@@ -1,0 +1,328 @@
+<resources>
+    <string name="nav_marketplace">मार्केटप्लेस</string><string name="nav_orders">ऑर्डर</string><string name="nav_pickups">पिकअप</string><string name="nav_rates">दर</string><string name="nav_profile">प्रोफाइल</string>
+    <string name="auth_existing_account">माझे खाते आधीच आहे</string><string name="auth_email_title">खाते तयार करा</string><string name="auth_sign_in_title">पुन्हा स्वागत आहे</string><string name="auth_email_detail">तुमचे ईमेल वापरा.</string><string name="auth_email_label">ईमेल</string><string name="auth_password_label">पासवर्ड (8+ अक्षरे)</string><string name="auth_continue">पुढे चला</string><string name="auth_sign_in">साइन इन</string><string name="auth_role_title">तुम्ही Kabadiwala Connect कसे वापरता?</string><string name="auth_role_collector">मी भंगार गोळा करतो</string><string name="auth_role_recycler">मी भंगार खरेदी किंवा प्रक्रिया करतो</string><string name="auth_business_name">व्यवसाय किंवा सुविधा नाव</string><string name="auth_materials_accepted">स्वीकारल्या जाणाऱ्या वस्तू</string><string name="auth_pickup_available">तुम्ही पिकअप करू शकता का?</string><string name="auth_recycler_complete_title">माहिती पाठवली</string><string name="auth_recycler_complete_detail">तुमचे रीसायकलर खाते पडताळणीच्या प्रतीक्षेत आहे.</string>
+    <string name="app_name">कबाडीवाला कनेक्ट</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">होम</string>
+    <string name="nav_prices">भाव</string>
+    <string name="nav_recyclers">रिसायकलर</string>
+    <string name="nav_earnings">कमाई</string>
+    <string name="nav_settings">सेटिंग्ज</string>
+
+    <!-- Connectivity -->
+    <string name="offline_banner">या फोनवर जतन केले · इंटरनेट आल्यावर सिंक होईल.</string>
+
+    <!-- Shared UI states -->
+    <string name="common_loading">थांबा…</string>
+    <string name="common_retry">पुन्हा प्रयत्न करा</string>
+    <string name="common_ok">ठीक आहे</string>
+    <string name="common_back">मागे</string>
+    <string name="common_no_data">अजून काही जतन नाही</string>
+    <string name="common_no_data_detail">नवीन माहिती येथे दिसेल.</string>
+    <string name="common_coming_soon">लवकरच येत आहे</string>
+    <string name="common_syncing">पाठवत आहे…</string>
+    <string name="common_error_title">काहीतरी चूक झाली</string>
+    <string name="common_offline_title">इंटरनेट नाही</string>
+    <string name="common_offline_detail">तुम्ही जतन केलेली माहिती पाहू शकता.</string>
+
+    <!-- Home -->
+    <string name="home_title">नमस्कार!</string>
+    <string name="home_subtitle">तुमचे काम येथून सुरू होते.</string>
+    <string name="home_cached_lots">जतन केलेले लॉट</string>
+    <string name="home_today_rate">आजचा सर्वोत्तम भाव</string>
+    <string name="home_quick_prices">भाव पहा</string>
+    <string name="home_quick_recyclers">रिसायकलर शोधा</string>
+    <string name="home_create_lot">लॉट तयार करा</string>
+    <string name="home_my_lots">माझे लॉट</string>
+    <string name="auth_demo_entry">पुणे डेमो पाहा</string>
+    <string name="home_demo_badge">डेमो डेटा</string>
+    <string name="demo_preview_banner">डेमो झलक · हा लाइव्ह डेटा नाही</string>
+    <string name="earnings_empty_title">अजून पूर्ण झालेली विक्री नाही</string><string name="earnings_empty_detail">रीसायकलरने पेमेंटची पुष्टी केल्यानंतर कमाई येथे दिसेल.</string><string name="recycler_live_data_unavailable">लाइव्ह मार्केटप्लेस डेटा सध्या उपलब्ध नाही.</string><string name="recycler_no_orders">अजून स्वीकारलेल्या ऑर्डर्स नाहीत.</string><string name="recycler_no_pickups">कोणतेही पिकअप ठरलेले नाहीत.</string><string name="recycler_rate_draft_saved">रेटचा ड्राफ्ट फोनवर जतन झाला. रेट सेवा जोडली जाईपर्यंत तो प्रकाशित होणार नाही.</string><string name="recycler_reference_captured">रेफरन्स फोनवर जतन झाला. हँडओव्हर पूर्ण करण्यापूर्वी सर्व्हरची पडताळणी आवश्यक आहे.</string><string name="recycler_verification_pending_detail">तुमची माहिती तपासणीसाठी पाठवली आहे. मंजुरीनंतर मार्केटप्लेस उघडेल.</string><string name="recycler_verification_rejected_detail">तुमचे सत्यापन मंजूर झाले नाही. माहिती बदला किंवा मदतीशी संपर्क करा.</string><string name="recycler_verification_suspended_detail">मार्केटप्लेस थांबवले आहे. नवीन काम स्वीकारण्यापूर्वी मदतीशी संपर्क करा.</string><string name="recycler_verification_verified_detail">तुमची सुविधा सत्यापित आहे. लॉट उपलब्ध झाल्यावर लाइव्ह मार्केटप्लेस दिसेल.</string>
+    <string name="home_greeting">शुभ संध्याकाळ, %1$s</string>
+    <string name="home_pune_location">पुणे</string>
+    <string name="home_today_earnings">आज ₹2,450 कमाई</string>
+    <string name="home_today_delta">आज +₹680</string>
+    <string name="home_demo_story">गोळा करा → किंमत जाणून घ्या → जोडा → पैसे मिळवा</string>
+    <string name="home_current_prices">आजच्या सामग्रीच्या किंमती</string>
+    <string name="home_price_updated">संदर्भ किंमत · आज अपडेट</string>
+    <string name="home_price_copper">तांबे</string>
+    <string name="home_recent_activity">अलीकडील हालचाल</string>
+    <string name="home_activity_posted">लॉट रिसायकलरला पाठवला</string>
+    <string name="home_activity_posted_detail">12.4 किलो कॉपर · कोथरूड, पुणे</string>
+    <string name="home_activity_payment">पेमेंट मिळाले</string>
+    <string name="home_activity_payment_detail">₹7,688 · 04 सप्टेंबर 2026</string>
+
+    <!-- Prices -->
+    <string name="prices_title">बाजारभाव</string>
+    <string name="prices_per_kg">प्रति किलो</string>
+    <string name="prices_updated_offline">जतन केलेले भाव दाखवले. इंटरनेट नाही.</string>
+    <string name="recycler_search">नाव किंवा परिसर शोधा</string><string name="recycler_radius">अंतर</string><string name="recycler_km">%1$d किमी</string><string name="recycler_material">सामान</string><string name="recycler_pickup_only">फक्त पिकअप</string><string name="recycler_sort">क्रम:</string><string name="recycler_nearby">जवळचे</string><string name="recycler_rate">भाव</string><string name="recycler_cached">जतन केलेले रिसायकलर — ऑफलाइन</string><string name="recycler_rate_value">₹%1$.0f / किलो</string><string name="recycler_pickup_yes">पिकअप उपलब्ध</string><string name="recycler_pickup_no">फक्त जमा करा</string><string name="recycler_match">जुळणी %1$d%%</string><string name="recycler_detail_authorization">मान्यता आणि भाव</string><string name="recycler_not_verified">मान्यता तपासलेली नाही</string><string name="recycler_materials">सामान: %1$s</string><string name="recycler_hours">वेळ: %1$s</string><string name="recycler_handover">सामान्य जमा वेळ: %1$d तास</string><string name="recycler_map_placeholder">नकाशा ठिकाण: %1$.3f, %2$.3f</string><string name="recycler_call">कॉल</string><string name="recycler_map">नकाशा</string><string name="recycler_contact_note">संपर्क: %1$s</string>
+    <string name="prices_location_label">ठिकाण</string><string name="prices_cached">जतन केलेला भाव — ऑफलाइन</string><string name="prices_rate_value">₹%1$.0f / किलो</string><string name="prices_range">सामान्य भाव: ₹%1$.0f–₹%2$.0f / किलो</string><string name="prices_last_updated">शेवटचे अपडेट: %1$s</string><string name="prices_hear">भाव ऐका</string><string name="prices_history_title">30 दिवसांचा कल</string><string name="prices_recycler_placeholder">कनेक्शन मिळाल्यावर रिसायकलर भाव येथे दिसतील.</string>
+    <string name="lot_estimated_value">अंदाजे किंमत: ₹%1$.0f</string><string name="lot_estimate_basis">स्थानिक भाव × वजन × अवस्था यावर आधारित.</string><string name="lot_estimate_disclaimer">हा फक्त अंदाज आहे. अंतिम किंमत तपासणीनंतर ठरेल.</string>
+
+    <!-- Recyclers -->
+    <string name="recyclers_title">रिसायकलर</string>
+    <string name="recyclers_authorized">अधिकृत</string>
+    <string name="recyclers_distance_km">%1$s किमी दूर</string>
+
+    <string name="quote_request_button">भाव मागा</string><string name="quote_request_title">भाव मागा</string><string name="quote_request_detail">तुमचा लॉट आणि रिसायकलर निवडा. विनंती या फोनमध्ये जतन होईल.</string><string name="quote_choose_lot">लॉट निवडा</string><string name="quote_choose_recycler">रिसायकलर निवडा</string><string name="quote_summary">विनंतीचा सारांश</string><string name="quote_lot_summary">%1$s • %2$.1f किलो</string><string name="quote_recycler_summary">रिसायकलर: %1$s</string><string name="quote_estimated">अंदाजे किंमत: ₹%1$.0f</string><string name="quote_confirmation">ही विनंती पाठवायची?</string><string name="quote_submit">विनंती पाठवा</string><string name="quote_saved">फोनमध्ये जतन केले</string><string name="quote_compare_title">भावांची तुलना</string><string name="quote_delivery_state">विनंती स्थिती: %1$s</string><string name="quote_best">सर्वोत्तम भाव</string><string name="quote_price">₹%1$.0f / किलो</string><string name="quote_total">एकूण: ₹%1$.0f</string><string name="quote_market_compare">बाजार भाव: ₹%1$.0f / किलो</string><string name="quote_distance">अंतर: %1$.1f किमी</string><string name="quote_validity">२४ तासांसाठी वैध</string><string name="quote_status">स्थिती: %1$s</string><string name="quote_accept">स्वीकारा</string><string name="quote_reject">नकार द्या</string>
+
+    <!-- Earnings -->
+    <string name="earnings_title">माझी कमाई</string>
+    <string name="earnings_total">एकूण कमाई</string>
+    <string name="earnings_pending">येणे बाकी रक्कम</string>
+    <string name="earnings_rupees">₹%1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">सेटिंग्ज</string>
+    <string name="settings_language">भाषा / Language</string>
+    <string name="settings_change_language">उपलब्ध भारतीय भाषांमधून निवडा</string>
+    <string name="cancel">रद्द करा</string>
+    <string name="language_english">English</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="language_marathi">मराठी</string>
+    <string name="settings_safety">सुरक्षा माहिती</string>
+    <string name="settings_help">मदत</string>
+    <string name="settings_about">कबाडीवाला कनेक्ट बद्दल</string>
+    <string name="settings_version">आवृत्ती %1$s</string>
+    <string name="settings_offline_note">सर्व सेटिंग्ज इंटरनेटशिवाय चालतात.</string>
+    <string name="settings_logout">लॉग आउट</string>
+    <string name="settings_logout_warning">साइन आउट केल्यावर या फोनवरील ऑफलाइन ड्राफ्ट, रांगेतील संदेश आणि खास सेव्ह केलेला डेटा हटवला जाईल. सर्व्हरवरील डेटा हटणार नाही.</string>
+
+    <string name="auth_step">पायरी %1$d / %2$d</string>
+    <string name="auth_welcome_title">कबाडीवाला कनेक्टमध्ये स्वागत आहे</string>
+    <string name="auth_welcome_detail">तुमचे काम जतन करा. चांगले रिसायकलिंग पर्याय शोधा.</string>
+    <string name="auth_get_started">सुरू करा</string>
+    <string name="auth_phone_title">तुमचा मोबाईल नंबर</string>
+    <string name="auth_phone_detail">आम्ही या नंबरवर एकदाच वापरता येणारा कोड पाठवू.</string>
+    <string name="auth_phone_label">10 अंकी मोबाईल नंबर</string>
+    <string name="auth_phone_error">योग्य भारतीय मोबाईल नंबर टाका.</string>
+    <string name="auth_network_error">सेवेशी संपर्क होऊ शकला नाही. कनेक्शन तपासून पुन्हा प्रयत्न करा.</string>
+    <string name="auth_send_otp">OTP पाठवा</string>
+    <string name="auth_otp_title">OTP टाका</string>
+    <string name="auth_otp_detail">कोड पाठवला: %1$s</string>
+    <string name="auth_otp_label">6 अंकी OTP</string>
+    <string name="auth_otp_hint">मिळालेला कोड टाका.</string>
+    <string name="auth_otp_incorrect">कोड चुकीचा आहे. पुन्हा प्रयत्न करा.</string>
+    <string name="auth_otp_expired">कोडची मुदत संपली. नवीन कोड पाठवा.</string>
+    <string name="auth_otp_attempts">खूप प्रयत्न झाले. नवीन कोड पाठवा.</string>
+    <string name="auth_otp_account_conflict">हा मोबाईल किंवा ईमेल आधीच नोंदणीकृत आहे. विद्यमान खाते किंवा दुसरे खाते वापरा.</string>
+    <string name="auth_server_error">सर्व्हर नोंदणी पूर्ण करू शकला नाही. पुन्हा प्रयत्न करा.</string>
+    <string name="auth_dev_otp">विकास OTP: %1$s</string>
+    <string name="auth_verify">तपासा</string>
+    <string name="auth_reset_otp">OTP रीसेट करा</string>
+    <string name="auth_resend">पुन्हा पाठवा</string>
+    <string name="auth_resend_in">%1$d सेकंदांनी पुन्हा पाठवा</string>
+    <string name="auth_resend_ready">आता नवीन कोड मागू शकता.</string>
+    <string name="update_available_title">अपडेट उपलब्ध आहे</string>
+    <string name="update_available_detail">नवीन आवृत्ती (%1$s) इंस्टॉल करण्यासाठी तयार आहे.</string>
+    <string name="update_available_notes">नवीन काय आहे: %1$s</string>
+    <string name="update_later">नंतर</string>
+    <string name="update_install">डाउनलोड करून इंस्टॉल करा</string>
+    <string name="update_downloading">अपडेट डाउनलोड होत आहे…</string>
+    <string name="update_install_error">अपडेट इंस्टॉल होऊ शकले नाही. पुन्हा प्रयत्न करा.</string>
+    <string name="update_install_permission">हे अपडेट इंस्टॉल करण्यासाठी Android ची परवानगी आवश्यक आहे. ती सुरू करून पुन्हा इंस्टॉल दाबा.</string>
+    <string name="auth_language_title">तुमची भाषा निवडा</string>
+    <string name="auth_language_detail">हे नंतर सेटिंग्जमध्ये बदलू शकता.</string>
+    <string name="first_language_title">तुमची भाषा निवडा</string>
+    <string name="first_language_detail">सुरुवात करण्यापूर्वी भाषा निवडा. ती नंतर सेटिंग्जमध्ये बदलू शकता.</string>
+    <string name="first_language_hint">तुमच्या भाषेवर टॅप करा. अॅप त्याच भाषेत उघडेल.</string>
+    <string name="first_language_continue">पुढे चला</string>
+    <string name="auth_location_title">तुमचा परिसर जतन करा</string>
+    <string name="auth_location_detail">अंदाजे ठिकाण वापरा किंवा परिसर स्वतः लिहा.</string>
+    <string name="auth_use_gps">माझे ठिकाण वापरा</string>
+    <string name="auth_enter_manually">परिसर स्वतः लिहा</string>
+    <string name="auth_area_title">तुमचा मुख्य संकलन परिसर</string>
+    <string name="auth_area_detail">वस्ती, शहर किंवा ओळखीची जागा पुरेशी आहे.</string>
+    <string name="auth_area_label">परिसराचे नाव</string>
+    <string name="auth_finish">जतन करा आणि पुढे जा</string>
+    <string name="auth_complete_title">तुम्ही तयार आहात!</string>
+    <string name="auth_complete_detail">तुमची प्रोफाइल या फोनमध्ये जतन झाली आहे.</string>
+    <string name="auth_complete_phone">मोबाईल: %1$s</string>
+    <string name="auth_name_label">तुमचे नाव</string><string name="auth_email_optional">ईमेल (ऐच्छिक)</string><string name="auth_email_optional_detail">ऐच्छिक: खाते परत मिळवण्यासाठी आणि सुरक्षा सूचनांसाठी ईमेल जोडा. लॉगिन मोबाइल नंबरनेच होईल.</string><string name="auth_email_optional_error">योग्य ईमेल लिहा किंवा रिकामे ठेवा.</string><string name="auth_continue_to_phone">मोबाईल पडताळणीकडे जा</string>
+    <string name="settings_profile">माझी प्रोफाइल</string><string name="profile_title">माझी प्रोफाइल</string><string name="profile_personal_details">खात्याची माहिती</string><string name="profile_name">नाव</string><string name="profile_mobile">मोबाईल नंबर</string><string name="profile_email">सुरक्षा ईमेल</string><string name="profile_role">खात्याचा प्रकार</string><string name="profile_language">भाषा</string><string name="profile_area">मुख्य परिसर</string><string name="profile_verification">पडताळणी</string><string name="profile_mobile_verified">मोबाईल पडताळले</string><string name="profile_not_added">जोडलेले नाही</string><string name="profile_collector">कलेक्टर</string><string name="profile_recycler">रीसायकलर</string>
+    <string name="lot_step">पायरी %1$d / %2$d</string><string name="lot_photo_title">फोटो काढा</string><string name="lot_photo_detail">सामानाचा एक स्पष्ट फोटो काढा.</string><string name="lot_take_photo">फोटो काढा</string><string name="lot_retake">पुन्हा फोटो काढा</string><string name="lot_confirm_photo">हा फोटो वापरा</string><string name="lot_photo_error">फोटो नाही किंवा खूप लहान/मोठा आहे. पुन्हा काढा.</string><string name="lot_material_title">तुम्ही काय जमा केले?</string><string name="lot_material_detail">एक सामान निवडा.</string><string name="lot_hazard">काळजीपूर्वक हाताळा</string><string name="lot_non_hazard">सामान्य सामान</string><string name="lot_condition_title">याची अवस्था कशी आहे?</string><string name="lot_weight_title">वजन किती आहे?</string><string name="lot_weight_detail">किलोमध्ये लिहा किंवा स्लाइड करा.</string><string name="lot_weight_label">किलोमधील वजन</string><string name="lot_weight_value">%1$s किलो</string><string name="lot_weight_error">0 पेक्षा जास्त आणि 500 किलोपेक्षा कमी लिहा.</string><string name="lot_next">पुढे</string><string name="lot_location_title">हे कुठून मिळाले?</string><string name="lot_location_detail">GPS वापरा किंवा परिसर लिहा.</string><string name="lot_area_label">परिसराचे नाव</string><string name="lot_use_gps">GPS ठिकाण वापरा</string><string name="lot_gps_saved">अंदाजे GPS ठिकाण जतन झाले</string><string name="lot_confirm_location">ठिकाण निश्चित करा</string><string name="lot_review_title">तुमचा लॉट तपासा</string><string name="lot_material_label">सामान</string><string name="lot_condition_label">अवस्था</string><string name="lot_notes_label">नोंद (ऐच्छिक)</string><string name="lot_value_placeholder">अंदाजे किंमत नंतर दिसेल.</string><string name="lot_save">लॉट जतन करा</string><string name="lot_saved_title">लॉट फोनमध्ये जतन झाला</string><string name="lot_saved_id">लॉट ID: %1$s</string><string name="lot_timeline">वेळ नोंद</string><string name="lot_created_timeline">तयार करून फोनमध्ये जतन केले</string><string name="lot_cancel">लॉट रद्द करा</string>
+    <string name="lot_material_crt">CRT</string><string name="lot_material_lcd">LCD पॅनेल</string><string name="lot_material_pcb">PCB / सर्किट बोर्ड</string><string name="lot_material_cables">केबल्स</string><string name="lot_material_copper">तांबे</string><string name="lot_material_battery">बॅटरी</string><string name="lot_material_motor">मोटर</string><string name="lot_material_magnet">चुंबक</string><string name="lot_material_plastic">प्लास्टिक</string><string name="lot_material_other">इतर</string><string name="lot_condition_intact">पूर्ण</string><string name="lot_condition_damaged">नुकसान झालेले</string><string name="lot_condition_partial">अर्धवट</string>
+
+    <!-- Safety & Help placeholders (full content arrives in a later phase) -->
+    <string name="safety_title">सुरक्षा माहिती</string>
+    <string name="safety_message">हातमोजे आणि मास्क वापरा. तारा जाळू नका. ई-कचरा हाताळल्यानंतर हात धुवा.</string>
+    <string name="help_title">मदत</string>
+    <string name="help_message">मदतीसाठी तुमच्या पर्यवेक्षकांना विचारा किंवा दिलेल्या नंबरवर कॉल करा.</string>
+
+    <!-- Permission rationale (requested only when a feature needs it, never at launch) -->
+    <string name="perm_camera_title">कॅमेरा हवा आहे</string>
+    <string name="perm_camera_text">गोळा केलेल्या सामानाचा फोटो घेण्यासाठी कॅमेरा चालू करा.</string>
+    <string name="perm_location_title">ठिकाण हवे आहे</string>
+    <string name="perm_location_text">सामान कुठून घेतले हे जतन करण्यासाठी ठिकाण चालू करा.</string>
+    <string name="perm_allow">चालू करा</string>
+    <string name="perm_not_now">आता नको</string>
+    <!-- हस्तांतरण, पेमेंट, कमाई आणि सुरक्षा भाषांतर -->
+    <string name="lot_safety_open">पुढे जाण्यापूर्वी सुरक्षा माहिती वाचा</string>
+    <string name="handover_choose_location">तुम्ही हे कुठे सुपूर्द कराल?</string><string name="handover_collection">संकलनाचे ठिकाण</string><string name="handover_collector">कलेक्टरचे ठिकाण</string><string name="handover_collector_id">कलेक्टर ID</string><string name="handover_create_title">हँडओव्हर नोंद तयार करा</string><string name="handover_date">दिनांक आणि वेळ</string><string name="handover_document_title">हँडओव्हर दस्तऐवज</string><string name="handover_expiry">ही नोंद जतन करून ठेवा.</string><string name="handover_handover_location">हँडओव्हरचे ठिकाण</string><string name="handover_location_label">ठिकाण: %1$s</string><string name="handover_lot_summary">%1$s • %2$.1f किलो • %3$s</string><string name="handover_mark_done">हँडओव्हर पूर्ण झाले</string><string name="handover_material">सामान</string><string name="handover_offline_note">फोनमध्ये जतन केले — नंतर सिंक होईल.</string><string name="handover_photo">सामानाचा फोटो</string><string name="handover_qr">रेफरन्सचा QR कोड</string><string name="handover_recycler">रिसायकलरचे ठिकाण</string><string name="handover_save">हँडओव्हर जतन करा</string><string name="handover_share">शेअर करा</string><string name="handover_share_text">हँडओव्हर %1$s — %2$s — ₹%3$.0f</string><string name="handover_sms">SMS</string><string name="handover_status_done">हँडओव्हर पूर्ण झाले</string><string name="handover_status_saved">फोनमध्ये जतन — सिंक बाकी</string><string name="handover_third_party">तृतीय पक्षाचे ठिकाण</string><string name="handover_time_review">हँडओव्हर वेळ: %1$s</string><string name="handover_value">मान्य किंमत</string><string name="handover_weight">वजन</string>
+    <string name="earnings_average">सरासरी लॉट किंमत</string><string name="earnings_this_month">या महिन्याची कमाई</string><string name="payment_amount">रक्कम</string><string name="payment_amount_error">योग्य रक्कम भरा.</string><string name="payment_choose_lot">लॉट निवडा</string><string name="payment_confirm">पुष्टी करा</string><string name="payment_confirm_text">₹%.2f चे पेमेंट जतन करायचे?</string><string name="payment_confirm_title">पेमेंटची पुष्टी</string><string name="payment_date_now">आजचे पेमेंट</string><string name="payment_method">पेमेंटची पद्धत</string><string name="payment_notes">नोंद</string><string name="payment_record">पेमेंट नोंदवा</string><string name="payment_save">पेमेंट जतन करा</string><string name="payment_title">पेमेंट</string><string name="earnings_chart">मासिक कमाई</string><string name="earnings_chart_month">महिना</string>
+    <string name="safety_all">सर्व</string><string name="safety_battery">बॅटरी</string><string name="safety_battery_audio">बॅटरी हाताळताना हातमोजे घाला आणि ती उघडू नका.</string><string name="safety_battery_do">हातमोजे घाला आणि बॅटरी कोरड्या ठिकाणी ठेवा.</string><string name="safety_battery_dont">बॅटरी फोडू, जाळू किंवा शॉर्ट करू नका.</string><string name="safety_bookmark">जतन करा</string><string name="safety_capacitor">कॅपेसिटर</string><string name="safety_capacitor_audio">कॅपेसिटरला स्पर्श करू नका; प्रशिक्षित व्यक्तीची मदत घ्या.</string><string name="safety_capacitor_do">वीज बंद करा आणि तज्ज्ञाकडून तपासणी करा.</string><string name="safety_capacitor_dont">चार्ज कॅपेसिटरला स्पर्श किंवा उघडू नका.</string><string name="safety_crt">CRT</string><string name="safety_crt_audio">CRT स्क्रीन काळजीपूर्वक ठेवा आणि फोडू नका.</string><string name="safety_crt_do">हातमोजे घाला आणि स्क्रीन सुरक्षित ठेवा.</string><string name="safety_crt_dont">CRT फोडू, कापू किंवा जाळू नका.</string><string name="safety_directory_detail">धोकादायक सामानासाठी सोपा सुरक्षा सल्ला.</string><string name="safety_do">हे करा</string><string name="safety_do_not">हे करू नका</string><string name="safety_filter">सामान निवडा</string><string name="safety_hear">ऐका</string><string name="safety_localized">हिंदी आणि मराठीत सल्ला उपलब्ध आहे.</string><string name="safety_motor">मोटर आणि भाग</string><string name="safety_motor_audio">मोटरचे भाग काळजीपूर्वक ठेवा आणि तारा कापू नका.</string><string name="safety_motor_do">हातमोजे घाला आणि जड भाग हळू उचला.</string><string name="safety_motor_dont">फिरणाऱ्या किंवा जोडलेल्या भागांना स्पर्श करू नका.</string><string name="safety_other">इतर धोकादायक सामान</string><string name="safety_other_audio">अनोळखी सामान उघडू नका; मदत घ्या.</string><string name="safety_other_do">सामान ओळखा आणि सुरक्षा साधने वापरा.</string><string name="safety_other_dont">अनोळखी सामान जाळू किंवा उघडू नका.</string><string name="safety_saved">जतन केले</string><string name="safety_tip_day">आजचा सुरक्षा सल्ला</string><string name="safety_tip_day_text">हातमोजे घाला आणि ई-कचरा जाळू नका.</string><string name="safety_transformer">ट्रान्सफॉर्मर</string><string name="safety_transformer_audio">ट्रान्सफॉर्मरमध्ये वीज साठलेली असू शकते; तो उघडू नका.</string><string name="safety_transformer_do">वीजेपासून वेगळे ठेवा आणि प्रशिक्षित व्यक्तीला द्या.</string><string name="safety_transformer_dont">ट्रान्सफॉर्मर उघडू, जाळू किंवा पाण्यात ठेवू नका.</string><string name="safety_visual">सुरक्षा सूचना</string>
+    <string name="lot_use_demo_photo">पुणे डेमो फोटो वापरा</string><string name="lot_choose_photo">गॅलरीमधून निवडा</string>
+    <string name="recycler_marketplace_title">जवळचे लॉट</string><string name="recycler_orders_title">सध्याच्या ऑर्डर्स</string><string name="recycler_orders_subtitle">स्वीकारलेले लॉट आणि हँडओव्हरची पुष्टी.</string><string name="recycler_order_reference">हँडओव्हर %1$s</string><string name="recycler_order_weight">मोजलेले वजन · %.1f किलो</string><string name="recycler_order_status">स्थिती · %1$s</string><string name="recycler_order_scan">QR हँडओव्हर उघडा</string><string name="recycler_pickups_title">पिकअप वेळापत्रक</string><string name="recycler_rates_title">माझे खरेदी दर</string><string name="recycler_profile_title">रिसायकलर प्रोफाइल</string><string name="recycler_verification_title">पडताळणी सुरू आहे</string>
+    <string name="auth_email_error">योग्य ईमेल लिहा.</string><string name="auth_password_error">किमान 8 अक्षरे वापरा.</string><string name="auth_role_detail">तुम्ही कोणते काम करता ते निवडा. हे ॲपमधून बदलता येणार नाही.</string><string name="auth_role_collector_detail">भंगारवाला / कलेक्टर</string><string name="auth_role_recycler_detail">अधिकृत रिसायकलर / एग्रीगेटर</string><string name="auth_recycler_details_title">तुमच्या सुविधेबद्दल सांगा</string><string name="auth_recycler_details_detail">माहिती तपासली जाईपर्यंत पडताळणी प्रलंबित राहील.</string><string name="auth_authorization_number">अधिकृतता / नोंदणी क्रमांक</string>
+    <string name="quote_submit_failed">विनंती पाठवता आली नाही. कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.</string>
+    <string name="quote_request_detail_live">ही विनंती निवडलेल्या रिसायकलरला पाठवा. उत्तर आल्यावर भाव येथे दिसतील.</string>
+    <string name="lot_photo_too_dark">फोटो खूप अंधुक आहे. शक्य असल्यास चांगल्या प्रकाशात पुन्हा फोटो घ्या.</string>
+    <string name="lot_photo_too_bright">फोटोवर खूप तेजस्वी प्रकाश आहे. चकाकीपासून दूर जाऊन पुन्हा फोटो घ्या.</string>
+    <string name="lot_photo_low_detail">सामान जवळ ठेवा, म्हणजे त्याचे तपशील स्पष्ट दिसतील.</string>
+    <string name="recycler_trust_passport">विश्वास प्रोफाइल</string>
+    <string name="recycler_verified_by">पडताळणी: %1$s</string>
+    <string name="recycler_valid_until">अधिकृतता %1$s पर्यंत वैध</string>
+    <string name="recycler_rating">रेटिंग %1$.1f · %2$d अभिप्राय</string>
+    <string name="recycler_completed_handovers">%1$d पडताळलेले हँडओव्हर पूर्ण</string>
+    <string name="recycler_trust_explainer">हे संकेत रिसायकलर प्रोफाइल आणि पूर्ण झालेल्या नोंदींवर आधारित आहेत. हा लपवलेला स्कोअर नाही.</string>
+    <string name="deal_sheet_title">पारदर्शक व्यवहार तपशील</string>
+    <string name="deal_market_reference">बाजार संदर्भ</string>
+    <string name="deal_offered_rate">रिसायकलरचा दर</string>
+    <string name="deal_weight">अंदाजे वजन</string>
+    <string name="deal_expected_total">अंदाजे एकूण</string>
+    <string name="deal_transport">वाहतूक परिणाम</string>
+    <string name="deal_not_included">समाविष्ट नाही</string>
+    <string name="deal_not_available">उपलब्ध नाही</string>
+    <string name="deal_final_values">अंतिम नोंदवलेली मूल्ये</string>
+    <string name="deal_final_weight">अंतिम वजन</string>
+    <string name="deal_final_amount">अंतिम रक्कम</string>
+    <string name="deal_explainer">बाजार दर हा फक्त मार्गदर्शक आहे. पैसे रिसायकलरच्या ऑफर आणि अंतिम मोजमापानुसार ठरतात.</string>
+    <string name="handover_scale_proof_title">काट्याचा पुरावा</string>
+    <string name="handover_scale_proof_detail">हँडओव्हर बंद करण्यापूर्वी अंतिम वजन नोंदवा आणि सामानाची पुष्टी करा.</string>
+    <string name="handover_final_weight_label">अंतिम वजन किलोमध्ये</string>
+    <string name="handover_material_confirmed">मी सामान तपासले आहे</string>
+    <string name="handover_scale_photo">काट्याचा फोटो</string>
+    <string name="handover_add_scale_photo">काट्याचा फोटो जोडा</string>
+    <string name="handover_retake_scale_photo">काट्याचा फोटो पुन्हा घ्या</string>
+    <string name="handover_weight_difference">हे मूळ वजनापेक्षा 5% पेक्षा जास्त वेगळे आहे. पुरावा जतन करा आणि गरज असल्यास समस्या नोंदवा.</string>
+    <string name="handover_save_proof">काट्याचा पुरावा जतन करा</string>
+    <string name="handover_proof_saved">काट्याचा पुरावा फोनमध्ये जतन झाला</string>
+    <string name="handover_report_problem">समस्या नोंदवा</string>
+    <string name="dispute_title">समस्या नोंदवा</string>
+    <string name="dispute_detail">काय बदलले ते सांगा. या नोंदीसोबत मूळ आणि अंतिम हँडओव्हर मूल्ये जतन होतील.</string>
+    <string name="dispute_reason_title">समस्या काय आहे?</string>
+    <string name="dispute_reason_weight">वजन वेगळे आहे</string>
+    <string name="dispute_reason_material">सामान वेगळे आहे</string>
+    <string name="dispute_reason_price">दर किंवा पेमेंट</string>
+    <string name="dispute_reason_other">काहीतरी वेगळे</string>
+    <string name="dispute_description_label">सोप्या शब्दांत सांगा</string>
+    <string name="dispute_description_hint">उदाहरण: अंतिम काट्यावर 4 किलो दिसले, पण व्यवहार 5 किलोपासून सुरू झाला होता.</string>
+    <string name="dispute_submit">नोंद जतन करा</string>
+    <string name="dispute_submitted">नोंद फोनमध्ये जतन झाली</string>
+    <string name="dispute_pending_sync">इंटरनेट मिळाल्यावर ती पाठवली जाईल.</string>
+    <string name="dispute_empty">या हँडओव्हरसाठी कोणतीही नोंद नाही.</string>
+    <string name="dispute_timeline">नोंदीचा क्रम</string>
+    <string name="dispute_status_saved">फोनमध्ये जतन</string>
+    <string name="dispute_status_open">तपासणीसाठी पाठवले</string>
+    <string name="dispute_status_under_review">तपासणी सुरू</string>
+    <string name="dispute_status_resolved">निराकरण झाले</string>
+    <string name="dispute_status_rejected">बंद</string>
+    <string name="handover_rate_recycler">या सत्यापित रीसायकलरला रेटिंग द्या</string>
+    <string name="settings_trust_tools">विश्वास आणि उपयुक्त साधने</string>
+    <string name="settings_rewards">बोनस</string>
+    <string name="settings_schemes">सरकारी योजना</string>
+    <string name="settings_diy">कचऱ्यातून उपयोगी वस्तू</string>
+    <string name="settings_messages">संदेश</string>
+    <string name="settings_disputes">वादांचा आढावा</string>
+    <string name="lot_description_label">लॉटचे वर्णन</string>
+    <string name="lot_description_generating">लिहित आहे…</string>
+    <string name="lot_description_refresh">पुन्हा सूचना द्या</string>
+    <string name="lot_description_ai">AI सूचना — जतन करण्यापूर्वी तपासा</string>
+    <string name="lot_description_fallback">बदलता येणारे वर्णन फोनमध्ये जतन आहे</string>
+    <string name="lot_repeat">हा लॉट पुन्हा तयार करा</string>
+    <string name="settings_appearance">दिसणे</string>
+    <string name="appearance_system">डिव्हाइस सेटिंग वापरा</string>
+    <string name="appearance_light">लाइट</string>
+    <string name="appearance_dark">डार्क</string>
+    <string name="future_bonuses_title">बोनस</string>
+    <string name="future_bonuses_subtitle">सत्यापित पेमेंटनंतरच बोनस मिळेल.</string>
+    <string name="future_refresh">रिफ्रेश</string>
+    <string name="future_refresh_bonuses">बोनस रिफ्रेश करा</string>
+    <string name="future_no_bonus_title">अजून सक्रिय बोनस प्रगती नाही</string>
+    <string name="future_no_bonus_detail">कमाई सुरू करण्यासाठी सत्यापित हँडओव्हर पूर्ण करा.</string>
+    <string name="future_collection_bonus">कलेक्शन बोनस</string>
+    <string name="future_bonus_progress">बोनस प्रगती %1$d टक्के</string>
+    <string name="future_bonus_earned">मिळाले %1$s</string>
+    <string name="future_bonus_in_progress">सुरू आहे</string>
+    <string name="future_schemes_title">सरकारी योजना</string>
+    <string name="future_schemes_subtitle">अधिकृत स्रोतांवरून माहिती पहा. हा सरकारी मंजुरीचा निर्णय नाही.</string>
+    <string name="future_schemes_offline_title">ऑफलाइन योजना उपलब्ध नाहीत</string>
+    <string name="future_schemes_offline_detail">सरकारी यादी रिफ्रेश करण्यासाठी इंटरनेटशी जोडा.</string>
+    <string name="future_documents">कागदपत्रे: %1$s</string>
+    <string name="future_open_official_source">अधिकृत स्रोत उघडा</string>
+    <string name="future_last_checked">शेवटची तपासणी %1$s</string>
+    <string name="future_date_unavailable">दिनांक उपलब्ध नाही</string>
+    <string name="future_diy_title">कचऱ्यातून उपयोगी वस्तू</string>
+    <string name="future_diy_subtitle">स्वच्छ आणि पुन्हा वापरता येणाऱ्या वस्तूंच्या सोप्या कल्पना.</string>
+    <string name="future_minutes">%1$d मिनिटे</string>
+    <string name="future_materials">साहित्य</string>
+    <string name="future_messages_title">संदेश</string>
+    <string name="future_messages_subtitle">चॅट तुमच्या व्यवहारातच राहते.</string>
+    <string name="future_no_messages_title">व्यवहाराचे संदेश नाहीत</string>
+    <string name="future_no_messages_detail">कोट किंवा स्वीकारलेला हँडओव्हर झाल्यावर संदेश दिसतील.</string>
+    <string name="future_transaction">व्यवहार %1$s</string>
+    <string name="future_transaction_chat">व्यवहाराची चॅट</string>
+    <string name="future_chat_privacy">पिकअप निश्चित होईपर्यंत संपर्क आणि अचूक ठिकाण खाजगी ठेवा.</string>
+    <string name="future_message">संदेश</string>
+    <string name="future_send">पाठवा</string>
+    <string name="future_message_sending">पाठवत आहे…</string>
+    <string name="future_message_queued">फोनमध्ये सेव्ह आहे · ऑनलाइन झाल्यावर पुन्हा पाठवा</string>
+    <string name="future_message_sent">पाठवले</string>
+    <string name="future_message_read">वाचले</string>
+    <string name="future_message_failed">पाठवले गेले नाही</string>
+    <string name="future_rate_recycler">%1$s ला रेटिंग द्या</string>
+    <string name="future_review_verified_detail">तुमचे पुनरावलोकन सत्यापित पेमेंटनंतरच स्वीकारले जाईल. नंतर ते बदलता येणार नाही.</string>
+    <string name="future_overall_experience">एकूण अनुभव</string>
+    <string name="future_pickup_reliability">पिकअपची विश्वासार्हता</string>
+    <string name="future_payment_clarity">पेमेंटची स्पष्टता</string>
+    <string name="future_optional_comment">पर्यायी टिप्पणी</string>
+    <string name="future_submitting">पाठवत आहे…</string>
+    <string name="future_submit_review">सत्यापित समीक्षा पाठवा</string>
+    <string name="future_dispute_title">वादांचा आढावा</string>
+    <string name="future_dispute_subtitle">तुमच्या जतन केलेल्या वाद इतिहासाचा तथ्यात्मक आढावा.</string>
+    <string name="future_no_dispute_title">अजून वादाचा डेटा नाही</string>
+    <string name="future_no_dispute_detail">किमान एक रिपोर्ट झाल्यावर चार्ट दिसतील.</string>
+    <string name="future_total_reports">एकूण रिपोर्ट</string>
+    <string name="future_last_months">मागील %1$d महिने</string>
+    <string name="future_by_reason">कारणानुसार</string>
+    <string name="future_by_status">स्थितीनुसार</string>
+    <string name="future_average_resolution">सरासरी निराकरण</string>
+    <string name="future_based_on_resolved">सोडवलेल्या रिपोर्टवर आधारित</string>
+    <string name="future_hours">%1$d तास</string>
+    <string name="future_more_data">टक्केवारी अर्थपूर्ण होण्यासाठी आणखी डेटा आवश्यक आहे.</string>
+    <string name="future_no_data">अजून डेटा नाही</string>
+    <string name="future_retry">पुन्हा प्रयत्न करा</string>
+    <string name="profile_verified">मोबाईल आणि खाते पडताळले</string>
+    <string name="profile_pending">पडताळणी प्रलंबित</string>
+    <string name="profile_rejected">पडताळणी नाकारली</string>
+    <string name="profile_suspended">खाते निलंबित</string>
+    <string name="home_work_queue">कामांची यादी</string>
+    <string name="home_field_tools">मैदानी साधने</string>
+    <string name="home_todays_signal">आजचा संकेत</string>
+    <string name="home_start_next_collection">तुमचे पुढील संकलन सुरू करा</string>
+    <string name="home_field_ready">कामासाठी तयार</string>
+    <string name="workflow_progress_value">%1$d / %2$d</string>
+    <string name="payment_no_lots">पेमेंट नोंदवण्यासाठी कोणताही लॉट तयार नाही.</string>
+    <string name="payment_waiting_sync">फोनवर जतन केले — समक्रमण बाकी आहे</string>
+    <string name="payment_recorded">नोंदवले</string>
+    <string name="payment_investigate">पेमेंट तपासा</string>
+    <string name="payment_method_cash">रोख</string>
+    <string name="payment_method_bank_transfer">बँक ट्रान्सफर</string>
+    <string name="payment_method_digital_wallet">डिजिटल वॉलेट</string>
+    <string name="home_collection_brief">तपशील ताजे असतानाच सामान, वजन आणि ठिकाण नोंदवा.</string>
+    <string name="prices_rate_label">आजचा दर</string>
+    <string name="prices_trend_up">वाढत आहे</string>
+    <string name="prices_trend_down">कमी होत आहे</string>
+    <string name="prices_trend_stable">स्थिर</string>
+    <string name="lot_material_suggest">फोटोवरून ओळखा</string>
+    <string name="lot_material_suggest_loading">फोटो वाचत आहे…</string>
+    <string name="lot_material_suggest_detail">Gemini साहित्य सुचवते. पुढे जाण्यापूर्वी पुष्टी करा.</string>
+    <string name="lot_material_suggested">सूचना: %1$s · %2$d%% आत्मविश्वास</string>
+    <string name="lot_material_use_suggestion">हे साहित्य निवडा</string>
+    <string name="lot_material_suggest_unavailable">फोटो ओळखता आला नाही. साहित्य स्वतः निवडा.</string>
+    <string name="future_chat_draft">Gemini ने ड्राफ्ट</string>
+    <string name="future_chat_drafting">ड्राफ्ट तयार होत आहे…</string>
+    <string name="future_chat_draft_note">पाठवण्यापूर्वी ड्राफ्ट तपासा.</string>
+</resources>

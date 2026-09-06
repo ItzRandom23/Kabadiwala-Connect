@@ -1,0 +1,370 @@
+package com.irinteractivestudios.kabadiwalaconnect.ui.navigation
+
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.compose.composable
+import com.irinteractivestudios.kabadiwalaconnect.di.KcViewModelFactory
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices.PricesScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices.PricesViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers.RecyclersScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers.RecyclersViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.HelpScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SafetyScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SettingsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SettingsViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingRoute
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotRoute
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotDetailScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteRequestScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteComparisonScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.RecyclerQuoteEntryScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers.HandoverCreateScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers.HandoverDocumentScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers.DisputeCenterScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.payments.PaymentRecordScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerOrdersScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerPickupsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerProfileScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerRatesScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerVerificationScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerOrdersViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.FutureFeatureViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.RewardsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.SchemesScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.DiyActivitiesScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.ChatListScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.ChatDetailScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.DisputeAnalyticsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.VerifiedRatingScreen
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitReviewRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.Dispute
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeStatus
+import com.google.gson.JsonObject
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import java.io.File
+import androidx.core.content.FileProvider
+
+/**
+ * Phase 1 navigation graph. Starts at Home; the 5 bottom tabs are
+ * top-level, Safety/Help are nested under Settings.
+ */
+@Composable
+fun AppNavHost(
+    navController: NavHostController,
+    factory: KcViewModelFactory,
+    onLanguageChange: (String) -> Unit,
+    onAppearanceChange: (String) -> Unit = {},
+    startDestination: String = Destinations.HOME,
+    onLogout: () -> Unit = {},
+    onDemo: () -> Unit = {},
+    demoMode: Boolean = false,
+    role: AccountRole = AccountRole.COLLECTOR,
+    onAuthFinished: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
+    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE)
+    LaunchedEffect(currentRoute, role) {
+        val collectorRoute = currentRoute in collectorRoutes || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
+        val recyclerRoute = currentRoute in recyclerRoutes
+        if (role == AccountRole.RECYCLER && collectorRoute) {
+            navController.navigate(if (factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
+        } else if (role == AccountRole.COLLECTOR && recyclerRoute) {
+            navController.navigate(Destinations.HOME) { popUpTo(0) }
+        }
+    }
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        // Keep navigation instantaneous. Screen-level state changes can still
+        // animate, but changing destinations should not slide or fade the
+        // entire app surface.
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
+    ) {
+        composable(Destinations.AUTH) {
+            val vm: OnboardingViewModel = viewModel(factory = factory)
+            OnboardingRoute(
+                viewModel = vm,
+                onDemo = onDemo,
+                onFinished = { onAuthFinished() }
+            )
+        }
+        composable(Destinations.CREATE_LOT) {
+            val vm: LotManagementViewModel = viewModel(factory = factory)
+            LotRoute(vm, onSafety = { navController.navigate(Destinations.SAFETY) }, demoMode = demoMode)
+        }
+        composable(Destinations.MY_LOTS) {
+            val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
+            LotsScreen(lots, onOpen = { navController.navigate(Destinations.lotDetail(it)) })
+        }
+        composable(Destinations.LOT_DETAIL, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("lotId").orEmpty()
+            val lot by factory.lotWriter.observeLot(id).collectAsStateWithLifecycle(initialValue = null)
+            val scope = rememberCoroutineScope()
+            lot?.let { item -> LotDetailScreen(item, onCancel = { scope.launch { factory.lotWriter.cancel(id, System.currentTimeMillis()) } }, onRepeat = { scope.launch { runCatching { factory.apiService.repeatLot(id, java.util.UUID.randomUUID().toString()).requireData() }; navController.popBackStack() } }) }
+        }
+        composable(Destinations.HOME) {
+            val vm: HomeViewModel = viewModel(factory = factory)
+            val state by vm.uiState.collectAsStateWithLifecycle()
+            HomeScreen(
+                state = state,
+                demoMode = demoMode,
+                onSeePrices = { navController.navigate(Destinations.PRICES) },
+                onFindRecyclers = { navController.navigate(Destinations.RECYCLERS) },
+                onRetry = null,
+                onCreateLot = { navController.navigate(Destinations.CREATE_LOT) },
+                onMyLots = { navController.navigate(Destinations.MY_LOTS) },
+                onOpenRewards = { navController.navigate(Destinations.REWARDS) },
+                onOpenSchemes = { navController.navigate(Destinations.SCHEMES) },
+                onOpenActivities = { navController.navigate(Destinations.ACTIVITIES) },
+                onOpenChat = { navController.navigate(Destinations.CHAT) },
+                onOpenDisputes = { navController.navigate(Destinations.DISPUTE_ANALYTICS) }
+            )
+        }
+        composable(Destinations.PRICES) {
+            val vm: PricesViewModel = viewModel(factory = factory)
+            val state by vm.uiState.collectAsStateWithLifecycle()
+            PricesScreen(state = state, vm = vm, speaker = factory.priceSpeaker, demoMode = demoMode)
+        }
+        composable(Destinations.RECYCLERS) {
+            val vm: RecyclersViewModel = viewModel(factory = factory)
+            val state by vm.uiState.collectAsStateWithLifecycle()
+            RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
+        }
+        composable(Destinations.RECYCLER_DETAIL, arguments = listOf(navArgument("recyclerId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("recyclerId").orEmpty()
+            val recycler by factory.recyclerCatalog!!.observeRecycler(id).collectAsStateWithLifecycle(initialValue = null)
+            recycler?.let { item -> RecyclerQuoteEntryScreen(item, onRequest = { navController.navigate(Destinations.quoteRequest("none", item.id)) }) }
+        }
+        composable(Destinations.QUOTE_REQUEST, arguments = listOf(navArgument("lotId") { type = NavType.StringType }, navArgument("recyclerId") { type = NavType.StringType })) { entry ->
+            val lotId = entry.arguments?.getString("lotId").orEmpty()
+            val recyclerId = entry.arguments?.getString("recyclerId").orEmpty()
+            val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
+            val recyclers by factory.recyclers.observeRecyclers().collectAsStateWithLifecycle(initialValue = emptyList())
+            QuoteRequestScreen(lots, recyclers, lotId, recyclerId, factory.quoteRepository, onSubmitted = { navController.navigate(Destinations.quoteCompare(it)) })
+        }
+        composable(Destinations.QUOTE_COMPARE, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
+            val lotId = entry.arguments?.getString("lotId").orEmpty()
+            val quotes by factory.quoteRepository.observeForLot(lotId).collectAsStateWithLifecycle(initialValue = emptyList())
+            val lot by factory.lotWriter.observeLot(lotId).collectAsStateWithLifecycle(initialValue = null)
+            val prices by factory.priceCatalog.observePrices().collectAsStateWithLifecycle(initialValue = emptyList())
+            val scope = rememberCoroutineScope()
+            QuoteComparisonScreen(quotes, lot, prices.firstOrNull { it.materialLabel == lot?.materialLabel }, factory.quoteRepository, onAccepted = { quoteId, id -> scope.launch { factory.quoteRepository.accept(quoteId); factory.lotWriter.confirm(id, System.currentTimeMillis()); navController.navigate(Destinations.handoverCreate(id, quoteId)) } })
+        }
+        composable(Destinations.HANDOVER_CREATE, arguments = listOf(navArgument("lotId") { type = NavType.StringType }, navArgument("quoteId") { type = NavType.StringType })) { entry ->
+            val lotId = entry.arguments?.getString("lotId").orEmpty(); val quoteId = entry.arguments?.getString("quoteId").orEmpty()
+            val lot by factory.lotWriter.observeLot(lotId).collectAsStateWithLifecycle(initialValue = null)
+            val quotes by factory.quoteRepository.observeForLot(lotId).collectAsStateWithLifecycle(initialValue = emptyList())
+            val scope = rememberCoroutineScope()
+            lot?.let { item -> quotes.firstOrNull { it.id == quoteId }?.let { quote -> HandoverCreateScreen(item, quote, item.collectorId.ifBlank { "local-collector" }) { type, location, time -> scope.launch { val h = factory.handoverRepository.create(item, quote, item.collectorId.ifBlank { "local-collector" }, type, location, time); navController.navigate(Destinations.handoverDocument(h.id)) } } } }
+        }
+        composable(Destinations.HANDOVER_DOCUMENT, arguments = listOf(navArgument("handoverId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("handoverId").orEmpty(); val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null); val lot by factory.lotWriter.observeLot(handover?.lotId.orEmpty()).collectAsStateWithLifecycle(initialValue = null); val prices by factory.priceCatalog.observePrices().collectAsStateWithLifecycle(initialValue = emptyList()); val scope = rememberCoroutineScope(); val context = LocalContext.current; var pendingScalePhoto by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+            val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> val path = pendingScalePhoto; if (ok && path != null) { handover?.let { item -> scope.launch { factory.handoverRepository.updateEvidence(id, item.actualWeightKg ?: item.weightKg, item.materialConfirmed, item.collectorConfirmed, path) } } } }
+            handover?.let { item ->
+                HandoverDocumentScreen(
+                    handover = item,
+                    photoPath = lot?.localPhotoPath,
+                    referencePrice = prices.firstOrNull { it.materialLabel == item.materialLabel },
+                    onUpdateEvidence = { weight, materialMatch, photo -> scope.launch { factory.handoverRepository.updateEvidence(id, weight, materialMatch, true, photo) } },
+                    onCaptureScalePhoto = { val dir = File(context.filesDir, "handover_photos").apply { mkdirs() }; val file = File(dir, "scale_${System.currentTimeMillis()}.jpg"); pendingScalePhoto = file.absolutePath; camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)) },
+                    onOpenDispute = { navController.navigate(Destinations.handoverDispute(id)) },
+                    onRate = { navController.navigate(Destinations.rateHandover(id)) },
+                    onMark = { scope.launch { factory.handoverRepository.markHandedOver(id) } }
+                )
+            }
+        }
+        composable(Destinations.RATE_HANDOVER, arguments = listOf(navArgument("handoverId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("handoverId").orEmpty()
+            val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null)
+            val scope = rememberCoroutineScope()
+            var submitting by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            var error by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+            handover?.let { item ->
+                VerifiedRatingScreen(item.recyclerName, submitting, error, onSubmit = { rating, pickup, payment, comment ->
+                    scope.launch {
+                        submitting = true
+                        error = null
+                        runCatching { factory.apiService.submitRecyclerReview(SubmitReviewRequestDto(id, rating, pickup, payment, comment.ifBlank { null })).requireData() }
+                            .onSuccess { navController.popBackStack() }
+                            .onFailure { error = "This review could not be submitted. Check your connection and try again." }
+                        submitting = false
+                    }
+                })
+            }
+        }
+        composable(Destinations.HANDOVER_DISPUTE, arguments = listOf(navArgument("handoverId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("handoverId").orEmpty()
+            val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null)
+            val disputes by factory.disputeRepository.observeForHandover(id).collectAsStateWithLifecycle(initialValue = emptyList())
+            val scope = rememberCoroutineScope()
+            handover?.let { item ->
+                DisputeCenterScreen(item, disputes) { type, description ->
+                    scope.launch {
+                        val localId = "DSP-${System.currentTimeMillis()}-${java.util.UUID.randomUUID().toString().take(6).uppercase()}"
+                        val local = Dispute(localId, item.id, item.lotId, item.collectorId, item.recyclerId, type, description, item.weightKg, item.actualWeightKg, DisputeStatus.SAVED_LOCALLY, System.currentTimeMillis(), false, null)
+                        factory.disputeRepository.save(local)
+                        runCatching {
+                            val body = JsonObject().apply {
+                                addProperty("type", type.name)
+                                addProperty("description", description)
+                                addProperty("claimedWeight", item.weightKg)
+                                item.actualWeightKg?.let { addProperty("actualValue", it) }
+                            }
+                            factory.apiService.disputeHandover(id, body).body()?.data?.id?.let { remoteId -> factory.disputeRepository.markSynced(localId, remoteId) }
+                        }
+                        navController.popBackStack()
+                    }
+                }
+            }
+        }
+        composable(Destinations.EARNINGS) {
+            val vm: EarningsViewModel = viewModel(factory = factory)
+            val state by vm.uiState.collectAsStateWithLifecycle()
+            EarningsScreen(state = state, onRetry = null, onRecordPayment = { navController.navigate(Destinations.PAYMENT_CREATE) })
+        }
+        composable(Destinations.PAYMENT_CREATE) {
+            val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
+            val scope = rememberCoroutineScope()
+            PaymentRecordScreen(lots, factory.paymentRepository) { lotId, amount -> scope.launch { factory.lotWriter.markPaid(lotId, amount, System.currentTimeMillis()); navController.popBackStack() } }
+        }
+        composable(Destinations.SETTINGS) {
+            val vm: SettingsViewModel = viewModel(factory = factory)
+            val language by vm.language.collectAsStateWithLifecycle()
+            val appearance by vm.appearance.collectAsStateWithLifecycle()
+            SettingsScreen(
+                language = language,
+                appearance = appearance,
+                appVersion = vm.appVersion,
+                onLanguageChange = { tag ->
+                    vm.setLanguage(tag)
+                    onLanguageChange(tag)
+                },
+                onAppearanceChange = { mode -> vm.setAppearance(mode); onAppearanceChange(mode) },
+                onOpenProfile = { navController.navigate(Destinations.PROFILE) },
+                onOpenSafety = { navController.navigate(Destinations.SAFETY) },
+                onOpenHelp = { navController.navigate(Destinations.HELP) },
+                onOpenRewards = { navController.navigate(Destinations.REWARDS) },
+                onOpenSchemes = { navController.navigate(Destinations.SCHEMES) },
+                onOpenActivities = { navController.navigate(Destinations.ACTIVITIES) },
+                onOpenChat = { navController.navigate(Destinations.CHAT) },
+                onOpenDisputes = { navController.navigate(Destinations.DISPUTE_ANALYTICS) },
+                onLogout = {
+                    onLogout()
+                    navController.navigate(Destinations.AUTH) {
+                        popUpTo(0)
+                    }
+                }
+            )
+        }
+        composable(Destinations.PROFILE) { ProfileScreen(factory.currentAccount) }
+        composable(Destinations.SAFETY) { SafetyScreen() }
+        composable(Destinations.HELP) { HelpScreen() }
+        composable(Destinations.REWARDS) {
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refresh() }
+            RewardsScreen(state, vm::refresh)
+        }
+        composable(Destinations.SCHEMES) {
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refresh() }
+            SchemesScreen(state, vm::refresh)
+        }
+        composable(Destinations.ACTIVITIES) {
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refresh() }
+            DiyActivitiesScreen(state.activities)
+        }
+        composable(Destinations.CHAT) {
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refresh() }
+            ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh)
+        }
+        composable(Destinations.CHAT_DETAIL, arguments = listOf(navArgument("conversationId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("conversationId").orEmpty()
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            val conversation = state.conversations.firstOrNull { it.id == id }
+            LaunchedEffect(id) { vm.refresh(); vm.startPolling(id) }
+            conversation?.let {
+                ChatDetailScreen(
+                    conversation = it,
+                    messages = state.messages[id].orEmpty(),
+                    sending = state.sending,
+                    onSend = { vm.sendMessage(id, it) },
+                    onRetryMessage = { vm.retryMessage(id, it) },
+                    draftSuggestion = state.drafts[id],
+                    drafting = state.draftingConversationId == id,
+                    onDraftReply = { vm.draftReply(id) }
+                )
+            }
+        }
+        composable(Destinations.DISPUTE_ANALYTICS) {
+            val vm: FutureFeatureViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refresh() }
+            DisputeAnalyticsScreen(state.analytics)
+        }
+        composable(Destinations.RECYCLER_VERIFY) { RecyclerVerificationScreen(factory.currentAccount) }
+        composable(Destinations.RECYCLER_MARKETPLACE) {
+            if (demoMode) RecyclerMarketplaceScreen(demoMode = true)
+            else {
+                val vm: RecyclerMarketplaceViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                RecyclerMarketplaceScreen(liveLots = state.lots, liveLoading = state.loading, liveError = state.error, liveSubmittedIds = state.submittedIds, onRefresh = vm::refresh, onLiveOfferSent = vm::submitOffer)
+            }
+        }
+        composable(Destinations.RECYCLER_ORDERS) {
+            if (demoMode) RecyclerOrdersScreen(demoMode = true, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
+            else {
+                val vm: RecyclerOrdersViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                RecyclerOrdersScreen(liveHandovers = state.handovers, liveLoading = state.loading, liveError = state.error, onRefresh = vm::refresh, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
+            }
+        }
+        composable(Destinations.RECYCLER_PICKUPS) { RecyclerPickupsScreen(demoMode = demoMode) }
+        composable(Destinations.RECYCLER_RATES) { RecyclerRatesScreen() }
+        composable(Destinations.RECYCLER_PROFILE) { RecyclerProfileScreen(factory.currentAccount, onLogout = onLogout) }
+        composable(Destinations.RECYCLER_SCAN) { RecyclerScanScreen() }
+    }
+}

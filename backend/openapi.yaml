@@ -1,0 +1,90 @@
+openapi: 3.0.3
+info:
+  title: Kabadiwala Connect API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      responses:
+        '200': { description: Healthy API and database }
+        '503': { description: Degraded database }
+  /auth/request-otp:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PhoneRequest' } } } }
+      responses:
+        '200': { description: OTP request accepted }
+        '400': { description: Invalid phone }
+        '429': { description: Rate limited or cooldown }
+  /auth/verify-otp:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyRequest' } } } }
+      responses:
+        '200': { description: Authenticated collector and JWT }
+        '400': { description: Invalid or expired OTP }
+        '429': { description: Attempts exceeded }
+  /auth/logout:
+    post: { responses: { '200': { description: Stateless logout acknowledgement } } }
+  /collectors/me:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Public collector profile }, '401': { description: Authentication required }, '403': { description: Account unavailable } }
+    put:
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileUpdate' } } } }
+      responses: { '200': { description: Updated collector profile }, '400': { description: Invalid language or location } }
+  /lots:
+    post:
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LotCreate' } } } }
+      responses: { '201': { description: Lot created }, '400': { description: Validation error }, '401': { description: Authentication required } }
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: query, name: page, schema: { type: integer, minimum: 1 } }, { in: query, name: limit, schema: { type: integer, maximum: 100 } }, { in: query, name: status, schema: { type: string } }, { in: query, name: materialCategory, schema: { type: string } }]
+      responses: { '200': { description: Collector lots with pagination } }
+  /lots/{lotId}:
+    parameters: [{ in: path, name: lotId, required: true, schema: { type: string } }]
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Owned lot }, '404': { description: Lot not found } } }
+    put: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LotUpdate' } } } }, responses: { '200': { description: Lot updated }, '409': { description: Locked or stale lot } } }
+    delete: { security: [{ bearerAuth: [] }], responses: { '200': { description: Lot cancelled }, '409': { description: Lot is locked } } }
+  /lots/{lotId}/photo:
+    post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [photo], properties: { photo: { type: string, format: binary } } } } } }, responses: { '200': { description: Photo uploaded }, '400': { description: Invalid photo }, '413': { description: File too large } } }
+  /prices/board:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] } }, { in: query, name: location, schema: { type: string } }], responses: { '200': { description: Current trusted/development price board }, '404': { description: No price available } } }
+  /prices/history:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string } }, { in: query, name: location, schema: { type: string } }, { in: query, name: days, schema: { type: integer, minimum: 1, maximum: 90, default: 30 } }], responses: { '200': { description: Chronological price history } } }
+  /lots/{lotId}/valuation:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: lotId, required: true, schema: { type: string } }], responses: { '200': { description: Server-calculated owned lot valuation }, '404': { description: Lot or price not found } } }
+  /admin/prices/{priceId}:
+    put: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: priceId, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PriceUpdate' } } } }, responses: { '200': { description: Updated price with audit trail }, '403': { description: Admin access required }, '422': { description: Invalid price range } } }
+  /quotes/request:
+    post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [lotId, recyclerId] } } } }, responses: { '201': { description: Quote request created }, '409': { description: Ineligible or duplicate request } } }
+  /quotes/pending:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Collector quote requests and quotes } } }
+  /quotes/{quoteId}:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Owned quote }, '404': { description: Quote not found } } }
+  /quotes/{quoteId}/accept:
+    post: { security: [{ bearerAuth: [] }], responses: { '200': { description: Quote accepted }, '409': { description: Expired or non-actionable quote } } }
+  /quotes/{quoteId}/reject:
+    post: { security: [{ bearerAuth: [] }], responses: { '200': { description: Quote rejected } } }
+  /recycler/quote-requests:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Assigned recycler requests } } }
+  /recycler/quote-requests/{requestId}:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Assigned request detail } } }
+  /recycler/quotes:
+    post: { security: [{ bearerAuth: [] }], responses: { '201': { description: Quote submitted }, '422': { description: Invalid quote } } }
+  /sync:
+    post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [operations], properties: { operations: { type: array, maxItems: 100, items: { type: object } } } } } } }, responses: { '200': { description: Per-operation sync results }, '422': { description: Invalid batch } } }
+  /sync/changes:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: since, schema: { type: string, format: date-time } }], responses: { '200': { description: Collector-owned delta changes } } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    LotCreate: { type: object, required: [materialCategory, condition, weight, collectionLocation], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, materialSubcategory: { type: string }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, weight: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 500 }, collectionLocation: { type: object, properties: { latitude: { type: number }, longitude: { type: number }, areaName: { type: string }, precision: { type: string, enum: [GPS, MANUAL] } } }, notes: { type: string, maxLength: 1000 } } }
+    LotUpdate: { type: object, required: [version], properties: { weight: { type: number }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, notes: { type: string }, version: { type: integer, minimum: 1 } } }
+    PhoneRequest: { type: object, required: [phone], properties: { phone: { type: string, pattern: '^[6-9]\\d{9}$' } } }
+    VerifyRequest: { type: object, required: [phone, otp], properties: { phone: { type: string }, otp: { type: string, pattern: '^\\d{6}$' } } }
+    ProfileUpdate: { type: object, properties: { preferredLanguage: { type: string, enum: [MARATHI, HINDI] }, primaryLocation: { type: object, properties: { latitude: { type: number, minimum: -90, maximum: 90 }, longitude: { type: number, minimum: -180, maximum: 180 }, areaName: { type: string, maxLength: 160 } } } } }
+    PriceUpdate: { type: object, required: [priceMin, priceMax, marketPrice], properties: { priceMin: { type: number, exclusiveMinimum: 0 }, priceMax: { type: number, exclusiveMinimum: 0 }, marketPrice: { type: number, exclusiveMinimum: 0 }, reason: { type: string, maxLength: 500 } } }

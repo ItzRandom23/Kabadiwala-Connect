@@ -1,0 +1,237 @@
+package com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticationRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailAccountRequest
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailAuthentication
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailValidator
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.IndianPhoneValidator
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpChallenge
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
+import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+enum class OnboardingStep { WELCOME, EMAIL, ROLE, LANGUAGE, RECYCLER_DETAILS, PHONE, OTP, LOCATION_PERMISSION, AREA, COMPLETE }
+enum class LocationChoice { GPS, MANUAL }
+
+data class OnboardingState(
+    val step: OnboardingStep = OnboardingStep.WELCOME,
+    val email: String = "",
+    val password: String = "",
+    val returningUser: Boolean = false,
+    val role: AccountRole = AccountRole.COLLECTOR,
+    val displayName: String = "",
+    val businessName: String = "",
+    val authorizationNumber: String = "",
+    val materialsAccepted: Set<String> = emptySet(),
+    val pickupAvailable: Boolean = false,
+    val serviceRadiusKm: Int = 25,
+    val phone: String = "",
+    val otp: String = "",
+    val language: String = LocaleManager.ENGLISH,
+    val area: String = "",
+    val locationChoice: LocationChoice = LocationChoice.MANUAL,
+    val challenge: OtpChallenge? = null,
+    val otpError: OtpError? = null,
+    val emailError: Boolean = false,
+    val passwordError: Boolean = false,
+    val phoneError: Boolean = false,
+    val authError: Boolean = false,
+    val isBusy: Boolean = false,
+    val completed: Boolean = false
+)
+
+enum class OtpError { INCORRECT, EXPIRED, ATTEMPTS_EXCEEDED, ACCOUNT_CONFLICT, SERVER, NETWORK }
+
+class OnboardingViewModel(
+    private val auth: AuthenticationRepository,
+    private val profiles: CollectorProfileRepository,
+    private val secureStorage: SecureStorage? = null,
+    initialLanguage: String = LocaleManager.ENGLISH,
+    private val now: () -> Long = { System.currentTimeMillis() }
+) : ViewModel() {
+    private val _state = MutableStateFlow(
+        OnboardingState(language = LocaleManager.normalizeTag(initialLanguage))
+    )
+    val state: StateFlow<OnboardingState> = _state.asStateFlow()
+    private var authenticatedCollectorId: String? = null
+
+    fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE) }
+    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = false) }
+    fun setEmail(value: String) { _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = false) }
+    fun setPassword(value: String) { _state.value = _state.value.copy(password = value, passwordError = false, authError = false) }
+    fun continueEmail() {
+        val current = _state.value
+        val validEmail = EmailValidator.isValid(current.email)
+        val validPassword = current.password.length >= 8
+        _state.value = current.copy(emailError = !validEmail, passwordError = !validPassword)
+        if (validEmail && validPassword) _state.value = _state.value.copy(step = if (current.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE)
+    }
+    fun signIn() {
+        val current = _state.value
+        if (!EmailValidator.isValid(current.email) || current.password.length < 8) { continueEmail(); return }
+        viewModelScope.launch {
+            _state.value = current.copy(isBusy = true, authError = false)
+            when (val result = auth.authenticateEmail(EmailAccountRequest(current.email, current.password, AccountRole.COLLECTOR, LocaleManager.ENGLISH, isReturning = true))) {
+                is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false) }
+                else -> _state.value = current.copy(isBusy = false, authError = true)
+            }
+        }
+    }
+    // The language is selected once on the first-run screen and persisted by
+    // MainActivity. Registration reuses that choice instead of asking again.
+    fun selectRole(role: AccountRole) {
+        val next = if (role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
+        _state.value = _state.value.copy(role = role, step = next)
+    }
+    fun setDisplayName(value: String) { _state.value = _state.value.copy(displayName = value) }
+    fun setBusinessName(value: String) { _state.value = _state.value.copy(businessName = value) }
+    fun setAuthorizationNumber(value: String) { _state.value = _state.value.copy(authorizationNumber = value) }
+    fun toggleMaterial(value: String) { _state.value = _state.value.copy(materialsAccepted = _state.value.materialsAccepted.toMutableSet().also { if (!it.add(value)) it.remove(value) }) }
+    fun setPickupAvailable(value: Boolean) { _state.value = _state.value.copy(pickupAvailable = value) }
+    fun setServiceRadius(value: Int) { _state.value = _state.value.copy(serviceRadiusKm = value) }
+    fun continueRecyclerDetails() { _state.value = _state.value.copy(step = OnboardingStep.LOCATION_PERMISSION) }
+
+    // Legacy phone OTP boundary remains available for older backend/dev flows.
+    fun setPhone(value: String) { _state.value = _state.value.copy(phone = value.filter(Char::isDigit), phoneError = false, authError = false) }
+    fun requestOtp() {
+        val phone = _state.value.phone
+        if (!IndianPhoneValidator.isValid(phone)) { _state.value = _state.value.copy(phoneError = true); return }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isBusy = true, phoneError = false)
+            try {
+                val challenge = auth.requestOtp(phone)
+                _state.value = _state.value.copy(step = OnboardingStep.OTP, challenge = challenge, otp = "", isBusy = false, authError = false)
+            } catch (_: Exception) { _state.value = _state.value.copy(isBusy = false, authError = true) }
+        }
+    }
+    fun setOtp(value: String) { _state.value = _state.value.copy(otp = value.filter(Char::isDigit).take(6), otpError = null) }
+    fun verifyOtp() {
+        val current = _state.value
+        if (current.otp.length != 6 || current.challenge == null) return
+        viewModelScope.launch {
+            _state.value = current.copy(isBusy = true)
+            val result = try {
+                auth.verifyOtp(
+                    current.phone,
+                    current.otp,
+                    PhoneAccountRequest(
+                        phoneNumber = current.phone,
+                        role = current.role,
+                        preferredLanguage = current.language,
+                        areaName = current.area,
+                        displayName = current.displayName,
+                        email = current.email,
+                        businessName = current.businessName,
+                        authorizationNumber = current.authorizationNumber,
+                        materialsAccepted = current.materialsAccepted.toList(),
+                        pickupAvailable = current.pickupAvailable,
+                        serviceRadiusKm = current.serviceRadiusKm
+                    )
+                )
+            } catch (_: Exception) { OtpVerification.NetworkError }
+            _state.value = when (result) {
+                is OtpVerification.Success -> {
+                    authenticatedCollectorId = result.collectorId.takeIf { it.isNotBlank() }
+                    val profile = result.profile
+                    if (profile != null) {
+                        secureStorage?.saveAccount(profile)
+                        if (profile.role == AccountRole.COLLECTOR) saveCollectorCacheIfNeeded(profile.profileId, current, profile.role)
+                        current.copy(
+                            step = OnboardingStep.COMPLETE,
+                            completed = true,
+                            isBusy = false,
+                            otpError = null,
+                            role = profile.role,
+                            email = profile.email,
+                            phone = profile.phoneNumber,
+                            displayName = profile.displayName.orEmpty(),
+                            area = profile.areaName.orEmpty()
+                        )
+                    } else {
+                        val next = if (current.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
+                        current.copy(step = next, isBusy = false, otpError = null)
+                    }
+                }
+                OtpVerification.Incorrect -> current.copy(isBusy = false, otpError = OtpError.INCORRECT)
+                OtpVerification.Expired -> current.copy(isBusy = false, otpError = OtpError.EXPIRED)
+                OtpVerification.AttemptsExceeded -> current.copy(isBusy = false, otpError = OtpError.ATTEMPTS_EXCEEDED)
+                OtpVerification.AccountConflict -> current.copy(isBusy = false, otpError = OtpError.ACCOUNT_CONFLICT)
+                OtpVerification.ServerError -> current.copy(isBusy = false, otpError = OtpError.SERVER)
+                OtpVerification.NetworkError -> current.copy(isBusy = false, otpError = OtpError.NETWORK)
+            }
+        }
+    }
+    fun resetOtp() {
+        _state.value = _state.value.copy(
+            step = OnboardingStep.PHONE,
+            otp = "",
+            challenge = null,
+            otpError = null,
+            authError = false,
+            isBusy = false
+        )
+    }
+
+    fun resendOtp() { requestOtp() }
+
+    fun selectLanguage(tag: String) {
+        val next = if (_state.value.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
+        _state.value = _state.value.copy(language = LocaleManager.normalizeTag(tag), step = next)
+    }
+    fun locationPermissionResult(granted: Boolean) { _state.value = _state.value.copy(locationChoice = if (granted) LocationChoice.GPS else LocationChoice.MANUAL, step = OnboardingStep.AREA) }
+    fun chooseManualLocation() { locationPermissionResult(false) }
+    fun setArea(value: String) { _state.value = _state.value.copy(area = value) }
+    fun continueToPhone() {
+        val current = _state.value
+        val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
+        _state.value = current.copy(emailError = !validEmail)
+        if (current.area.isNotBlank() && validEmail) _state.value = _state.value.copy(step = OnboardingStep.PHONE)
+    }
+
+    fun saveProfile() {
+        val current = _state.value
+        if (current.area.isBlank() && current.role == AccountRole.COLLECTOR) return
+        viewModelScope.launch {
+            _state.value = current.copy(isBusy = true, authError = false)
+            if (current.email.isNotBlank() && authenticatedCollectorId == null) {
+                val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
+                when (val result = auth.authenticateEmail(request)) {
+                    is EmailAuthentication.Success -> {
+                        secureStorage?.saveAccount(result.profile)
+                        saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
+                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false)
+                    }
+                    else -> _state.value = current.copy(isBusy = false, authError = true)
+                }
+            } else {
+                val timestamp = now()
+                val id = authenticatedCollectorId ?: "KC-${UUID.randomUUID().toString().take(8).uppercase()}"
+                val profile = CollectorProfile(id, current.phone, current.language, current.area, current.locationChoice.name.lowercase(), timestamp, timestamp)
+                profiles.save(profile)
+                try { auth.updateProfile(profile) } catch (_: Exception) { }
+                secureStorage?.put(SecureStorage.COLLECTOR_ID, id)
+                _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false)
+            }
+        }
+    }
+
+    private suspend fun saveCollectorCacheIfNeeded(profileId: String, current: OnboardingState, role: AccountRole = current.role) {
+        if (role == AccountRole.COLLECTOR) {
+            val timestamp = now()
+            profiles.save(CollectorProfile(profileId, current.phone, current.language, current.area, current.locationChoice.name.lowercase(), timestamp, timestamp))
+            secureStorage?.put(SecureStorage.COLLECTOR_ID, profileId)
+        }
+    }
+}

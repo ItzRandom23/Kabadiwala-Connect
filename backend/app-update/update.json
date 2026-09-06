@@ -1,0 +1,6 @@
+{
+  "versionCode": 4,
+  "versionName": "0.0.3-beta",
+  "apkUrl": "kabadiwala-connect-0.0.3-beta.apk",
+  "releaseNotes": "Clarified OTP registration errors and fixed onboarding progress steps."
+}
