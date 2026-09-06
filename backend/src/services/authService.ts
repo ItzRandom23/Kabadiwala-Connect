@@ -83,10 +83,27 @@ export class AuthService {
     try {
       return await this.verifyPhoneAccount(phone, input);
     } catch (error) {
-      if (error instanceof AppError) throw error;
-      if ((error as { code?: string })?.code === 'P2002') {
-        throw new AppError('CONFLICT', 'This mobile number or email is already linked to another account', 409, { code: 'ACCOUNT_CONFLICT' });
+      const details = error instanceof AppError && typeof error.details === 'object' && error.details !== null
+        ? error.details as { code?: string }
+        : undefined;
+      const isEmailConflict = error instanceof AppError && error.code === 'CONFLICT' && details?.code === 'EMAIL_IN_USE';
+      const isUniqueConstraint = (error as { code?: string })?.code === 'P2002';
+      if (isEmailConflict || isUniqueConstraint) {
+        // The phone OTP is the verified identity boundary. Email is optional
+        // for phone accounts, so a duplicate email must not block signup;
+        // retry without attaching that email. This also makes a concurrent
+        // double-tap/retry idempotent after the first transaction commits.
+        try {
+          return await this.verifyPhoneAccount(phone, { ...input, email: undefined });
+        } catch (retryError) {
+          if (retryError instanceof AppError) throw retryError;
+          if ((retryError as { code?: string })?.code === 'P2002') {
+            throw new AppError('CONFLICT', 'This mobile number is already linked to another account', 409, { code: 'ACCOUNT_CONFLICT' });
+          }
+          throw retryError;
+        }
       }
+      if (error instanceof AppError) throw error;
       throw error;
     }
   }

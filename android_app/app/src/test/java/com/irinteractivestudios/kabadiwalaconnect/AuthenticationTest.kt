@@ -171,6 +171,43 @@ class AuthenticationTest {
         }
     }
 
+    @Test fun onboarding_retriesVerifiedCollectorPhoneEvenWhenOptionalEmailWasEntered() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var legacySignInCalls = 0
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification {
+                    legacySignInCalls++
+                    return OtpVerification.Success("existing-token", Long.MAX_VALUE, "existing-collector")
+                }
+                override suspend fun verifyOtp(phoneNumber: String, code: String, account: PhoneAccountRequest) = OtpVerification.AccountConflict
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.setPhone("9876543210")
+            vm.setEmail("friend@example.com")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(1, legacySignInCalls)
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+            assertTrue(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun onboarding_gpsStoresDetectedAreaAndCoordinates() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)

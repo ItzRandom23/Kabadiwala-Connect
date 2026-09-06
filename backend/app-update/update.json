@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "0.0.7-beta",
-  "apkUrl": "kabadiwala-connect-0.0.7-beta.apk",
-  "releaseNotes": "Added complete locale resource coverage for all supported languages and improved language switching stability."
+  "versionCode": 9,
+  "versionName": "0.0.8-beta",
+  "apkUrl": "kabadiwala-connect-0.0.8-beta.apk",
+  "releaseNotes": "Fixed account creation conflicts after successful phone verification, including duplicate retries and optional email conflicts."
 }

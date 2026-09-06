@@ -187,7 +187,7 @@ class OnboardingViewModel(
             // matching account identity. A verified phone is enough to safely
             // retry through the existing-phone sign-in path; this avoids
             // trapping a user on an erroneous duplicate-account message.
-            val result = if (registrationResult == OtpVerification.AccountConflict && current.email.isBlank()) {
+            val result = if (registrationResult == OtpVerification.AccountConflict && current.role == AccountRole.COLLECTOR) {
                 try {
                     auth.verifyOtp(current.phone, current.otp)
                 } catch (_: Exception) {
