@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DescriptionSource } from '@prisma/client';
+import prismaPackage from '@prisma/client';
 import { maybeAiDescription } from '../src/routes/futureRoutes.js';
+
+const { DescriptionSource } = prismaPackage;
 
 afterEach(() => {
   delete process.env.AI_DESCRIPTION_URL;

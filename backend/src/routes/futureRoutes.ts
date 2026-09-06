@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import type { Request } from 'express';
 import multer from 'multer';
-import type { PrismaClient } from '@prisma/client';
-import { AccountRole, DescriptionSource, MessageStatus, PreferredLanguage, RewardStatus } from '@prisma/client';
+import type { AccountRole as AccountRoleType, PrismaClient } from '@prisma/client';
+import prismaPackage from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { JwtService } from '../services/jwt.js';
 import { requireAccount } from '../middleware/auth.js';
 import { AppError } from '../utils/errors.js';
+
+const { AccountRole, DescriptionSource, MessageStatus, PreferredLanguage, RewardStatus } = prismaPackage;
 
 const languageSchema = z.nativeEnum(PreferredLanguage).default(PreferredLanguage.ENGLISH);
 const appearanceSchema = z.enum(['SYSTEM', 'LIGHT', 'DARK']);
@@ -333,7 +335,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Message must be between 1 and 1000 characters', 422);
     const existing = await db.chatMessage.findFirst({ where: { conversationId: conversation.id, clientMessageId: parsed.data.clientMessageId } });
     if (existing) return res.json({ success: true, data: existing, message: 'Message already sent' });
-    const message = await db.chatMessage.create({ data: { conversationId: conversation.id, senderId: identity.collectorId, senderRole: identity.role as AccountRole, clientMessageId: parsed.data.clientMessageId, body: parsed.data.body, status: MessageStatus.SENT } });
+    const message = await db.chatMessage.create({ data: { conversationId: conversation.id, senderId: identity.collectorId, senderRole: identity.role as AccountRoleType, clientMessageId: parsed.data.clientMessageId, body: parsed.data.body, status: MessageStatus.SENT } });
     await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
     return res.status(201).json({ success: true, data: message, message: 'Message sent' });
   });
