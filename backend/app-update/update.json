@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "0.0.6-beta",
-  "apkUrl": "kabadiwala-connect-0.0.6-beta.apk",
-  "releaseNotes": "Fixed verified development OTP sign-in when an old test account produces a duplicate-account response."
+  "versionCode": 8,
+  "versionName": "0.0.7-beta",
+  "apkUrl": "kabadiwala-connect-0.0.7-beta.apk",
+  "releaseNotes": "Added complete locale resource coverage for all supported languages and improved language switching stability."
 }

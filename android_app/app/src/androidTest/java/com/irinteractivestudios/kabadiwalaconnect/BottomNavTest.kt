@@ -3,9 +3,15 @@ package com.irinteractivestudios.kabadiwalaconnect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.irinteractivestudios.kabadiwalaconnect.KabadiwalaApp
+import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +26,26 @@ class BottomNavTest {
 
     @get:Rule
     val composeTestRule = createAndroidComposeRule<MainActivity>()
+
+    @Before
+    fun enterHomeWhenUnauthenticated() {
+        val app = ApplicationProvider.getApplicationContext<KabadiwalaApp>()
+        runBlocking {
+            app.container.authenticationRepository.logout()
+            app.container.clearAccount()
+        }
+        LocaleManager.persistTag(app, LocaleManager.ENGLISH)
+        composeTestRule.activityRule.scenario.recreate()
+        composeTestRule.waitForIdle()
+        if (composeTestRule.onAllNodesWithTag("auth_start_over").fetchSemanticsNodes().isNotEmpty()) {
+            composeTestRule.onNodeWithTag("auth_start_over").performClick()
+            composeTestRule.waitForIdle()
+        }
+        if (composeTestRule.onAllNodesWithTag("auth_demo").fetchSemanticsNodes().isNotEmpty()) {
+            composeTestRule.onNodeWithTag("auth_demo").performClick()
+            composeTestRule.waitForIdle()
+        }
+    }
 
     @Test
     fun appLaunchesOnHome() {

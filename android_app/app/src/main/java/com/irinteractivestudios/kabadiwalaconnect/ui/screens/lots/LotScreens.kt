@@ -18,9 +18,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -62,11 +65,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,6 +88,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.WorkflowProgress
 import com.irinteractivestudios.kabadiwalaconnect.util.FeaturePermission
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -144,7 +151,22 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -
 
 @Composable
 fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () -> Unit, onRequestLocation: () -> Unit, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, onUseDemoPhoto: (() -> Unit)? = null, onSelectPhoto: () -> Unit = {}) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val scrollState = rememberScrollState()
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom, state.step) {
+        if (imeBottom > 0) {
+            delay(200)
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .imePadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         if (state.step != LotStep.SAVED) {
             WorkflowProgress(
                 current = state.step.ordinal + 1,

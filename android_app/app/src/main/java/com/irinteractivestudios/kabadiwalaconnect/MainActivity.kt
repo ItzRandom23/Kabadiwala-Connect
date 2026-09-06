@@ -95,6 +95,23 @@ class MainActivity : ComponentActivity() {
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole)
                 val languageSelected = LocaleManager.hasPersistedTag(this@MainActivity)
+                var navGuardReady by remember { mutableStateOf(false) }
+
+                // A restored NavHost back stack can outlive a session (for
+                // example after process death or test/activity recreation).
+                // Never leave a signed-out user on an account-owned screen,
+                // and start a valid session from its role-appropriate home.
+                LaunchedEffect(initialRoute, route) {
+                    if (!navGuardReady && route != null) {
+                        navGuardReady = true
+                        if (route != initialRoute) {
+                            navController.navigate(initialRoute) {
+                                popUpTo(0)
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                }
 
                 val connection by app.container.connectivityObserver.state
                     .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
@@ -111,8 +128,18 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val title = when (route) {
+                    Destinations.MY_LOTS -> stringResource(R.string.home_my_lots)
+                    Destinations.LOT_DETAIL -> stringResource(R.string.lot_review_title)
                     Destinations.PRICES -> stringResource(R.string.prices_title)
                     Destinations.RECYCLERS -> stringResource(R.string.recyclers_title)
+                    Destinations.RECYCLER_DETAIL -> stringResource(R.string.recyclers_title)
+                    Destinations.QUOTE_REQUEST -> stringResource(R.string.quote_request_title)
+                    Destinations.QUOTE_COMPARE -> stringResource(R.string.quote_compare_title)
+                    Destinations.HANDOVER_CREATE -> stringResource(R.string.handover_create_title)
+                    Destinations.HANDOVER_DOCUMENT -> stringResource(R.string.handover_document_title)
+                    Destinations.HANDOVER_DISPUTE -> stringResource(R.string.dispute_title)
+                    Destinations.RATE_HANDOVER -> stringResource(R.string.handover_rate_recycler)
+                    Destinations.PAYMENT_CREATE -> stringResource(R.string.payment_title)
                     Destinations.EARNINGS -> stringResource(R.string.earnings_title)
                     Destinations.SETTINGS -> stringResource(R.string.settings_title)
                     Destinations.PROFILE -> stringResource(R.string.profile_title)

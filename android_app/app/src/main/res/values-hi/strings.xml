@@ -330,4 +330,14 @@
     <string name="future_chat_draft">Gemini से ड्राफ्ट</string>
     <string name="future_chat_drafting">ड्राफ्ट बन रहा है…</string>
     <string name="future_chat_draft_note">भेजने से पहले ड्राफ्ट देखें।</string>
+    <string name="lot_weight_unit_kg">Kilograms (kg)</string>
+    <string name="lot_weight_unit_grams">Grams (g)</string>
+    <string name="lot_weight_slider_hint">The slider uses practical steps; use the field for exact values.</string>
+    <string name="lot_saving">Saving…</string>
+    <string name="lot_save_error">Couldn’t save this lot locally. Check storage and try again.</string>
+    <string name="lot_back_home">Back to home</string>
+    <string name="lot_start_over">Start again</string>
+    <string name="auth_sending_otp">Sending OTP…</string>
+    <string name="auth_verifying">Verifying…</string>
+    <string name="auth_start_over">Start again</string>
 </resources>
