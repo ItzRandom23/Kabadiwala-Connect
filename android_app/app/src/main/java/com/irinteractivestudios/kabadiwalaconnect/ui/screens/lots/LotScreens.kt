@@ -151,9 +151,23 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                 total = 7,
                 label = stringResource(R.string.lot_step, state.step.ordinal + 1, 7)
             )
+            if (state.step != LotStep.PHOTO) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = vm::goBack,
+                        enabled = !state.isSaving,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("lot_back")
+                    ) { Text(stringResource(R.string.common_back)) }
+                    OutlinedButton(
+                        onClick = vm::startOver,
+                        enabled = !state.isSaving,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("lot_start_over")
+                    ) { Text(stringResource(R.string.lot_start_over)) }
+                }
+            }
         }
         when (state.step) {
-            LotStep.PHOTO -> PhotoStep(state, vm, onTakePhoto, onSelectPhoto, onUseDemoPhoto)
+            LotStep.PHOTO -> PhotoStep(state, vm, onTakePhoto, onSelectPhoto, onHome, onUseDemoPhoto)
             LotStep.MATERIAL -> MaterialStep(state, vm, onSafety)
             LotStep.CONDITION -> ConditionStep(state, vm)
             LotStep.WEIGHT -> WeightStep(state, vm)
@@ -164,7 +178,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     }
 }
 
-@Composable private fun PhotoStep(s: LotDraftState, vm: LotManagementViewModel, take: () -> Unit, select: () -> Unit, useDemoPhoto: (() -> Unit)?) {
+@Composable private fun PhotoStep(s: LotDraftState, vm: LotManagementViewModel, take: () -> Unit, select: () -> Unit, onHome: () -> Unit, useDemoPhoto: (() -> Unit)?) {
     Icon(Icons.Filled.CameraAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(58.dp))
     Text(stringResource(R.string.lot_photo_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_photo_detail), style = MaterialTheme.typography.bodyLarge)
@@ -187,6 +201,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     OutlinedButton(onClick = select, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_choose_photo")) { Icon(Icons.Filled.CropSquare, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_choose_photo)) }
     if (useDemoPhoto != null && s.photoPath == null) OutlinedButton(onClick = useDemoPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_demo_photo")) { Icon(Icons.Filled.Recycling, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_demo_photo)) }
     if (s.photoPath != null) OutlinedButton(onClick = { vm.photoCaptured(s.photoPath) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_confirm_photo")) { Text(stringResource(R.string.lot_confirm_photo)) }
+    OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("lot_cancel_to_home")) { Text(stringResource(R.string.lot_cancel)) }
 }
 @Composable private fun MaterialStep(s: LotDraftState, vm: LotManagementViewModel, onSafety: () -> Unit) {
     val context = LocalContext.current

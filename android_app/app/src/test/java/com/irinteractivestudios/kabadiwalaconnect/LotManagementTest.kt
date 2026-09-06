@@ -47,6 +47,25 @@ class LotManagementTest {
         assertEquals(LotStep.LOCATION, vm.state.value.step)
     }
 
+    @Test fun lotBackAndStartOverAllowCorrectionsBeforeSaving() {
+        val vm = LotManagementViewModel(writer(mutableListOf()), "collector")
+        vm.chooseMaterial(Material.CABLES)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeight("10")
+        assertEquals(LotStep.WEIGHT, vm.state.value.step)
+
+        vm.goBack()
+        assertEquals(LotStep.CONDITION, vm.state.value.step)
+        vm.goBack()
+        assertEquals(LotStep.MATERIAL, vm.state.value.step)
+        assertEquals(Material.CABLES, vm.state.value.material)
+
+        vm.startOver()
+        assertEquals(LotStep.PHOTO, vm.state.value.step)
+        assertEquals(null, vm.state.value.material)
+        assertEquals("", vm.state.value.weightText)
+    }
+
     @Test fun save_createsExpectedOfflineLotIdAndFields() = runTest {
         val saved = mutableListOf<Lot>()
         val vm = LotManagementViewModel(writer(saved), "collector-1", now = { 1234L })

@@ -90,6 +90,44 @@ class AuthenticationTest {
         assertEquals("9876543210", vm.state.value.phone)
     }
 
+    @Test fun onboarding_backAndStartOverKeepPeopleOutOfDeadEnds() {
+        val vm = TestAuth.onboarding()
+        vm.selectRole(AccountRole.COLLECTOR)
+        vm.chooseManualLocation()
+        vm.setArea("Pune")
+        vm.continueToPhone()
+
+        vm.goBack()
+        assertEquals(OnboardingStep.AREA, vm.state.value.step)
+        assertEquals("Pune", vm.state.value.area)
+
+        vm.startOver()
+        assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+        assertEquals("", vm.state.value.phone)
+        assertEquals("", vm.state.value.area)
+    }
+
+    @Test fun onboarding_successfulLegacyOtpCompletesInsteadOfSendingUserBack() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val vm = TestAuth.onboarding()
+            vm.setPhone("9876543210")
+            vm.requestOtp()
+            advanceUntilIdle()
+            assertEquals(OnboardingStep.OTP, vm.state.value.step)
+
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+            assertTrue(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun onboarding_gpsStoresDetectedAreaAndCoordinates() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)

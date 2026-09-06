@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "0.0.4-beta",
-  "apkUrl": "kabadiwala-connect-0.0.4-beta.apk",
-  "releaseNotes": "Fixed demo lot completion, home navigation, weight units, and retryable local saves."
+  "versionCode": 6,
+  "versionName": "0.0.5-beta",
+  "apkUrl": "kabadiwala-connect-0.0.5-beta.apk",
+  "releaseNotes": "Added back and start-over controls, fixed OTP completion, and made OTP request failures visible."
 }

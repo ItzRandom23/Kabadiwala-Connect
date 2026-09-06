@@ -83,6 +83,19 @@ class LotManagementViewModel(
         }
     }
     fun retake() { _state.value = _state.value.copy(step = LotStep.PHOTO, photoError = null) }
+    fun goBack() {
+        val current = _state.value
+        val previous = when (current.step) {
+            LotStep.MATERIAL -> LotStep.PHOTO
+            LotStep.CONDITION -> LotStep.MATERIAL
+            LotStep.WEIGHT -> LotStep.CONDITION
+            LotStep.LOCATION -> LotStep.WEIGHT
+            LotStep.REVIEW -> LotStep.LOCATION
+            LotStep.PHOTO, LotStep.SAVED -> current.step
+        }
+        _state.value = current.copy(step = previous, saveError = false, isSaving = false)
+    }
+    fun startOver() { _state.value = LotDraftState() }
     fun chooseMaterial(material: Material) { _state.value = recalc(_state.value.copy(material = material, step = LotStep.CONDITION)) }
     fun applyMaterialSuggestion() {
         val suggested = materialToEnum(_state.value.materialSuggestion?.materialCategory) ?: return

@@ -122,6 +122,7 @@
     <string name="lot_saved_title">Lot saved on this phone</string>
     <string name="lot_saved_id">Lot ID: %1$s</string>
     <string name="lot_back_home">Back to home</string>
+    <string name="lot_start_over">Start again</string>
     <string name="lot_timeline">Timeline</string>
     <string name="lot_created_timeline">Created and saved locally</string>
     <string name="lot_cancel">Cancel lot</string>
@@ -295,6 +296,7 @@
     <string name="auth_phone_error">Enter a valid Indian mobile number.</string>
     <string name="auth_network_error">Could not reach the service. Check your connection and try again.</string>
     <string name="auth_send_otp">Send OTP</string>
+    <string name="auth_sending_otp">Sending OTP…</string>
     <string name="auth_otp_title">Enter the OTP</string>
     <string name="auth_otp_detail">Code sent to %1$s</string>
     <string name="auth_otp_label">6-digit OTP</string>
@@ -306,8 +308,10 @@
     <string name="auth_server_error">The server could not complete registration. Try again.</string>
     <string name="auth_dev_otp">Development OTP: %1$s</string>
     <string name="auth_verify">Verify</string>
+    <string name="auth_verifying">Verifying…</string>
     <string name="auth_reset_otp">Reset OTP</string>
     <string name="auth_change_phone">Edit mobile number / reset OTP</string>
+    <string name="auth_start_over">Start again</string>
     <string name="auth_resend">Send again</string>
     <string name="auth_resend_in">Send again in %1$d s</string>
     <string name="auth_resend_ready">You can request a new code now.</string>

@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
                         topBar = {
                             KcTopBar(
                                 title = title,
-                                showBack = route != Destinations.AUTH && !isTopLevel,
+                                showBack = route != Destinations.AUTH && !isTopLevel && route != Destinations.CREATE_LOT,
                                 onBack = {
                                     if (route == Destinations.CREATE_LOT) {
                                         if (!navController.popBackStack(Destinations.HOME, false)) {

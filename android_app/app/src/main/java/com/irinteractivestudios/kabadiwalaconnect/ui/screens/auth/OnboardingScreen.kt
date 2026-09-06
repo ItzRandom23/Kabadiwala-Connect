@@ -81,7 +81,21 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
         vm.locationPermissionResult(granted)
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) Progress(state)
+        if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) {
+            Progress(state)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = vm::goBack,
+                    enabled = !state.isBusy,
+                    modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_back")
+                ) { Text(stringResource(R.string.common_back)) }
+                OutlinedButton(
+                    onClick = vm::startOver,
+                    enabled = !state.isBusy,
+                    modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_start_over")
+                ) { Text(stringResource(R.string.auth_start_over)) }
+            }
+        }
         when (state.step) {
             OnboardingStep.WELCOME -> Welcome(vm, onDemo)
             OnboardingStep.EMAIL -> EmailEntry(state, vm)
@@ -245,7 +259,8 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     Text(stringResource(R.string.auth_phone_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_phone_detail), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(state.phone, vm::setPhone, label = { Text(stringResource(R.string.auth_phone_label)) }, leadingIcon = { Icon(Icons.Filled.Phone, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, isError = state.phoneError, supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_phone"))
-    KcPrimaryButton(stringResource(R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
+    if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
+    KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
 }
 
 @Composable private fun OtpEntry(state: OnboardingState, vm: OnboardingViewModel) {
@@ -255,7 +270,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     Text(stringResource(R.string.auth_otp_detail, state.phone), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(state.otp, vm::setOtp, label = { Text(stringResource(R.string.auth_otp_label)) }, leadingIcon = { Icon(Icons.Filled.Sms, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, isError = state.otpError != null, supportingText = { if (state.otpError != null) Text(stringResource(when (state.otpError) { OtpError.INCORRECT -> R.string.auth_otp_incorrect; OtpError.EXPIRED -> R.string.auth_otp_expired; OtpError.ATTEMPTS_EXCEEDED -> R.string.auth_otp_attempts; OtpError.ACCOUNT_CONFLICT -> R.string.auth_otp_account_conflict; OtpError.SERVER -> R.string.auth_server_error; OtpError.NETWORK -> R.string.auth_network_error })) }, modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).testTag("auth_otp"))
     if (BuildConfig.DEBUG) state.challenge?.developmentCodeHint?.let { Text(stringResource(R.string.auth_dev_otp, it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    KcPrimaryButton(stringResource(R.string.auth_verify), vm::verifyOtp, icon = Icons.Filled.CheckCircle, enabled = state.otp.length == 6 && !state.isBusy, testTag = "auth_verify")
+    KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_verifying else R.string.auth_verify), vm::verifyOtp, icon = Icons.Filled.CheckCircle, enabled = state.otp.length == 6 && !state.isBusy, testTag = "auth_verify")
     OutlinedButton(
         onClick = vm::resetOtp,
         enabled = !state.isBusy,

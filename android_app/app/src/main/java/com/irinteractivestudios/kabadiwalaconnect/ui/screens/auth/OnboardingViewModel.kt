@@ -13,7 +13,9 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
@@ -75,6 +77,34 @@ class OnboardingViewModel(
 
     fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE) }
     fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = false) }
+    fun goBack() {
+        val current = _state.value
+        val previous = when (current.step) {
+            OnboardingStep.EMAIL -> OnboardingStep.WELCOME
+            OnboardingStep.ROLE -> OnboardingStep.WELCOME
+            OnboardingStep.LANGUAGE -> OnboardingStep.ROLE
+            OnboardingStep.RECYCLER_DETAILS -> OnboardingStep.ROLE
+            OnboardingStep.LOCATION_PERMISSION -> if (current.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.ROLE
+            OnboardingStep.AREA -> OnboardingStep.LOCATION_PERMISSION
+            OnboardingStep.PHONE -> if (current.returningUser) OnboardingStep.WELCOME else OnboardingStep.AREA
+            OnboardingStep.OTP -> OnboardingStep.PHONE
+            OnboardingStep.WELCOME, OnboardingStep.COMPLETE -> current.step
+        }
+        _state.value = current.copy(
+            step = previous,
+            otp = if (previous == OnboardingStep.PHONE) "" else current.otp,
+            challenge = if (previous == OnboardingStep.PHONE) null else current.challenge,
+            otpError = null,
+            phoneError = false,
+            authError = false,
+            isBusy = false
+        )
+    }
+    fun startOver() {
+        val language = _state.value.language
+        authenticatedCollectorId = null
+        _state.value = OnboardingState(language = language)
+    }
     fun setEmail(value: String) { _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = false) }
     fun setPassword(value: String) { _state.value = _state.value.copy(password = value, passwordError = false, authError = false) }
     fun continueEmail() {
@@ -125,7 +155,11 @@ class OnboardingViewModel(
     fun setOtp(value: String) { _state.value = _state.value.copy(otp = value.filter(Char::isDigit).take(6), otpError = null) }
     fun verifyOtp() {
         val current = _state.value
-        if (current.otp.length != 6 || current.challenge == null) return
+        if (current.otp.length != 6) return
+        if (current.challenge == null) {
+            _state.value = current.copy(otpError = OtpError.EXPIRED)
+            return
+        }
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true)
             val result = try {
@@ -151,26 +185,35 @@ class OnboardingViewModel(
             } catch (_: Exception) { OtpVerification.NetworkError }
             _state.value = when (result) {
                 is OtpVerification.Success -> {
-                    authenticatedCollectorId = result.collectorId.takeIf { it.isNotBlank() }
-                    val profile = result.profile
-                    if (profile != null) {
-                        secureStorage?.saveAccount(profile)
-                        if (profile.role == AccountRole.COLLECTOR) saveCollectorCacheIfNeeded(profile.profileId, current, profile.role)
-                        current.copy(
-                            step = OnboardingStep.COMPLETE,
-                            completed = true,
-                            isBusy = false,
-                            otpError = null,
-                            role = profile.role,
-                            email = profile.email,
-                            phone = profile.phoneNumber,
-                            displayName = profile.displayName.orEmpty(),
-                            area = profile.areaName.orEmpty()
-                        )
-                    } else {
-                        val next = if (current.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
-                        current.copy(step = next, isBusy = false, otpError = null)
-                    }
+                    val profileId = result.collectorId.takeIf { it.isNotBlank() }
+                        ?: result.profile?.profileId?.takeIf { it.isNotBlank() }
+                        ?: "KC-${UUID.randomUUID().toString().take(8).uppercase()}"
+                    authenticatedCollectorId = profileId
+                    val profile = result.profile ?: AccountProfile(
+                        id = profileId,
+                        email = current.email,
+                        role = current.role,
+                        preferredLanguage = current.language,
+                        verificationStatus = if (current.role == AccountRole.RECYCLER) RecyclerVerificationStatus.PENDING else RecyclerVerificationStatus.VERIFIED,
+                        profileId = profileId,
+                        businessName = current.businessName.ifBlank { null },
+                        phoneNumber = current.phone,
+                        displayName = current.displayName.ifBlank { null },
+                        areaName = current.area
+                    )
+                    secureStorage?.saveAccount(profile)
+                    if (profile.role == AccountRole.COLLECTOR) saveCollectorCacheIfNeeded(profile.profileId, current, profile.role)
+                    current.copy(
+                        step = OnboardingStep.COMPLETE,
+                        completed = true,
+                        isBusy = false,
+                        otpError = null,
+                        role = profile.role,
+                        email = profile.email.ifBlank { current.email },
+                        phone = profile.phoneNumber.ifBlank { current.phone },
+                        displayName = profile.displayName.orEmpty(),
+                        area = profile.areaName.orEmpty().ifBlank { current.area }
+                    )
                 }
                 OtpVerification.Incorrect -> current.copy(isBusy = false, otpError = OtpError.INCORRECT)
                 OtpVerification.Expired -> current.copy(isBusy = false, otpError = OtpError.EXPIRED)
