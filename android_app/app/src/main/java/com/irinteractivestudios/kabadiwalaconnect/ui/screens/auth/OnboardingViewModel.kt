@@ -162,7 +162,7 @@ class OnboardingViewModel(
         }
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true)
-            val result = try {
+            val registrationResult = try {
                 auth.verifyOtp(
                     current.phone,
                     current.otp,
@@ -183,6 +183,19 @@ class OnboardingViewModel(
                     )
                 )
             } catch (_: Exception) { OtpVerification.NetworkError }
+            // Older test deployments can have a phone profile without its
+            // matching account identity. A verified phone is enough to safely
+            // retry through the existing-phone sign-in path; this avoids
+            // trapping a user on an erroneous duplicate-account message.
+            val result = if (registrationResult == OtpVerification.AccountConflict && current.email.isBlank()) {
+                try {
+                    auth.verifyOtp(current.phone, current.otp)
+                } catch (_: Exception) {
+                    OtpVerification.NetworkError
+                }
+            } else {
+                registrationResult
+            }
             _state.value = when (result) {
                 is OtpVerification.Success -> {
                     val profileId = result.collectorId.takeIf { it.isNotBlank() }

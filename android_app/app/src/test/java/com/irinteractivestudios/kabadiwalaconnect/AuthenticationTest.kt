@@ -1,10 +1,15 @@
 package com.irinteractivestudios.kabadiwalaconnect
 
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.IndianPhoneValidator
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticationRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockOtpService
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpChallenge
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
 import com.irinteractivestudios.kabadiwalaconnect.util.InMemorySecureStorage
@@ -16,6 +21,8 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -121,6 +128,42 @@ class AuthenticationTest {
             vm.verifyOtp()
             advanceUntilIdle()
 
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+            assertTrue(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun onboarding_retriesVerifiedExistingPhoneWhenRegistrationConflicts() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var legacySignInCalls = 0
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification {
+                    legacySignInCalls++
+                    return OtpVerification.Success("existing-token", Long.MAX_VALUE, "existing-collector")
+                }
+                override suspend fun verifyOtp(phoneNumber: String, code: String, account: PhoneAccountRequest) = OtpVerification.AccountConflict
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.setPhone("9876543210")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(1, legacySignInCalls)
             assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
             assertTrue(vm.state.value.completed)
         } finally {
