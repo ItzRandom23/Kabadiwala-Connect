@@ -76,7 +76,10 @@ fun OnboardingRoute(viewModel: OnboardingViewModel, onFinished: () -> Unit, onDe
 
 @Composable
 fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: () -> Unit = {}) {
-    val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.locationPermissionResult(it) }
+    val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        vm.locationPermissionResult(granted)
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) Progress(state)
         when (state.step) {
@@ -85,7 +88,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
             OnboardingStep.ROLE -> RoleEntry(state, vm)
             OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
             OnboardingStep.RECYCLER_DETAILS -> RecyclerDetailsEntry(state, vm)
-            OnboardingStep.LOCATION_PERMISSION -> LocationPermission(vm, locationLauncher)
+            OnboardingStep.LOCATION_PERMISSION -> LocationPermission(state, vm, locationLauncher)
             OnboardingStep.AREA -> AreaEntry(state, vm)
             OnboardingStep.PHONE -> PhoneEntry(state, vm)
             OnboardingStep.OTP -> OtpEntry(state, vm)
@@ -179,17 +182,37 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     KcPrimaryButton(stringResource(R.string.auth_continue), vm::continueRecyclerDetails, icon = Icons.Filled.CheckCircle, enabled = state.businessName.isNotBlank() && state.materialsAccepted.isNotEmpty())
 }
 
-@Composable private fun LocationPermission(vm: OnboardingViewModel, launcher: androidx.activity.result.ActivityResultLauncher<String>) {
+@Composable private fun LocationPermission(state: OnboardingState, vm: OnboardingViewModel, launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
     Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
     Text(stringResource(R.string.auth_location_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_location_detail), style = MaterialTheme.typography.bodyLarge)
-    KcPrimaryButton(stringResource(R.string.auth_use_gps), { launcher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, icon = Icons.Filled.LocationOn, testTag = "auth_use_gps")
-    OutlinedButton(onClick = vm::chooseManualLocation, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_manual_location")) { Text(stringResource(R.string.auth_enter_manually)) }
+    if (state.isLocationBusy) {
+        Text(stringResource(R.string.auth_location_detecting), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (state.locationError) {
+        Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
+    }
+    KcPrimaryButton(
+        stringResource(R.string.auth_use_gps),
+        { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
+        icon = Icons.Filled.LocationOn,
+        enabled = !state.isLocationBusy,
+        testTag = "auth_use_gps"
+    )
+    OutlinedButton(onClick = vm::chooseManualLocation, enabled = !state.isLocationBusy, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_manual_location")) { Text(stringResource(R.string.auth_enter_manually)) }
 }
 
 @Composable private fun AreaEntry(state: OnboardingState, vm: OnboardingViewModel) {
     Text(stringResource(R.string.auth_area_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_area_detail), style = MaterialTheme.typography.bodyLarge)
+    if (state.locationChoice == LocationChoice.GPS && state.area.isNotBlank()) {
+        Text(stringResource(R.string.auth_location_detected, state.area), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else if (state.locationChoice == LocationChoice.GPS && !state.locationError) {
+        Text(stringResource(R.string.auth_location_coordinates_saved), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (state.locationError) {
+        Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
+    }
     OutlinedTextField(state.area, vm::setArea, label = { Text(stringResource(R.string.auth_area_label)) }, leadingIcon = { Icon(Icons.Filled.LocationOn, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_area"))
     if (state.role == AccountRole.COLLECTOR) {
         OutlinedTextField(state.displayName, vm::setDisplayName, label = { Text(stringResource(R.string.auth_name_label)) }, leadingIcon = { Icon(Icons.Filled.Person, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_name"))
@@ -238,6 +261,6 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
         enabled = !state.isBusy,
         modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_reset_otp")
     ) {
-        Text(stringResource(R.string.auth_reset_otp))
+        Text(stringResource(R.string.auth_change_phone))
     }
 }

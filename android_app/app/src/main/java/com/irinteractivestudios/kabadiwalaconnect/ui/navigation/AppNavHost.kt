@@ -127,7 +127,19 @@ fun AppNavHost(
         }
         composable(Destinations.CREATE_LOT) {
             val vm: LotManagementViewModel = viewModel(factory = factory)
-            LotRoute(vm, onSafety = { navController.navigate(Destinations.SAFETY) }, demoMode = demoMode)
+            LotRoute(
+                vm,
+                onSafety = { navController.navigate(Destinations.SAFETY) },
+                onHome = {
+                    if (!navController.popBackStack(Destinations.HOME, false)) {
+                        navController.navigate(Destinations.HOME) {
+                            popUpTo(0)
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                demoMode = demoMode
+            )
         }
         composable(Destinations.MY_LOTS) {
             val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())

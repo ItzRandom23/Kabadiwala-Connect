@@ -9,6 +9,8 @@ export type PhoneAccountInput = {
   role?: 'COLLECTOR' | 'RECYCLER';
   preferredLanguage?: string;
   areaName?: string;
+  latitude?: number;
+  longitude?: number;
   displayName?: string;
   email?: string;
   businessName?: string;
@@ -97,6 +99,8 @@ export class AuthService {
       throw new AppError('VALIDATION_ERROR', 'Unsupported language', 422, { code: 'INVALID_LANGUAGE' });
     }
     const areaName = input.areaName?.trim() ?? '';
+    const latitude = input.latitude;
+    const longitude = input.longitude;
     const displayName = input.displayName?.trim() ?? '';
 
     return this.db!.$transaction(async (tx) => {
@@ -167,6 +171,8 @@ export class AuthService {
               ...(email ? { email } : {}),
               ...(displayName ? { displayName } : {}),
               ...(areaName ? { areaName } : {}),
+              ...(latitude !== undefined ? { latitude } : {}),
+              ...(longitude !== undefined ? { longitude } : {}),
               preferredLanguage: preferredLanguage as any,
               lastLoginAt: new Date()
             }
@@ -193,6 +199,8 @@ export class AuthService {
             displayName: displayName || null,
             preferredLanguage: preferredLanguage as any,
             areaName,
+            latitude,
+            longitude,
             accountStatus: 'ACTIVE'
           }
         });
@@ -216,6 +224,8 @@ export class AuthService {
           name: input.businessName?.trim() || displayName || 'New recycler facility',
           address: areaName || 'Location to be confirmed',
           areaName: areaName || 'Location to be confirmed',
+          latitude,
+          longitude,
           authorizationStatus: 'PENDING',
           licenseNumber: input.authorizationNumber?.trim() || null,
           maxPickupDistanceKm: input.serviceRadiusKm ?? 25,

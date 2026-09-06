@@ -8,6 +8,13 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
 import com.irinteractivestudios.kabadiwalaconnect.util.InMemorySecureStorage
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
+import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,5 +76,37 @@ class AuthenticationTest {
         assertEquals(OnboardingStep.PHONE, vm.state.value.step)
         assertEquals("", vm.state.value.otp)
         assertEquals(null, vm.state.value.challenge)
+    }
+
+    @Test fun onboarding_invalidPhoneCanBeCorrected() {
+        val vm = TestAuth.onboarding()
+        vm.setPhone("1234567890")
+        vm.requestOtp()
+
+        assertTrue(vm.state.value.phoneError)
+        vm.setPhone("9876543210")
+
+        assertFalse(vm.state.value.phoneError)
+        assertEquals("9876543210", vm.state.value.phone)
+    }
+
+    @Test fun onboarding_gpsStoresDetectedAreaAndCoordinates() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        val vm = TestAuth.onboarding(
+            locationProvider = LocationProvider { CurrentLocation(18.5204, 73.8567, "Pune") }
+        )
+
+        try {
+            vm.locationPermissionResult(true)
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.AREA, vm.state.value.step)
+            assertEquals("Pune", vm.state.value.area)
+            assertEquals(18.5204, vm.state.value.latitude ?: 0.0, 0.000001)
+            assertEquals(73.8567, vm.state.value.longitude ?: 0.0, 0.000001)
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 }

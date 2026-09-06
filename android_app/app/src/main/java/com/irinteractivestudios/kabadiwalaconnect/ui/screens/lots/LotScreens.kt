@@ -84,9 +84,11 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
-fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, demoMode: Boolean = false) {
+fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, demoMode: Boolean = false) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val gpsSaved = stringResource(R.string.lot_gps_saved)
@@ -127,10 +129,10 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, demoMode: Bo
         {
             val file = File(context.filesDir, "demo_copper.webp")
             if (!file.exists()) context.resources.openRawResource(R.raw.kc_copper).use { input -> file.outputStream().use { output -> input.copyTo(output) } }
-            vm.photoCaptured(file.absolutePath)
+            vm.demoPhotoCaptured(file.absolutePath)
         }
     } else null
-    LotScreen(state, vm, onTakePhoto = requestCamera, onSelectPhoto = { gallery.launch("image/*") }, onRequestLocation = { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onSafety = onSafety, onUseDemoPhoto = useDemoPhoto)
+    LotScreen(state, vm, onTakePhoto = requestCamera, onSelectPhoto = { gallery.launch("image/*") }, onRequestLocation = { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onSafety = onSafety, onHome = onHome, onUseDemoPhoto = useDemoPhoto)
     if (showCameraRationale) {
         PermissionRationaleDialog(
             permission = FeaturePermission.CAMERA,
@@ -141,7 +143,7 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, demoMode: Bo
 }
 
 @Composable
-fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () -> Unit, onRequestLocation: () -> Unit, onSafety: () -> Unit = {}, onUseDemoPhoto: (() -> Unit)? = null, onSelectPhoto: () -> Unit = {}) {
+fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () -> Unit, onRequestLocation: () -> Unit, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, onUseDemoPhoto: (() -> Unit)? = null, onSelectPhoto: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (state.step != LotStep.SAVED) {
             WorkflowProgress(
@@ -157,7 +159,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             LotStep.WEIGHT -> WeightStep(state, vm)
             LotStep.LOCATION -> LocationStep(state, vm, onRequestLocation)
             LotStep.REVIEW -> ReviewStep(state, vm)
-            LotStep.SAVED -> SavedStep(state)
+            LotStep.SAVED -> SavedStep(state, onHome)
         }
     }
 }
@@ -216,6 +218,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                     "LCD_PANEL", "LCD" -> stringResource(R.string.lot_material_lcd)
                     "PCB" -> stringResource(R.string.lot_material_pcb)
                     "CABLE" -> stringResource(R.string.lot_material_cables)
+                    "COPPER" -> stringResource(R.string.lot_material_copper)
                     "BATTERY" -> stringResource(R.string.lot_material_battery)
                     "MOTOR" -> stringResource(R.string.lot_material_motor)
                     "MAGNET" -> stringResource(R.string.lot_material_magnet)
@@ -274,9 +277,46 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 @Composable private fun WeightStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_weight_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_weight_detail), style = MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(s.weightText, vm::setWeight, label = { Text(stringResource(R.string.lot_weight_label)) }, textStyle = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = s.weightError, supportingText = { if (s.weightError) Text(stringResource(R.string.lot_weight_error)) }, modifier = Modifier.fillMaxWidth().testTag("lot_weight"))
-    val value = s.weightText.toFloatOrNull()?.coerceIn(0f, 500f) ?: 0f
-    Slider(value = value, onValueChange = { vm.setWeight("%.1f".format(it)) }, valueRange = 0f..499.9f, modifier = Modifier.testTag("lot_weight_slider"))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = s.weightUnit == WeightUnit.KG,
+            onClick = { vm.setWeightUnit(WeightUnit.KG) },
+            label = { Text(stringResource(R.string.lot_weight_unit_kg)) },
+            modifier = Modifier.weight(1f)
+        )
+        FilterChip(
+            selected = s.weightUnit == WeightUnit.GRAMS,
+            onClick = { vm.setWeightUnit(WeightUnit.GRAMS) },
+            label = { Text(stringResource(R.string.lot_weight_unit_grams)) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+    OutlinedTextField(
+        value = s.weightText,
+        onValueChange = vm::setWeight,
+        label = { Text(stringResource(R.string.lot_weight_label)) },
+        suffix = { Text(if (s.weightUnit == WeightUnit.GRAMS) "g" else "kg") },
+        textStyle = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true,
+        isError = s.weightError,
+        supportingText = { Text(if (s.weightError) stringResource(R.string.lot_weight_error) else stringResource(R.string.lot_weight_slider_hint)) },
+        modifier = Modifier.fillMaxWidth().testTag("lot_weight")
+    )
+    val sliderMax = if (s.weightUnit == WeightUnit.GRAMS) 10_000f else 500f
+    val value = s.weightText.toFloatOrNull()?.coerceIn(0f, sliderMax) ?: 0f
+    Slider(
+        value = value,
+        onValueChange = { next ->
+            vm.setWeight(
+                if (s.weightUnit == WeightUnit.GRAMS) next.roundToInt().toString()
+                else String.format(Locale.US, "%.1f", next)
+            )
+        },
+        valueRange = 0f..sliderMax,
+        steps = 99,
+        modifier = Modifier.testTag("lot_weight_slider")
+    )
     KcPrimaryButton(stringResource(R.string.lot_next), vm::confirmWeight, icon = Icons.Filled.CheckCircle, testTag = "lot_weight_next")
 }
 @Composable private fun LocationStep(s: LotDraftState, vm: LotManagementViewModel, gps: () -> Unit) {
@@ -292,7 +332,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     EvidenceSection(title = stringResource(R.string.lot_review_title)) {
         ProofRow(stringResource(R.string.lot_material_label), s.material?.key.orEmpty())
         ProofRow(stringResource(R.string.lot_condition_label), s.condition?.name.orEmpty())
-        ProofRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, s.weightText))
+        ProofRow(stringResource(R.string.lot_weight_label), "${s.weightText} ${if (s.weightUnit == WeightUnit.GRAMS) "g" else "kg"}")
         ProofRow(stringResource(R.string.lot_area_label), s.location)
     }
     s.valuation?.let { valuation ->
@@ -308,14 +348,22 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         OutlinedButton(onClick = vm::suggestDescription, enabled = !s.descriptionLoading) { Text(if (s.descriptionLoading) stringResource(R.string.lot_description_generating) else stringResource(R.string.lot_description_refresh)) }
     }
     OutlinedTextField(s.notes, vm::setNotes, label = { Text(stringResource(R.string.lot_description_label)) }, supportingText = { Text(if (s.descriptionSource == "AI") stringResource(R.string.lot_description_ai) else stringResource(R.string.lot_description_fallback)) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6)
-    KcPrimaryButton(stringResource(R.string.lot_save), vm::save, icon = Icons.Filled.CheckCircle, testTag = "lot_save")
+    if (s.saveError) Text(stringResource(R.string.lot_save_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    KcPrimaryButton(
+        stringResource(if (s.isSaving) R.string.lot_saving else R.string.lot_save),
+        vm::save,
+        icon = Icons.Filled.CheckCircle,
+        enabled = !s.isSaving,
+        testTag = "lot_save"
+    )
 }
 @Composable private fun ReviewRow(label: String, value: String) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, style = MaterialTheme.typography.labelLarge); Text(value, style = MaterialTheme.typography.titleMedium) } }
-@Composable private fun SavedStep(s: LotDraftState) {
+@Composable private fun SavedStep(s: LotDraftState, onHome: () -> Unit) {
     EvidenceSection(title = stringResource(R.string.lot_saved_title), status = stringResource(R.string.quote_saved)) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
+            KcPrimaryButton(stringResource(R.string.lot_back_home), onHome, icon = Icons.Filled.CheckCircle, testTag = "lot_back_home")
         }
     }
 }

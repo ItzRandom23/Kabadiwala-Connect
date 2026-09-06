@@ -112,6 +112,7 @@
     <string name="auth_dev_otp">विकास OTP: %1$s</string>
     <string name="auth_verify">जाँचें</string>
     <string name="auth_reset_otp">OTP रीसेट करें</string>
+    <string name="auth_change_phone">मोबाइल नंबर बदलें / OTP रीसेट करें</string>
     <string name="auth_resend">फिर भेजें</string>
     <string name="auth_resend_in">%1$d सेकंड में फिर भेजें</string>
     <string name="auth_resend_ready">अब नया कोड माँग सकते हैं।</string>
@@ -133,6 +134,10 @@
     <string name="auth_location_detail">लगभग जगह चुनें या अपना क्षेत्र लिखें।</string>
     <string name="auth_use_gps">मेरी जगह इस्तेमाल करें</string>
     <string name="auth_enter_manually">खुद क्षेत्र लिखें</string>
+    <string name="auth_location_detecting">आपका वर्तमान स्थान लिया जा रहा है…</string>
+    <string name="auth_location_unavailable">विश्वसनीय स्थान नहीं मिल सका। कृपया अपना क्षेत्र लिखें।</string>
+    <string name="auth_location_detected">मिला हुआ क्षेत्र: %1$s। जाँचें और जरूरत हो तो बदलें।</string>
+    <string name="auth_location_coordinates_saved">आपके GPS निर्देशांक सेव हो गए हैं। नीचे क्षेत्र का नाम जाँचें।</string>
     <string name="auth_area_title">आपका मुख्य संग्रह क्षेत्र</string>
     <string name="auth_area_detail">मोहल्ला, शहर या कोई पहचान की जगह काफी है।</string>
     <string name="auth_area_label">क्षेत्र का नाम</string>

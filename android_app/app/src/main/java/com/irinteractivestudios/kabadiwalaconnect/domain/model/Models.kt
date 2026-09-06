@@ -34,7 +34,9 @@ data class CollectorProfile(
     val primaryLocation: String = "",
     val locationSource: String = "manual",
     val createdAtEpochMs: Long = 0L,
-    val lastLoginEpochMs: Long = 0L
+    val lastLoginEpochMs: Long = 0L,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 /** One digital lot of collected e-waste. Created in Phase 2+. */

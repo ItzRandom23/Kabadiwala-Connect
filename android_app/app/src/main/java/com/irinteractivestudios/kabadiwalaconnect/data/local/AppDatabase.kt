@@ -21,7 +21,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,7 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .build().also { instance = it }
             }
 
@@ -113,6 +113,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS future_activities (id TEXT NOT NULL PRIMARY KEY, slug TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, materialsCsv TEXT NOT NULL, stepsCsv TEXT NOT NULL, warningsCsv TEXT NOT NULL, difficulty TEXT NOT NULL, minutes INTEGER NOT NULL, cachedAtEpochMs INTEGER NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS future_conversations (id TEXT NOT NULL PRIMARY KEY, lotId TEXT NOT NULL, quoteId TEXT, collectorId TEXT NOT NULL, recyclerId TEXT NOT NULL, status TEXT NOT NULL, lastMessageAt TEXT)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS future_messages (id TEXT NOT NULL PRIMARY KEY, conversationId TEXT NOT NULL, senderId TEXT NOT NULL, senderRole TEXT NOT NULL, clientMessageId TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, createdAt TEXT, readAt TEXT)")
+            }
+        }
+        val MIGRATION_12_13 = object : androidx.room.migration.Migration(12, 13) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE collector_profile ADD COLUMN latitude REAL")
+                db.execSQL("ALTER TABLE collector_profile ADD COLUMN longitude REAL")
             }
         }
 

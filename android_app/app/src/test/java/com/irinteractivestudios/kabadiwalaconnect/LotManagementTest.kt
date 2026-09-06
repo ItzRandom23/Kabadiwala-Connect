@@ -6,6 +6,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotCondition
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.Material
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.WeightUnit
 import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -61,6 +62,43 @@ class LotManagementTest {
         assertEquals("collector-1", saved.single().collectorId)
         assertEquals("Pune", saved.single().location)
         assertEquals(LotStep.SAVED, vm.state.value.step)
+    }
+
+    @Test fun grams_areConvertedToKgWhenLotIsSaved() = runTest {
+        val saved = mutableListOf<Lot>()
+        val vm = LotManagementViewModel(writer(saved), "collector-grams", now = { 5678L })
+        vm.chooseMaterial(Material.COPPER)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeightUnit(WeightUnit.GRAMS)
+        vm.setWeight("250")
+        vm.confirmWeight()
+        assertEquals(LotStep.LOCATION, vm.state.value.step)
+        vm.setLocation("Pune")
+        vm.confirmLocation()
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(0.25, saved.single().weightKg, 0.0001)
+        assertEquals(LotStep.SAVED, vm.state.value.step)
+    }
+
+    @Test fun saveFailure_keepsReviewStepAndExposesRetryableError() = runTest {
+        val failingWriter = object : LotWriter {
+            override fun observeLot(id: String): Flow<Lot?> = emptyFlow()
+            override suspend fun save(lot: Lot) { error("database unavailable") }
+            override suspend fun cancel(id: String, updatedAt: Long) = true
+        }
+        val vm = LotManagementViewModel(failingWriter, "collector", now = { 9L })
+        vm.chooseMaterial(Material.CABLES)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeight("1")
+        vm.confirmWeight()
+        vm.setLocation("Pune")
+        vm.confirmLocation()
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(LotStep.REVIEW, vm.state.value.step)
+        assertTrue(vm.state.value.saveError)
+        assertFalse(vm.state.value.isSaving)
     }
 
     private fun writer(saved: MutableList<Lot>) = object : LotWriter {

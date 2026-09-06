@@ -48,7 +48,9 @@ data class PhoneAccountRequest(
     val authorizationNumber: String = "",
     val materialsAccepted: List<String> = emptyList(),
     val pickupAvailable: Boolean = false,
-    val serviceRadiusKm: Int = 25
+    val serviceRadiusKm: Int = 25,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 sealed interface EmailAuthentication {
@@ -159,7 +161,9 @@ class RoomCollectorProfileRepository(private val dao: CollectorProfileDao) : Col
                 primaryLocation = profile.primaryLocation,
                 locationSource = profile.locationSource,
                 createdAtEpochMs = profile.createdAtEpochMs,
-                lastLoginEpochMs = profile.lastLoginEpochMs
+                lastLoginEpochMs = profile.lastLoginEpochMs,
+                latitude = profile.latitude,
+                longitude = profile.longitude
             )
         )
     }
@@ -174,7 +178,9 @@ private fun CollectorProfileEntity.toDomain() = com.irinteractivestudios.kabadiw
     primaryLocation = primaryLocation,
     locationSource = locationSource,
     createdAtEpochMs = createdAtEpochMs,
-    lastLoginEpochMs = lastLoginEpochMs
+    lastLoginEpochMs = lastLoginEpochMs,
+    latitude = latitude,
+    longitude = longitude
 )
 
 interface AuthenticationRepository {

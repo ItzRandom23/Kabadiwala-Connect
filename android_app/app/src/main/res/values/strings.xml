@@ -94,8 +94,11 @@
     <string name="lot_non_hazard">General material</string><string name="lot_safety_open">Read safety guidance before continuing</string>
     <string name="lot_condition_title">What is its condition?</string>
     <string name="lot_weight_title">How much does it weigh?</string>
-    <string name="lot_weight_detail">Enter kilograms. You can also slide.</string>
-    <string name="lot_weight_label">Weight in kg</string>
+    <string name="lot_weight_detail">Choose kilograms or grams. Enter an exact value or use the slider.</string>
+    <string name="lot_weight_label">Weight</string>
+    <string name="lot_weight_unit_kg">Kilograms (kg)</string>
+    <string name="lot_weight_unit_grams">Grams (g)</string>
+    <string name="lot_weight_slider_hint">The slider uses practical steps; use the field for exact values.</string>
     <string name="lot_weight_value">%1$s kg</string>
     <string name="lot_weight_error">Enter more than 0 and less than 500 kg.</string>
     <string name="lot_next">Next</string>
@@ -114,8 +117,11 @@
     <string name="lot_estimate_basis">Based on local price × weight × condition. Quality adjustment: 1.0.</string>
     <string name="lot_estimate_disclaimer">Estimate only. Final value depends on recycler inspection.</string>
     <string name="lot_save">Save lot</string>
+    <string name="lot_saving">Saving…</string>
+    <string name="lot_save_error">Couldn’t save this lot locally. Check storage and try again.</string>
     <string name="lot_saved_title">Lot saved on this phone</string>
     <string name="lot_saved_id">Lot ID: %1$s</string>
+    <string name="lot_back_home">Back to home</string>
     <string name="lot_timeline">Timeline</string>
     <string name="lot_created_timeline">Created and saved locally</string>
     <string name="lot_cancel">Cancel lot</string>
@@ -301,6 +307,7 @@
     <string name="auth_dev_otp">Development OTP: %1$s</string>
     <string name="auth_verify">Verify</string>
     <string name="auth_reset_otp">Reset OTP</string>
+    <string name="auth_change_phone">Edit mobile number / reset OTP</string>
     <string name="auth_resend">Send again</string>
     <string name="auth_resend_in">Send again in %1$d s</string>
     <string name="auth_resend_ready">You can request a new code now.</string>
@@ -322,6 +329,10 @@
     <string name="auth_location_detail">Use your approximate location, or type your area yourself.</string>
     <string name="auth_use_gps">Use my location</string>
     <string name="auth_enter_manually">Type area myself</string>
+    <string name="auth_location_detecting">Getting your current location…</string>
+    <string name="auth_location_unavailable">We couldn’t get a reliable location. Please type your area instead.</string>
+    <string name="auth_location_detected">Detected area: %1$s. Check it and edit it if needed.</string>
+    <string name="auth_location_coordinates_saved">Your GPS coordinates were saved. Check the area name below.</string>
     <string name="auth_area_title">Your primary collection area</string>
     <string name="auth_area_detail">A neighbourhood, town, or landmark is enough.</string>
     <string name="auth_area_label">Area name</string>

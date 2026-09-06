@@ -22,6 +22,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.RecyclerReposi
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.RecyclerCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentRepository
@@ -67,7 +68,8 @@ class KcViewModelFactory(
                 auth = container.authenticationRepository,
                 profiles = container.collectorProfileRepository,
                 secureStorage = container.secureStorage,
-                initialLanguage = LocaleManager.persistedTag(app)
+                initialLanguage = LocaleManager.persistedTag(app),
+                locationProvider = AndroidLocationProvider(app)
             )
         modelClass.isAssignableFrom(LotManagementViewModel::class.java) ->
             LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService)

@@ -15,6 +15,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +43,10 @@ data class OnboardingState(
     val language: String = LocaleManager.ENGLISH,
     val area: String = "",
     val locationChoice: LocationChoice = LocationChoice.MANUAL,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationError: Boolean = false,
+    val isLocationBusy: Boolean = false,
     val challenge: OtpChallenge? = null,
     val otpError: OtpError? = null,
     val emailError: Boolean = false,
@@ -59,7 +64,8 @@ class OnboardingViewModel(
     private val profiles: CollectorProfileRepository,
     private val secureStorage: SecureStorage? = null,
     initialLanguage: String = LocaleManager.ENGLISH,
-    private val now: () -> Long = { System.currentTimeMillis() }
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val locationProvider: LocationProvider? = null
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         OnboardingState(language = LocaleManager.normalizeTag(initialLanguage))
@@ -104,7 +110,7 @@ class OnboardingViewModel(
     fun continueRecyclerDetails() { _state.value = _state.value.copy(step = OnboardingStep.LOCATION_PERMISSION) }
 
     // Legacy phone OTP boundary remains available for older backend/dev flows.
-    fun setPhone(value: String) { _state.value = _state.value.copy(phone = value.filter(Char::isDigit), phoneError = false, authError = false) }
+    fun setPhone(value: String) { _state.value = _state.value.copy(phone = value.filter(Char::isDigit).take(10), phoneError = false, authError = false) }
     fun requestOtp() {
         val phone = _state.value.phone
         if (!IndianPhoneValidator.isValid(phone)) { _state.value = _state.value.copy(phoneError = true); return }
@@ -137,7 +143,9 @@ class OnboardingViewModel(
                         authorizationNumber = current.authorizationNumber,
                         materialsAccepted = current.materialsAccepted.toList(),
                         pickupAvailable = current.pickupAvailable,
-                        serviceRadiusKm = current.serviceRadiusKm
+                        serviceRadiusKm = current.serviceRadiusKm,
+                        latitude = current.latitude,
+                        longitude = current.longitude
                     )
                 )
             } catch (_: Exception) { OtpVerification.NetworkError }
@@ -190,8 +198,43 @@ class OnboardingViewModel(
         val next = if (_state.value.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
         _state.value = _state.value.copy(language = LocaleManager.normalizeTag(tag), step = next)
     }
-    fun locationPermissionResult(granted: Boolean) { _state.value = _state.value.copy(locationChoice = if (granted) LocationChoice.GPS else LocationChoice.MANUAL, step = OnboardingStep.AREA) }
-    fun chooseManualLocation() { locationPermissionResult(false) }
+    fun locationPermissionResult(granted: Boolean) {
+        if (!granted) {
+            chooseManualLocation()
+            return
+        }
+        val provider = locationProvider
+        if (provider == null) {
+            _state.value = _state.value.copy(locationChoice = LocationChoice.GPS, locationError = false, isLocationBusy = false, step = OnboardingStep.AREA)
+            return
+        }
+
+        _state.value = _state.value.copy(isLocationBusy = true, locationError = false)
+        viewModelScope.launch {
+            val detected = runCatching { provider.current() }.getOrNull()
+            val current = _state.value
+            _state.value = current.copy(
+                locationChoice = if (detected == null) LocationChoice.MANUAL else LocationChoice.GPS,
+                latitude = detected?.latitude,
+                longitude = detected?.longitude,
+                area = detected?.areaName.orEmpty(),
+                locationError = detected == null,
+                isLocationBusy = false,
+                step = OnboardingStep.AREA
+            )
+        }
+    }
+
+    fun chooseManualLocation() {
+        _state.value = _state.value.copy(
+            locationChoice = LocationChoice.MANUAL,
+            latitude = null,
+            longitude = null,
+            locationError = false,
+            isLocationBusy = false,
+            step = OnboardingStep.AREA
+        )
+    }
     fun setArea(value: String) { _state.value = _state.value.copy(area = value) }
     fun continueToPhone() {
         val current = _state.value
@@ -218,7 +261,17 @@ class OnboardingViewModel(
             } else {
                 val timestamp = now()
                 val id = authenticatedCollectorId ?: "KC-${UUID.randomUUID().toString().take(8).uppercase()}"
-                val profile = CollectorProfile(id, current.phone, current.language, current.area, current.locationChoice.name.lowercase(), timestamp, timestamp)
+                val profile = CollectorProfile(
+                    id = id,
+                    phoneNumber = current.phone,
+                    preferredLanguage = current.language,
+                    primaryLocation = current.area,
+                    locationSource = current.locationChoice.name.lowercase(),
+                    createdAtEpochMs = timestamp,
+                    lastLoginEpochMs = timestamp,
+                    latitude = current.latitude,
+                    longitude = current.longitude
+                )
                 profiles.save(profile)
                 try { auth.updateProfile(profile) } catch (_: Exception) { }
                 secureStorage?.put(SecureStorage.COLLECTOR_ID, id)
@@ -230,7 +283,19 @@ class OnboardingViewModel(
     private suspend fun saveCollectorCacheIfNeeded(profileId: String, current: OnboardingState, role: AccountRole = current.role) {
         if (role == AccountRole.COLLECTOR) {
             val timestamp = now()
-            profiles.save(CollectorProfile(profileId, current.phone, current.language, current.area, current.locationChoice.name.lowercase(), timestamp, timestamp))
+            profiles.save(
+                CollectorProfile(
+                    id = profileId,
+                    phoneNumber = current.phone,
+                    preferredLanguage = current.language,
+                    primaryLocation = current.area,
+                    locationSource = current.locationChoice.name.lowercase(),
+                    createdAtEpochMs = timestamp,
+                    lastLoginEpochMs = timestamp,
+                    latitude = current.latitude,
+                    longitude = current.longitude
+                )
+            )
             secureStorage?.put(SecureStorage.COLLECTOR_ID, profileId)
         }
     }

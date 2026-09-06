@@ -52,7 +52,9 @@ class RemoteAuthenticationRepository(
                     authorizationNumber = account?.authorizationNumber,
                     materialsAccepted = account?.materialsAccepted,
                     pickupAvailable = account?.pickupAvailable,
-                    serviceRadiusKm = account?.serviceRadiusKm
+                    serviceRadiusKm = account?.serviceRadiusKm,
+                    latitude = account?.latitude,
+                    longitude = account?.longitude
                 )
             ).requireData()
             val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
@@ -88,6 +90,8 @@ class RemoteAuthenticationRepository(
             CollectorUpdateDto(
                 preferredLanguage = LocaleManager.toBackendName(profile.preferredLanguage),
                 primaryLocation = LocationDto(
+                    latitude = profile.latitude,
+                    longitude = profile.longitude,
                     areaName = profile.primaryLocation,
                     precision = if (profile.locationSource == "gps") "GPS" else "MANUAL"
                 ),

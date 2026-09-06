@@ -8,11 +8,12 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepo
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 internal object TestAuth {
-    fun onboarding(initialLanguage: String = LocaleManager.ENGLISH) = OnboardingViewModel(
+    fun onboarding(initialLanguage: String = LocaleManager.ENGLISH, locationProvider: LocationProvider? = null) = OnboardingViewModel(
         object : AuthenticationRepository {
             private val otp = MockOtpService()
             override suspend fun requestOtp(phoneNumber: String): OtpChallenge = otp.send(phoneNumber, 0)
@@ -25,6 +26,7 @@ internal object TestAuth {
             override suspend fun save(profile: CollectorProfile) = Unit
             override suspend fun clear() = Unit
         },
-        initialLanguage = initialLanguage
+        initialLanguage = initialLanguage,
+        locationProvider = locationProvider
     )
 }

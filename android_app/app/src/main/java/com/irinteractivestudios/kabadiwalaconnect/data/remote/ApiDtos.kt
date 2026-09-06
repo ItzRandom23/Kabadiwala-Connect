@@ -18,7 +18,9 @@ data class VerifyOtpRequestDto(
     val authorizationNumber: String? = null,
     val materialsAccepted: List<String>? = null,
     val pickupAvailable: Boolean? = null,
-    val serviceRadiusKm: Int? = null
+    val serviceRadiusKm: Int? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 data class OtpRequestedDto(val message: String? = null)
 data class LogoutDto(val loggedOut: Boolean = true)

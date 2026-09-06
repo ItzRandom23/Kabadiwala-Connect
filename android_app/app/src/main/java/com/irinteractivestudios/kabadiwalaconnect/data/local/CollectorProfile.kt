@@ -15,7 +15,9 @@ data class CollectorProfileEntity(
     val primaryLocation: String,
     val locationSource: String,
     val createdAtEpochMs: Long,
-    val lastLoginEpochMs: Long
+    val lastLoginEpochMs: Long,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Dao

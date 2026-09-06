@@ -21,8 +21,10 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
+import java.util.Locale
 
 enum class LotStep { PHOTO, MATERIAL, CONDITION, WEIGHT, LOCATION, REVIEW, SAVED }
+enum class WeightUnit { KG, GRAMS }
 enum class Material(val key: String, val hazardous: Boolean) { CRT("CRT", true), LCD("LCD Panel", false), PCB("PCB / Circuit Board", true), CABLES("Cables", false), COPPER("Copper", false), BATTERY("Battery", true), MOTOR("Motor", false), MAGNET("Magnet", false), PLASTIC("Plastic", false), OTHER("Other", false) }
 enum class LotCondition { INTACT, DAMAGED, PARTIAL }
 
@@ -34,6 +36,7 @@ data class LotDraftState(
     val material: Material? = null,
     val condition: LotCondition? = null,
     val weightText: String = "",
+    val weightUnit: WeightUnit = WeightUnit.KG,
     val weightError: Boolean = false,
     val location: String = "",
     val locationSource: String = "manual",
@@ -44,7 +47,9 @@ data class LotDraftState(
     val materialSuggestionLoading: Boolean = false,
     val materialSuggestionError: Boolean = false,
     val valuation: Valuation? = null,
-    val savedLotId: String? = null
+    val savedLotId: String? = null,
+    val isSaving: Boolean = false,
+    val saveError: Boolean = false
 )
 
 class LotManagementViewModel(
@@ -58,6 +63,24 @@ class LotManagementViewModel(
     fun photoCaptured(path: String) {
         val result = PhotoValidator.validate(path)
         _state.value = if (result.valid) _state.value.copy(photoPath = path, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
+    }
+    fun demoPhotoCaptured(path: String) {
+        photoCaptured(path)
+        if (_state.value.photoPath == path) {
+            _state.value = _state.value.copy(
+                materialSuggestion = MaterialSuggestionDto(
+                    materialCategory = "COPPER",
+                    confidence = 1.0,
+                    rationale = "Demo image recognized as copper.",
+                    source = "DEMO"
+                ),
+                materialSuggestionLoading = false,
+                materialSuggestionError = false
+            )
+            // Demo mode is offline and unauthenticated, so it must not depend
+            // on the collector-only Gemini endpoint to complete the flow.
+            chooseMaterial(Material.COPPER)
+        }
     }
     fun retake() { _state.value = _state.value.copy(step = LotStep.PHOTO, photoError = null) }
     fun chooseMaterial(material: Material) { _state.value = recalc(_state.value.copy(material = material, step = LotStep.CONDITION)) }
@@ -81,7 +104,23 @@ class LotManagementViewModel(
     }
     fun chooseCondition(condition: LotCondition) { _state.value = recalc(_state.value.copy(condition = condition, step = LotStep.WEIGHT)) }
     fun setWeight(value: String) { _state.value = recalc(_state.value.copy(weightText = value.filter { it.isDigit() || it == '.' }.take(7), weightError = false)) }
-    fun confirmWeight() { val value = _state.value.weightText.toDoubleOrNull(); _state.value = if (value != null && value > 0 && value < 500) _state.value.copy(step = LotStep.LOCATION, weightError = false) else _state.value.copy(weightError = true) }
+    fun setWeightUnit(unit: WeightUnit) {
+        val current = _state.value
+        val value = current.weightText.toDoubleOrNull()
+        val converted = if (value == null) {
+            current.weightText
+        } else if (unit == WeightUnit.GRAMS) {
+            String.format(Locale.US, "%.0f", if (current.weightUnit == WeightUnit.KG) value * 1000 else value)
+        } else {
+            String.format(Locale.US, "%.3f", if (current.weightUnit == WeightUnit.GRAMS) value / 1000 else value)
+                .trimEnd('0').trimEnd('.')
+        }
+        _state.value = recalc(current.copy(weightUnit = unit, weightText = converted, weightError = false))
+    }
+    fun confirmWeight() {
+        val value = _state.value.weightKgOrNull()
+        _state.value = if (value != null && value > 0 && value <= 500) _state.value.copy(step = LotStep.LOCATION, weightError = false) else _state.value.copy(weightError = true)
+    }
     fun setLocation(value: String, source: String = "manual") { _state.value = _state.value.copy(location = value, locationSource = source) }
     fun confirmLocation() { if (_state.value.location.isNotBlank()) { _state.value = _state.value.copy(step = LotStep.REVIEW); suggestDescription() } }
     fun setNotes(value: String) {
@@ -98,27 +137,37 @@ class LotManagementViewModel(
         _state.value = current.copy(descriptionLoading = true)
         viewModelScope.launch {
             val result = api?.let { service ->
-                runCatching { service.suggestLotDescription(DescriptionSuggestionRequestDto(material = current.material?.key, condition = current.condition?.name, weight = current.weightText.toDoubleOrNull(), notes = current.notes)).requireData() }.getOrNull()
+                runCatching { service.suggestLotDescription(DescriptionSuggestionRequestDto(material = current.material?.key, condition = current.condition?.name, weight = current.weightKgOrNull(), notes = current.notes)).requireData() }.getOrNull()
             }
-            val fallback = "${current.condition?.name?.lowercase() ?: "used"} ${current.material?.key ?: "electronic material"} lot${current.weightText.toDoubleOrNull()?.let { " weighing $it kg" } ?: ""}."
+            val fallback = "${current.condition?.name?.lowercase() ?: "used"} ${current.material?.key ?: "electronic material"} lot${current.weightKgOrNull()?.let { " weighing $it kg" } ?: ""}."
             val suggestion = result?.text?.takeIf { it.isNotBlank() } ?: fallback
             _state.value = _state.value.copy(notes = if (_state.value.notes.isBlank()) suggestion else _state.value.notes, descriptionSource = result?.source ?: "TEMPLATE", descriptionLoading = false)
         }
     }
     fun save() {
         val s = _state.value
-        val weight = s.weightText.toDoubleOrNull() ?: return
+        if (s.isSaving) return
+        val weight = s.weightKgOrNull()
+        if (weight == null || s.material == null || s.condition == null || s.location.isBlank()) {
+            _state.value = s.copy(saveError = true)
+            return
+        }
         val timestamp = now()
         val id = "LOT-$timestamp-${java.util.UUID.randomUUID().toString().take(6).uppercase()}"
+        _state.value = s.copy(isSaving = true, saveError = false)
         viewModelScope.launch {
-            writer.save(Lot(id, collectorId, s.material?.key.orEmpty(), s.condition?.name.orEmpty(), weight, s.photoPath, null, s.valuation?.estimatedValue, null, null, s.location, timestamp, timestamp, LotStatus.SAVED, s.notes, false))
-            _state.value = s.copy(step = LotStep.SAVED, savedLotId = id)
+            try {
+                writer.save(Lot(id, collectorId, s.material.key, s.condition.name, weight, s.photoPath, null, s.valuation?.estimatedValue, null, null, s.location, timestamp, timestamp, LotStatus.SAVED, s.notes, false))
+                _state.value = _state.value.copy(step = LotStep.SAVED, savedLotId = id, isSaving = false, saveError = false)
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(isSaving = false, saveError = true)
+            }
         }
     }
 
     private fun recalc(state: LotDraftState): LotDraftState {
         val price = state.material?.let { material -> MockPriceData.all.firstOrNull { it.materialLabel == material.key } }
-        val weight = state.weightText.toDoubleOrNull()
+        val weight = state.weightKgOrNull()
         val condition = state.condition?.let { ConditionMultiplier.valueOf(it.name) }
         return if (price != null && weight != null && condition != null) state.copy(valuation = ValuationCalculator.calculate(price.ratePerKg, weight, condition, minPrice = price.minRatePerKg, maxPrice = price.maxRatePerKg)) else state.copy(valuation = null)
     }
@@ -128,6 +177,7 @@ class LotManagementViewModel(
         "LCD_PANEL", "LCD" -> Material.LCD
         "PCB" -> Material.PCB
         "CABLE" -> Material.CABLES
+        "COPPER" -> Material.COPPER
         "BATTERY" -> Material.BATTERY
         "MOTOR" -> Material.MOTOR
         "MAGNET" -> Material.MAGNET
@@ -135,4 +185,9 @@ class LotManagementViewModel(
         "OTHER" -> Material.OTHER
         else -> null
     }
+}
+
+fun LotDraftState.weightKgOrNull(): Double? {
+    val value = weightText.toDoubleOrNull() ?: return null
+    return if (weightUnit == WeightUnit.GRAMS) value / 1000.0 else value
 }
