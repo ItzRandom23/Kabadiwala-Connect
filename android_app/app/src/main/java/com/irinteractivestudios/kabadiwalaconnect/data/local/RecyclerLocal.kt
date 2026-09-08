@@ -52,7 +52,16 @@ data class RecyclerEntity(
 }
 
 class RoomRecyclerRepository(private val dao: RecyclerDao) : RecyclerCatalogRepository {
-    init { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { if (BuildConfig.DEBUG && dao.count() == 0) dao.insertAll(MockRecyclerData.all.map { it.toEntity() }) } }
+    init {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            // Keep sample facilities isolated to the intentionally offline
+            // development build. Never present them as live facilities when
+            // the app is configured for the real backend.
+            if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid") && dao.count() == 0) {
+                dao.insertAll(MockRecyclerData.all.map { it.toEntity() })
+            }
+        }
+    }
     override fun observeRecyclers(): Flow<List<Recycler>> = dao.observeAll().map { it.map { entity -> entity.toDomain() } }
     override fun observeRecycler(id: String): Flow<Recycler?> = dao.observeById(id).map { it?.toDomain() }
 }

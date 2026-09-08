@@ -6,7 +6,8 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidator
-import com.irinteractivestudios.kabadiwalaconnect.data.local.MockPriceData
+import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
 import com.irinteractivestudios.kabadiwalaconnect.util.ConditionMultiplier
 import com.irinteractivestudios.kabadiwalaconnect.util.Valuation
 import com.irinteractivestudios.kabadiwalaconnect.util.ValuationCalculator
@@ -56,10 +57,23 @@ class LotManagementViewModel(
     private val writer: LotWriter,
     private val collectorId: String,
     private val api: ApiService? = null,
+    private val priceCatalog: PriceCatalogRepository? = null,
     private val now: () -> Long = { System.currentTimeMillis() }
 ) : ViewModel() {
     private val _state = MutableStateFlow(LotDraftState())
     val state: StateFlow<LotDraftState> = _state.asStateFlow()
+    private var currentPrices: List<Price> = emptyList()
+
+    init {
+        priceCatalog?.let { catalog ->
+            viewModelScope.launch {
+                catalog.observePrices().collect { prices ->
+                    currentPrices = prices
+                    _state.value = recalc(_state.value)
+                }
+            }
+        }
+    }
     fun photoCaptured(path: String) {
         val result = PhotoValidator.validate(path)
         _state.value = if (result.valid) _state.value.copy(photoPath = path, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
@@ -179,7 +193,7 @@ class LotManagementViewModel(
     }
 
     private fun recalc(state: LotDraftState): LotDraftState {
-        val price = state.material?.let { material -> MockPriceData.all.firstOrNull { it.materialLabel == material.key } }
+        val price = state.material?.let { material -> currentPrices.firstOrNull { it.materialLabel == material.key } }
         val weight = state.weightKgOrNull()
         val condition = state.condition?.let { ConditionMultiplier.valueOf(it.name) }
         return if (price != null && weight != null && condition != null) state.copy(valuation = ValuationCalculator.calculate(price.ratePerKg, weight, condition, minPrice = price.minRatePerKg, maxPrice = price.maxRatePerKg)) else state.copy(valuation = null)

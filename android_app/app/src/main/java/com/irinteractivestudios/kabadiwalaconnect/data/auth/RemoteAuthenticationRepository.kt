@@ -179,5 +179,7 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     businessName = profile?.name,
     phoneNumber = phone ?: profile?.contact?.phone.orEmpty(),
     displayName = displayName ?: profile?.name,
-    areaName = areaName ?: profile?.facilityLocation?.areaName
+    areaName = areaName ?: profile?.facilityLocation?.areaName,
+    latitude = latitude,
+    longitude = longitude
 )

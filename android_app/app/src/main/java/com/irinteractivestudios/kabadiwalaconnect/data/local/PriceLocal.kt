@@ -38,7 +38,12 @@ interface PriceDao {
 class RoomPriceRepository(private val dao: PriceDao) : PriceCatalogRepository {
     init {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            if (BuildConfig.DEBUG && dao.count() == 0) dao.insertAll(MockPriceData.all.map { it.toEntity() })
+            // Keep sample prices isolated to the intentionally offline
+            // development build. A real-backend debug build must not show
+            // fabricated data when the server has no cache yet.
+            if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid") && dao.count() == 0) {
+                dao.insertAll(MockPriceData.all.map { it.toEntity() })
+            }
         }
     }
     override fun observePrices(location: String): Flow<List<Price>> = dao.observe(location).map { list -> list.map { it.toDomain() } }

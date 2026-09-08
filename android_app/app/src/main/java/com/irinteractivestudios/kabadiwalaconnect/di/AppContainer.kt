@@ -132,7 +132,8 @@ class AppContainer(context: Context) {
             }
         }
         if (prices.isNotEmpty()) database.priceDao().replaceLocation(location, prices)
-        val recyclers = runCatching { apiService.getRecyclers(location, 50, null, null, "proximity", 1, 100).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
+        val account = currentAccount()
+        val recyclers = runCatching { apiService.getRecyclers(location, 50, null, null, "proximity", 1, 100, account?.latitude, account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,
                 name = recycler.name,
@@ -228,6 +229,8 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.ACCOUNT_VERIFICATION_STATUS)
         secureStorage.remove(SecureStorage.ACCOUNT_LANGUAGE)
         secureStorage.remove(SecureStorage.ACCOUNT_PROFILE_ID)
+        secureStorage.remove(SecureStorage.ACCOUNT_LATITUDE)
+        secureStorage.remove(SecureStorage.ACCOUNT_LONGITUDE)
         secureStorage.remove(SecureStorage.COLLECTOR_ID)
     }
 

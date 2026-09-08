@@ -41,6 +41,8 @@ const publicProfile = (user: any, profile: any) => ({
   accountStatus: user.accountStatus,
   verificationStatus: user.role === 'RECYCLER' ? profile?.authorizationStatus ?? 'PENDING' : 'VERIFIED',
   profileId: user.role === 'RECYCLER' ? user.recyclerProfileId : user.collectorProfileId,
+  latitude: profile?.latitude ?? null,
+  longitude: profile?.longitude ?? null,
   profile: profile ?? null,
   createdAt: user.createdAt.toISOString(),
   updatedAt: user.updatedAt.toISOString()

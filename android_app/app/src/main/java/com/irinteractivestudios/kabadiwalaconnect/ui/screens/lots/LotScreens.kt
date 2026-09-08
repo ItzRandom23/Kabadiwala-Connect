@@ -375,7 +375,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     s.valuation?.let { valuation ->
         EvidenceSection(title = stringResource(R.string.lot_value_placeholder), status = stringResource(R.string.quote_saved)) {
                 Text(stringResource(R.string.lot_value_placeholder), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text(stringResource(R.string.lot_estimated_value, valuation.estimatedValue), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
+                Text(stringResource(R.string.lot_price_range, valuation.typicalMin, valuation.typicalMax), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
                 Text(stringResource(R.string.lot_estimate_basis), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }

@@ -72,7 +72,7 @@ class KcViewModelFactory(
                 locationProvider = AndroidLocationProvider(app)
             )
         modelClass.isAssignableFrom(LotManagementViewModel::class.java) ->
-            LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService)
+            LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService, priceCatalog)
         modelClass.isAssignableFrom(RecyclerMarketplaceViewModel::class.java) ->
             RecyclerMarketplaceViewModel(container.apiService)
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->

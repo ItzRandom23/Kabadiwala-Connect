@@ -34,6 +34,8 @@ interface SecureStorage {
         const val ACCOUNT_VERIFICATION_STATUS = "account_verification_status"
         const val ACCOUNT_LANGUAGE = "account_language"
         const val ACCOUNT_PROFILE_ID = "account_profile_id"
+        const val ACCOUNT_LATITUDE = "account_latitude"
+        const val ACCOUNT_LONGITUDE = "account_longitude"
     }
 }
 

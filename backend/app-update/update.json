@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.0.8-beta",
-  "apkUrl": "kabadiwala-connect-0.0.8-beta.apk",
-  "releaseNotes": "Fixed account creation conflicts after successful phone verification, including duplicate retries and optional email conflicts."
+  "versionCode": 10,
+  "versionName": "0.0.9-beta",
+  "apkUrl": "kabadiwala-connect-0.0.9-beta.apk",
+  "releaseNotes": "Fixed duplicate phone signup races, removed live-backend mock catalog leakage, and show expected lot price ranges from the real price catalog."
 }

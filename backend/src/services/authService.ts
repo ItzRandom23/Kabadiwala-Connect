@@ -41,6 +41,8 @@ function publicPhoneProfile(user: any, profile: any) {
     accountStatus: user.accountStatus,
     verificationStatus: isRecycler ? profile?.authorizationStatus ?? 'PENDING' : 'VERIFIED',
     profileId: isRecycler ? user.recyclerProfileId : user.collectorProfileId,
+    latitude: profile?.latitude ?? null,
+    longitude: profile?.longitude ?? null,
     profile: profile ?? null,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
@@ -89,6 +91,14 @@ export class AuthService {
       const isEmailConflict = error instanceof AppError && error.code === 'CONFLICT' && details?.code === 'EMAIL_IN_USE';
       const isUniqueConstraint = (error as { code?: string })?.code === 'P2002';
       if (isEmailConflict || isUniqueConstraint) {
+        // A double tap or a retry from a second device can race the first
+        // transaction. Once the phone row exists, the verified phone is the
+        // identity boundary: return the account that won the insert instead
+        // of surfacing a misleading 409 to the user.
+        if (isUniqueConstraint) {
+          const existing = await this.findExistingPhoneAccount(phone);
+          if (existing) return existing;
+        }
         // The phone OTP is the verified identity boundary. Email is optional
         // for phone accounts, so a duplicate email must not block signup;
         // retry without attaching that email. This also makes a concurrent
@@ -106,6 +116,16 @@ export class AuthService {
       if (error instanceof AppError) throw error;
       throw error;
     }
+  }
+
+  private async findExistingPhoneAccount(phone: string) {
+    if (!this.db) return null;
+    const user = await this.db.user.findUnique({ where: { phone } });
+    if (!user || user.accountStatus === 'SUSPENDED' || user.accountStatus === 'DELETED') return null;
+    const profile = user.role === 'RECYCLER'
+      ? await this.db.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
+      : await this.db.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
+    return this.issuePhone(user, profile);
   }
 
   private async verifyPhoneAccount(phone: string, input: PhoneAccountInput) {

@@ -113,7 +113,8 @@
     <string name="lot_condition_label">Condition</string>
     <string name="lot_notes_label">Notes (optional)</string>
     <string name="lot_value_placeholder">Estimated value will appear later.</string>
-    <string name="lot_estimated_value">Estimated value: ₹%1$.0f</string>
+    <string name="lot_estimated_value">Market midpoint: ₹%1$.0f</string>
+    <string name="lot_price_range">Expected price range: ₹%1$.0f–₹%2$.0f</string>
     <string name="lot_estimate_basis">Based on local price × weight × condition. Quality adjustment: 1.0.</string>
     <string name="lot_estimate_disclaimer">Estimate only. Final value depends on recycler inspection.</string>
     <string name="lot_save">Save lot</string>

@@ -76,7 +76,7 @@ interface ApiService {
     suspend fun getValuation(@Path("lotId") lotId: String): Response<ApiEnvelope<ValuationDto>>
 
     @GET("recyclers")
-    suspend fun getRecyclers(@Query("location") location: String?, @Query("radius") radiusKm: Int?, @Query("materialCategory") materialCategory: String?, @Query("availability") availability: String?, @Query("sort") sort: String = "proximity", @Query("page") page: Int = 1, @Query("limit") limit: Int = 100): Response<ApiEnvelope<RecyclerPageDto>>
+    suspend fun getRecyclers(@Query("location") location: String?, @Query("radius") radiusKm: Int?, @Query("materialCategory") materialCategory: String?, @Query("availability") availability: String?, @Query("sort") sort: String = "proximity", @Query("page") page: Int = 1, @Query("limit") limit: Int = 100, @Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null): Response<ApiEnvelope<RecyclerPageDto>>
 
     @GET("recyclers/{recyclerId}")
     suspend fun getRecycler(@Path("recyclerId") recyclerId: String): Response<ApiEnvelope<RecyclerDto>>

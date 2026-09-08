@@ -258,6 +258,8 @@ fun SecureStorage.saveAccount(profile: AccountProfile) {
     put(SecureStorage.ACCOUNT_VERIFICATION_STATUS, profile.verificationStatus.name)
     put(SecureStorage.ACCOUNT_LANGUAGE, profile.preferredLanguage)
     put(SecureStorage.ACCOUNT_PROFILE_ID, profile.profileId)
+    profile.latitude?.let { put(SecureStorage.ACCOUNT_LATITUDE, it.toString()) } ?: remove(SecureStorage.ACCOUNT_LATITUDE)
+    profile.longitude?.let { put(SecureStorage.ACCOUNT_LONGITUDE, it.toString()) } ?: remove(SecureStorage.ACCOUNT_LONGITUDE)
 }
 
 fun SecureStorage.readAccount(): AccountProfile? {
@@ -273,6 +275,8 @@ fun SecureStorage.readAccount(): AccountProfile? {
         profileId = profileId,
         phoneNumber = get(SecureStorage.ACCOUNT_PHONE).orEmpty(),
         displayName = get(SecureStorage.ACCOUNT_DISPLAY_NAME)?.takeIf { it.isNotBlank() },
-        areaName = get(SecureStorage.ACCOUNT_AREA_NAME)?.takeIf { it.isNotBlank() }
+        areaName = get(SecureStorage.ACCOUNT_AREA_NAME)?.takeIf { it.isNotBlank() },
+        latitude = get(SecureStorage.ACCOUNT_LATITUDE)?.toDoubleOrNull(),
+        longitude = get(SecureStorage.ACCOUNT_LONGITUDE)?.toDoubleOrNull()
     )
 }

@@ -15,7 +15,9 @@ data class AccountProfile(
     val businessName: String? = null,
     val phoneNumber: String = "",
     val displayName: String? = null,
-    val areaName: String? = null
+    val areaName: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 /**
