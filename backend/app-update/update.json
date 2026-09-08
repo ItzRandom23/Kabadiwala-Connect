@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.0.9-beta",
-  "apkUrl": "kabadiwala-connect-0.0.9-beta.apk",
-  "releaseNotes": "Fixed duplicate phone signup races, removed live-backend mock catalog leakage, and show expected lot price ranges from the real price catalog."
+  "versionCode": 11,
+  "versionName": "0.0.10-beta",
+  "apkUrl": "kabadiwala-connect-0.0.10-beta.apk",
+  "releaseNotes": "Fixed GPS area detection with locality-first labels and reliable recent-location fallback. Development OTP 123456 is now shown in beta builds."
 }

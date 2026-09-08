@@ -32,9 +32,7 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
     private val appContext = context.applicationContext
 
     override suspend fun current(): CurrentLocation? {
-        val location = withContext(Dispatchers.Main.immediate) {
-            withTimeoutOrNull(10_000L) { requestFreshLocation() }
-        } ?: return null
+        val location = withContext(Dispatchers.Main.immediate) { requestFreshLocation() } ?: return null
 
         val areaName = withContext(Dispatchers.IO) { reverseGeocode(location) }
         return CurrentLocation(location.latitude, location.longitude, areaName)
@@ -58,25 +56,27 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
             .maxByOrNull { it.time }
             ?.takeIf { System.currentTimeMillis() - it.time <= 60_000L }
 
-        val fresh = suspendCancellableCoroutine<Location?> { continuation ->
-            lateinit var listener: LocationListener
-            listener = object : LocationListener {
-                override fun onLocationChanged(location: Location) {
-                    if (!continuation.isActive) return
-                    manager.removeUpdates(listener)
-                    continuation.resume(location)
+        val fresh = withTimeoutOrNull(8_000L) {
+            suspendCancellableCoroutine<Location?> { continuation ->
+                lateinit var listener: LocationListener
+                listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        if (!continuation.isActive) return
+                        manager.removeUpdates(listener)
+                        continuation.resume(location)
+                    }
                 }
-            }
 
-            var registered = false
-            providers.forEach { provider ->
-                runCatching {
-                    manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
-                    registered = true
+                var registered = false
+                providers.forEach { provider ->
+                    runCatching {
+                        manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+                        registered = true
+                    }
                 }
+                if (!registered) continuation.resume(null)
+                continuation.invokeOnCancellation { manager.removeUpdates(listener) }
             }
-            if (!registered) continuation.resume(null)
-            continuation.invokeOnCancellation { manager.removeUpdates(listener) }
         }
 
         return fresh ?: lastKnown
@@ -89,15 +89,27 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
             Geocoder(appContext, Locale.getDefault())
                 .getFromLocation(location.latitude, location.longitude, 1)
                 ?.firstOrNull()
-                ?.areaName()
+                ?.collectionAreaName()
         }.getOrNull()
     }
 }
 
-private fun Address.areaName(): String? = listOf(
-    locality,
+/**
+ * Builds a collection-friendly label such as "Hadapsar, Pune, Maharashtra".
+ * A state by itself is deliberately rejected: coarse GPS is still saved, but
+ * the collector must confirm a real locality instead of silently storing an
+ * unusable state-wide collection area.
+ */
+private fun Address.collectionAreaName(): String? {
+    val localParts = listOf(
     subLocality,
+    locality,
     subAdminArea,
-    adminArea,
-    featureName
-).firstOrNull { !it.isNullOrBlank() }
+    featureName?.takeUnless { value -> value.all(Char::isDigit) }
+    ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }.distinctBy(String::lowercase)
+    if (localParts.isEmpty()) return null
+    return (localParts + listOfNotNull(adminArea?.trim()?.takeIf(String::isNotBlank)))
+        .distinctBy(String::lowercase)
+        .take(3)
+        .joinToString(", ")
+}

@@ -1,6 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.auth
 
 import android.util.Base64
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
@@ -30,7 +31,12 @@ class RemoteAuthenticationRepository(
     override suspend fun requestOtp(phoneNumber: String): OtpChallenge {
         api.requestOtp(OtpRequestDto(phoneNumber)).requireData()
         val now = System.currentTimeMillis()
-        return OtpChallenge(phoneNumber, now + OTP_TTL_MS, now + RESEND_COOLDOWN_MS)
+        return OtpChallenge(
+            phoneNumber,
+            now + OTP_TTL_MS,
+            now + RESEND_COOLDOWN_MS,
+            developmentCodeHint = if (BuildConfig.DEBUG) DEVELOPMENT_OTP_CODE else null
+        )
     }
 
     override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification = verifyOtpInternal(phoneNumber, code, null)
@@ -165,6 +171,7 @@ class RemoteAuthenticationRepository(
         private const val OTP_TTL_MS = 10 * 60 * 1000L
         private const val RESEND_COOLDOWN_MS = 30 * 1000L
         private const val SESSION_FALLBACK_MS = 30L * 24L * 60L * 60L * 1000L
+        private const val DEVELOPMENT_OTP_CODE = "123456"
     }
 }
 
