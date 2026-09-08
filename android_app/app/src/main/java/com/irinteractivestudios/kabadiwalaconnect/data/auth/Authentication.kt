@@ -68,7 +68,19 @@ object EmailValidator {
 
 object IndianPhoneValidator {
     private val pattern = Regex("^[6-9]\\d{9}$")
-    fun isValid(value: String): Boolean = pattern.matches(value)
+
+    /** Return the canonical ten-digit Indian mobile number used by the API. */
+    fun normalize(value: String): String {
+        val digits = value.filter { it in '0'..'9' }
+        return when {
+            digits.length == 14 && digits.startsWith("0091") -> digits.drop(4)
+            digits.length == 12 && digits.startsWith("91") -> digits.drop(2)
+            digits.length == 11 && digits.startsWith('0') -> digits.drop(1)
+            else -> digits
+        }
+    }
+
+    fun isValid(value: String): Boolean = pattern.matches(normalize(value))
 }
 
 interface OtpService {

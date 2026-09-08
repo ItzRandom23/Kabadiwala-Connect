@@ -16,4 +16,55 @@ describe('collector authentication service', () => {
   it('verifies a development OTP and creates a collector', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-1'); const result = await service.verifyOtp('9876543210', '123456', 'ip-1'); expect(result.collector.id).toBe('collector-new'); expect(result.token).toBeTruthy(); });
   it('rejects an invalid OTP', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-1'); await expect(service.verifyOtp('9876543210', '000000', 'ip-1')).rejects.toMatchObject({ code: 'OTP_INVALID' }); });
   it('logs in an existing collector', async () => { const { service } = setup(true); await service.requestOtp('9876543210', 'ip-2'); const result = await service.verifyOtp('9876543210', '123456', 'ip-2'); expect(result.collector.id).toBe('collector-1'); });
+
+  it('does not block a verified phone when the optional email belongs to another account', async () => {
+    const existingUser = {
+      id: 'user-1',
+      phone: '9876543210',
+      email: 'old@example.com',
+      role: 'COLLECTOR',
+      preferredLanguage: 'ENGLISH',
+      accountStatus: 'ACTIVE',
+      collectorProfileId: 'collector-1',
+      recyclerProfileId: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    const existingProfile = {
+      id: 'collector-1',
+      phone: '9876543210',
+      email: 'old@example.com',
+      displayName: null,
+      preferredLanguage: 'ENGLISH',
+      areaName: 'Pune',
+      accountStatus: 'ACTIVE',
+      createdAt: new Date(),
+      lastLoginAt: new Date()
+    };
+    const tx = {
+      user: {
+        findUnique: async ({ where }: any) => 'phone' in where ? existingUser : { id: 'other-user' },
+        findFirst: async () => null,
+        update: async ({ data }: any) => Object.assign(existingUser, data)
+      },
+      collector: {
+        findFirst: async () => null,
+        findUnique: async ({ where }: any) => 'email' in where ? { id: 'other-collector' } : existingProfile,
+        update: async () => existingProfile
+      }
+    };
+    const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
+    const service = new AuthService(new DevelopmentOtpProvider(config), {} as any, new JwtService(config), undefined, db);
+
+    await service.requestOtp('9876543210', 'ip-3');
+    const result = await service.verifyOtp('9876543210', '123456', 'ip-3', {
+      role: 'COLLECTOR',
+      preferredLanguage: 'ENGLISH',
+      areaName: 'Pune',
+      email: 'other@example.com'
+    });
+
+    expect(result.user?.profileId).toBe('collector-1');
+    expect(result.user?.email).toBe('old@example.com');
+  });
 });

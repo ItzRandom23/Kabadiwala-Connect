@@ -137,12 +137,25 @@ class OnboardingViewModel(
     fun toggleMaterial(value: String) { _state.value = _state.value.copy(materialsAccepted = _state.value.materialsAccepted.toMutableSet().also { if (!it.add(value)) it.remove(value) }) }
     fun setPickupAvailable(value: Boolean) { _state.value = _state.value.copy(pickupAvailable = value) }
     fun setServiceRadius(value: Int) { _state.value = _state.value.copy(serviceRadiusKm = value) }
-    fun continueRecyclerDetails() { _state.value = _state.value.copy(step = OnboardingStep.LOCATION_PERMISSION) }
+    fun continueRecyclerDetails() {
+        val current = _state.value
+        if (!current.hasRequiredRecyclerDetails()) return
+        val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
+        _state.value = current.copy(emailError = !validEmail)
+        if (validEmail) _state.value = _state.value.copy(step = OnboardingStep.LOCATION_PERMISSION)
+    }
 
     // Legacy phone OTP boundary remains available for older backend/dev flows.
-    fun setPhone(value: String) { _state.value = _state.value.copy(phone = value.filter(Char::isDigit).take(10), phoneError = false, authError = false) }
+    fun setPhone(value: String) {
+        _state.value = _state.value.copy(
+            phone = IndianPhoneValidator.normalize(value),
+            phoneError = false,
+            authError = false
+        )
+    }
     fun requestOtp() {
-        val phone = _state.value.phone
+        val phone = IndianPhoneValidator.normalize(_state.value.phone)
+        _state.value = _state.value.copy(phone = phone)
         if (!IndianPhoneValidator.isValid(phone)) { _state.value = _state.value.copy(phoneError = true); return }
         viewModelScope.launch {
             _state.value = _state.value.copy(isBusy = true, phoneError = false)
@@ -156,32 +169,44 @@ class OnboardingViewModel(
     fun verifyOtp() {
         val current = _state.value
         if (current.otp.length != 6) return
+        val useLegacyPhoneOnlyVerification = current.isPhoneOnlyVerification()
+        if (!useLegacyPhoneOnlyVerification && !current.hasRequiredRegistrationFields()) return
         if (current.challenge == null) {
             _state.value = current.copy(otpError = OtpError.EXPIRED)
             return
         }
+        val email = current.email.trim()
+        val area = current.area.trim()
+        val displayName = current.displayName.trim()
+        val businessName = current.businessName.trim()
+        val authorizationNumber = current.authorizationNumber.trim()
+        val materialsAccepted = current.materialsAccepted.map { it.trim() }.filter { it.isNotEmpty() }
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true)
             val registrationResult = try {
-                auth.verifyOtp(
-                    current.phone,
-                    current.otp,
-                    PhoneAccountRequest(
-                        phoneNumber = current.phone,
-                        role = current.role,
-                        preferredLanguage = current.language,
-                        areaName = current.area,
-                        displayName = current.displayName,
-                        email = current.email,
-                        businessName = current.businessName,
-                        authorizationNumber = current.authorizationNumber,
-                        materialsAccepted = current.materialsAccepted.toList(),
-                        pickupAvailable = current.pickupAvailable,
-                        serviceRadiusKm = current.serviceRadiusKm,
-                        latitude = current.latitude,
-                        longitude = current.longitude
+                if (useLegacyPhoneOnlyVerification) {
+                    auth.verifyOtp(current.phone, current.otp)
+                } else {
+                    auth.verifyOtp(
+                        current.phone,
+                        current.otp,
+                        PhoneAccountRequest(
+                            phoneNumber = current.phone,
+                            role = current.role,
+                            preferredLanguage = current.language,
+                            areaName = area,
+                            displayName = displayName,
+                            email = email,
+                            businessName = businessName,
+                            authorizationNumber = authorizationNumber,
+                            materialsAccepted = materialsAccepted,
+                            pickupAvailable = current.pickupAvailable,
+                            serviceRadiusKm = current.serviceRadiusKm,
+                            latitude = current.latitude,
+                            longitude = current.longitude
+                        )
                     )
-                )
+                }
             } catch (_: Exception) { OtpVerification.NetworkError }
             // Older test deployments can have a phone profile without its
             // matching account identity. A verified phone is enough to safely
@@ -296,8 +321,30 @@ class OnboardingViewModel(
         val current = _state.value
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
         _state.value = current.copy(emailError = !validEmail)
-        if (current.area.isNotBlank() && validEmail) _state.value = _state.value.copy(step = OnboardingStep.PHONE)
+        if (current.area.isNotBlank() && validEmail && (current.role != AccountRole.RECYCLER || current.hasRequiredRecyclerDetails())) {
+            _state.value = _state.value.copy(step = OnboardingStep.PHONE)
+        }
     }
+
+    private fun OnboardingState.hasRequiredRecyclerDetails(): Boolean =
+        role != AccountRole.RECYCLER || (businessName.isNotBlank() && materialsAccepted.isNotEmpty())
+
+    private fun OnboardingState.hasRequiredRegistrationFields(): Boolean =
+        phone.isNotBlank() &&
+            area.isNotBlank() &&
+            (email.isBlank() || EmailValidator.isValid(email)) &&
+            hasRequiredRecyclerDetails()
+
+    private fun OnboardingState.isPhoneOnlyVerification(): Boolean =
+        role == AccountRole.COLLECTOR &&
+            area.isBlank() &&
+            displayName.isBlank() &&
+            email.isBlank() &&
+            businessName.isBlank() &&
+            authorizationNumber.isBlank() &&
+            materialsAccepted.isEmpty() &&
+            latitude == null &&
+            longitude == null
 
     fun saveProfile() {
         val current = _state.value

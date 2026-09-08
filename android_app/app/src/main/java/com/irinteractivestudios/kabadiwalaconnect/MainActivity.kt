@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -85,12 +86,15 @@ class MainActivity : ComponentActivity() {
             ) {
                 val navController = rememberNavController()
                 val uiScope = rememberCoroutineScope()
-                var demoMode by remember { mutableStateOf(false) }
+                // Demo mode has no persisted account/session. Keep only this
+                // short-lived flag across activity recreation so a language
+                // change does not send the demo user back to AUTH.
+                var demoMode by rememberSaveable { mutableStateOf(false) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
                 val cachedAccount = app.container.currentAccount()
-                val initialRoute = if (!app.container.hasValidSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (demoMode) Destinations.HOME else if (!app.container.hasValidSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole)
@@ -104,7 +108,12 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(initialRoute, route) {
                     if (!navGuardReady && route != null) {
                         navGuardReady = true
-                        if (route != initialRoute) {
+                        val shouldRecoverRoute = if (demoMode) {
+                            route == Destinations.AUTH
+                        } else {
+                            route != initialRoute
+                        }
+                        if (shouldRecoverRoute) {
                             navController.navigate(initialRoute) {
                                 popUpTo(0)
                                 launchSingleTop = true

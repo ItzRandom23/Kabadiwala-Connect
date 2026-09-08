@@ -33,4 +33,66 @@ describe('app', () => {
     expect(missing.status).toBe(404);
     expect(missing.body.error.code).toBe('NOT_FOUND');
   });
+
+  it('treats blank optional phone-registration fields as omitted', async () => {
+    let captured: any;
+    const authService = {
+      requestOtp: async () => 'OTP sent successfully',
+      verifyOtp: async (_phone: string, _otp: string, _ip: string, account: any) => {
+        captured = account;
+        return { token: 'token', collector: null, user: { id: 'u1', role: 'COLLECTOR', profileId: 'c1' } };
+      }
+    };
+    const authApp = createApp(config, db, new JwtService(config), service, authService as any);
+
+    const response = await request(authApp).post('/api/v1/auth/verify-otp').send({
+      phone: '9876543210',
+      otp: '123456',
+      role: 'COLLECTOR',
+      preferredLanguage: 'ENGLISH',
+      areaName: ' Pune ',
+      email: '   ',
+      displayName: ''
+    });
+
+    expect(response.status).toBe(200);
+    expect(captured.areaName).toBe('Pune');
+    expect(captured.email).toBeUndefined();
+    expect(captured.displayName).toBeUndefined();
+  });
+
+  it('normalizes common Indian phone formats before requesting an OTP', async () => {
+    let capturedPhone = '';
+    const authService = {
+      requestOtp: async (phone: string) => {
+        capturedPhone = phone;
+        return 'OTP sent successfully';
+      }
+    };
+    const authApp = createApp(config, db, new JwtService(config), service, authService as any);
+
+    const response = await request(authApp).post('/api/v1/auth/request-otp').send({ phone: '+91 93107-07756' });
+
+    expect(response.status).toBe(200);
+    expect(capturedPhone).toBe('9310707756');
+  });
+
+  it('requires mandatory phone-registration fields when creating an account', async () => {
+    const authService = {
+      requestOtp: async () => 'OTP sent successfully',
+      verifyOtp: async () => { throw new Error('verifyOtp should not be called for invalid input'); }
+    };
+    const authApp = createApp(config, db, new JwtService(config), service, authService as any);
+
+    const response = await request(authApp).post('/api/v1/auth/verify-otp').send({
+      phone: '9876543210',
+      otp: '123456',
+      role: 'COLLECTOR',
+      preferredLanguage: 'ENGLISH',
+      areaName: ''
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
 });

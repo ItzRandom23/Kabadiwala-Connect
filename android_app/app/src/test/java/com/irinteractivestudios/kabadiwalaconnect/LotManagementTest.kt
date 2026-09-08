@@ -100,6 +100,21 @@ class LotManagementTest {
         assertEquals(LotStep.SAVED, vm.state.value.step)
     }
 
+    @Test fun save_keepsCollectorQuotedPriceWithLot() = runTest {
+        val saved = mutableListOf<Lot>()
+        val vm = LotManagementViewModel(writer(saved), "collector-quote", now = { 6789L })
+        vm.chooseMaterial(Material.COPPER)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeight("2")
+        vm.confirmWeight()
+        vm.setLocation("Pune")
+        vm.confirmLocation()
+        vm.setQuotePrice("1250")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(1250.0, saved.single().quoteRupees!!, 0.0001)
+    }
+
     @Test fun saveFailure_keepsReviewStepAndExposesRetryableError() = runTest {
         val failingWriter = object : LotWriter {
             override fun observeLot(id: String): Flow<Lot?> = emptyFlow()

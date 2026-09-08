@@ -42,6 +42,8 @@ data class LotDraftState(
     val location: String = "",
     val locationSource: String = "manual",
     val notes: String = "",
+    val quotePriceText: String = "",
+    val quotePriceError: Boolean = false,
     val descriptionSource: String = "USER",
     val descriptionLoading: Boolean = false,
     val materialSuggestion: MaterialSuggestionDto? = null,
@@ -158,6 +160,12 @@ class LotManagementViewModel(
             descriptionSource = "USER"
         )
     }
+    fun setQuotePrice(value: String) {
+        _state.value = _state.value.copy(
+            quotePriceText = value.filter { it.isDigit() || it == '.' }.take(9),
+            quotePriceError = false
+        )
+    }
     fun suggestDescription() {
         val current = _state.value
         if (current.descriptionLoading) return
@@ -179,12 +187,17 @@ class LotManagementViewModel(
             _state.value = s.copy(saveError = true)
             return
         }
+        val quotePrice = s.quotePriceOrNull()
+        if (s.quotePriceText.isNotBlank() && quotePrice == null) {
+            _state.value = s.copy(quotePriceError = true)
+            return
+        }
         val timestamp = now()
         val id = "LOT-$timestamp-${java.util.UUID.randomUUID().toString().take(6).uppercase()}"
         _state.value = s.copy(isSaving = true, saveError = false)
         viewModelScope.launch {
             try {
-                writer.save(Lot(id, collectorId, s.material.key, s.condition.name, weight, s.photoPath, null, s.valuation?.estimatedValue, null, null, s.location, timestamp, timestamp, LotStatus.SAVED, s.notes, false))
+                writer.save(Lot(id, collectorId, s.material.key, s.condition.name, weight, s.photoPath, null, s.valuation?.estimatedValue, quotePrice, null, s.location, timestamp, timestamp, LotStatus.SAVED, s.notes, false))
                 _state.value = _state.value.copy(step = LotStep.SAVED, savedLotId = id, isSaving = false, saveError = false)
             } catch (_: Exception) {
                 _state.value = _state.value.copy(isSaving = false, saveError = true)
@@ -217,4 +230,9 @@ class LotManagementViewModel(
 fun LotDraftState.weightKgOrNull(): Double? {
     val value = weightText.toDoubleOrNull() ?: return null
     return if (weightUnit == WeightUnit.GRAMS) value / 1000.0 else value
+}
+
+fun LotDraftState.quotePriceOrNull(): Double? {
+    val value = quotePriceText.toDoubleOrNull() ?: return null
+    return value.takeIf { it > 0 && it < 1_000_000 }
 }

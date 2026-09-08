@@ -94,8 +94,9 @@ private fun Lot.toSyncPayload() = mapOf(
     "weight" to weightKg,
     "collectionLocation" to mapOf("areaName" to location, "precision" to "MANUAL"),
     "notes" to notes.takeIf { it.isNotBlank() },
-    // Kept in the local queue payload only; the backend ignores this field
-    // during lot creation and receives it through the multipart photo call.
+    "quotedPrice" to quoteRupees,
+    // Keep the original photo path in the queue so the sync worker can upload
+    // it after the lot itself is created.
     "photoPath" to localPhotoPath
 )
 

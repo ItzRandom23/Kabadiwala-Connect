@@ -141,6 +141,18 @@ export class AuthService {
     const displayName = input.displayName?.trim() ?? '';
 
     return this.db!.$transaction(async (tx) => {
+      // Email is an optional recovery detail. A verified phone must remain
+      // sufficient to sign in, even when the submitted email belongs to a
+      // different account. In that case, leave the existing email untouched
+      // or create the phone account without attaching the duplicate email.
+      const usableEmail = async (candidate: string | null, existingUserId?: string, existingCollectorId?: string) => {
+        if (!candidate) return null;
+        const emailOwner = await tx.user.findUnique({ where: { email: candidate } });
+        const collectorEmailOwner = await tx.collector.findUnique({ where: { email: candidate } });
+        if ((emailOwner && emailOwner.id !== existingUserId) || (collectorEmailOwner && collectorEmailOwner.id !== existingCollectorId)) return null;
+        return candidate;
+      };
+
       let user = await tx.user.findUnique({ where: { phone } });
 
       // Link legacy OTP-created records to the account identity model without
@@ -150,17 +162,11 @@ export class AuthService {
         if (legacyCollector) {
           user = await tx.user.findFirst({ where: { collectorProfileId: legacyCollector.id } });
           if (!user) {
-            if (email) {
-              const emailOwner = await tx.user.findUnique({ where: { email } });
-              const collectorEmailOwner = await tx.collector.findUnique({ where: { email } });
-              if (emailOwner || (collectorEmailOwner && collectorEmailOwner.id !== legacyCollector.id)) {
-                throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
-              }
-            }
+            const accountEmail = await usableEmail(email, undefined, legacyCollector.id);
             user = await tx.user.create({
               data: {
                 phone,
-                email,
+                email: accountEmail,
                 passwordHash: null,
                 role: 'COLLECTOR',
                 preferredLanguage: preferredLanguage as any,
@@ -176,10 +182,11 @@ export class AuthService {
         if (legacyRecycler) {
           user = await tx.user.findFirst({ where: { recyclerProfileId: legacyRecycler.id } });
           if (!user) {
+            const accountEmail = await usableEmail(email);
             user = await tx.user.create({
               data: {
                 phone,
-                email,
+                email: accountEmail,
                 passwordHash: null,
                 role: 'RECYCLER',
                 preferredLanguage: preferredLanguage as any,
@@ -193,19 +200,16 @@ export class AuthService {
       if (user) {
         if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
         if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
-        if (email && email !== user.email) {
-          const emailOwner = await tx.user.findUnique({ where: { email } });
-          if (emailOwner && emailOwner.id !== user.id) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
-          const collectorEmailOwner = await tx.collector.findUnique({ where: { email } });
-          if (collectorEmailOwner && collectorEmailOwner.id !== user.collectorProfileId) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
-          user = await tx.user.update({ where: { id: user.id }, data: { email } });
+        const accountEmail = await usableEmail(email, user.id, user.collectorProfileId ?? undefined);
+        if (accountEmail && accountEmail !== user.email) {
+          user = await tx.user.update({ where: { id: user.id }, data: { email: accountEmail } });
         }
 
         if (user.role === 'COLLECTOR') {
           await tx.collector.update({
             where: { id: user.collectorProfileId ?? '' },
             data: {
-              ...(email ? { email } : {}),
+              ...(accountEmail ? { email: accountEmail } : {}),
               ...(displayName ? { displayName } : {}),
               ...(areaName ? { areaName } : {}),
               ...(latitude !== undefined ? { latitude } : {}),
@@ -221,18 +225,13 @@ export class AuthService {
         return this.issuePhone(user, profile);
       }
 
-      if (email) {
-        const emailOwner = await tx.user.findUnique({ where: { email } });
-        if (emailOwner) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
-        const collectorEmailOwner = await tx.collector.findUnique({ where: { email } });
-        if (collectorEmailOwner) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
-      }
+      const accountEmail = await usableEmail(email);
 
       if (requestedRole === 'COLLECTOR') {
         const profile = await tx.collector.create({
           data: {
             phone,
-            email,
+            email: accountEmail,
             displayName: displayName || null,
             preferredLanguage: preferredLanguage as any,
             areaName,
@@ -244,7 +243,7 @@ export class AuthService {
         user = await tx.user.create({
           data: {
             phone,
-            email,
+            email: accountEmail,
             passwordHash: null,
             role: 'COLLECTOR',
             preferredLanguage: preferredLanguage as any,
@@ -257,7 +256,7 @@ export class AuthService {
       const profile = await tx.recycler.create({
         data: {
           phone,
-          email,
+          email: accountEmail,
           name: input.businessName?.trim() || displayName || 'New recycler facility',
           address: areaName || 'Location to be confirmed',
           areaName: areaName || 'Location to be confirmed',
@@ -277,7 +276,7 @@ export class AuthService {
       user = await tx.user.create({
         data: {
           phone,
-          email,
+          email: accountEmail,
           passwordHash: null,
           role: 'RECYCLER',
           preferredLanguage: preferredLanguage as any,

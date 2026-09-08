@@ -378,8 +378,31 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
                 Text(stringResource(R.string.lot_price_range, valuation.typicalMin, valuation.typicalMax), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
                 Text(stringResource(R.string.lot_estimate_basis), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
+        Surface(
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Warning, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.lot_estimate_warning), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
     Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(
+        value = s.quotePriceText,
+        onValueChange = vm::setQuotePrice,
+        label = { Text(stringResource(R.string.lot_user_price_label)) },
+        supportingText = { Text(if (s.quotePriceError) stringResource(R.string.lot_user_price_error) else stringResource(R.string.lot_user_price_detail)) },
+        leadingIcon = { Text("₹", style = MaterialTheme.typography.titleMedium) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true,
+        isError = s.quotePriceError,
+        modifier = Modifier.fillMaxWidth().testTag("lot_user_price")
+    )
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.lot_description_label), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         OutlinedButton(onClick = vm::suggestDescription, enabled = !s.descriptionLoading) { Text(if (s.descriptionLoading) stringResource(R.string.lot_description_generating) else stringResource(R.string.lot_description_refresh)) }
@@ -418,7 +441,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     } }
 }
 
-@Composable fun LotDetailScreen(lot: Lot, onCancel: () -> Unit, onRepeat: () -> Unit = {}) { Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }; Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium); ReviewRow(stringResource(R.string.lot_condition_label), lot.condition); ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString())); ReviewRow(stringResource(R.string.lot_area_label), lot.location); lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }; Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge); if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(R.string.lot_repeat)) }; if (lot.status == LotStatus.SAVED) OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) } } }
+@Composable fun LotDetailScreen(lot: Lot, onCancel: () -> Unit, onRepeat: () -> Unit = {}) { Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }; Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium); ReviewRow(stringResource(R.string.lot_condition_label), lot.condition); ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString())); ReviewRow(stringResource(R.string.lot_area_label), lot.location); lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }; lot.quoteRupees?.let { ReviewRow(stringResource(R.string.lot_user_price_label), "₹%.0f".format(it)) }; Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge); if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(R.string.lot_repeat)) }; if (lot.status == LotStatus.SAVED) OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) } } }
 
 private fun decodeSampledBitmap(path: String, maxDimension: Int = 1200): ImageBitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 
 /**
@@ -66,5 +67,21 @@ class BottomNavTest {
         // Back to Home.
         composeTestRule.onNodeWithTag("nav_home").performClick()
         composeTestRule.onNodeWithTag("nav_home").assertIsSelected()
+    }
+
+    @Test
+    fun changingLanguageInDemoKeepsDemoSession() {
+        composeTestRule.onNodeWithTag("nav_settings")
+            .performClick()
+        composeTestRule.onNodeWithTag("settings_language_picker")
+            .performClick()
+        composeTestRule.onNodeWithTag("lang_hi")
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("nav_home")
+            .assertIsDisplayed()
+            .assertIsSelected()
+        assertTrue(composeTestRule.onAllNodesWithTag("auth_get_started").fetchSemanticsNodes().isEmpty())
     }
 }

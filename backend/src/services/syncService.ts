@@ -24,7 +24,7 @@ export class SyncService {
       try {
         if (op.operationType === 'CREATE' && op.entityType === 'LOT') {
           const p = op.payload;
-          const lot = await this.db.lot.create({ data: { id: op.entityId, collectorId: cid, materialCategory: p.materialCategory, materialSubcategory: p.materialSubcategory, condition: p.condition, weight: p.weight, collectionLatitude: p.collectionLocation?.latitude, collectionLongitude: p.collectionLocation?.longitude, collectionAreaName: p.collectionLocation?.areaName, collectionLocationPrecision: p.collectionLocation?.precision, notes: p.notes, status: 'CREATED' } });
+          const lot = await this.db.lot.create({ data: { id: op.entityId, collectorId: cid, materialCategory: p.materialCategory, materialSubcategory: p.materialSubcategory, condition: p.condition, weight: p.weight, collectionLatitude: p.collectionLocation?.latitude, collectionLongitude: p.collectionLocation?.longitude, collectionAreaName: p.collectionLocation?.areaName, collectionLocationPrecision: p.collectionLocation?.precision, notes: p.notes, quotedPrice: p.quotedPrice, status: 'CREATED' } });
           await this.save(cid, op, hash, 'APPLIED');
           results.push({ operationId: op.operationId, status: 'APPLIED', entityType: 'LOT', entityId: lot.id });
         } else if (op.operationType === 'UPDATE' && op.entityType === 'LOT') {

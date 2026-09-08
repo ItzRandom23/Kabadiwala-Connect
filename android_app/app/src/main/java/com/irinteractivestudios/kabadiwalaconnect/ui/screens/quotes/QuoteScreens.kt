@@ -72,6 +72,7 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
                 ProofRow(stringResource(R.string.handover_weight), stringResource(R.string.lot_weight_value, selectedLot.weightKg.toString()))
                 ProofRow(stringResource(R.string.quote_choose_recycler), selectedRecycler.name)
                 Text(stringResource(R.string.quote_estimated, selectedLot.estimatedValueRupees ?: 0.0), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
+                selectedLot.quoteRupees?.let { Text(stringResource(R.string.quote_user_price, it), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
             }
             Text(stringResource(R.string.quote_confirmation), style = MaterialTheme.typography.bodyLarge)
             if (submitError) Text(stringResource(R.string.quote_submit_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)

@@ -37,6 +37,13 @@ class AuthenticationTest {
         assertFalse(IndianPhoneValidator.isValid("98765abc10"))
     }
 
+    @Test fun indianPhoneValidator_normalizesCommonIndianFormats() {
+        assertEquals("9310707756", IndianPhoneValidator.normalize("+91 93107-07756"))
+        assertEquals("9310707756", IndianPhoneValidator.normalize("0091 9310707756"))
+        assertEquals("9310707756", IndianPhoneValidator.normalize("09310707756"))
+        assertTrue(IndianPhoneValidator.isValid("+91 93107-07756"))
+    }
+
     @Test fun mockOtp_supportsSuccessIncorrectExpiryAndAttemptLimit() = runTest {
         val service = MockOtpService(ttlMs = 10, resendCooldownMs = 5, maxAttempts = 2)
         service.send("9876543210", nowEpochMs = 100)
@@ -112,6 +119,18 @@ class AuthenticationTest {
         assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
         assertEquals("", vm.state.value.phone)
         assertEquals("", vm.state.value.area)
+    }
+
+    @Test fun onboarding_nameIsOptionalAndCanContinueToPhone() {
+        val vm = TestAuth.onboarding()
+        vm.selectRole(AccountRole.COLLECTOR)
+        vm.chooseManualLocation()
+        vm.setArea("Pune")
+        vm.setDisplayName("")
+
+        vm.continueToPhone()
+
+        assertEquals(OnboardingStep.PHONE, vm.state.value.step)
     }
 
     @Test fun onboarding_successfulLegacyOtpCompletesInsteadOfSendingUserBack() = runTest {
@@ -193,6 +212,8 @@ class AuthenticationTest {
             }
             val vm = OnboardingViewModel(auth, profiles)
             vm.setPhone("9876543210")
+            vm.chooseManualLocation()
+            vm.setArea("Pune")
             vm.setEmail("friend@example.com")
             vm.requestOtp()
             advanceUntilIdle()
@@ -203,6 +224,88 @@ class AuthenticationTest {
             assertEquals(1, legacySignInCalls)
             assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
             assertTrue(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun onboarding_doesNotVerifyWhenRequiredRegistrationFieldsAreMissing() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var registrationCalls = 0
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification =
+                    OtpVerification.Success("token", Long.MAX_VALUE, "collector")
+                override suspend fun verifyOtp(phoneNumber: String, code: String, account: PhoneAccountRequest): OtpVerification {
+                    registrationCalls++
+                    return OtpVerification.Success("token", Long.MAX_VALUE, "collector")
+                }
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.setPhone("9876543210")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.setDisplayName("Asha")
+
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(0, registrationCalls)
+            assertEquals(OnboardingStep.OTP, vm.state.value.step)
+            assertFalse(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun onboarding_sendsTrimmedMandatoryFieldsAndLeavesOptionalFieldsOptional() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var captured: PhoneAccountRequest? = null
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification =
+                    OtpVerification.Success("token", Long.MAX_VALUE, "collector")
+                override suspend fun verifyOtp(phoneNumber: String, code: String, account: PhoneAccountRequest): OtpVerification {
+                    captured = account
+                    return OtpVerification.Success("token", Long.MAX_VALUE, "collector")
+                }
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.setPhone("9876543210")
+            vm.chooseManualLocation()
+            vm.setArea("  Pune  ")
+            vm.setDisplayName("  ")
+            vm.setEmail("   ")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals("Pune", captured?.areaName)
+            assertEquals("", captured?.displayName)
+            assertEquals("", captured?.email)
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
         } finally {
             Dispatchers.resetMain()
         }

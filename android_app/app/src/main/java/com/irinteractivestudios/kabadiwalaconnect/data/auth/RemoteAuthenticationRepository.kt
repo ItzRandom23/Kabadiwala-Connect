@@ -44,6 +44,11 @@ class RemoteAuthenticationRepository(
     override suspend fun verifyOtp(phoneNumber: String, code: String, account: PhoneAccountRequest): OtpVerification = verifyOtpInternal(phoneNumber, code, account)
 
     private suspend fun verifyOtpInternal(phoneNumber: String, code: String, account: PhoneAccountRequest?): OtpVerification {
+        fun String?.trimmedOrNull() = this?.trim()?.takeIf { it.isNotEmpty() }
+        val materials = account?.materialsAccepted
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }
         return try {
             val auth = api.verifyOtp(
                 VerifyOtpRequestDto(
@@ -51,12 +56,12 @@ class RemoteAuthenticationRepository(
                     otp = code,
                     role = account?.role?.name,
                     preferredLanguage = account?.preferredLanguage?.let(LocaleManager::toBackendName),
-                    areaName = account?.areaName,
-                    displayName = account?.displayName,
-                    email = account?.email?.ifBlank { null },
-                    businessName = account?.businessName,
-                    authorizationNumber = account?.authorizationNumber,
-                    materialsAccepted = account?.materialsAccepted,
+                    areaName = account?.areaName.trimmedOrNull(),
+                    displayName = account?.displayName.trimmedOrNull(),
+                    email = account?.email.trimmedOrNull(),
+                    businessName = account?.businessName.trimmedOrNull(),
+                    authorizationNumber = account?.authorizationNumber.trimmedOrNull(),
+                    materialsAccepted = materials,
                     pickupAvailable = account?.pickupAvailable,
                     serviceRadiusKm = account?.serviceRadiusKm,
                     latitude = account?.latitude,

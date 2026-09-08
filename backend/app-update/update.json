@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "0.0.10-beta",
-  "apkUrl": "kabadiwala-connect-0.0.10-beta.apk",
-  "releaseNotes": "Fixed GPS area detection with locality-first labels and reliable recent-location fallback. Development OTP 123456 is now shown in beta builds."
+  "versionCode": 13,
+  "versionName": "0.0.12-beta",
+  "apkUrl": "kabadiwala-connect-0.0.12-beta.apk",
+  "releaseNotes": "Fixed demo language switching, improved phone registration handling, and added estimated-price warnings with an optional collector price quote."
 }
