@@ -1,6 +1,6 @@
 {
-  "versionCode": 14,
-  "versionName": "0.0.13-beta",
-  "apkUrl": "kabadiwala-connect-0.0.13-beta.apk",
-  "releaseNotes": "Made collector name mandatory, prefilled the fixed development OTP on every device, and hardened duplicate account creation retries."
+  "versionCode": 15,
+  "versionName": "0.0.14-beta",
+  "apkUrl": "kabadiwala-connect-0.0.14-beta.apk",
+  "releaseNotes": "Added a dedicated household seller window and enforced ten-digit numeric mobile numbers."
 }

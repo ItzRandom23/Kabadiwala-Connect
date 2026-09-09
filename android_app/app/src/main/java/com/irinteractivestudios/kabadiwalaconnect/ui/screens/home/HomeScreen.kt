@@ -65,6 +65,7 @@ fun HomeScreen(
     onOpenDisputes: () -> Unit = {},
     onRetry: (() -> Unit)? = null,
     demoMode: Boolean = false,
+    household: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val lotCount = when (state) {
@@ -79,10 +80,10 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineLarge)
-            Text(stringResource(R.string.home_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(if (household) R.string.home_household_title else R.string.home_title), style = MaterialTheme.typography.headlineLarge)
+            Text(stringResource(if (household) R.string.home_household_subtitle else R.string.home_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        NextCollectionPanel(demoMode = demoMode, onCreateLot = onCreateLot)
+        NextCollectionPanel(demoMode = demoMode, household = household, onCreateLot = onCreateLot)
         when (state) {
             is UiState.Loading -> LoadingContent()
             // An empty work queue is communicated by the metrics; a large
@@ -127,7 +128,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NextCollectionPanel(demoMode: Boolean, onCreateLot: () -> Unit) {
+private fun NextCollectionPanel(demoMode: Boolean, household: Boolean, onCreateLot: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -148,9 +149,9 @@ private fun NextCollectionPanel(demoMode: Boolean, onCreateLot: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 KcStatusPill(if (demoMode) stringResource(R.string.home_demo_badge) else stringResource(R.string.home_field_ready))
-                Text(stringResource(R.string.home_start_next_collection), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(if (household) R.string.home_household_action_title else R.string.home_start_next_collection), style = MaterialTheme.typography.titleLarge)
                 Text(
-                    stringResource(R.string.home_collection_brief),
+                    stringResource(if (household) R.string.home_household_action_detail else R.string.home_collection_brief),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2
@@ -169,7 +170,7 @@ private fun NextCollectionPanel(demoMode: Boolean, onCreateLot: () -> Unit) {
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.home_create_lot), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(if (household) R.string.home_household_create_lot else R.string.home_create_lot), style = MaterialTheme.typography.titleSmall)
                 }
             }
         }

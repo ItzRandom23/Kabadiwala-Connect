@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Recycling
@@ -158,6 +159,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
 @Composable private fun RoleEntry(state: OnboardingState, vm: OnboardingViewModel) {
     Text(stringResource(R.string.auth_role_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_role_detail), style = MaterialTheme.typography.bodyLarge)
+    RoleCard(AccountRole.HOUSEHOLD, stringResource(R.string.auth_role_household), stringResource(R.string.auth_role_household_detail), Icons.Filled.Home, state.role == AccountRole.HOUSEHOLD) { vm.selectRole(AccountRole.HOUSEHOLD) }
     RoleCard(AccountRole.COLLECTOR, stringResource(R.string.auth_role_collector), stringResource(R.string.auth_role_collector_detail), Icons.Filled.Recycling, state.role == AccountRole.COLLECTOR) { vm.selectRole(AccountRole.COLLECTOR) }
     RoleCard(AccountRole.RECYCLER, stringResource(R.string.auth_role_recycler), stringResource(R.string.auth_role_recycler_detail), Icons.Filled.Storefront, state.role == AccountRole.RECYCLER) { vm.selectRole(AccountRole.RECYCLER) }
 }
@@ -232,7 +234,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
         Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
     }
     OutlinedTextField(state.area, vm::setArea, label = { Text(stringResource(R.string.auth_area_label)) }, leadingIcon = { Icon(Icons.Filled.LocationOn, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_area"))
-    if (state.role == AccountRole.COLLECTOR) {
+    if (state.role != AccountRole.RECYCLER) {
         OutlinedTextField(
             state.displayName,
             vm::setDisplayName,
@@ -252,7 +254,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
         stringResource(R.string.auth_continue_to_phone),
         vm::continueToPhone,
         icon = Icons.Filled.Phone,
-        enabled = state.area.isNotBlank() && (state.role != AccountRole.COLLECTOR || state.displayName.isNotBlank()) && !state.isBusy,
+        enabled = state.area.isNotBlank() && (state.role == AccountRole.RECYCLER || state.displayName.isNotBlank()) && !state.isBusy,
         testTag = "auth_area_next"
     )
 }
@@ -279,7 +281,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
 @Composable private fun PhoneEntry(state: OnboardingState, vm: OnboardingViewModel) {
     Text(stringResource(R.string.auth_phone_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_phone_detail), style = MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(state.phone, vm::setPhone, label = { Text(stringResource(R.string.auth_phone_label)) }, leadingIcon = { Icon(Icons.Filled.Phone, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, isError = state.phoneError, supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_phone"))
+    OutlinedTextField(state.phone, vm::setPhone, label = { Text(stringResource(R.string.auth_phone_label)) }, leadingIcon = { Icon(Icons.Filled.Phone, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, isError = state.phoneError, supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_phone"))
     if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
     KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
 }

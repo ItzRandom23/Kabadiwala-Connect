@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
+import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.HOUSEHOLD_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.RECYCLER_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
@@ -72,7 +73,11 @@ fun KcTopBar(
 /** Bottom navigation: the 5 primary tabs with icon + label. */
 @Composable
 fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: AccountRole = AccountRole.COLLECTOR) {
-    val tabs = if (role == AccountRole.RECYCLER) RECYCLER_BOTTOM_TABS else BOTTOM_TABS
+    val tabs = when (role) {
+        AccountRole.RECYCLER -> RECYCLER_BOTTOM_TABS
+        AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS
+        AccountRole.COLLECTOR -> BOTTOM_TABS
+    }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
