@@ -179,25 +179,30 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         topBar = {
-                            KcTopBar(
-                                title = title,
-                                showBack = route != Destinations.AUTH && !isTopLevel && route != Destinations.CREATE_LOT,
-                                onBack = {
-                                    if (route == Destinations.CREATE_LOT) {
-                                        if (!navController.popBackStack(Destinations.HOME, false)) {
+                            // Top-level screens own their visual headers. Keeping the
+                            // app bar for detail screens only removes duplicated titles
+                            // and gives the primary content a clearer first focal point.
+                            if (!isTopLevel && route != Destinations.AUTH) {
+                                KcTopBar(
+                                    title = title,
+                                    showBack = route != Destinations.CREATE_LOT,
+                                    onBack = {
+                                        if (route == Destinations.CREATE_LOT) {
+                                            if (!navController.popBackStack(Destinations.HOME, false)) {
+                                                navController.navigate(Destinations.HOME) {
+                                                    popUpTo(0)
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        } else if (!navController.popBackStack()) {
                                             navController.navigate(Destinations.HOME) {
                                                 popUpTo(0)
                                                 launchSingleTop = true
                                             }
                                         }
-                                    } else if (!navController.popBackStack()) {
-                                        navController.navigate(Destinations.HOME) {
-                                            popUpTo(0)
-                                            launchSingleTop = true
-                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         },
                         bottomBar = {
                             if (isTopLevel) {

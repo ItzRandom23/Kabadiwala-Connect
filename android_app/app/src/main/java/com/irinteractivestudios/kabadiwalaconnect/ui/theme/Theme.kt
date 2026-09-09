@@ -34,6 +34,10 @@ private val LightColorScheme = lightColorScheme(
     surface = KcSurface,
     onSurface = KcOnSurface,
     surfaceVariant = KcSurfaceVariant,
+    surfaceContainerLowest = KcSurface,
+    surfaceContainerLow = KcSurfaceRaised,
+    surfaceContainer = KcSurfaceSunken,
+    surfaceContainerHigh = KcSurfaceHigh,
     onSurfaceVariant = KcOnSurfaceVariant,
     outline = KcOutline,
     error = KcError,
@@ -56,6 +60,10 @@ private val DarkColorScheme = darkColorScheme(
     surface = KcDarkSurface,
     onSurface = KcDarkOnSurface,
     surfaceVariant = KcDarkSurfaceRaised,
+    surfaceContainerLowest = KcDarkBackground,
+    surfaceContainerLow = KcDarkSurface,
+    surfaceContainer = KcDarkSurfaceRaised,
+    surfaceContainerHigh = KcDarkSurfaceHigh,
     onSurfaceVariant = KcDarkMuted,
     outline = KcDarkOutline,
     error = KcErrorContainer,
@@ -80,9 +88,11 @@ object KcTheme {
 }
 
 private val KcShapes = Shapes(
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(26.dp)
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp)
 )
 
 /**

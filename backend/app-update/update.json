@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.0.14-beta",
-  "apkUrl": "kabadiwala-connect-0.0.14-beta.apk",
-  "releaseNotes": "Added a dedicated household seller window and enforced ten-digit numeric mobile numbers."
+  "versionCode": 16,
+  "versionName": "0.0.15-beta",
+  "apkUrl": "kabadiwala-connect-0.0.15-beta.apk",
+  "releaseNotes": "Refined the collector dashboard and navigation, improved light and dark surface hierarchy, and optimized recycler discovery."
 }

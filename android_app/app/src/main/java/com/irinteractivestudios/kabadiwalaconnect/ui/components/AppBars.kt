@@ -1,5 +1,8 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -21,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -79,20 +84,33 @@ fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: Accou
         AccountRole.COLLECTOR -> BOTTOM_TABS
     }
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp,
+        shadowElevation = 10.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
         tabs.forEach { tab ->
             val isSelected = currentRoute == tab.route
             val selectedColor = MaterialTheme.colorScheme.primary
+            val itemColor = animateColorAsState(
+                if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "bottomNavColor"
+            ).value
+            val indicatorWidth = animateDpAsState(
+                if (isSelected) 28.dp else 6.dp,
+                label = "bottomNavIndicator"
+            ).value
+            val iconScale = animateFloatAsState(
+                if (isSelected) 1.08f else 1f,
+                label = "bottomNavIconScale"
+            ).value
             Column(
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -100,28 +118,34 @@ fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: Accou
                     .testTag(tab.testTag)
                     .heightIn(min = 64.dp)
                     .clickable { onNavigate(tab.route) }
-                    .semantics { this.role = Role.Tab; selected = isSelected }
+                    .semantics(mergeDescendants = true) { this.role = Role.Tab; selected = isSelected }
                     .padding(vertical = 5.dp)
             )
             {
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .width(indicatorWidth)
+                        .heightIn(min = 3.dp)
+                        .background(
+                            if (isSelected) selectedColor else MaterialTheme.colorScheme.outline.copy(alpha = .22f),
+                            RoundedCornerShape(99.dp)
+                        )
+                )
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 6.dp))
                 Icon(
                     tab.icon,
-                    contentDescription = stringResource(tab.labelRes),
-                    tint = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(23.dp)
+                    contentDescription = null,
+                    tint = itemColor,
+                    modifier = Modifier.size(23.dp).graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                    }
                 )
                 Text(
                     stringResource(tab.labelRes),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = itemColor,
                     maxLines = 1
-                )
-                androidx.compose.foundation.layout.Spacer(
-                    Modifier
-                        .padding(top = 4.dp)
-                        .width(if (isSelected) 18.dp else 0.dp)
-                        .background(selectedColor, RoundedCornerShape(99.dp))
-                        .heightIn(min = if (isSelected) 2.dp else 0.dp)
                 )
             }
         }
