@@ -1,6 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.domain.model
 
-enum class AccountRole { COLLECTOR, RECYCLER }
+enum class AccountRole { HOUSEHOLD, COLLECTOR, RECYCLER }
 
 enum class RecyclerVerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
 

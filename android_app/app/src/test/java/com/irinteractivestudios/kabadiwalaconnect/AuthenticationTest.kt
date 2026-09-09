@@ -104,6 +104,15 @@ class AuthenticationTest {
         assertEquals("9876543210", vm.state.value.phone)
     }
 
+    @Test fun onboarding_phoneFieldStoresOnlyTenDigits() {
+        val vm = TestAuth.onboarding()
+        vm.setPhone("+91 98765-43210 extra")
+
+        assertEquals("9198765432", vm.state.value.phone)
+        vm.setPhone("9876543210")
+        assertEquals("9876543210", vm.state.value.phone)
+    }
+
     @Test fun onboarding_backAndStartOverKeepPeopleOutOfDeadEnds() {
         val vm = TestAuth.onboarding()
         vm.selectRole(AccountRole.COLLECTOR)

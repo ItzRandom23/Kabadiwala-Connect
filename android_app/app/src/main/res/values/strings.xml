@@ -43,6 +43,11 @@
     <!-- Home -->
     <string name="home_title">Namaste!</string>
     <string name="home_subtitle">Your collection work starts here.</string>
+    <string name="home_household_title">Your scrap dashboard</string>
+    <string name="home_household_subtitle">Sell household scrap to verified recyclers near you.</string>
+    <string name="home_household_action_title">Sell scrap from home</string>
+    <string name="home_household_action_detail">Add what you want to sell, check the current price, and connect with a verified recycler.</string>
+    <string name="home_household_create_lot">Start a sale</string>
     <string name="home_cached_lots">Saved lots</string>
     <string name="home_today_rate">Today\'s top rate</string>
     <string name="home_quick_prices">See prices</string>
@@ -283,6 +288,8 @@
     <string name="auth_sign_in">Sign in</string>
     <string name="auth_role_title">How do you use Kabadiwala Connect?</string>
     <string name="auth_role_detail">Choose the work you do. You can’t change this from the app.</string>
+    <string name="auth_role_household">I am a household / local seller</string>
+    <string name="auth_role_household_detail">Sell your household scrap. You do not buy or process scrap.</string>
     <string name="auth_role_collector">I collect scrap</string>
     <string name="auth_role_collector_detail">Kabadiwala / Collector</string>
     <string name="auth_role_recycler">I buy or process scrap</string>

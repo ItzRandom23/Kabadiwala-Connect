@@ -67,7 +67,11 @@ object Destinations {
     val RECYCLER_TOP_LEVEL = listOf(RECYCLER_MARKETPLACE, RECYCLER_ORDERS, RECYCLER_PICKUPS, RECYCLER_RATES, RECYCLER_PROFILE)
     const val START = HOME
 
-    fun topLevelFor(role: AccountRole) = if (role == AccountRole.RECYCLER) RECYCLER_TOP_LEVEL else TOP_LEVEL
+    fun topLevelFor(role: AccountRole) = when (role) {
+        AccountRole.RECYCLER -> RECYCLER_TOP_LEVEL
+        AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS.map { it.route }
+        AccountRole.COLLECTOR -> TOP_LEVEL
+    }
 }
 
 /** Bottom navigation tab: icon + label, no deep menus. */
@@ -83,6 +87,13 @@ val BOTTOM_TABS = listOf(
     BottomTab(Destinations.PRICES, R.string.nav_prices, Icons.Filled.CurrencyRupee, "nav_prices"),
     BottomTab(Destinations.RECYCLERS, R.string.nav_recyclers, Icons.Filled.Recycling, "nav_recyclers"),
     BottomTab(Destinations.EARNINGS, R.string.nav_earnings, Icons.Filled.AccountBalanceWallet, "nav_earnings"),
+    BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
+)
+
+val HOUSEHOLD_BOTTOM_TABS = listOf(
+    BottomTab(Destinations.HOME, R.string.nav_home, Icons.Filled.Home, "nav_home"),
+    BottomTab(Destinations.PRICES, R.string.nav_prices, Icons.Filled.CurrencyRupee, "nav_prices"),
+    BottomTab(Destinations.RECYCLERS, R.string.nav_recyclers, Icons.Filled.Recycling, "nav_recyclers"),
     BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
 )
 

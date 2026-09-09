@@ -157,6 +157,7 @@ fun AppNavHost(
             HomeScreen(
                 state = state,
                 demoMode = demoMode,
+                household = role == AccountRole.HOUSEHOLD,
                 onSeePrices = { navController.navigate(Destinations.PRICES) },
                 onFindRecyclers = { navController.navigate(Destinations.RECYCLERS) },
                 onRetry = null,

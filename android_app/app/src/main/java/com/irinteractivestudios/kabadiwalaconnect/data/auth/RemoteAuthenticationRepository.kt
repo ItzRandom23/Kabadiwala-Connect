@@ -56,7 +56,7 @@ class RemoteAuthenticationRepository(
                 VerifyOtpRequestDto(
                     phone = phoneNumber,
                     otp = code,
-                    role = account?.role?.name,
+                    role = account?.role?.wireName(),
                     preferredLanguage = account?.preferredLanguage?.let(LocaleManager::toBackendName),
                     areaName = account?.areaName.trimmedOrNull(),
                     displayName = account?.displayName.trimmedOrNull(),
@@ -118,7 +118,7 @@ class RemoteAuthenticationRepository(
             val body = EmailAuthRequestDto(
                 email = request.email,
                 password = request.password,
-                role = request.role.name,
+                role = request.role.wireName(),
                 preferredLanguage = LocaleManager.toBackendName(request.preferredLanguage),
                 areaName = request.areaName,
                 businessName = request.businessName,
@@ -197,3 +197,5 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     latitude = latitude,
     longitude = longitude
 )
+
+private fun AccountRole.wireName(): String = if (this == AccountRole.RECYCLER) "RECYCLER" else "COLLECTOR"
