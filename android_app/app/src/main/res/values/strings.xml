@@ -275,6 +275,12 @@
     <string name="auth_step">Step %1$d of %2$d</string>
     <string name="auth_welcome_title">Welcome to Kabadiwala Connect</string>
     <string name="auth_welcome_detail">Save your work. Find better recycling options.</string>
+    <string name="auth_benefit_sell_title">Sell from your doorstep</string>
+    <string name="auth_benefit_sell_detail">Create a scrap lot in a few simple steps.</string>
+    <string name="auth_benefit_price_title">See fair, current prices</string>
+    <string name="auth_benefit_price_detail">Make informed decisions before you sell.</string>
+    <string name="auth_benefit_trust_title">Connect with confidence</string>
+    <string name="auth_benefit_trust_detail">Find verified recycling partners nearby.</string>
     <string name="auth_get_started">Get started</string>
     <string name="auth_existing_account">I already have an account</string>
     <string name="auth_email_title">Create your account</string>
