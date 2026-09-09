@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -127,23 +129,37 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
 }
 
 @Composable private fun Welcome(vm: OnboardingViewModel, onDemo: () -> Unit) {
-    Spacer(Modifier.height(24.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-        Icon(
-            painter = painterResource(R.drawable.ic_kc_logo),
-            contentDescription = stringResource(R.string.app_name),
-            tint = androidx.compose.ui.graphics.Color.Unspecified,
-            modifier = Modifier.size(96.dp)
-        )
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)) {
+            Icon(painter = painterResource(R.drawable.ic_kc_logo), contentDescription = stringResource(R.string.app_name), tint = androidx.compose.ui.graphics.Color.Unspecified, modifier = Modifier.size(88.dp))
+            Text(stringResource(R.string.auth_welcome_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.auth_welcome_detail), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+        }
     }
-    Text(stringResource(R.string.auth_welcome_title), style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    Text(stringResource(R.string.auth_welcome_detail), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        WelcomeBenefit(Icons.Filled.Home, stringResource(R.string.auth_benefit_sell_title), stringResource(R.string.auth_benefit_sell_detail))
+        WelcomeBenefit(Icons.Filled.AttachMoney, stringResource(R.string.auth_benefit_price_title), stringResource(R.string.auth_benefit_price_detail))
+        WelcomeBenefit(Icons.Filled.Verified, stringResource(R.string.auth_benefit_trust_title), stringResource(R.string.auth_benefit_trust_detail))
+    }
     KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
     OutlinedButton(onClick = { vm.toggleReturning(); vm.start() }, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text(stringResource(R.string.auth_existing_account)) }
     // Demo is a development-only facility. It is absent from release builds;
     // the real-backend path still uses live authentication and catalogs.
     if (BuildConfig.DEBUG) {
         OutlinedButton(onClick = onDemo, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_demo")) { Text(stringResource(R.string.auth_demo_entry)) }
+    }
+}
+
+@Composable
+private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(42.dp)) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(10.dp))
+        }
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -165,8 +181,17 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
 }
 
 @Composable private fun RoleCard(role: AccountRole, title: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)) {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp)); Column(Modifier.weight(1f).padding(start = 14.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }; RadioButton(selected, onClick) }
+    Card(onClick = onClick, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .35f)), modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(48.dp)) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(12.dp))
+            }
+            Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            RadioButton(selected, onClick)
+        }
     }
 }
 
