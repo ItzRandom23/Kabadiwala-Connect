@@ -26,8 +26,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 13
-        versionName = "0.0.12-beta"
+        versionCode = 14
+        versionName = "0.0.13-beta"
         buildConfigField("String", "API_BASE_URL", "\"$configuredApiBaseUrl\"")
         buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"$configuredUpdateManifestUrl\"")
         // The current VPS is HTTP-only for testing. Release deployments should use HTTPS.

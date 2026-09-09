@@ -67,4 +67,21 @@ describe('collector authentication service', () => {
     expect(result.user?.profileId).toBe('collector-1');
     expect(result.user?.email).toBe('old@example.com');
   });
+
+  it('requires a name when creating a new collector phone account', async () => {
+    const tx = {
+      user: { findUnique: async () => null },
+      collector: { findFirst: async () => null }
+    };
+    const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
+    const service = new AuthService(new DevelopmentOtpProvider(config), {} as any, new JwtService(config), undefined, db);
+
+    await service.requestOtp('9876543210', 'ip-4');
+    await expect(service.verifyOtp('9876543210', '123456', 'ip-4', {
+      role: 'COLLECTOR',
+      preferredLanguage: 'ENGLISH',
+      areaName: 'Pune',
+      displayName: '   '
+    })).rejects.toMatchObject({ code: 'VALIDATION_ERROR', details: { code: 'DISPLAY_NAME_REQUIRED' } });
+  });
 });

@@ -233,11 +233,28 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     }
     OutlinedTextField(state.area, vm::setArea, label = { Text(stringResource(R.string.auth_area_label)) }, leadingIcon = { Icon(Icons.Filled.LocationOn, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_area"))
     if (state.role == AccountRole.COLLECTOR) {
-        OutlinedTextField(state.displayName, vm::setDisplayName, label = { Text(stringResource(R.string.auth_name_label)) }, leadingIcon = { Icon(Icons.Filled.Person, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_name"))
+        OutlinedTextField(
+            state.displayName,
+            vm::setDisplayName,
+            label = { Text(stringResource(R.string.auth_name_label)) },
+            leadingIcon = { Icon(Icons.Filled.Person, null) },
+            singleLine = true,
+            isError = state.displayNameError,
+            supportingText = {
+                Text(stringResource(if (state.displayNameError) R.string.auth_name_required_error else R.string.auth_required_field))
+            },
+            modifier = Modifier.fillMaxWidth().testTag("auth_name")
+        )
         OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
         Text(stringResource(R.string.auth_email_optional_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    KcPrimaryButton(stringResource(R.string.auth_continue_to_phone), vm::continueToPhone, icon = Icons.Filled.Phone, enabled = state.area.isNotBlank() && !state.isBusy, testTag = "auth_area_next")
+    KcPrimaryButton(
+        stringResource(R.string.auth_continue_to_phone),
+        vm::continueToPhone,
+        icon = Icons.Filled.Phone,
+        enabled = state.area.isNotBlank() && (state.role != AccountRole.COLLECTOR || state.displayName.isNotBlank()) && !state.isBusy,
+        testTag = "auth_area_next"
+    )
 }
 
 @Composable private fun Complete(state: OnboardingState) {
@@ -273,7 +290,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     Text(stringResource(R.string.auth_otp_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_otp_detail, state.phone), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(state.otp, vm::setOtp, label = { Text(stringResource(R.string.auth_otp_label)) }, leadingIcon = { Icon(Icons.Filled.Sms, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, isError = state.otpError != null, supportingText = { if (state.otpError != null) Text(stringResource(when (state.otpError) { OtpError.INCORRECT -> R.string.auth_otp_incorrect; OtpError.EXPIRED -> R.string.auth_otp_expired; OtpError.ATTEMPTS_EXCEEDED -> R.string.auth_otp_attempts; OtpError.ACCOUNT_CONFLICT -> R.string.auth_otp_account_conflict; OtpError.SERVER -> R.string.auth_server_error; OtpError.NETWORK -> R.string.auth_network_error })) }, modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).testTag("auth_otp"))
-    if (BuildConfig.DEBUG) state.challenge?.developmentCodeHint?.let { Text(stringResource(R.string.auth_dev_otp, it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    state.challenge?.developmentCodeHint?.let { Text(stringResource(R.string.auth_dev_otp, it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
     KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_verifying else R.string.auth_verify), vm::verifyOtp, icon = Icons.Filled.CheckCircle, enabled = state.otp.length == 6 && !state.isBusy, testTag = "auth_verify")
     OutlinedButton(
         onClick = vm::resetOtp,

@@ -1,7 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.auth
 
 import android.util.Base64
-import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
@@ -35,7 +34,10 @@ class RemoteAuthenticationRepository(
             phoneNumber,
             now + OTP_TTL_MS,
             now + RESEND_COOLDOWN_MS,
-            developmentCodeHint = if (BuildConfig.DEBUG) DEVELOPMENT_OTP_CODE else null
+            // SMS delivery is intentionally disabled for the current beta.
+            // Keep the configured development code available on every build
+            // so sideloaded APKs behave exactly like local ADB builds.
+            developmentCodeHint = DEVELOPMENT_OTP_CODE
         )
     }
 

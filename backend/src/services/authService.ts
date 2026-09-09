@@ -108,6 +108,8 @@ export class AuthService {
         } catch (retryError) {
           if (retryError instanceof AppError) throw retryError;
           if ((retryError as { code?: string })?.code === 'P2002') {
+            const existing = await this.findExistingPhoneAccount(phone);
+            if (existing) return existing;
             throw new AppError('CONFLICT', 'This mobile number is already linked to another account', 409, { code: 'ACCOUNT_CONFLICT' });
           }
           throw retryError;
@@ -223,6 +225,10 @@ export class AuthService {
           ? await tx.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
           : await tx.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
         return this.issuePhone(user, profile);
+      }
+
+      if (requestedRole === 'COLLECTOR' && !displayName) {
+        throw new AppError('VALIDATION_ERROR', 'Name is required for collector registration', 422, { code: 'DISPLAY_NAME_REQUIRED' });
       }
 
       const accountEmail = await usableEmail(email);

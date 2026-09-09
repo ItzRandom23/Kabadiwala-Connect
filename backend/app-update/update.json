@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.0.12-beta",
-  "apkUrl": "kabadiwala-connect-0.0.12-beta.apk",
-  "releaseNotes": "Fixed demo language switching, improved phone registration handling, and added estimated-price warnings with an optional collector price quote."
+  "versionCode": 14,
+  "versionName": "0.0.13-beta",
+  "apkUrl": "kabadiwala-connect-0.0.13-beta.apk",
+  "releaseNotes": "Made collector name mandatory, prefilled the fixed development OTP on every device, and hardened duplicate account creation retries."
 }

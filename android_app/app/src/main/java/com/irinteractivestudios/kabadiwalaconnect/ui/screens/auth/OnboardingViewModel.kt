@@ -52,6 +52,7 @@ data class OnboardingState(
     val challenge: OtpChallenge? = null,
     val otpError: OtpError? = null,
     val emailError: Boolean = false,
+    val displayNameError: Boolean = false,
     val passwordError: Boolean = false,
     val phoneError: Boolean = false,
     val authError: Boolean = false,
@@ -131,7 +132,7 @@ class OnboardingViewModel(
         val next = if (role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
         _state.value = _state.value.copy(role = role, step = next)
     }
-    fun setDisplayName(value: String) { _state.value = _state.value.copy(displayName = value) }
+    fun setDisplayName(value: String) { _state.value = _state.value.copy(displayName = value, displayNameError = false) }
     fun setBusinessName(value: String) { _state.value = _state.value.copy(businessName = value) }
     fun setAuthorizationNumber(value: String) { _state.value = _state.value.copy(authorizationNumber = value) }
     fun toggleMaterial(value: String) { _state.value = _state.value.copy(materialsAccepted = _state.value.materialsAccepted.toMutableSet().also { if (!it.add(value)) it.remove(value) }) }
@@ -161,7 +162,13 @@ class OnboardingViewModel(
             _state.value = _state.value.copy(isBusy = true, phoneError = false)
             try {
                 val challenge = auth.requestOtp(phone)
-                _state.value = _state.value.copy(step = OnboardingStep.OTP, challenge = challenge, otp = "", isBusy = false, authError = false)
+                _state.value = _state.value.copy(
+                    step = OnboardingStep.OTP,
+                    challenge = challenge,
+                    otp = challenge.developmentCodeHint.orEmpty(),
+                    isBusy = false,
+                    authError = false
+                )
             } catch (_: Exception) { _state.value = _state.value.copy(isBusy = false, authError = true) }
         }
     }
@@ -320,8 +327,9 @@ class OnboardingViewModel(
     fun continueToPhone() {
         val current = _state.value
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
-        _state.value = current.copy(emailError = !validEmail)
-        if (current.area.isNotBlank() && validEmail && (current.role != AccountRole.RECYCLER || current.hasRequiredRecyclerDetails())) {
+        val validDisplayName = current.role != AccountRole.COLLECTOR || current.displayName.isNotBlank()
+        _state.value = current.copy(emailError = !validEmail, displayNameError = !validDisplayName)
+        if (current.area.isNotBlank() && validDisplayName && validEmail && (current.role != AccountRole.RECYCLER || current.hasRequiredRecyclerDetails())) {
             _state.value = _state.value.copy(step = OnboardingStep.PHONE)
         }
     }
@@ -332,6 +340,7 @@ class OnboardingViewModel(
     private fun OnboardingState.hasRequiredRegistrationFields(): Boolean =
         phone.isNotBlank() &&
             area.isNotBlank() &&
+            (role != AccountRole.COLLECTOR || displayName.isNotBlank()) &&
             (email.isBlank() || EmailValidator.isValid(email)) &&
             hasRequiredRecyclerDetails()
 

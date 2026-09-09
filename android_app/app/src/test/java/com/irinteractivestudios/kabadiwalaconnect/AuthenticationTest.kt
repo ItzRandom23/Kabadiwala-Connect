@@ -109,6 +109,7 @@ class AuthenticationTest {
         vm.selectRole(AccountRole.COLLECTOR)
         vm.chooseManualLocation()
         vm.setArea("Pune")
+        vm.setDisplayName("Asha")
         vm.continueToPhone()
 
         vm.goBack()
@@ -121,16 +122,23 @@ class AuthenticationTest {
         assertEquals("", vm.state.value.area)
     }
 
-    @Test fun onboarding_nameIsOptionalAndCanContinueToPhone() {
+    @Test fun onboarding_nameIsMandatoryBeforePhoneVerification() {
         val vm = TestAuth.onboarding()
         vm.selectRole(AccountRole.COLLECTOR)
         vm.chooseManualLocation()
         vm.setArea("Pune")
-        vm.setDisplayName("")
+        vm.setDisplayName("   ")
 
         vm.continueToPhone()
 
+        assertEquals(OnboardingStep.AREA, vm.state.value.step)
+        assertTrue(vm.state.value.displayNameError)
+
+        vm.setDisplayName("Asha")
+        vm.continueToPhone()
+
         assertEquals(OnboardingStep.PHONE, vm.state.value.step)
+        assertFalse(vm.state.value.displayNameError)
     }
 
     @Test fun onboarding_successfulLegacyOtpCompletesInsteadOfSendingUserBack() = runTest {
@@ -214,6 +222,7 @@ class AuthenticationTest {
             vm.setPhone("9876543210")
             vm.chooseManualLocation()
             vm.setArea("Pune")
+            vm.setDisplayName("Asha")
             vm.setEmail("friend@example.com")
             vm.requestOtp()
             advanceUntilIdle()
@@ -293,7 +302,7 @@ class AuthenticationTest {
             vm.setPhone("9876543210")
             vm.chooseManualLocation()
             vm.setArea("  Pune  ")
-            vm.setDisplayName("  ")
+            vm.setDisplayName("  Asha  ")
             vm.setEmail("   ")
             vm.requestOtp()
             advanceUntilIdle()
@@ -303,7 +312,7 @@ class AuthenticationTest {
             advanceUntilIdle()
 
             assertEquals("Pune", captured?.areaName)
-            assertEquals("", captured?.displayName)
+            assertEquals("Asha", captured?.displayName)
             assertEquals("", captured?.email)
             assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
         } finally {

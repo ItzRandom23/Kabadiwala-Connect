@@ -349,7 +349,9 @@
     <string name="auth_complete_title">You are ready!</string>
     <string name="auth_complete_detail">Your collector profile is saved on this phone.</string>
     <string name="auth_complete_phone">Mobile: %1$s</string>
-    <string name="auth_name_label">Your name</string>
+    <string name="auth_name_label">Your name (required)</string>
+    <string name="auth_name_required_error">Enter your name to continue.</string>
+    <string name="auth_required_field">Required</string>
     <string name="auth_email_optional">Email address (optional)</string>
     <string name="auth_email_optional_detail">Optional: add an email for account recovery and security alerts. Your mobile number remains your sign-in.</string>
     <string name="auth_email_optional_error">Enter a valid email address or leave it empty.</string>
