@@ -77,6 +77,25 @@ describe('app', () => {
     expect(capturedPhone).toBe('9310707756');
   });
 
+  it('uses the existing-account path when registration fields are omitted', async () => {
+    let capturedAccount: unknown = 'not-called';
+    const authService = {
+      verifyOtp: async (_phone: string, _otp: string, _ip: string, account?: unknown) => {
+        capturedAccount = account;
+        return { token: 'token', collector: { id: 'c1' }, user: null };
+      }
+    };
+    const authApp = createApp(config, db, new JwtService(config), service, authService as any);
+
+    const response = await request(authApp).post('/api/v1/auth/verify-otp').send({
+      phone: '9876543210',
+      otp: '123456'
+    });
+
+    expect(response.status).toBe(200);
+    expect(capturedAccount).toBeUndefined();
+  });
+
   it('requires mandatory phone-registration fields when creating an account', async () => {
     const authService = {
       requestOtp: async () => 'OTP sent successfully',

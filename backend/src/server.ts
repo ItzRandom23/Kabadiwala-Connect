@@ -18,8 +18,10 @@ import { HandoverService } from './services/handoverService.js';
 import { PaymentService } from './services/paymentService.js';
 import { SyncService } from './services/syncService.js';
 import { EmailAuthService } from './services/emailAuthService.js';
+import { ensureOptionalUniqueIndexes } from './config/mongoIndexes.js';
 
 const config = loadConfig();
+await ensureOptionalUniqueIndexes(prisma);
 const collectors = new CollectorRepository(prisma);
 const jwt = new JwtService(config);
 let storage: StorageService;
