@@ -34,11 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBrandLogo
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 
 /** First-run language choice with a naturally scrolling header and option list. */
@@ -80,11 +80,9 @@ fun InitialLanguageScreen(onLanguageSelected: (String) -> Unit) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_kc_logo),
+                        KcBrandLogo(
                             contentDescription = stringResource(R.string.app_name),
-                            tint = androidx.compose.ui.graphics.Color.Unspecified,
-                            modifier = Modifier.size(52.dp)
+                            size = 52.dp
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(

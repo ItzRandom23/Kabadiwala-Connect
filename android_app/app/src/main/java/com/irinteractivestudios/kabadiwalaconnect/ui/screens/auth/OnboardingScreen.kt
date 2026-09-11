@@ -55,7 +55,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -66,6 +65,7 @@ import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcMinTouchHeight
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBrandLogo
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.delay
@@ -131,7 +131,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
 @Composable private fun Welcome(vm: OnboardingViewModel, onDemo: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)) {
-            Icon(painter = painterResource(R.drawable.ic_kc_logo), contentDescription = stringResource(R.string.app_name), tint = androidx.compose.ui.graphics.Color.Unspecified, modifier = Modifier.size(88.dp))
+            KcBrandLogo(contentDescription = stringResource(R.string.app_name), size = 88.dp)
             Text(stringResource(R.string.auth_welcome_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
             Text(stringResource(R.string.auth_welcome_detail), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
         }
