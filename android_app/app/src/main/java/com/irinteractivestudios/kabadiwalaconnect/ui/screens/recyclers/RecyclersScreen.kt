@@ -1,5 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.filled.PedalBike
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +42,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -51,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Recycler
+import com.irinteractivestudios.kabadiwalaconnect.data.local.MockRecyclerData
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EmptyContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
@@ -58,6 +71,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerSortMode
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
+import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,6 +80,37 @@ import java.util.Locale
 @Composable
 fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOpen: (String) -> Unit, demoMode: Boolean = false, modifier: Modifier = Modifier) {
     val filters by vm.filters.collectAsStateWithLifecycle()
+    val displayedState = if (demoMode && state is UiState.Empty) UiState.Success(MockRecyclerData.all) else state
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val locationProvider = remember(context) { AndroidLocationProvider(context) }
+    var locationLabel by remember { mutableStateOf<String?>(null) }
+    var locationBusy by remember { mutableStateOf(false) }
+    var locationError by remember { mutableStateOf(false) }
+    fun refreshLocation() {
+        scope.launch {
+            locationBusy = true
+            locationError = false
+            val current = locationProvider.current()
+            if (current == null) {
+                locationError = true
+            } else {
+                locationLabel = current.areaName ?: "Current location"
+                vm.refreshCatalogs(current)
+            }
+            locationBusy = false
+        }
+    }
+    val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) refreshLocation() else locationError = true
+    }
+    LaunchedEffect(Unit) {
+        vm.refreshCatalogs(null)
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (granted) refreshLocation()
+        else locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -83,6 +129,23 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
                 leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("recycler_search")
+            )
+        }
+        item {
+            AssistChip(
+                onClick = {
+                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    if (granted) refreshLocation() else locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                },
+                label = {
+                    when {
+                        locationBusy -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        locationError -> Text("Location unavailable · Try again")
+                        locationLabel != null -> Text("Near ${locationLabel!!}")
+                        else -> Text("Use my current location")
+                    }
+                },
+                leadingIcon = { Icon(Icons.Filled.LocationOn, null) }
             )
         }
         item { Text(stringResource(R.string.recycler_radius), style = MaterialTheme.typography.titleSmall) }
@@ -116,18 +179,18 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
                 FilterChip(filters.sort == RecyclerSortMode.RATE, { vm.setSort(RecyclerSortMode.RATE) }, label = { Text(stringResource(R.string.recycler_rate)) })
             }
         }
-        when (state) {
+        when (displayedState) {
             is UiState.Loading -> item { LoadingContent(Modifier.fillMaxWidth().height(220.dp)) }
             is UiState.Error -> item { ErrorContent(modifier = Modifier.fillMaxWidth().height(220.dp)) }
             is UiState.Empty -> item { EmptyContent(Modifier.fillMaxWidth().height(220.dp)) }
             is UiState.Offline -> {
                 item { CachedRecyclerNotice() }
-                items(state.cached.orEmpty(), key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
+                items(displayedState.cached.orEmpty(), key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
             }
-            is UiState.Success -> items(state.data, key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
+            is UiState.Success -> items(displayedState.data, key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
             is UiState.Syncing -> {
                 item { CachedRecyclerNotice() }
-                items(state.cached.orEmpty(), key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
+                items(displayedState.cached.orEmpty(), key = { it.id }) { recycler -> RecyclerCard(recycler, vm, onOpen) }
             }
         }
     }

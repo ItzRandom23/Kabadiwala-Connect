@@ -11,6 +11,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerMatcher
 import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerFilterEngine
 import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerFilters
 import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerSortMode
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -26,6 +27,11 @@ class RecyclersViewModel(
     recyclers: RecyclerRepository,
     connectivity: ConnectivityObserver
 ) : ViewModel() {
+
+    private var refreshCatalogs: (suspend (CurrentLocation?) -> Unit)? = null
+
+    fun setCatalogRefresher(refresher: suspend (CurrentLocation?) -> Unit) { refreshCatalogs = refresher }
+    suspend fun refreshCatalogs(location: CurrentLocation?) { refreshCatalogs?.invoke(location) }
 
     private val _filters = MutableStateFlow(RecyclerFilters())
     val filters = _filters.asStateFlow()

@@ -185,6 +185,7 @@ fun AppNavHost(
         }
         composable(Destinations.RECYCLERS) {
             val vm: RecyclersViewModel = viewModel(factory = factory)
+            vm.setCatalogRefresher { current -> factory.refreshCatalogs("Pune", current) }
             val state by vm.uiState.collectAsStateWithLifecycle()
             if (role == AccountRole.HOUSEHOLD && demoMode) NearbyKabadiwalasScreen(
                 area = factory.currentAccount?.areaName ?: "Kothrud, Pune",

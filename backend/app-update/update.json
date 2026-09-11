@@ -1,6 +1,6 @@
 {
-  "versionCode": 18,
-  "versionName": "0.0.17-beta",
-  "apkUrl": "kabadiwala-connect-0.0.17-beta.apk",
-  "releaseNotes": "Improved brand-logo visibility in dark mode with a high-contrast logo treatment across welcome and language-selection screens."
+  "versionCode": 19,
+  "versionName": "0.0.18-beta",
+  "apkUrl": "kabadiwala-connect-0.0.18-beta.apk",
+  "releaseNotes": "Nearby now shows demo and testing shops reliably, refreshes the catalog with the detected location, and keeps the current-location fallback visible."
 }

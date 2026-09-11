@@ -29,6 +29,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverReposi
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 
 /**
  * Builds the Phase 1 ViewModels from the [AppContainer].
@@ -53,6 +54,8 @@ class KcViewModelFactory(
     val syncQueue get() = container.database.syncQueueDao()
     fun requestSync() = container.syncScheduler.requestSync()
     val currentAccount: AccountProfile? get() = container.currentAccount()
+    suspend fun refreshCatalogs(location: String = "Pune", current: CurrentLocation? = null) =
+        container.refreshCatalogs(location, current?.latitude, current?.longitude)
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {

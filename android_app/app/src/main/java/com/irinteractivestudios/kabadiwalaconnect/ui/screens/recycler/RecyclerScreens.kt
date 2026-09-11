@@ -57,8 +57,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcAmberSecondary
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcGreenPrimary
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSuccess
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 
 data class MarketplaceLot(val id: String, val material: String, val weight: String, val range: String, val area: String, val distance: String, val requestId: String = id)
 
@@ -153,7 +152,7 @@ fun RecyclerMarketplaceScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.material, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(lot.id, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.weight, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary); Text("  ·  ${lot.range}", style = MaterialTheme.typography.bodyLarge, color = KcAmberSecondary) }
                         Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, modifier = Modifier.padding(end = 5.dp)); Text("${lot.area} · ${lot.distance}", style = MaterialTheme.typography.bodyMedium) }
-                        if (lot.id in sentLots) Text("Offer saved. Collector will see it after sync.", color = KcSuccess, style = MaterialTheme.typography.labelLarge)
+                        if (lot.id in sentLots) Text("Offer saved. Collector will see it after sync.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
                         else Button(onClick = { sentLots = sentLots + lot.id; onOfferSent(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Make an offer") }
                     }
                 }
@@ -171,7 +170,7 @@ private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, onOffer
             Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.material, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(lot.weight, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
             Text("${lot.area}${lot.distance.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodyMedium)
             Text(lot.range, style = MaterialTheme.typography.bodyMedium, color = KcAmberSecondary)
-            if (submitted) Text("Offer sent. Collector will see it after sync.", color = KcSuccess, style = MaterialTheme.typography.labelLarge)
+            if (submitted) Text("Offer sent. Collector will see it after sync.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
             else {
                 OutlinedTextField(rateText, { rateText = it.filter { char -> char.isDigit() || char == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                 Button(onClick = { val rate = rateText.toDoubleOrNull() ?: return@Button; onOfferSent(lot.requestId, rate) }, enabled = rateText.toDoubleOrNull()?.let { it > 0 } == true, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Send offer") }
@@ -223,7 +222,7 @@ fun RecyclerOrdersScreen(
         }
         if (demoMode) {
             item { DemoDataBanner() }
-            item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcSuccess); Text("Copper Cable · 12.4 kg", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text("Pulkit · Kothrud, Pune", style = MaterialTheme.typography.bodyMedium); Text("₹535/kg · Pickup arranged", color = KcGreenPrimary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text("  Scan handover QR") } } } }
+            item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text("Copper Cable · 12.4 kg", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text("Pulkit · Kothrud, Pune", style = MaterialTheme.typography.bodyMedium); Text("₹535/kg · Pickup arranged", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text("  Scan handover QR") } } } }
             item { Text("No other active orders", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else if (liveLoading) {
             item { LoadingContent(Modifier.fillMaxWidth().heightIn(min = 300.dp)) }
@@ -288,7 +287,7 @@ fun RecyclerScanScreen(
         state.verified?.let { verified ->
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcSuccess); Text(stringResource(R.string.recycler_scan_verified), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text(stringResource(R.string.recycler_scan_verified), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
                     Text(stringResource(R.string.recycler_order_reference, verified.referenceId), fontWeight = FontWeight.SemiBold)
                     Text(stringResource(R.string.recycler_scan_material, verified.materialCategory.replace('_', ' ')))
                     Text(stringResource(R.string.recycler_order_weight, verified.declaredWeight))
@@ -312,10 +311,10 @@ fun RecyclerPickupsScreen(demoMode: Boolean = false) {
             DemoDataBanner()
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = KcGreenPrimary); Text("PCB · Kothrud", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text("PCB · Kothrud", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }
                     Text("Today · 2:00–4:00 PM · Approx. 8.5 kg", style = MaterialTheme.typography.bodyMedium)
                     Text("Exact address is shared only after acceptance.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (pickupReady) Text("Pickup marked ready. Collector will see it after sync.", color = KcSuccess, style = MaterialTheme.typography.labelLarge)
+                    if (pickupReady) Text("Pickup marked ready. Collector will see it after sync.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
                     else Button(onClick = { pickupReady = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Mark pickup ready") }
                 }
             }

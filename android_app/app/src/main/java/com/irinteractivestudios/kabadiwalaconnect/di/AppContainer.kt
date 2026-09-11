@@ -128,7 +128,7 @@ class AppContainer(context: Context) {
 
     suspend fun refreshAccount() { authenticationRepository.refreshAccount() }
 
-    suspend fun refreshCatalogs(location: String = "Pune") {
+    suspend fun refreshCatalogs(location: String = "Pune", latitude: Double? = null, longitude: Double? = null) {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
         val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
         val prices = categories.mapNotNull { category ->
@@ -148,7 +148,7 @@ class AppContainer(context: Context) {
         }
         if (prices.isNotEmpty()) database.priceDao().replaceLocation(location, prices)
         val account = currentAccount()
-        val recyclers = runCatching { apiService.getRecyclers(location, 50, null, null, "proximity", 1, 100, account?.latitude, account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
+        val recyclers = runCatching { apiService.getRecyclers(location, 50, null, null, "proximity", 1, 100, latitude ?: account?.latitude, longitude ?: account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,
                 name = recycler.name,

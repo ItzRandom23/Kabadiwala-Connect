@@ -57,6 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -306,7 +307,26 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 @Composable private fun PhoneEntry(state: OnboardingState, vm: OnboardingViewModel) {
     Text(stringResource(R.string.auth_phone_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_phone_detail), style = MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(state.phone, vm::setPhone, label = { Text(stringResource(R.string.auth_phone_label)) }, leadingIcon = { Icon(Icons.Filled.Phone, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, isError = state.phoneError, supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_phone"))
+    OutlinedTextField(
+        value = state.phone,
+        onValueChange = vm::setPhone,
+        label = { Text(stringResource(R.string.auth_phone_label)) },
+        leadingIcon = { Icon(Icons.Filled.Phone, null) },
+        prefix = {
+            Text(
+                text = "+91",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        placeholder = { Text("10-digit mobile number") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        isError = state.phoneError,
+        supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) },
+        modifier = Modifier.fillMaxWidth().testTag("auth_phone")
+    )
     if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
     KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
 }

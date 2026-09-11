@@ -57,7 +57,10 @@ class RoomRecyclerRepository(private val dao: RecyclerDao) : RecyclerCatalogRepo
             // Keep sample facilities isolated to the intentionally offline
             // development build. Never present them as live facilities when
             // the app is configured for the real backend.
-            if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid") && dao.count() == 0) {
+            // Demo and testing builds must remain useful without a populated
+            // backend. Keep the bundled facilities as a visible fallback;
+            // production builds never seed synthetic shops.
+            if (BuildConfig.DEBUG && (BuildConfig.APP_ENVIRONMENT == "TESTING" || BuildConfig.API_BASE_URL.contains(".invalid")) && dao.count() == 0) {
                 dao.insertAll(MockRecyclerData.all.map { it.toEntity() })
             }
         }
