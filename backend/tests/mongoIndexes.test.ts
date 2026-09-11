@@ -29,7 +29,7 @@ describe('Mongo optional unique indexes', () => {
 
     const creates = commands.filter(command => command.createIndexes);
     const drops = commands.filter(command => command.dropIndexes);
-    expect(creates).toHaveLength(6);
+    expect(creates).toHaveLength(14);
     expect(drops).toHaveLength(6);
     expect(creates).toContainEqual(expect.objectContaining({
       createIndexes: 'User',
@@ -38,6 +38,10 @@ describe('Mongo optional unique indexes', () => {
         unique: true,
         partialFilterExpression: { collectorProfileId: { $type: 'string' } }
       })]
+    }));
+    expect(creates).toContainEqual(expect.objectContaining({
+      createIndexes: 'RefreshToken',
+      indexes: [expect.objectContaining({ name: 'RefreshToken_tokenHash_key', unique: true })]
     }));
   });
 
@@ -59,6 +63,7 @@ describe('Mongo optional unique indexes', () => {
 
     await ensureOptionalUniqueIndexes(db);
 
-    expect(commands.filter(command => command.createIndexes || command.dropIndexes)).toHaveLength(0);
+    expect(commands.filter(command => command.dropIndexes)).toHaveLength(0);
+    expect(commands.filter(command => command.createIndexes)).toHaveLength(8);
   });
 });

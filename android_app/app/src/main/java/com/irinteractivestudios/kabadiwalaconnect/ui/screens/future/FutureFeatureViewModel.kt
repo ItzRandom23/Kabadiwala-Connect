@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.google.gson.JsonObject
+import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
+import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 
 data class FutureFeatureState(
     val loading: Boolean = false,
@@ -35,7 +38,12 @@ data class FutureFeatureState(
     val draftingConversationId: String? = null
 )
 
-class FutureFeatureViewModel(private val api: ApiService, private val cache: FutureCacheStore? = null) : ViewModel() {
+class FutureFeatureViewModel(
+    private val api: ApiService,
+    private val cache: FutureCacheStore? = null,
+    private val syncQueue: SyncQueueDao? = null,
+    private val requestSync: () -> Unit = {}
+) : ViewModel() {
     private val _state = MutableStateFlow(FutureFeatureState())
     val state: StateFlow<FutureFeatureState> = _state.asStateFlow()
     private var pollingJob: Job? = null
@@ -123,6 +131,14 @@ class FutureFeatureViewModel(private val api: ApiService, private val cache: Fut
                 upsertLocalMessage(conversationId, message)
             }.onFailure {
                 upsertLocalMessage(conversationId, pending.copy(status = "QUEUED_OFFLINE"))
+                val payload = JsonObject().apply {
+                    addProperty("id", pending.id)
+                    addProperty("conversationId", conversationId)
+                    addProperty("clientMessageId", clientId)
+                    addProperty("body", trimmed)
+                }
+                syncQueue?.enqueue(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+                requestSync()
             }
             _state.value = _state.value.copy(sending = false)
         }

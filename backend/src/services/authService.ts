@@ -3,7 +3,8 @@ import { AppError } from '../utils/errors.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import type { JwtService } from './jwt.js';
 import type { OtpProvider } from './otp.js';
-import { OtpRateLimiter } from './rateLimiter.js';
+import { OtpRateLimiter, type AuthenticationRateLimiter } from './rateLimiter.js';
+import type { SessionService } from './sessionService.js';
 
 export type PhoneAccountInput = {
   role?: 'COLLECTOR' | 'RECYCLER';
@@ -54,18 +55,19 @@ export class AuthService {
     private readonly otp: OtpProvider,
     private readonly collectors: CollectorRepository,
     private readonly jwt: JwtService,
-    private readonly limiter = new OtpRateLimiter(),
-    private readonly db?: PrismaClient
+    private readonly limiter: AuthenticationRateLimiter = new OtpRateLimiter(),
+    private readonly db?: PrismaClient,
+    private readonly sessions?: SessionService
   ) {}
 
   async requestOtp(phone: string, ip: string) {
-    this.limiter.check(phone, ip, 'request');
+    await this.limiter.check(phone, ip, 'request');
     await this.otp.request(phone);
     return 'OTP sent successfully';
   }
 
   async verifyOtp(phone: string, code: string, ip: string, input?: PhoneAccountInput) {
-    this.limiter.check(phone, ip, 'verify');
+    await this.limiter.check(phone, ip, 'verify');
     const result = await this.otp.verify(phone, code);
     if (result === 'expired') throw new AppError('OTP_EXPIRED', 'OTP has expired', 400);
     if (result === 'locked') throw new AppError('OTP_ATTEMPTS_EXCEEDED', 'Too many verification attempts', 429);
@@ -79,7 +81,8 @@ export class AuthService {
       collector ??= await this.collectors.create(phone);
       collector = await this.collectors.touchLogin(collector.id);
       console.log(JSON.stringify({ event: created ? 'collector_created' : 'collector_login', collectorId: collector.id }));
-      return { token: this.jwt.generateToken(collector.id), collector, user: null };
+      const issued = this.sessions ? await this.sessions.issue(collector.id, 'COLLECTOR') : { token: this.jwt.generateToken(collector.id) };
+      return { ...issued, collector, user: null };
     }
 
     try {
@@ -293,11 +296,14 @@ export class AuthService {
     });
   }
 
-  private issuePhone(user: any, profile: any) {
+  private async issuePhone(user: any, profile: any) {
     const profileId = user.role === 'RECYCLER' ? user.recyclerProfileId : user.collectorProfileId;
     if (!profileId) throw new AppError('INTERNAL_SERVER_ERROR', 'Account profile is incomplete', 500);
-    const token = user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId);
+    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId) };
     const account = publicPhoneProfile(user, profile);
-    return { token, user: account, collector: user.role === 'COLLECTOR' ? profile : null };
+    return { ...issued, user: account, collector: user.role === 'COLLECTOR' ? profile : null };
   }
+
+  async refresh(refreshToken: string, ip: string) { if (!this.sessions) throw new AppError('INTERNAL_SERVER_ERROR', 'Session rotation is unavailable', 503); await this.limiter.check(refreshToken, ip, 'login'); return this.sessions.rotate(refreshToken); }
+  logout(refreshToken?: string) { return this.sessions?.revoke(refreshToken) ?? Promise.resolve(); }
 }

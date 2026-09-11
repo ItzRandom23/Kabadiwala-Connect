@@ -132,7 +132,7 @@ class MockOtpService(
 
 interface SessionRepository {
     fun isSessionValid(nowEpochMs: Long = System.currentTimeMillis()): Boolean
-    fun save(token: String, expiresAtEpochMs: Long)
+    fun save(token: String, expiresAtEpochMs: Long, refreshToken: String? = null)
     fun clear()
 }
 
@@ -143,13 +143,15 @@ class SecureSessionRepository(private val storage: SecureStorage) : SessionRepos
         return !token.isNullOrBlank() && expiry != null && expiry > nowEpochMs
     }
 
-    override fun save(token: String, expiresAtEpochMs: Long) {
+    override fun save(token: String, expiresAtEpochMs: Long, refreshToken: String?) {
         storage.put(SecureStorage.AUTH_TOKEN, token)
         storage.put(SecureStorage.SESSION_EXPIRY, expiresAtEpochMs.toString())
+        refreshToken?.let { storage.put(SecureStorage.REFRESH_TOKEN, it) }
     }
 
     override fun clear() {
         storage.remove(SecureStorage.AUTH_TOKEN)
+        storage.remove(SecureStorage.REFRESH_TOKEN)
         storage.remove(SecureStorage.SESSION_EXPIRY)
     }
 }
@@ -203,6 +205,8 @@ interface AuthenticationRepository {
     suspend fun updateProfile(profile: com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile) = Unit
     suspend fun authenticateEmail(request: EmailAccountRequest): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun refreshAccount(): AccountProfile? = null
+    /** Refreshes credentials without loading profile data; used by the HTTP 401 authenticator. */
+    suspend fun refreshAccessToken(): String? = null
     fun isSessionValid(): Boolean
     fun logout()
 }

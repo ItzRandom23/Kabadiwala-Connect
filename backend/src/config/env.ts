@@ -5,8 +5,10 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16),
-  JWT_EXPIRES_IN: z.string().min(1).default('30d'),
-  CORS_ORIGIN: z.string().min(1).default('*'),
+  JWT_EXPIRES_IN: z.string().min(1).default('15m'),
+  REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  TRACEABILITY_SIGNING_SECRET: z.string().min(16),
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   APP_VERSION: z.string().min(1).default('1.0.0'),
   OTP_PROVIDER: z.enum(['development', 'twilio']).default('development'),
   TWILIO_ACCOUNT_SID: z.string().optional(),
@@ -20,18 +22,23 @@ const schema = z.object({
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().min(1).default('uploads'),
   LOCAL_UPLOAD_BASE_URL: z.string().default(''),
-  LOCAL_UPLOAD_PUBLIC: z.coerce.boolean().default(true),
+  LOCAL_UPLOAD_PUBLIC: z.coerce.boolean().default(false),
   S3_ENDPOINT: z.string().url().optional().or(z.literal('')),
   S3_REGION: z.string().default('ap-south-1'),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  S3_PUBLIC_BASE_URL: z.string().url().optional().or(z.literal(''))
+  S3_PUBLIC_BASE_URL: z.string().url().optional().or(z.literal('')),
+  RATE_LIMIT_STORE: z.enum(['memory', 'database']).default('memory')
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV === 'production' && value.OTP_PROVIDER === 'development') ctx.addIssue({ code: 'custom', path: ['OTP_PROVIDER'], message: 'Development OTP provider is not allowed in production' });
   if (value.NODE_ENV === 'production' && value.CORS_ORIGIN === '*') ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Wildcard CORS is not allowed in production' });
+  if (value.NODE_ENV === 'production' && value.CORS_ORIGIN.split(',').some(origin => !origin.trim().startsWith('https://'))) ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Production CORS origins must use HTTPS' });
   if (value.NODE_ENV === 'production' && value.JWT_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'JWT_SECRET must be at least 32 characters in production' });
+  if (value.NODE_ENV === 'production' && value.TRACEABILITY_SIGNING_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must be at least 32 characters in production' });
   if (value.NODE_ENV === 'production' && value.STORAGE_PROVIDER === 'local' && value.LOCAL_UPLOAD_PUBLIC) ctx.addIssue({ code: 'custom', path: ['LOCAL_UPLOAD_PUBLIC'], message: 'Public local uploads are not allowed in production; use protected storage or set LOCAL_UPLOAD_PUBLIC=false' });
+  if (value.NODE_ENV === 'production' && value.STORAGE_PROVIDER === 's3' && value.S3_PUBLIC_BASE_URL) ctx.addIssue({ code: 'custom', path: ['S3_PUBLIC_BASE_URL'], message: 'Public object URLs are not allowed in production; use signed access' });
+  if (value.NODE_ENV === 'production' && value.RATE_LIMIT_STORE !== 'database') ctx.addIssue({ code: 'custom', path: ['RATE_LIMIT_STORE'], message: 'Production rate limiting must use the shared database store' });
   if (value.OTP_PROVIDER === 'twilio' && (!value.TWILIO_ACCOUNT_SID || !value.TWILIO_AUTH_TOKEN || !value.TWILIO_VERIFY_SERVICE_SID)) ctx.addIssue({ code: 'custom', path: ['TWILIO_*'], message: 'Twilio credentials are required when OTP_PROVIDER=twilio' });
 });
 

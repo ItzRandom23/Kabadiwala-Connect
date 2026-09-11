@@ -1,9 +1,12 @@
+import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { assertLotTransition } from './lotStateMachine.js';
+import { createSignedTraceabilityQr, verifySignedTraceabilityQr } from './traceability.js';
+import type { AuthenticationRateLimiter } from './rateLimiter.js';
 
 export class HandoverService {
-  constructor(private db: PrismaClient) {}
+  constructor(private db: PrismaClient, private readonly traceabilitySecret: string, private readonly rateLimiter?: AuthenticationRateLimiter) {}
   private async get(id: string) {
     const h = await this.db.handover.findUnique({ where: { id }, include: { lot: true, quote: true, recycler: true } });
     if (!h) throw new AppError('NOT_FOUND', 'Handover not found', 404, { code: 'HANDOVER_NOT_FOUND' });
@@ -20,12 +23,39 @@ export class HandoverService {
     assertLotTransition(lot.status, 'HANDED_OVER');
     const old = await this.db.handover.findFirst({ where: { lotId: lot.id, status: { in: ['GENERATED', 'DISPUTED', 'PENDING_MANUAL_REVIEW'] } } });
     if (old) return old;
-    const ref = `HOV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    const ref = `HOV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${randomBytes(5).toString('hex').toUpperCase()}`;
+    const issuedAt = new Date();
+    const expiresAt = new Date(Date.now() + 7 * 86400000);
+    const signedQr = createSignedTraceabilityQr({ version: 1, referenceId: ref, lotId: lot.id, recyclerId: q.recyclerId, materialCategory: lot.materialCategory, weight: lot.weight, issuedAt: issuedAt.toISOString(), expiresAt: expiresAt.toISOString() }, this.traceabilitySecret);
     return this.db.$transaction(async tx => {
-      const h = await tx.handover.create({ data: { lotId: lot.id, quoteId: q.id, collectorId: cid, recyclerId: q.recyclerId, photoReference: lot.photoUrl, materialCategory: lot.materialCategory, materialDescription: lot.materialSubcategory, weight: lot.weight, quotedPrice: q.totalQuotedPrice, collectionLocation: { latitude: lot.collectionLatitude, longitude: lot.collectionLongitude, areaName: lot.collectionAreaName }, handoverLocation: p.handoverLocation, timestamp: p.timestamp ? new Date(p.timestamp) : new Date(), referenceId: ref, qrCodeData: ref, expiresAt: new Date(Date.now() + 7 * 86400000) } });
+      const h = await tx.handover.create({ data: { ...(p.clientHandoverId ? { id: p.clientHandoverId } : {}), lotId: lot.id, quoteId: q.id, collectorId: cid, recyclerId: q.recyclerId, photoReference: lot.photoUrl, materialCategory: lot.materialCategory, materialDescription: lot.materialSubcategory, weight: lot.weight, quotedPrice: q.totalQuotedPrice, collectionLocation: { latitude: lot.collectionLatitude, longitude: lot.collectionLongitude, areaName: lot.collectionAreaName }, handoverLocation: p.handoverLocation, timestamp: p.timestamp ? new Date(p.timestamp) : issuedAt, referenceId: ref, qrCodeData: signedQr.qrCodeData, qrVersion: 1, qrSignature: signedQr.qrSignature, expiresAt } });
       await tx.lot.update({ where: { id: lot.id }, data: { status: 'HANDED_OVER' } });
       return h;
     });
+  }
+  async verifyPublic(qrCodeData: string, ip: string) {
+    await this.rateLimiter?.check('handover-verification', ip, 'public_verify');
+    const payload = verifySignedTraceabilityQr(qrCodeData, this.traceabilitySecret);
+    const h = await this.db.handover.findUnique({ where: { referenceId: payload.referenceId }, include: { recycler: true } });
+    const valid = Boolean(h && h.qrSignature && h.qrSignature === qrCodeData.split('.')[2] && h.lotId === payload.lotId && h.recyclerId === payload.recyclerId && h.materialCategory === payload.materialCategory && h.weight === payload.weight && h.expiresAt.toISOString() === payload.expiresAt && h.expiresAt > new Date());
+    if (!valid || !h) throw new AppError('NOT_FOUND', 'No valid handover record matches this code', 404, { code: 'HANDOVER_NOT_VERIFIED' });
+    return {
+      valid: true,
+      handoverId: h.id,
+      referenceId: h.referenceId,
+      materialCategory: h.materialCategory,
+      declaredWeight: h.weight,
+      actualWeight: h.actualWeight,
+      timestamp: h.timestamp,
+      status: h.status,
+      recycler: {
+        name: h.recycler.name,
+        authorizationStatus: h.recycler.authorizationStatus,
+        authorizationAuthority: h.recycler.authorizationAuthority,
+        licenseNumber: h.recycler.licenseNumber,
+        authorizationValidUntil: h.recycler.authorizationValidUntil
+      }
+    };
   }
   async view(id: string, actor: string, role: string) {
     const h = await this.get(id);
@@ -37,7 +67,13 @@ export class HandoverService {
     if (!h || h.collectorId !== actor) throw new AppError('NOT_FOUND', 'Handover not found', 404, { code: 'HANDOVER_NOT_FOUND' });
     return this.get(h.id);
   }
-  async mark(id: string, cid: string) { const h = await this.view(id, cid, 'COLLECTOR'); if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover is not actionable', 409, { code: 'HANDOVER_NOT_ACTIONABLE' }); return h; }
+  async mark(id: string, cid: string) {
+    const h = await this.view(id, cid, 'COLLECTOR');
+    if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover is not actionable', 409, { code: 'HANDOVER_NOT_ACTIONABLE' });
+    const claimed = await this.db.handover.updateMany({ where: { id, collectorId: cid, status: 'GENERATED', collectorConfirmedAt: null }, data: { collectorConfirmedAt: new Date() } });
+    if (!claimed.count && !h.collectorConfirmedAt) throw new AppError('CONFLICT', 'Handover is no longer actionable', 409, { code: 'HANDOVER_ALREADY_ACTIONED' });
+    return this.get(id);
+  }
   async updateEvidence(id: string, cid: string, p: { actualWeight: number; materialMatch: boolean; scalePhotoReference?: string; collectorConfirmed?: boolean }) {
     const h = await this.view(id, cid, 'COLLECTOR');
     if (!['GENERATED', 'CONFIRMED_BY_RECYCLER'].includes(h.status)) throw new AppError('CONFLICT', 'Handover evidence is locked', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
@@ -90,7 +126,7 @@ export class HandoverService {
     });
   }
   recyclerList(rid: string) { return this.db.handover.findMany({ where: { recyclerId: rid }, orderBy: { createdAt: 'desc' } }); }
-  async dispute(cid: string, id: string, p: any) { const h = await this.view(id, cid, 'COLLECTOR'); return this.db.dispute.create({ data: { handoverId: h.id, lotId: h.lotId, collectorId: cid, recyclerId: h.recyclerId, type: p.type, reportedBy: cid, description: p.description, claimedValue: p.claimedWeight, evidence: p.evidence } }); }
+  async dispute(cid: string, id: string, p: any) { const h = await this.view(id, cid, 'COLLECTOR'); if (p.clientDisputeId) { const prior = await this.db.dispute.findFirst({ where: { id: p.clientDisputeId, collectorId: cid, handoverId: h.id } }); if (prior) return prior; } return this.db.dispute.create({ data: { ...(p.clientDisputeId ? { id: p.clientDisputeId } : {}), handoverId: h.id, lotId: h.lotId, collectorId: cid, recyclerId: h.recyclerId, type: p.type, reportedBy: cid, description: p.description, claimedValue: p.claimedWeight, evidence: p.evidence } }); }
   async adminDisputes() { return this.db.dispute.findMany({ orderBy: { createdAt: 'desc' } }); }
   async adminDispute(id: string) { const d = await this.db.dispute.findUnique({ where: { id }, include: { handover: true } }); if (!d) throw new AppError('NOT_FOUND', 'Dispute not found', 404, { code: 'DISPUTE_NOT_FOUND' }); return d; }
   async resolve(id: string, admin: string, p: any) { const d = await this.db.dispute.findUnique({ where: { id } }); if (!d) throw new AppError('NOT_FOUND', 'Dispute not found', 404, { code: 'DISPUTE_NOT_FOUND' }); if (d.status === 'RESOLVED') throw new AppError('CONFLICT', 'Dispute already resolved', 409, { code: 'DISPUTE_ALREADY_RESOLVED' }); return this.db.$transaction(async tx => { const out = await tx.dispute.update({ where: { id }, data: { status: 'RESOLVED', resolution: p.resolution, resolutionNotes: p.notes, resolvedBy: admin, resolvedAt: new Date() } }); await tx.handover.update({ where: { id: d.handoverId }, data: { status: 'COMPLETED' } }); return out; }); }

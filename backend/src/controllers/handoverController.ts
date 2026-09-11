@@ -5,7 +5,8 @@ import { AppError } from '../utils/errors.js';
 
 const location = z.object({ type: z.enum(['COLLECTOR_LOCATION', 'RECYCLER_FACILITY', 'THIRD_PARTY']), latitude: z.number().finite().min(-90).max(90).optional(), longitude: z.number().finite().min(-180).max(180).optional(), address: z.string().max(300).optional() });
 export const handoverController = (s: HandoverService) => ({
-  create: async (q: Request, r: Response) => { const p = z.object({ lotId: z.string(), quoteId: z.string(), handoverLocation: location, timestamp: z.string().optional() }).safeParse(q.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid handover', 422, { code: 'INVALID_HANDOVER_LOCATION' }); r.status(201).json({ success: true, data: await s.create(q.identity!.collectorId, p.data), message: 'Handover generated' }); },
+  verifyPublic: async (q: Request, r: Response) => { const p = z.object({ qrCodeData: z.string().trim().min(40).max(4000) }).safeParse(q.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'A handover verification code is required', 422, { code: 'INVALID_HANDOVER_QR' }); return r.json({ success: true, data: await s.verifyPublic(p.data.qrCodeData, q.ip ?? 'unknown'), message: 'Handover verification complete' }); },
+  create: async (q: Request, r: Response) => { const p = z.object({ lotId: z.string(), quoteId: z.string(), clientHandoverId: z.string().trim().min(16).max(120).optional(), handoverLocation: location, timestamp: z.string().optional() }).safeParse(q.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid handover', 422, { code: 'INVALID_HANDOVER_LOCATION' }); r.status(201).json({ success: true, data: await s.create(q.identity!.collectorId, p.data), message: 'Handover generated' }); },
   get: async (q: Request, r: Response) => r.json({ success: true, data: await s.view(String(q.params.handoverId), q.identity!.collectorId, 'COLLECTOR'), message: 'Handover retrieved' }),
   getReference: async (q: Request, r: Response) => r.json({ success: true, data: await s.byReference(String(q.params.referenceId), q.identity!.collectorId), message: 'Handover retrieved' }),
   mark: async (q: Request, r: Response) => r.json({ success: true, data: await s.mark(String(q.params.handoverId), q.identity!.collectorId), message: 'Handover marked' }),
@@ -16,6 +17,7 @@ export const handoverController = (s: HandoverService) => ({
   reject: async (q: Request, r: Response) => { const p = z.object({ reason: z.string().trim().min(1).max(500) }).safeParse(q.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'A rejection reason is required', 422, { code: 'INVALID_REJECTION_REASON' }); return r.json({ success: true, data: await s.reject(String(q.params.handoverId), q.identity!.collectorId, p.data.reason), message: 'Handover rejected' }); },
   dispute: async (q: Request, r: Response) => {
     const p = z.object({
+      clientDisputeId: z.string().trim().min(16).max(120).optional(),
       type: z.enum(['WEIGHT_DISCREPANCY', 'MATERIAL_MISMATCH', 'PRICE_DISAGREEMENT', 'OTHER']),
       description: z.string().trim().min(10).max(500),
       claimedWeight: z.number().finite().positive().max(500).optional(),

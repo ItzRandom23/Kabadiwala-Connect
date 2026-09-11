@@ -38,8 +38,11 @@ interface ApiService {
     @GET("auth/profile")
     suspend fun getAccountProfile(): Response<ApiEnvelope<AccountProfileDto>>
 
+    @POST("auth/refresh")
+    suspend fun refreshSession(@Body body: RefreshTokenRequestDto): Response<ApiEnvelope<RefreshTokenResponseDto>>
+
     @POST("auth/logout")
-    suspend fun logout(): Response<ApiEnvelope<LogoutDto>>
+    suspend fun logout(@Body body: RefreshTokenRequestDto): Response<ApiEnvelope<LogoutDto>>
 
     @GET("collectors/me")
     suspend fun getCollector(): Response<ApiEnvelope<CollectorDto>>
@@ -107,6 +110,9 @@ interface ApiService {
 
     @POST("handovers")
     suspend fun createHandover(@Body body: CreateHandoverRequestDto): Response<ApiEnvelope<HandoverDto>>
+
+    @POST("verify/handover")
+    suspend fun verifyHandover(@Body body: VerifyHandoverRequestDto): Response<ApiEnvelope<VerifiedHandoverDto>>
 
     @GET("handovers/{handoverId}")
     suspend fun getHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<HandoverDto>>

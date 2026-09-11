@@ -1,0 +1,21 @@
+services:
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env.testing
+    ports:
+      - "4000:4000"
+    volumes:
+      - testing_uploads:/app/uploads
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  testing_uploads:

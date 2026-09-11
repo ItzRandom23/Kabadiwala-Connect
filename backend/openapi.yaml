@@ -26,6 +26,8 @@ paths:
         '429': { description: Attempts exceeded }
   /auth/logout:
     post: { responses: { '200': { description: Stateless logout acknowledgement } } }
+  /auth/refresh:
+    post: { requestBody: { required: true, content: { application/json: { schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } } } } }, responses: { '200': { description: Rotated access and refresh tokens }, '401': { description: Invalid, expired, revoked, or reused refresh token } } }
   /collectors/me:
     get:
       security: [{ bearerAuth: [] }]
@@ -49,6 +51,7 @@ paths:
     put: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LotUpdate' } } } }, responses: { '200': { description: Lot updated }, '409': { description: Locked or stale lot } } }
     delete: { security: [{ bearerAuth: [] }], responses: { '200': { description: Lot cancelled }, '409': { description: Lot is locked } } }
   /lots/{lotId}/photo:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Authenticated private lot photo, content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { description: Photo not found or not owned by caller } } }
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [photo], properties: { photo: { type: string, format: binary } } } } } }, responses: { '200': { description: Photo uploaded }, '400': { description: Invalid photo }, '413': { description: File too large } } }
   /prices/board:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] } }, { in: query, name: location, schema: { type: string } }], responses: { '200': { description: Current trusted/development price board }, '404': { description: No price available } } }
@@ -74,6 +77,22 @@ paths:
     get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Assigned request detail } } }
   /recycler/quotes:
     post: { security: [{ bearerAuth: [] }], responses: { '201': { description: Quote submitted }, '422': { description: Invalid quote } } }
+  /verify/handover:
+    post: { requestBody: { required: true, content: { application/json: { schema: { type: object, required: [qrCodeData], properties: { qrCodeData: { type: string, minLength: 40, maxLength: 4000 } } } } } }, responses: { '200': { description: Signed handover is valid and still current }, '404': { description: Invalid, expired, or unknown handover } } }
+  /handovers:
+    post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [lotId, quoteId, handoverLocation], properties: { lotId: { type: string }, quoteId: { type: string }, clientHandoverId: { type: string }, handoverLocation: { type: object }, timestamp: { type: string, format: date-time } } } } } }, responses: { '201': { description: Signed traceability handover generated }, '409': { description: Quote or recycler is not actionable } } }
+  /handovers/{handoverId}:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Collector-owned handover }, '404': { description: Handover not found } } }
+  /handovers/{handoverId}/mark-handed-over:
+    post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Collector confirmation recorded } } }
+  /handovers/{handoverId}/evidence:
+    put: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Weight and material evidence saved }, '409': { description: Evidence is locked } } }
+  /handovers/{handoverId}/dispute:
+    post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '201': { description: Idempotent collector dispute created } } }
+  /recycler/handovers:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Recycler handover queue } } }
+  /recycler/handovers/{handoverId}/confirm:
+    post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Recycler receipt confirmed or discrepancy opened }, '409': { description: Recycler is unverified or handover was already reviewed } } }
   /sync:
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [operations], properties: { operations: { type: array, maxItems: 100, items: { type: object } } } } } } }, responses: { '200': { description: Per-operation sync results }, '422': { description: Invalid batch } } }
   /sync/changes:

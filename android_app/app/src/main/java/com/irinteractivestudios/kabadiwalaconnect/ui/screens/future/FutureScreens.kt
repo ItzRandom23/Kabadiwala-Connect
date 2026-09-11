@@ -184,7 +184,7 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 }
 
 @Composable
-fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, modifier: Modifier = Modifier) {
+fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     var draft by remember { mutableStateOf("") }
     LaunchedEffect(draftSuggestion) { if (!draftSuggestion.isNullOrBlank()) draft = draftSuggestion }
     Column(modifier.fillMaxSize().padding(16.dp)) {
@@ -209,6 +209,10 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
         }
         if (drafting || draftSuggestion != null) {
             Text(stringResource(if (drafting) R.string.future_chat_drafting else R.string.future_chat_draft_note), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        onProceedToHandover?.let { proceed ->
+            Button(onClick = proceed, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.future_confirm_handover)) }
+            Spacer(Modifier.height(8.dp))
         }
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = draft, onValueChange = { draft = it.take(1000) }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.future_message)) }, maxLines = 4)

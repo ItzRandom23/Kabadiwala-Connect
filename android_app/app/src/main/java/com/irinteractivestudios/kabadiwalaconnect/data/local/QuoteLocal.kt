@@ -9,6 +9,9 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteExpiry
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.io.IOException
+import java.util.UUID
+import com.google.gson.JsonObject
 
 @Entity(tableName = "quotes")
 data class QuoteEntity(@PrimaryKey val id: String, val recyclerId: String, val lotId: String, val amountRupees: Double, val recyclerName: String, val pricePerKg: Double, val marketRatePerKg: Double, val distanceKm: Double, val pickupAvailable: Boolean, val createdAtEpochMs: Long, val expiresAtEpochMs: Long, val status: String, val deliveryState: String)
@@ -16,6 +19,7 @@ data class QuoteEntity(@PrimaryKey val id: String, val recyclerId: String, val l
     @Query("SELECT * FROM quotes WHERE lotId = :lotId ORDER BY pricePerKg DESC") fun observeForLot(lotId: String): Flow<List<QuoteEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(items: List<QuoteEntity>)
     @Query("UPDATE quotes SET status = :status WHERE id = :id") suspend fun updateStatus(id: String, status: String): Int
+    @Query("DELETE FROM quotes WHERE id = :id") suspend fun delete(id: String)
     @Query("DELETE FROM quotes") suspend fun clearAll()
 }
 
@@ -35,24 +39,61 @@ class RoomQuoteRepository(private val dao: QuoteDao) : QuoteRepository {
 /** Live quote integration used outside the debug preview. Room remains the
  * read cache so the comparison screen stays usable when the request response
  * has already been received and the next screen is opened offline. */
-class RemoteQuoteRepository(private val dao: QuoteDao, private val api: ApiService) : QuoteRepository {
+class RemoteQuoteRepository(
+    private val dao: QuoteDao,
+    private val api: ApiService,
+    private val queue: SyncQueueDao? = null,
+    private val requestSync: () -> Unit = {}
+) : QuoteRepository {
     override fun observeForLot(lotId: String): Flow<List<Quote>> = dao.observeForLot(lotId).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
 
     override suspend fun submitRequest(lot: Lot, recycler: Recycler, nowEpochMs: Long): List<Quote> {
-        api.requestQuote(QuoteRequestDto(lot.id, recycler.id)).requireData()
-        val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
-        dao.insertAll(quotes.map { it.toEntity() })
-        return quotes
+        return try {
+            api.requestQuote(QuoteRequestDto(lot.id, recycler.id)).requireData()
+            val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
+            dao.insertAll(quotes.map { it.toEntity() })
+            quotes
+        } catch (_: IOException) {
+            val placeholder = Quote(
+                id = "QRQ-${UUID.randomUUID()}", recyclerId = recycler.id, lotId = lot.id,
+                amountRupees = lot.estimatedValueRupees ?: recycler.offeredRatePerKg * lot.weightKg,
+                recyclerName = recycler.name, pricePerKg = recycler.offeredRatePerKg,
+                marketRatePerKg = lot.estimatedValueRupees?.div(lot.weightKg)?.takeUnless { it == 0.0 } ?: recycler.offeredRatePerKg,
+                distanceKm = recycler.distanceKm ?: 0.0, pickupAvailable = recycler.pickupAvailable,
+                createdAtEpochMs = nowEpochMs, expiresAtEpochMs = nowEpochMs + 24L * 60L * 60L * 1000L,
+                status = QuoteStatus.PENDING, deliveryState = QuoteDeliveryState.WAITING_TO_SEND
+            )
+            dao.insertAll(listOf(placeholder.toEntity()))
+            enqueue("REQUEST_QUOTE", JsonObject().apply { addProperty("id", placeholder.id); addProperty("lotId", lot.id); addProperty("recyclerId", recycler.id) })
+            listOf(placeholder)
+        }
     }
 
     override suspend fun accept(quoteId: String): Boolean {
-        val quote = api.acceptQuote(quoteId).requireData()
-        return dao.updateStatus(quote.id, QuoteStatus.ACCEPTED.name) > 0
+        return try {
+            val quote = api.acceptQuote(quoteId).requireData()
+            dao.updateStatus(quote.id, QuoteStatus.ACCEPTED.name) > 0
+        } catch (_: IOException) {
+            val updated = dao.updateStatus(quoteId, QuoteStatus.ACCEPTED.name) > 0
+            if (updated) enqueue("ACCEPT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
+            updated
+        }
     }
 
     override suspend fun reject(quoteId: String): Boolean {
-        val quote = api.rejectQuote(quoteId).requireData()
-        return dao.updateStatus(quote.id, QuoteStatus.REJECTED.name) > 0
+        return try {
+            val quote = api.rejectQuote(quoteId).requireData()
+            dao.updateStatus(quote.id, QuoteStatus.REJECTED.name) > 0
+        } catch (_: IOException) {
+            val updated = dao.updateStatus(quoteId, QuoteStatus.REJECTED.name) > 0
+            if (updated) enqueue("REJECT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
+            updated
+        }
+    }
+
+    private suspend fun enqueue(operation: String, payload: JsonObject) {
+        queue?.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+        requestSync()
     }
 }
 

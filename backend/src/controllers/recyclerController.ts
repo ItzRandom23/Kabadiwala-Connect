@@ -28,8 +28,9 @@ export const recyclerController = (s: RecyclerService) => ({
   adminList: async (_req: Request, res: Response) => res.json({ success: true, data: await s.adminList(), message: 'Admin recycler list retrieved' }),
   adminDetail: async (req: Request, res: Response) => res.json({ success: true, data: await s.adminDetail(String(req.params.recyclerId)), message: 'Admin recycler retrieved' }),
   authorize: async (req: Request, res: Response) => {
-    const p = z.object({ status: z.enum(['VERIFIED', 'PENDING', 'REJECTED', 'SUSPENDED']), reason: z.string().max(500).optional() }).safeParse(req.body);
+    const p = z.object({ status: z.enum(['VERIFIED', 'PENDING', 'REJECTED', 'SUSPENDED']), reason: z.string().max(500).optional(), authority: z.string().trim().max(160).optional(), registrationNumber: z.string().trim().max(160).optional(), authorizationType: z.string().trim().max(160).optional(), evidenceReference: z.string().trim().max(500).optional(), verificationSource: z.string().trim().max(500).optional(), validUntil: z.string().datetime().optional() }).superRefine((value, ctx) => { if (value.status === 'VERIFIED' && (!value.authority || !value.registrationNumber || !value.authorizationType || !value.evidenceReference || !value.verificationSource || !value.validUntil)) ctx.addIssue({ code: 'custom', path: ['status'], message: 'Verified recyclers require complete registration evidence and validity' }); }).safeParse(req.body);
     if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid authorization status', 422, { code: 'INVALID_AUTHORIZATION_STATUS' });
-    return res.json({ success: true, data: await s.authorize(String(req.params.recyclerId), req.identity!.collectorId, p.data.status, p.data.reason), message: 'Recycler authorization updated' });
+    const { status, reason, validUntil, ...details } = p.data;
+    return res.json({ success: true, data: await s.authorize(String(req.params.recyclerId), req.identity!.collectorId, status, reason, { ...details, validUntil: validUntil ? new Date(validUntil) : undefined }), message: 'Recycler authorization updated' });
   }
 });

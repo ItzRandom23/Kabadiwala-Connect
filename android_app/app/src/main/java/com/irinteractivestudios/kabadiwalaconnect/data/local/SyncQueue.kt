@@ -41,6 +41,9 @@ interface SyncQueueDao {
     @Query("DELETE FROM sync_queue WHERE uid = :uid")
     suspend fun remove(uid: Long)
 
+    @Query("UPDATE sync_queue SET attempts = attempts + 1 WHERE uid = :uid")
+    suspend fun incrementAttempts(uid: Long)
+
     @Query("DELETE FROM sync_queue")
     suspend fun clear()
 }

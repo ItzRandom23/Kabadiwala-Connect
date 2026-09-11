@@ -1,5 +1,5 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import type { AppConfig } from '../config/env.js';
@@ -7,6 +7,7 @@ import { AppError } from '../utils/errors.js';
 
 export interface StorageService {
   putImage(input: Buffer, objectKey: string): Promise<{ key: string; url: string }>;
+  getImage(objectKey: string): Promise<{ body: Buffer; contentType: string }>;
   delete(objectKey: string): Promise<void>;
 }
 
@@ -58,6 +59,14 @@ export class LocalStorageService implements StorageService {
     }
   }
 
+  async getImage(objectKey: string) {
+    try {
+      return { body: await readFile(safeChildPath(this.root, objectKey)), contentType: 'image/jpeg' };
+    } catch {
+      throw new AppError('NOT_FOUND', 'Photo not found', 404, { code: 'PHOTO_NOT_FOUND' });
+    }
+  }
+
   get directory() {
     return this.root;
   }
@@ -90,5 +99,15 @@ export class S3StorageService implements StorageService {
 
   async delete(objectKey: string) {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.config.S3_BUCKET, Key: objectKey }));
+  }
+
+  async getImage(objectKey: string) {
+    try {
+      const result = await this.client.send(new GetObjectCommand({ Bucket: this.config.S3_BUCKET, Key: objectKey }));
+      if (!result.Body) throw new Error('Missing object body');
+      return { body: Buffer.from(await result.Body.transformToByteArray()), contentType: result.ContentType || 'image/jpeg' };
+    } catch {
+      throw new AppError('NOT_FOUND', 'Photo not found', 404, { code: 'PHOTO_NOT_FOUND' });
+    }
   }
 }

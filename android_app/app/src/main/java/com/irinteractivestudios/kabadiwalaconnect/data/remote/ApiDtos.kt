@@ -24,9 +24,11 @@ data class VerifyOtpRequestDto(
 )
 data class OtpRequestedDto(val message: String? = null)
 data class LogoutDto(val loggedOut: Boolean = true)
-data class AuthResponseDto(val token: String, val collector: CollectorDto? = null, val user: AccountProfileDto? = null)
+data class AuthResponseDto(val token: String, val refreshToken: String? = null, val collector: CollectorDto? = null, val user: AccountProfileDto? = null)
 data class EmailAuthRequestDto(val email: String, val password: String, val role: String? = null, val preferredLanguage: String? = null, val areaName: String? = null, val businessName: String? = null, val authorizationNumber: String? = null, val materialsAccepted: List<String>? = null, val pickupAvailable: Boolean? = null, val serviceRadiusKm: Int? = null)
-data class AccountAuthResponseDto(val token: String, val user: AccountProfileDto)
+data class AccountAuthResponseDto(val token: String, val refreshToken: String? = null, val user: AccountProfileDto)
+data class RefreshTokenRequestDto(val refreshToken: String)
+data class RefreshTokenResponseDto(val token: String, val refreshToken: String)
 data class AccountProfileDto(val id: String, val email: String? = null, val phone: String? = null, val displayName: String? = null, val areaName: String? = null, val latitude: Double? = null, val longitude: Double? = null, val role: String, val preferredLanguage: String = "ENGLISH", val accountStatus: String = "ACTIVE", val verificationStatus: String = "VERIFIED", val profileId: String = "", val profile: RecyclerDto? = null, val createdAt: String? = null, val updatedAt: String? = null)
 
 data class CollectorDto(val id: String, val phone: String, val email: String? = null, val displayName: String? = null, val preferredLanguage: String? = null, val primaryLocation: LocationDto? = null, val accountStatus: String? = null, val createdAt: String? = null, val lastLoginAt: String? = null)
@@ -62,11 +64,47 @@ data class SubmitRecyclerQuoteRequestDto(val quoteRequestId: String, val pricePe
 data class QuoteRequestResponseDto(val id: String? = null, val lotId: String? = null, val recyclerId: String? = null, val status: String? = null)
 data class QuoteDto(val id: String, val lotId: String, val recyclerId: String, val pricePerKg: Double, val totalQuotedPrice: Double? = null, val totalPrice: Double? = null, val status: String, val validUntil: String? = null, val createdAt: String? = null, val recycler: RecyclerDto? = null, val recyclerNotes: String? = null, val comparison: String? = null, val anomaly: Boolean = false)
 
-data class CreateHandoverRequestDto(val lotId: String, val quoteId: String, val handoverLocation: HandoverLocationDto, val timestamp: String? = null)
+data class CreateHandoverRequestDto(val lotId: String, val quoteId: String, val clientHandoverId: String? = null, val handoverLocation: HandoverLocationDto, val timestamp: String? = null)
 data class HandoverLocationDto(val type: String, val latitude: Double? = null, val longitude: Double? = null, val address: String? = null)
-data class HandoverDto(val id: String, val referenceId: String? = null, val lotId: String, val status: String, val qrPayload: String? = null, val createdAt: String? = null, val weight: Double? = null, val actualWeight: Double? = null, val materialConfirmedAt: String? = null, val recyclerConfirmedAt: String? = null, val paymentStatus: String? = null)
+data class HandoverDto(
+    val id: String,
+    val referenceId: String? = null,
+    val lotId: String,
+    val quoteId: String? = null,
+    val recyclerId: String? = null,
+    val collectorId: String? = null,
+    val status: String,
+    val qrCodeData: String? = null,
+    val createdAt: String? = null,
+    val timestamp: String? = null,
+    val expiresAt: String? = null,
+    val weight: Double? = null,
+    val quotedPrice: Double? = null,
+    val actualWeight: Double? = null,
+    val materialCategory: String? = null,
+    val materialDescription: String? = null,
+    val collectionLocation: LocationDto? = null,
+    val handoverLocation: HandoverLocationDto? = null,
+    val materialConfirmedAt: String? = null,
+    val collectorConfirmedAt: String? = null,
+    val recyclerConfirmedAt: String? = null,
+    val paymentStatus: String? = null
+)
 data class HandoverEvidenceRequestDto(val actualWeight: Double, val materialMatch: Boolean, val scalePhotoReference: String? = null, val collectorConfirmed: Boolean = true)
 data class RecyclerHandoverConfirmRequestDto(val actualWeight: Double, val materialMatch: Boolean, val scalePhotoReference: String? = null, val notes: String? = null, val reason: String? = null)
+data class VerifyHandoverRequestDto(val qrCodeData: String)
+data class VerifiedHandoverDto(
+    val valid: Boolean = false,
+    val handoverId: String = "",
+    val referenceId: String = "",
+    val materialCategory: String = "",
+    val declaredWeight: Double = 0.0,
+    val actualWeight: Double? = null,
+    val timestamp: String? = null,
+    val status: String = "",
+    val recycler: RecyclerVerificationDto? = null
+)
+data class RecyclerVerificationDto(val name: String = "", val authorizationStatus: String = "", val authorizationAuthority: String? = null, val licenseNumber: String? = null, val authorizationValidUntil: String? = null)
 data class DisputeDto(val id: String, val status: String? = null)
 
 data class RecordPaymentRequestDto(val lotId: String, val amount: Double, val method: String, val date: String, val time: String? = null, val notes: String? = null)

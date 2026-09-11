@@ -2,6 +2,8 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import type { JwtService } from './jwt.js';
+import type { SessionService } from './sessionService.js';
+import type { AuthenticationRateLimiter } from './rateLimiter.js';
 
 export type EmailAccountInput = {
   email: string;
@@ -49,10 +51,13 @@ const publicProfile = (user: any, profile: any) => ({
 });
 
 export class EmailAuthService {
-  constructor(private readonly db: PrismaClient, private readonly jwt: JwtService) {}
+  constructor(private readonly db: PrismaClient, private readonly jwt: JwtService, private readonly sessions?: SessionService, private readonly limiter?: AuthenticationRateLimiter) {}
 
-  async signup(input: EmailAccountInput) {
+  private audit(method: string, outcome: string, ip: string, userAgent?: string, actorId?: string, actorRole?: string) { return this.db.loginAudit.create({ data: { actorId, actorRole, method, outcome, ipHash: createHash('sha256').update(ip).digest('hex'), userAgent: userAgent?.slice(0, 300) } }).catch(() => undefined); }
+
+  async signup(input: EmailAccountInput, ip = 'unknown', userAgent?: string) {
     const email = normalizedEmail(input.email);
+    await this.limiter?.check(email, ip, 'signup');
     const existing = await this.db.user.findUnique({ where: { email } });
     if (existing) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
 
@@ -82,18 +87,24 @@ export class EmailAuthService {
       const user = await tx.user.create({ data: { email, passwordHash: hashPassword(input.password), role: input.role, preferredLanguage: input.preferredLanguage, recyclerProfileId: profile.id } });
       return { user, profile };
     });
-    return this.issue(created.user, created.profile);
+    const issued = await this.issue(created.user, created.profile);
+    await this.audit('EMAIL_SIGNUP', 'SUCCESS', ip, userAgent, created.user.id, created.user.role);
+    return issued;
   }
 
-  async login(emailInput: string, password: string) {
-    const user = await this.db.user.findUnique({ where: { email: normalizedEmail(emailInput) } });
-    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' });
+  async login(emailInput: string, password: string, ip = 'unknown', userAgent?: string) {
+    const email = normalizedEmail(emailInput);
+    await this.limiter?.check(email, ip, 'login');
+    const user = await this.db.user.findUnique({ where: { email } });
+    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) { await this.audit('EMAIL_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent); throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' }); }
     if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
     if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
     const profile = user.role === 'RECYCLER'
       ? await this.db.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
       : await this.db.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
-    return this.issue(user, profile);
+    const issued = await this.issue(user, profile);
+    await this.audit('EMAIL_LOGIN', 'SUCCESS', ip, userAgent, user.id, user.role);
+    return issued;
   }
 
   async profile(profileId: string, role: 'COLLECTOR' | 'RECYCLER') {
@@ -107,11 +118,11 @@ export class EmailAuthService {
     return publicProfile(user, profile);
   }
 
-  private issue(user: any, profile: any) {
+  private async issue(user: any, profile: any) {
     const profileId = user.role === 'RECYCLER' ? user.recyclerProfileId : user.collectorProfileId;
     if (!profileId) throw new AppError('INTERNAL_SERVER_ERROR', 'Account profile is incomplete', 500);
-    const token = user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId);
-    return { token, user: publicProfile(user, profile) };
+    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId) };
+    return { ...issued, user: publicProfile(user, profile) };
   }
 }
 

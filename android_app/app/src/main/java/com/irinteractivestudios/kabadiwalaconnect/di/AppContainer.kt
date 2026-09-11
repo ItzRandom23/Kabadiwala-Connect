@@ -31,6 +31,8 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepositor
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomHandoverRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.local.RemoteHandoverRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.local.OfflineFirstHandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomPaymentRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomDisputeRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PriceEntity
@@ -58,6 +60,7 @@ import androidx.room.withTransaction
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 
 /**
  * Manual service locator (Phase 1).
@@ -74,7 +77,11 @@ class AppContainer(context: Context) {
 
     /** Uses the configured backend and injects the current encrypted bearer token. */
     val apiService: ApiService by lazy {
-        RetrofitProvider.create(BuildConfig.API_BASE_URL) { secureStorage.get(SecureStorage.AUTH_TOKEN) }
+        RetrofitProvider.create(
+            baseUrl = BuildConfig.API_BASE_URL,
+            tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
+            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken() } }
+        )
     }
 
     val lotRepository: LotRepository by lazy { RoomLotRepository(database.lotDao(), database.syncQueueDao()) { syncScheduler.requestSync() } }
@@ -84,9 +91,16 @@ class AppContainer(context: Context) {
     val recyclerRepository: RecyclerRepository by lazy { RoomRecyclerRepository(database.recyclerDao()) }
     val quoteRepository: QuoteRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomQuoteRepository(database.quoteDao())
-        else RemoteQuoteRepository(database.quoteDao(), apiService)
+        else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao()) { syncScheduler.requestSync() }
     }
-    val handoverRepository: HandoverRepository by lazy { RoomHandoverRepository(database.handoverDao()) }
+    val handoverRepository: HandoverRepository by lazy {
+        if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomHandoverRepository(database.handoverDao())
+        else OfflineFirstHandoverRepository(
+            RoomHandoverRepository(database.handoverDao()),
+            RemoteHandoverRepository(database.handoverDao(), apiService),
+            database.syncQueueDao()
+        ) { syncScheduler.requestSync() }
+    }
     val paymentRepository: PaymentRepository by lazy { RoomPaymentRepository(database.paymentDao(), database.syncQueueDao()) { syncScheduler.requestSync() } }
     val earningsRepository: EarningsRepository get() = paymentRepository
     val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository by lazy { RoomDisputeRepository(database.disputeDao()) }
@@ -108,6 +122,7 @@ class AppContainer(context: Context) {
     val collectorProfileRepository: CollectorProfileRepository by lazy { RoomCollectorProfileRepository(database.collectorProfileDao()) }
 
     fun hasValidSession(): Boolean = sessionRepository.isSessionValid()
+    fun hasRestorableSession(): Boolean = hasValidSession() || !secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()
 

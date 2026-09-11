@@ -8,13 +8,14 @@ plugins {
 
 android {
     namespace = "com.irinteractivestudios.kabadiwalaconnect"
-    val configuredApiBaseUrl = providers.gradleProperty("apiBaseUrl")
+    val testingApiBaseUrl = providers.gradleProperty("testingApiBaseUrl")
         .orElse("http://140.245.232.208:4000/api/v1/")
         .get()
         .let { if (it.endsWith('/')) it else "$it/" }
-    val configuredUpdateManifestUrl = providers.gradleProperty("updateManifestUrl")
-        .orElse("${configuredApiBaseUrl.removeSuffix("api/v1/")}app/update.json")
+    val productionApiBaseUrl = providers.gradleProperty("productionApiBaseUrl")
+        .orElse("https://api.invalid/api/v1/")
         .get()
+        .let { if (it.endsWith('/')) it else "$it/" }
     // compileSdk 37: required by androidx.lifecycle 2.11.0. Kept in step
     // with the newest installed SDK platform; minSdk stays low for
     // entry-level devices (see defaultConfig below).
@@ -26,18 +27,28 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 16
-        versionName = "0.0.15-beta"
-        buildConfigField("String", "API_BASE_URL", "\"$configuredApiBaseUrl\"")
-        buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"$configuredUpdateManifestUrl\"")
-        // The current VPS is HTTP-only for testing. Release deployments should use HTTPS.
-        manifestPlaceholders["apiUsesCleartext"] = configuredApiBaseUrl.startsWith("http://").toString()
-
+        versionCode = 17
+        versionName = "0.0.16-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"$testingApiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"TESTING\"")
+            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${testingApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
+            // Cleartext is limited to the debug/testing variant. Move this host
+            // behind TLS before supplying it to a production build.
+            manifestPlaceholders["apiUsesCleartext"] = testingApiBaseUrl.startsWith("http://").toString()
+        }
         release {
+            require(productionApiBaseUrl.startsWith("https://")) {
+                "Production API URL must use HTTPS"
+            }
+            buildConfigField("String", "API_BASE_URL", "\"$productionApiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"PRODUCTION\"")
+            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${productionApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
+            manifestPlaceholders["apiUsesCleartext"] = "false"
             optimization {
                 enable = false
             }
@@ -104,6 +115,7 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp)
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") { isTransitive = false }
 
     // Coroutines.
     implementation(libs.kotlinx.coroutines.core)

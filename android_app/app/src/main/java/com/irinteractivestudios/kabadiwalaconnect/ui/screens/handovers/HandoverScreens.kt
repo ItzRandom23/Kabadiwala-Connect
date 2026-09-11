@@ -60,8 +60,10 @@ fun HandoverDocumentScreen(
     onMark: () -> Unit
 ) {
     val context = LocalContext.current
-    val shareText = stringResource(R.string.handover_share_text, handover.id, handover.materialLabel, handover.quotedPriceRupees)
-    val qr = remember(handover.id) { createQr(handover.id) }
+    val publicReference = handover.referenceId ?: handover.id
+    val shareText = stringResource(R.string.handover_share_text, publicReference, handover.materialLabel, handover.quotedPriceRupees)
+    val qrValue = handover.qrCodeData ?: handover.id
+    val qr = remember(qrValue) { createQr(qrValue) }
     var actualWeightText by remember(handover.id, handover.actualWeightKg) { mutableStateOf(handover.actualWeightKg?.toString() ?: handover.weightKg.toString()) }
     var materialConfirmed by remember(handover.id, handover.materialConfirmed) { mutableStateOf(handover.materialConfirmed) }
     val actualWeight = actualWeightText.toDoubleOrNull()
@@ -73,7 +75,7 @@ fun HandoverDocumentScreen(
         item { Text(stringResource(R.string.handover_document_title), style = MaterialTheme.typography.headlineMedium) }
         item { photoPath?.let { path -> android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap()?.let { Image(it, stringResource(R.string.handover_photo), Modifier.fillMaxWidth().height(180.dp)) } } }
         item { DealSheetCard(dealLot, dealQuote, referencePrice, handover.actualWeightKg, handover.actualWeightKg?.let { dealQuote.pricePerKg * it }) }
-        item { EvidenceSection(title = handover.id, status = stringResource(if (handover.status == HandoverStatus.HANDED_OVER) R.string.handover_status_done else R.string.handover_status_saved)) { Text("₹%.0f".format(handover.quotedPriceRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold); ProofRow(stringResource(R.string.handover_material), handover.materialLabel); ProofRow(stringResource(R.string.handover_weight), "%.1f kg".format(handover.weightKg)); ProofRow(stringResource(R.string.handover_collection), handover.collectionLocation); ProofRow(stringResource(R.string.handover_handover_location), handover.handoverLocation); ProofRow(stringResource(R.string.handover_date), DateFormat.getDateTimeInstance().format(Date(handover.timestampEpochMs))); ProofRow(stringResource(R.string.handover_recycler), handover.recyclerName); ProofRow(stringResource(R.string.handover_collector_id), handover.collectorId) } }
+        item { EvidenceSection(title = publicReference, status = stringResource(if (handover.status == HandoverStatus.HANDED_OVER) R.string.handover_status_done else R.string.handover_status_saved)) { Text("₹%.0f".format(handover.quotedPriceRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold); ProofRow(stringResource(R.string.handover_material), handover.materialLabel); ProofRow(stringResource(R.string.handover_weight), "%.1f kg".format(handover.weightKg)); ProofRow(stringResource(R.string.handover_collection), handover.collectionLocation); ProofRow(stringResource(R.string.handover_handover_location), handover.handoverLocation); ProofRow(stringResource(R.string.handover_date), DateFormat.getDateTimeInstance().format(Date(handover.timestampEpochMs))); ProofRow(stringResource(R.string.handover_recycler), handover.recyclerName); ProofRow(stringResource(R.string.handover_collector_id), handover.collectorId) } }
         item {
             EvidenceSection(title = stringResource(R.string.handover_scale_proof_title), status = if (evidenceReady) stringResource(R.string.handover_proof_saved) else null) {
                     Text(stringResource(R.string.handover_scale_proof_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -93,7 +95,7 @@ fun HandoverDocumentScreen(
         item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }, null)) }) { Text(stringResource(R.string.handover_share)) }; OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_SENDTO).apply { data = android.net.Uri.parse("smsto:"); putExtra("sms_body", shareText) }) }) { Text(stringResource(R.string.handover_sms)) } } }
         item { OutlinedButton(onClick = onOpenDispute, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_report_problem)) } }
         if (handover.status == HandoverStatus.HANDED_OVER) item { OutlinedButton(onClick = onRate, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_rate_recycler)) } }
-        item { Button(onClick = onMark, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = handover.status != HandoverStatus.HANDED_OVER) { Text(stringResource(R.string.handover_mark_done)) } }
+        item { Button(onClick = onMark, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = handover.status != HandoverStatus.HANDED_OVER && !handover.collectorConfirmed) { Text(stringResource(if (handover.collectorConfirmed) R.string.handover_collector_confirmed else R.string.handover_mark_done)) } }
     }
 }
 

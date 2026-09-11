@@ -1,6 +1,6 @@
 {
-  "versionCode": 16,
-  "versionName": "0.0.15-beta",
-  "apkUrl": "kabadiwala-connect-0.0.15-beta.apk",
-  "releaseNotes": "Refined the collector dashboard and navigation, improved light and dark surface hierarchy, and optimized recycler discovery."
+  "versionCode": 17,
+  "versionName": "0.0.16-beta",
+  "apkUrl": "kabadiwala-connect-0.0.16-beta.apk",
+  "releaseNotes": "Connected the complete three-role testing flow, added signed handover QR verification and camera scanning, strengthened offline synchronization and session security, and improved recycler matching and collector communication."
 }

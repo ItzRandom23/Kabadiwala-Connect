@@ -23,6 +23,9 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsSc
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.HouseholdDealScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.HouseholdHomeScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.NearbyKabadiwalasScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices.PricesScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices.PricesViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers.RecyclersScreen
@@ -95,7 +98,7 @@ fun AppNavHost(
 ) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
-    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE)
+    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL)
     LaunchedEffect(currentRoute, role) {
         val collectorRoute = currentRoute in collectorRoutes || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
         val recyclerRoute = currentRoute in recyclerRoutes
@@ -154,7 +157,12 @@ fun AppNavHost(
         composable(Destinations.HOME) {
             val vm: HomeViewModel = viewModel(factory = factory)
             val state by vm.uiState.collectAsStateWithLifecycle()
-            HomeScreen(
+            if (role == AccountRole.HOUSEHOLD) HouseholdHomeScreen(
+                area = factory.currentAccount?.areaName ?: "Kothrud, Pune",
+                onCreateLot = { navController.navigate(Destinations.CREATE_LOT) },
+                onFindKabadiwala = { navController.navigate(Destinations.RECYCLERS) },
+                onOpenDeal = { navController.navigate(if (demoMode) Destinations.householdDeal("kb-01") else Destinations.CHAT) }
+            ) else HomeScreen(
                 state = state,
                 demoMode = demoMode,
                 household = role == AccountRole.HOUSEHOLD,
@@ -178,7 +186,21 @@ fun AppNavHost(
         composable(Destinations.RECYCLERS) {
             val vm: RecyclersViewModel = viewModel(factory = factory)
             val state by vm.uiState.collectAsStateWithLifecycle()
-            RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
+            if (role == AccountRole.HOUSEHOLD && demoMode) NearbyKabadiwalasScreen(
+                area = factory.currentAccount?.areaName ?: "Kothrud, Pune",
+                onInvite = { navController.navigate(Destinations.householdDeal(it)) }
+            ) else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
+        }
+        composable(Destinations.HOUSEHOLD_DEAL, arguments = listOf(navArgument("kabadiwalaId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("kabadiwalaId").orEmpty()
+            if (demoMode) HouseholdDealScreen(
+                kabadiwalaId = id,
+                onFindAnother = {
+                    if (!navController.popBackStack(Destinations.RECYCLERS, false)) navController.navigate(Destinations.RECYCLERS)
+                }
+            ) else LaunchedEffect(Unit) {
+                navController.navigate(Destinations.CHAT) { popUpTo(Destinations.HOUSEHOLD_DEAL) { inclusive = true } }
+            }
         }
         composable(Destinations.RECYCLER_DETAIL, arguments = listOf(navArgument("recyclerId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("recyclerId").orEmpty()
@@ -198,7 +220,14 @@ fun AppNavHost(
             val lot by factory.lotWriter.observeLot(lotId).collectAsStateWithLifecycle(initialValue = null)
             val prices by factory.priceCatalog.observePrices().collectAsStateWithLifecycle(initialValue = emptyList())
             val scope = rememberCoroutineScope()
-            QuoteComparisonScreen(quotes, lot, prices.firstOrNull { it.materialLabel == lot?.materialLabel }, factory.quoteRepository, onAccepted = { quoteId, id -> scope.launch { factory.quoteRepository.accept(quoteId); factory.lotWriter.confirm(id, System.currentTimeMillis()); navController.navigate(Destinations.handoverCreate(id, quoteId)) } })
+            QuoteComparisonScreen(quotes, lot, prices.firstOrNull { it.materialLabel == lot?.materialLabel }, factory.quoteRepository, onAccepted = { quoteId, id -> scope.launch {
+                if (factory.quoteRepository.accept(quoteId)) {
+                    factory.lotWriter.confirm(id, System.currentTimeMillis())
+                    val quote = quotes.firstOrNull { it.id == quoteId }
+                    val conversation = runCatching { factory.apiService.createConversation(com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateConversationRequestDto(id, quoteId, recyclerId = quote?.recyclerId)).requireData() }.getOrNull()
+                    navController.navigate(conversation?.id?.let(Destinations::chatDetail) ?: Destinations.CHAT)
+                }
+            } })
         }
         composable(Destinations.HANDOVER_CREATE, arguments = listOf(navArgument("lotId") { type = NavType.StringType }, navArgument("quoteId") { type = NavType.StringType })) { entry ->
             val lotId = entry.arguments?.getString("lotId").orEmpty(); val quoteId = entry.arguments?.getString("quoteId").orEmpty()
@@ -255,12 +284,24 @@ fun AppNavHost(
                         factory.disputeRepository.save(local)
                         runCatching {
                             val body = JsonObject().apply {
+                                addProperty("clientDisputeId", localId)
                                 addProperty("type", type.name)
                                 addProperty("description", description)
                                 addProperty("claimedWeight", item.weightKg)
                                 item.actualWeightKg?.let { addProperty("actualValue", it) }
                             }
-                            factory.apiService.disputeHandover(id, body).body()?.data?.id?.let { remoteId -> factory.disputeRepository.markSynced(localId, remoteId) }
+                            factory.apiService.disputeHandover(id, body).requireData().id.let { remoteId -> factory.disputeRepository.markSynced(localId, remoteId) }
+                        }.onFailure {
+                            val payload = JsonObject().apply {
+                                addProperty("id", localId)
+                                addProperty("handoverId", id)
+                                addProperty("type", type.name)
+                                addProperty("description", description)
+                                addProperty("claimedWeight", item.weightKg)
+                                item.actualWeightKg?.let { addProperty("actualValue", it) }
+                            }
+                            factory.syncQueue.enqueue(com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity(operation = "CREATE_DISPUTE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+                            factory.requestSync()
                         }
                         navController.popBackStack()
                     }
@@ -348,7 +389,10 @@ fun AppNavHost(
                     onRetryMessage = { vm.retryMessage(id, it) },
                     draftSuggestion = state.drafts[id],
                     drafting = state.draftingConversationId == id,
-                    onDraftReply = { vm.draftReply(id) }
+                    onDraftReply = { vm.draftReply(id) },
+                    onProceedToHandover = conversation.quoteId?.let { quoteId ->
+                        { navController.navigate(Destinations.handoverCreate(conversation.lotId, quoteId)) }
+                    }
                 )
             }
         }
@@ -378,6 +422,10 @@ fun AppNavHost(
         composable(Destinations.RECYCLER_PICKUPS) { RecyclerPickupsScreen(demoMode = demoMode) }
         composable(Destinations.RECYCLER_RATES) { RecyclerRatesScreen() }
         composable(Destinations.RECYCLER_PROFILE) { RecyclerProfileScreen(factory.currentAccount, onLogout = onLogout) }
-        composable(Destinations.RECYCLER_SCAN) { RecyclerScanScreen() }
+        composable(Destinations.RECYCLER_SCAN) {
+            val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset)
+        }
     }
 }

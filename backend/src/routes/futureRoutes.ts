@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import multer from 'multer';
 import type { AccountRole as AccountRoleType, PrismaClient } from '@prisma/client';
 import prismaPackage from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { JwtService } from '../services/jwt.js';
 import { requireAccount } from '../middleware/auth.js';
@@ -235,7 +235,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
 
   router.post('/lots/description-suggestion', async (req, res) => {
     const collectorId = requireRole(req, 'COLLECTOR');
-    const parsed = z.object({ lotId: z.string().optional(), material: z.string().max(100).optional(), condition: z.string().max(50).optional(), weight: z.number().finite().nonnegative().optional(), notes: z.string().max(500).optional(), language: z.string().max(12).optional() }).safeParse(req.body);
+    const parsed = z.object({ lotId: z.string().optional(), material: z.string().max(100).optional(), condition: z.string().max(50).optional(), weight: z.number().finite().nonnegative().optional(), notes: z.string().max(500).optional(), language: z.string().max(12).optional(), consentForTraining: z.boolean().default(false) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Description details are invalid', 422);
     if (parsed.data.lotId) {
       const ownedLot = await db.lot.findFirst({ where: { id: parsed.data.lotId, collectorId }, select: { id: true } });
@@ -243,6 +243,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     }
     const suggestion = await maybeAiDescription(parsed.data);
     if (parsed.data.lotId) await db.lotDescription.create({ data: { lotId: parsed.data.lotId, text: suggestion.text, source: suggestion.source, model: suggestion.model } });
+    await db.aiInference.create({ data: { lotId: parsed.data.lotId, feature: 'LOT_DESCRIPTION', modelProvider: suggestion.source === DescriptionSource.AI ? (process.env.AI_DESCRIPTION_URL ? 'CUSTOM' : 'GOOGLE_GEMINI') : 'TEMPLATE', modelVersion: suggestion.model ?? 'deterministic-template-v1', inputProvenance: { material: parsed.data.material, condition: parsed.data.condition, hasWeight: parsed.data.weight !== undefined, hasNotes: Boolean(parsed.data.notes), language: parsed.data.language }, prediction: { text: suggestion.text, source: suggestion.source }, consentForTraining: parsed.data.consentForTraining } });
     return res.json({ success: true, data: suggestion, message: suggestion.source === DescriptionSource.AI ? 'Description suggestion generated' : 'Offline description suggestion generated' });
   });
 
@@ -268,6 +269,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const alternatives = Array.isArray(parsed?.alternatives) ? parsed.alternatives.filter((item): item is string => typeof item === 'string' && materialCategories.includes(item as typeof materialCategories[number])).slice(0, 2) : [];
     const rationale = typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
     const data = result ? { materialCategory: category, confidence, alternatives, rationale, source: 'AI', model: result.model } : fallback;
+    await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: result ? 'GOOGLE_GEMINI' : 'TEMPLATE', modelVersion: result?.model ?? 'manual-fallback-v1', inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
     return res.json({ success: true, data, message: result ? 'Material suggestion generated' : 'Material suggestion unavailable; choose manually' });
   });
 

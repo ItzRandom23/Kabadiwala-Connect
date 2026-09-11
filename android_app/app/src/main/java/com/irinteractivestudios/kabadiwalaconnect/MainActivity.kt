@@ -8,8 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -74,12 +79,15 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = !initialDark
         }
         val app = application as KabadiwalaApp
+        // Local-only QA entry point. Release builds ignore the extra, while
+        // designers can open the household journey without creating test accounts.
+        val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
         // The collector id can be created by the remote OTP response during
         // this activity session, so ViewModels read it when they are created.
         val factory = KcViewModelFactory(app, app.container)
         setContent {
             var appearanceMode by remember { mutableStateOf(AppearanceManager.load(this@MainActivity)) }
-            var activeRole by remember { mutableStateOf(app.container.currentAccount()?.role ?: AccountRole.COLLECTOR) }
+            var activeRole by remember { mutableStateOf(if (householdPreview) AccountRole.HOUSEHOLD else app.container.currentAccount()?.role ?: AccountRole.COLLECTOR) }
             KabadiwalaConnectTheme(
                 darkTheme = AppearanceManager.isDark(appearanceMode),
                 role = activeRole
@@ -89,12 +97,12 @@ class MainActivity : ComponentActivity() {
                 // Demo mode has no persisted account/session. Keep only this
                 // short-lived flag across activity recreation so a language
                 // change does not send the demo user back to AUTH.
-                var demoMode by rememberSaveable { mutableStateOf(false) }
+                var demoMode by rememberSaveable { mutableStateOf(householdPreview) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
                 val cachedAccount = app.container.currentAccount()
-                val initialRoute = if (demoMode) Destinations.HOME else if (!app.container.hasValidSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (demoMode) Destinations.HOME else if (!app.container.hasRestorableSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole)
@@ -125,9 +133,9 @@ class MainActivity : ComponentActivity() {
                 val connection by app.container.connectivityObserver.state
                     .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
                 LaunchedEffect(connection) {
-                    if (connection == ConnectionState.ONLINE && app.container.hasValidSession()) {
+                    if (connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
                         app.container.refreshAccount()
-                        app.container.refreshCatalogs()
+                        if (app.container.hasValidSession()) app.container.refreshCatalogs()
                     }
                 }
                 LaunchedEffect(languageSelected) {
@@ -160,6 +168,7 @@ class MainActivity : ComponentActivity() {
                     Destinations.RECYCLER_RATES -> stringResource(R.string.recycler_rates_title)
                     Destinations.RECYCLER_PROFILE -> stringResource(R.string.recycler_profile_title)
                     Destinations.RECYCLER_VERIFY -> stringResource(R.string.recycler_verification_title)
+                    Destinations.HOUSEHOLD_DEAL -> stringResource(R.string.future_transaction_chat)
                     Destinations.REWARDS -> stringResource(R.string.settings_rewards)
                     Destinations.SCHEMES -> stringResource(R.string.settings_schemes)
                     Destinations.ACTIVITIES -> stringResource(R.string.settings_diy)
@@ -222,6 +231,16 @@ class MainActivity : ComponentActivity() {
                                 .padding(innerPadding)
                         ) {
                             OfflineBanner(state = connection)
+                            if (BuildConfig.APP_ENVIRONMENT == "TESTING") {
+                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = stringResource(R.string.testing_mode_banner),
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                            }
                             AppNavHost(
                                 navController = navController,
                                 factory = factory,

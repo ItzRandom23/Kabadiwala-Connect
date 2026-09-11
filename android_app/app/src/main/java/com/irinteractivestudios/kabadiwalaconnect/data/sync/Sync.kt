@@ -19,6 +19,21 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import kotlinx.coroutines.flow.first
 import java.io.IOException
 import java.io.File
+import com.google.gson.JsonObject
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateHandoverRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.QuoteStatus
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /** Uploads supported offline operations in small, idempotent batches. */
 class SyncWorker(
@@ -35,8 +50,19 @@ class SyncWorker(
         val pending = queue.observeAll().first().take(BATCH_SIZE)
         if (pending.isEmpty()) return Result.success()
 
-        val operations = pending.mapNotNull { item -> item.toOperationOrNull() }
-        pending.filter { it.toOperationOrNull() == null }.forEach { queue.remove(it.uid) }
+        // Operations with dedicated idempotent API contracts are replayed
+        // before the legacy batch. They retain their queue row on any
+        // uncertain response so WorkManager can safely retry them.
+        for (item in pending.filterNot { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }) {
+            when (processExtended(app, item)) {
+                QueueResult.APPLIED -> queue.remove(item.uid)
+                QueueResult.RETRY -> { queue.incrementAttempts(item.uid); return Result.retry() }
+                QueueResult.REJECTED -> { queue.incrementAttempts(item.uid); return Result.failure() }
+            }
+        }
+
+        val batchPending = pending.filter { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }
+        val operations = batchPending.mapNotNull { item -> item.toOperationOrNull() }
         if (operations.isEmpty()) return Result.success()
 
         return try {
@@ -46,7 +72,7 @@ class SyncWorker(
             }
             val results = response.body()?.data?.results ?: return Result.retry()
             val resultByOperation = results.associateBy { it.operationId }
-            pending.forEach { item ->
+            batchPending.forEach { item ->
                 val operation = item.toOperationOrNull() ?: return@forEach
                 val result = resultByOperation[operation.operationId] ?: return@forEach
                 if (result.status in TERMINAL_STATUSES) {
@@ -75,6 +101,81 @@ class SyncWorker(
             Result.failure()
         }
     }
+
+    private suspend fun processExtended(app: KabadiwalaApp, item: SyncQueueItemEntity): QueueResult {
+        val payload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull() ?: return QueueResult.REJECTED
+        return try {
+            when (item.operation) {
+                "REQUEST_QUOTE" -> {
+                    app.container.apiService.requestQuote(QuoteRequestDto(payload.string("lotId"), payload.string("recyclerId"))).requireData()
+                    app.container.database.quoteDao().delete(payload.string("id"))
+                }
+                "ACCEPT_QUOTE" -> {
+                    val quote = app.container.apiService.acceptQuote(payload.string("id")).requireData()
+                    app.container.database.quoteDao().updateStatus(quote.id, QuoteStatus.ACCEPTED.name)
+                }
+                "REJECT_QUOTE" -> {
+                    val quote = app.container.apiService.rejectQuote(payload.string("id")).requireData()
+                    app.container.database.quoteDao().updateStatus(quote.id, QuoteStatus.REJECTED.name)
+                }
+                "CREATE_HANDOVER" -> {
+                    val id = payload.string("id")
+                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val dto = app.container.apiService.createHandover(CreateHandoverRequestDto(
+                        lotId = payload.string("lotId"), quoteId = payload.string("quoteId"), clientHandoverId = id,
+                        handoverLocation = HandoverLocationDto(payload.string("locationType"), address = payload.string("location")),
+                        timestamp = payload.long("timestampEpochMs").toIsoTimestamp()
+                    )).requireData()
+                    app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
+                }
+                "MARK_HANDOVER" -> {
+                    val id = payload.string("id")
+                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val dto = app.container.apiService.markHandover(id).requireData()
+                    app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
+                }
+                "UPDATE_HANDOVER_EVIDENCE" -> {
+                    val id = payload.string("id")
+                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val dto = app.container.apiService.updateHandoverEvidence(id, HandoverEvidenceRequestDto(payload.double("actualWeight"), payload.boolean("materialMatch"), collectorConfirmed = payload.boolean("collectorConfirmed"))).requireData()
+                    app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
+                }
+                "SEND_CHAT_MESSAGE" -> {
+                    val clientId = payload.string("clientMessageId")
+                    val message = app.container.apiService.sendMessage(payload.string("conversationId"), SendMessageRequestDto(clientId, payload.string("body"))).requireData()
+                    FutureCacheStore(app.container.database.futureCacheDao()).apply { deleteMessage("local-$clientId"); saveMessages(listOf(message)) }
+                }
+                "CREATE_DISPUTE" -> {
+                    val localId = payload.string("id")
+                    val handoverId = payload.string("handoverId")
+                    val body = payload.deepCopy().apply { addProperty("clientDisputeId", localId); remove("id"); remove("handoverId") }
+                    val dispute = app.container.apiService.disputeHandover(handoverId, body).requireData()
+                    app.container.database.disputeDao().markSynced(localId, dispute.id)
+                }
+                else -> return QueueResult.REJECTED
+            }
+            QueueResult.APPLIED
+        } catch (error: com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException) {
+            if (error.httpCode == 409 && alreadyApplied(app, item, payload)) QueueResult.APPLIED
+            else if (error.httpCode == 408 || error.httpCode == 429 || (error.httpCode ?: 0) >= 500) QueueResult.RETRY else QueueResult.REJECTED
+        } catch (_: IOException) {
+            QueueResult.RETRY
+        } catch (_: Exception) {
+            QueueResult.REJECTED
+        }
+    }
+
+    private suspend fun alreadyApplied(app: KabadiwalaApp, item: SyncQueueItemEntity, payload: JsonObject): Boolean = runCatching {
+        when (item.operation) {
+            "ACCEPT_QUOTE" -> app.container.apiService.getQuote(payload.string("id")).requireData().status == "ACCEPTED"
+            "REJECT_QUOTE" -> app.container.apiService.getQuote(payload.string("id")).requireData().status == "REJECTED"
+            "MARK_HANDOVER" -> app.container.apiService.getHandover(payload.string("id")).requireData().collectorConfirmedAt != null
+            "UPDATE_HANDOVER_EVIDENCE" -> app.container.apiService.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
+            else -> false
+        }
+    }.getOrDefault(false)
+
+    private enum class QueueResult { APPLIED, RETRY, REJECTED }
 
     private suspend fun uploadLotPhotoIfPresent(app: KabadiwalaApp, operation: SyncOperationDto): PhotoUploadResult {
         if (operation.entityType != "LOT") return PhotoUploadResult.NOT_NEEDED
@@ -113,6 +214,12 @@ class SyncWorker(
         private val TERMINAL_STATUSES = setOf("APPLIED", "ALREADY_APPLIED", "CONFLICT", "REJECTED", "INVALID")
     }
 }
+
+private fun JsonObject.string(name: String): String = get(name)?.asString ?: error("Missing $name")
+private fun JsonObject.long(name: String): Long = get(name)?.asLong ?: error("Missing $name")
+private fun JsonObject.double(name: String): Double = get(name)?.asDouble ?: error("Missing $name")
+private fun JsonObject.boolean(name: String): Boolean = get(name)?.asBoolean ?: error("Missing $name")
+private fun Long.toIsoTimestamp(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(this))
 
 class SyncScheduler(private val context: Context) {
 

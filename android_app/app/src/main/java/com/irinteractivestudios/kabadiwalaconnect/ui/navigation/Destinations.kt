@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.PriceChange
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
@@ -60,6 +61,8 @@ object Destinations {
     const val ACTIVITIES = "settings/activities"
     const val CHAT = "messages"
     const val CHAT_DETAIL = "messages/{conversationId}"
+    const val HOUSEHOLD_DEAL = "household/deal/{kabadiwalaId}"
+    fun householdDeal(id: String) = "household/deal/$id"
     const val DISPUTE_ANALYTICS = "disputes/analytics"
     fun chatDetail(id: String) = "messages/$id"
 
@@ -93,7 +96,7 @@ val BOTTOM_TABS = listOf(
 val HOUSEHOLD_BOTTOM_TABS = listOf(
     BottomTab(Destinations.HOME, R.string.nav_home, Icons.Filled.Home, "nav_home"),
     BottomTab(Destinations.PRICES, R.string.nav_prices, Icons.Filled.CurrencyRupee, "nav_prices"),
-    BottomTab(Destinations.RECYCLERS, R.string.nav_recyclers, Icons.Filled.Recycling, "nav_recyclers"),
+    BottomTab(Destinations.RECYCLERS, R.string.recycler_nearby, Icons.Filled.Store, "nav_recyclers"),
     BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
 )
 

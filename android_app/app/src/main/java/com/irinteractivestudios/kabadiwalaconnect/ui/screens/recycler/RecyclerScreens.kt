@@ -1,5 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,8 @@ import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
@@ -249,17 +254,52 @@ private fun LiveOrderCard(handover: HandoverDto, onScan: () -> Unit) {
 }
 
 @Composable
-fun RecyclerScanScreen() {
+fun RecyclerScanScreen(
+    state: RecyclerScanState,
+    onVerify: (String) -> Unit,
+    onConfirm: (Double, Boolean, String?) -> Unit,
+    onReset: () -> Unit
+) {
     var reference by remember { mutableStateOf("") }
-    var captured by remember { mutableStateOf(false) }
+    var actualWeight by remember(state.verified?.handoverId) { mutableStateOf(state.verified?.actualWeight?.toString() ?: state.verified?.declaredWeight?.toString().orEmpty()) }
+    var materialMatch by remember(state.verified?.handoverId) { mutableStateOf(true) }
+    var notes by remember(state.verified?.handoverId) { mutableStateOf("") }
+    val scannerPrompt = stringResource(R.string.recycler_scan_title)
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.takeIf(String::isNotBlank)?.let { value ->
+            reference = value
+            onVerify(value)
+        }
+    }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(Icons.Filled.QrCodeScanner, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
-        Text("Scan handover QR", style = MaterialTheme.typography.headlineLarge)
-        Text("The QR contains only a server-side handover reference. Enter it if the camera is unavailable.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(reference, { reference = it }, label = { Text("Handover reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        if (captured) Text(stringResource(R.string.recycler_reference_captured), color = KcAmberSecondary, style = MaterialTheme.typography.bodyLarge)
-        Button(onClick = { captured = reference.isNotBlank() }, enabled = reference.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Validate handover reference") }
-        TextButton(onClick = { reference = "" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Clear") }
+        Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.recycler_scan_explanation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(
+            onClick = { scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false).setPrompt(scannerPrompt)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+        ) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_scan_camera)) }
+        OutlinedTextField(reference, { reference = it }, label = { Text(stringResource(R.string.recycler_scan_reference)) }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { onVerify(reference) }, enabled = reference.isNotBlank() && !state.checking, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            if (state.checking) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.recycler_scan_validate))
+        }
+        if (state.error) Text(stringResource(R.string.recycler_scan_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+        state.verified?.let { verified ->
+            OperationalSurface {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcSuccess); Text(stringResource(R.string.recycler_scan_verified), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
+                    Text(stringResource(R.string.recycler_order_reference, verified.referenceId), fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.recycler_scan_material, verified.materialCategory.replace('_', ' ')))
+                    Text(stringResource(R.string.recycler_order_weight, verified.declaredWeight))
+                    OutlinedTextField(actualWeight, { actualWeight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.handover_final_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
+                    OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 } == true && !state.confirming && !state.confirmed, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(if (state.confirmed) R.string.recycler_scan_confirmed else R.string.recycler_scan_confirm)) }
+                }
+            }
+        }
+        TextButton(onClick = { reference = ""; onReset() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_scan_clear)) }
     }
 }
 

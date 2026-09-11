@@ -9,6 +9,7 @@ import { handoverController } from '../controllers/handoverController.js';
 export const handoverRoutes = (j: JwtService, c: CollectorRepository, s: HandoverService, db?: PrismaClient) => {
   const x = handoverController(s);
   return Router()
+    .post('/verify/handover', x.verifyPublic)
     .post('/handovers', requireAuth(j, c), x.create)
     .get('/handovers/reference/:referenceId', requireAuth(j, c), x.getReference)
     .get('/handovers/:handoverId', requireAuth(j, c), x.get)

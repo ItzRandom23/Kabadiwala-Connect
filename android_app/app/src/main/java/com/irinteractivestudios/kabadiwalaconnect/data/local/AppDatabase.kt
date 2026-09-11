@@ -21,7 +21,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,7 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     .build().also { instance = it }
             }
 
@@ -119,6 +119,13 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE collector_profile ADD COLUMN latitude REAL")
                 db.execSQL("ALTER TABLE collector_profile ADD COLUMN longitude REAL")
+            }
+        }
+        val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE handovers ADD COLUMN qrCodeData TEXT")
+                db.execSQL("ALTER TABLE handovers ADD COLUMN referenceId TEXT")
+                db.execSQL("ALTER TABLE handovers ADD COLUMN expiresAtEpochMs INTEGER")
             }
         }
 

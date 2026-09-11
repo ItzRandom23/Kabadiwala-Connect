@@ -10,6 +10,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.LocationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.OtpRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifyOtpRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RefreshTokenRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
@@ -19,6 +20,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import java.io.IOException
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import kotlinx.coroutines.launch
 
 /** Real collector authentication against the versioned backend API. */
 class RemoteAuthenticationRepository(
@@ -71,7 +73,7 @@ class RemoteAuthenticationRepository(
                 )
             ).requireData()
             val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(auth.token, expiry)
+            session.save(auth.token, expiry, auth.refreshToken)
             val profile = auth.user?.toDomain() ?: auth.collector?.let { collector ->
                 AccountProfile(
                     id = collector.id,
@@ -130,7 +132,7 @@ class RemoteAuthenticationRepository(
             val auth = if (request.isReturning) api.login(body) else api.signup(body)
             val result = auth.requireData()
             val expiry = jwtExpiry(result.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(result.token, expiry)
+            session.save(result.token, expiry, result.refreshToken)
             val profile = result.user.toDomain()
             storage?.saveAccount(profile)
             EmailAuthentication.Success(result.token, expiry, profile)
@@ -144,15 +146,32 @@ class RemoteAuthenticationRepository(
         }
     }
 
+    override suspend fun refreshAccessToken(): String? = runCatching {
+        val refreshToken = storage?.get(SecureStorage.REFRESH_TOKEN) ?: return@runCatching null
+        val refreshed = api.refreshSession(RefreshTokenRequestDto(refreshToken)).requireData()
+        val expiry = jwtExpiry(refreshed.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
+        session.save(refreshed.token, expiry, refreshed.refreshToken)
+        refreshed.token
+    }.getOrElse {
+        // A rejected rotating token is not recoverable. Clear it so repeated
+        // requests cannot create a refresh loop with stale credentials.
+        if (it is RemoteApiException && it.httpCode == 401) session.clear()
+        null
+    }
+
     override suspend fun refreshAccount(): AccountProfile? = runCatching {
+        if (!session.isSessionValid() && refreshAccessToken() == null) return@runCatching null
         api.getAccountProfile().requireData().toDomain().also { storage?.saveAccount(it) }
     }.getOrNull()
 
     override fun isSessionValid() = session.isSessionValid()
 
     override fun logout() {
-        // Logout is stateless on the backend; clearing the bearer token is the
-        // security boundary and works even when the phone is offline.
+        storage?.get(SecureStorage.REFRESH_TOKEN)?.let { refreshToken ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { api.logout(RefreshTokenRequestDto(refreshToken)) }
+            }
+        }
         session.clear()
     }
 

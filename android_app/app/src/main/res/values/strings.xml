@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="app_name">Kabadiwala Connect</string>
 
     <!-- Bottom navigation -->
@@ -44,7 +44,7 @@
     <string name="home_title">Namaste!</string>
     <string name="home_subtitle">Your collection work starts here.</string>
     <string name="home_household_title">Your scrap dashboard</string>
-    <string name="home_household_subtitle">Sell household scrap to verified recyclers near you.</string>
+    <string name="home_household_subtitle">Sell household scrap to trusted kabadiwalas near you.</string>
     <string name="home_household_action_title">Sell scrap from home</string>
     <string name="home_household_action_detail">Add what you want to sell, check the current price, and connect with a verified recycler.</string>
     <string name="home_household_create_lot">Start a sale</string>
@@ -121,8 +121,8 @@
     <string name="lot_estimated_value">Market midpoint: ₹%1$.0f</string>
     <string name="lot_price_range">Expected price range: ₹%1$.0f–₹%2$.0f</string>
     <string name="lot_estimate_basis">Based on local price × weight × condition. Quality adjustment: 1.0.</string>
-    <string name="lot_estimate_disclaimer">Estimate only. Final value depends on recycler inspection.</string>
-    <string name="lot_estimate_warning">Warning: the actual final price may vary from this estimate after inspection and negotiation.</string>
+    <string name="lot_estimate_disclaimer">Estimate only. Your final price is confirmed after a kabadiwala accepts and inspects the scrap.</string>
+    <string name="lot_estimate_warning">This is a market estimate, not a promise. You can agree the final price in chat after a kabadiwala accepts.</string>
     <string name="lot_user_price_label">Quote your own price (optional)</string>
     <string name="lot_user_price_detail">Tell recyclers the price you expect for this lot.</string>
     <string name="lot_user_price_error">Enter a valid amount greater than ₹0.</string>
@@ -451,4 +451,62 @@
     <string name="future_chat_draft">Draft with Gemini</string>
     <string name="future_chat_drafting">Drafting…</string>
     <string name="future_chat_draft_note">Review the draft before sending.</string>
+    <string name="future_confirm_handover">Price agreed — continue to handover</string>
+    <string name="household_home_title">Turn clutter into value.</string>
+    <string name="household_home_subtitle">A local kabadiwala collects from your doorstep. You stay in control of the final price.</string>
+    <string name="household_new_pickup">NEW PICKUP</string>
+    <string name="household_sell_title">Show us what you want to sell</string>
+    <string name="household_sell_detail">Add a photo, weight and area. We’ll show an estimated range before you contact anyone.</string>
+    <string name="household_create_lot">Create scrap lot</string>
+    <string name="household_how_sale_works">How a sale works</string>
+    <string name="household_clear_steps">Clear at every step</string>
+    <string name="household_nearby_now">Nearby right now</string>
+    <string name="household_trusted_count">%1$d trusted kabadiwalas</string>
+    <string name="household_preview_pickup">Preview an accepted pickup</string>
+    <string name="household_preview_detail">See how price confirmation and private chat work.</string>
+    <string name="household_nearby_title">Kabadiwalas near you</string>
+    <string name="household_nearby_detail">Ranked by distance. Compare trust and pickup time before sharing your lot.</string>
+    <string name="household_closest_filter">Closest first · within 5 km</string>
+    <string name="household_pickup_request">Pickup request</string>
+    <string name="household_private_chat">Private deal chat</string>
+    <string name="household_find_another">Find another</string>
+    <string name="household_chat_placeholder">Agree price or pickup time…</string>
+    <string name="household_send_message">Send message</string>
+    <string name="household_find_new_title">Find a new kabadiwala?</string>
+    <string name="household_find_new_detail">This chat will close. Your lot stays available and you can choose someone else nearby.</string>
+    <string name="household_keep_chat">Keep this chat</string>
+    <string name="household_step_create">Create lot</string>
+    <string name="household_step_range">Get a market range</string>
+    <string name="household_step_choose">Choose nearby</string>
+    <string name="household_step_invite">Invite a kabadiwala</string>
+    <string name="household_step_chat">Chat &amp; confirm</string>
+    <string name="household_step_agree">Agree after inspection</string>
+    <string name="household_distance_pickup">%1$.1f km · %2$d min pickup</string>
+    <string name="household_distance">%1$.1f km</string>
+    <string name="household_closest">Closest</string>
+    <string name="household_away">away</string>
+    <string name="household_pickups">%1$d pickups</string>
+    <string name="household_minutes">%1$d min</string>
+    <string name="household_typical">typical</string>
+    <string name="household_share_lot">Share my lot</string>
+    <string name="household_waiting_for">Waiting for %1$s</string>
+    <string name="household_chat_after_accept">Chat opens only after they accept.</string>
+    <string name="household_accepted">%1$s accepted</string>
+    <string name="household_chat_open">Chat is now open · pickup around 5:30 PM</string>
+    <string name="household_estimated_range">ESTIMATED RANGE</string>
+    <string name="household_final_after_inspection">Final price after inspection and agreement</string>
+    <string name="testing_mode_banner">Testing mode · Connected to the test server</string>
+    <string name="recycler_scan_title">Scan handover QR</string>
+    <string name="recycler_scan_explanation">Scan the complete signed code. It is checked against the server before the material can be accepted.</string>
+    <string name="recycler_scan_camera">Open camera scanner</string>
+    <string name="recycler_scan_reference">Signed handover code</string>
+    <string name="recycler_scan_validate">Verify handover</string>
+    <string name="recycler_scan_error">The handover could not be verified or confirmed. Check the code, authorization, and connection.</string>
+    <string name="recycler_scan_verified">Verified traceability record</string>
+    <string name="recycler_scan_material">Material: %1$s</string>
+    <string name="recycler_scan_notes">Inspection notes (optional)</string>
+    <string name="recycler_scan_confirm">Confirm receipt</string>
+    <string name="recycler_scan_confirmed">Receipt confirmed</string>
+    <string name="recycler_scan_clear">Clear and scan another</string>
+    <string name="handover_collector_confirmed">Awaiting recycler confirmation</string>
 </resources>

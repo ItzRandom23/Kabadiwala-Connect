@@ -144,7 +144,11 @@ data class Handover(
     val materialConfirmed: Boolean = false,
     val collectorConfirmed: Boolean = false,
     val scalePhotoPath: String? = null,
-    val evidenceUpdatedAtEpochMs: Long? = null
+    val evidenceUpdatedAtEpochMs: Long? = null,
+    /** Opaque, server-signed traceability payload. Never reconstruct this on-device. */
+    val qrCodeData: String? = null,
+    val referenceId: String? = null,
+    val expiresAtEpochMs: Long? = null
 )
 
 enum class DisputeType { WEIGHT_DISCREPANCY, MATERIAL_MISMATCH, PRICE_DISAGREEMENT, OTHER }

@@ -21,6 +21,7 @@ interface SecureStorage {
     companion object Keys {
         /** Backend bearer token for the current collector session. */
         const val AUTH_TOKEN = "auth_token"
+        const val REFRESH_TOKEN = "refresh_token"
 
         /** Server-issued collector id (or local development id). */
         const val COLLECTOR_ID = "collector_id"

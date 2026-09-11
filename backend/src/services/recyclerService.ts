@@ -72,6 +72,12 @@ export class RecyclerService {
       authorizationStatus: recycler.authorizationStatus,
       authorizationDetails: {
         authority: recycler.authorizationAuthority,
+        registrationNumber: recycler.licenseNumber,
+        type: recycler.authorizationType,
+        evidenceReference: recycler.authorizationEvidenceReference,
+        verificationSource: recycler.verificationSource,
+        verifiedAt: recycler.verifiedAt,
+        verifiedBy: recycler.verifiedBy,
         validUntil: recycler.authorizationValidUntil
       },
       materialsAccepted: recycler.materials.map((material: any) => ({
@@ -83,6 +89,10 @@ export class RecyclerService {
       rates: recycler.rates.map((rate: any) => ({
         materialCategory: rate.materialCategory,
         pricePerKg: rate.pricePerKg,
+        unit: rate.unit,
+        sourceReference: rate.sourceReference,
+        qualityStatus: rate.qualityStatus,
+        effectiveAt: rate.effectiveAt,
         updatedAt: rate.updatedAt
       })),
       pickupAvailability: recycler.pickupAvailability ?? 'FLEXIBLE',
@@ -272,7 +282,8 @@ export class RecyclerService {
     id: string,
     actorId: string,
     status: RecyclerAuthorizationStatus,
-    reason?: string
+    reason?: string,
+    details?: { authority?: string; registrationNumber?: string; authorizationType?: string; evidenceReference?: string; verificationSource?: string; validUntil?: Date }
   ) {
     return this.db.$transaction(async transaction => {
       const previous = await transaction.recycler.findUnique({ where: { id } });
@@ -281,7 +292,16 @@ export class RecyclerService {
       }
       const recycler = await transaction.recycler.update({
         where: { id },
-        data: { authorizationStatus: status },
+        data: {
+          authorizationStatus: status,
+          ...(details?.authority ? { authorizationAuthority: details.authority } : {}),
+          ...(details?.registrationNumber ? { licenseNumber: details.registrationNumber } : {}),
+          ...(details?.authorizationType ? { authorizationType: details.authorizationType } : {}),
+          ...(details?.evidenceReference ? { authorizationEvidenceReference: details.evidenceReference } : {}),
+          ...(details?.verificationSource ? { verificationSource: details.verificationSource } : {}),
+          ...(details?.validUntil ? { authorizationValidUntil: details.validUntil } : {}),
+          ...(status === 'VERIFIED' ? { verifiedAt: new Date(), verifiedBy: actorId } : {})
+        },
         include: this.include
       });
       await transaction.recyclerAuthorizationAudit.create({

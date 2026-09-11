@@ -14,6 +14,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingView
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerOrdersViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.FutureFeatureViewModel
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotRepository
@@ -49,6 +50,8 @@ class KcViewModelFactory(
     val paymentRepository: PaymentRepository get() = container.paymentRepository
     val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository get() = container.disputeRepository
     val apiService get() = container.apiService
+    val syncQueue get() = container.database.syncQueueDao()
+    fun requestSync() = container.syncScheduler.requestSync()
     val currentAccount: AccountProfile? get() = container.currentAccount()
 
     @Suppress("UNCHECKED_CAST")
@@ -77,8 +80,10 @@ class KcViewModelFactory(
             RecyclerMarketplaceViewModel(container.apiService)
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->
             RecyclerOrdersViewModel(container.apiService)
+        modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
+            RecyclerScanViewModel(container.apiService)
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
-            FutureFeatureViewModel(container.apiService, FutureCacheStore(container.database.futureCacheDao()))
+            FutureFeatureViewModel(container.apiService, FutureCacheStore(container.database.futureCacheDao()), container.database.syncQueueDao()) { container.syncScheduler.requestSync() }
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")
     } as T
 

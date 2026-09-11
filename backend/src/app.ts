@@ -17,6 +17,7 @@ import { handoverRoutes } from './routes/handoverRoutes.js';
 import { paymentRoutes } from './routes/paymentRoutes.js';
 import { syncRoutes } from './routes/syncRoutes.js';
 import { futureRoutes } from './routes/futureRoutes.js';
+import { datasetRoutes } from './routes/datasetRoutes.js';
 import type { JwtService } from './services/jwt.js';
 import type { CollectorService } from './services/collectorService.js';
 import type { AuthService } from './services/authService.js';
@@ -49,7 +50,15 @@ export function createApp(
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: config.CORS_ORIGIN === '*' ? true : config.CORS_ORIGIN }));
+  const allowedOrigins = config.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || config.NODE_ENV !== 'production' && config.CORS_ORIGIN === '*' || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
+    credentials: false,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  }));
   if (config.STORAGE_PROVIDER === 'local' && config.LOCAL_UPLOAD_PUBLIC) {
     app.use('/uploads', express.static(resolve(process.cwd(), config.LOCAL_UPLOAD_DIR), { index: false }));
   }
@@ -61,7 +70,7 @@ export function createApp(
 
   const api = express.Router();
   api.use(healthRoutes(db, config));
-  if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt));
+  if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db));
   if (collectorRepository) api.use('/collectors', collectorRoutes(jwt, collectorRepository, collectorService));
   if (lotService && collectorRepository) api.use('/lots', lotRoutes(jwt, collectorRepository, lotService));
   if (priceService && collectorRepository) api.use(priceRoutes(jwt, collectorRepository, priceService));
@@ -71,6 +80,7 @@ export function createApp(
   if (paymentService && collectorRepository) api.use(paymentRoutes(jwt, collectorRepository, paymentService));
   if (syncService && collectorRepository) api.use(syncRoutes(jwt, collectorRepository, syncService));
   api.use('/future', futureRoutes(jwt, db));
+  api.use(datasetRoutes(jwt, db));
   app.use('/api/v1', api);
   app.use(notFound);
   app.use(errorHandler);

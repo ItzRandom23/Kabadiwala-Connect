@@ -13,8 +13,13 @@ export const requireRecycler = (jwtService: JwtService, db?: PrismaClient): Requ
     const identity = jwtService.verifyToken(header.slice(7));
     if (identity.role !== 'RECYCLER') return next(new AppError('AUTHORIZATION_ERROR', 'Recycler access required', 403));
     if (db) {
-      const recycler = await db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true } });
-      if (!recycler) return next(new AppError('RECYCLER_NOT_FOUND', 'Recycler not found', 404));
+      const [user, recycler] = await Promise.all([
+        db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { accountStatus: true } }),
+        db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true } })
+      ]);
+      if (!user || !recycler) return next(new AppError('RECYCLER_NOT_FOUND', 'Recycler not found', 404));
+      if (user.accountStatus === 'SUSPENDED') return next(new AppError('ACCOUNT_SUSPENDED', 'Account is suspended', 403));
+      if (user.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
       if (recycler.authorizationStatus !== 'VERIFIED') return next(new AppError('RECYCLER_NOT_VERIFIED', 'Verified recycler access required', 403));
     }
     req.identity = identity;

@@ -10,7 +10,7 @@ This phase records payments; it does not transfer money. Collector APIs record/l
 
 ## Handover & Disputes (Phase 7)
 
-Handover APIs create records from accepted quotes, generate unique `HOV-YYYYMMDD-RANDOM` references and QR payloads containing only the reference, enforce seven-day expiry, and support collector/recycler/admin ownership boundaries. Recycler confirmations preserve original and actual weight; differences over 5% or material mismatches open disputes. Payment is not performed here.
+Handover APIs create records from accepted quotes, generate unique `HOV-YYYYMMDD-RANDOM` references and versioned HMAC-signed QR payloads, enforce seven-day expiry, and support collector/recycler/admin ownership boundaries. `POST /api/v1/verify/handover` validates authenticity against current database state without returning collector contact details. Recycler confirmations preserve original and actual weight; differences over 5% or material mismatches open disputes. Payment is not performed here.
 
 Backend API for the Android-first Kabadiwala Connect product. The service is the source of truth for account roles, recycler verification, collector lots, prices, matching, offers, handovers, payments, and offline sync. There is no user-facing web frontend.
 
@@ -24,25 +24,27 @@ Node.js 20+, npm, and MongoDB (Atlas or self-hosted replica set).
 npm install
 copy .env.example .env
 npm run db:generate
-npm run db:push
+npm run db:prepare
 npm run db:seed
 ```
 
-Set `DATABASE_URL` to the MongoDB connection string and set a JWT secret of at least 16 characters in `.env`. Never commit the database password or other credentials. `db:push` is used because Prisma migrations are not supported for MongoDB.
+Set `DATABASE_URL` to the MongoDB connection string and set a JWT secret of at least 16 characters in `.env`. Never commit the database password or other credentials. Use `db:prepare` for MongoDB: it creates the required runtime indexes while preserving partial unique indexes for optional phone/email fields. A direct `prisma db push` conflicts with those intentional partial indexes and is not part of deployment.
 
 ## Authentication and roles
 
 New Android accounts use email/password:
 
 - `POST /api/v1/auth/signup` accepts email, password, role (`COLLECTOR` or `RECYCLER`), preferred language, and optional recycler business details.
-- `POST /api/v1/auth/login` returns a bearer token plus the role-bearing account profile.
+- `POST /api/v1/auth/login` returns a short-lived bearer token, a rotating refresh token and the role-bearing account profile.
+- `POST /api/v1/auth/refresh` rotates the refresh token. Reuse revokes its token family.
+- `POST /api/v1/auth/logout` revokes the supplied refresh-token family; the access token expires shortly afterward.
 - `GET /api/v1/auth/profile` revalidates the profile after an offline launch.
 
 Recycler accounts are created with `authorizationStatus=PENDING`; only secure backend/admin data can move them to `VERIFIED`. Role is never inferred from an email string or domain.
 
 The phone/OTP contract below remains for older collector clients during migration.
 
-`POST /api/v1/auth/request-otp` accepts `{ "phone": "9876543210" }`. `POST /api/v1/auth/verify-otp` accepts the phone and six-digit OTP, creates or logs in a collector, and returns a JWT plus the public collector profile. `POST /api/v1/auth/logout` is stateless and tells the client to remove its token. Use the JWT as `Authorization: Bearer <token>` for collector APIs. `PUT /api/v1/collectors/me` updates only language and primary location; latitude/longitude may be omitted for a manual area and must be valid when supplied.
+`POST /api/v1/auth/request-otp` accepts `{ "phone": "9876543210" }`. `POST /api/v1/auth/verify-otp` accepts the phone and six-digit OTP, creates or logs in a collector, and returns access/refresh tokens plus the public collector profile. Use the access token as `Authorization: Bearer <token>` for collector APIs. `PUT /api/v1/collectors/me` updates only language and primary location; latitude/longitude may be omitted for a manual area and must be valid when supplied.
 
 ## Android test updates
 
@@ -56,7 +58,7 @@ Gemini features are optional and fail safely when the key is absent or the provi
 
 ```bash
 npm run dev
-npm run build
+npm run build # automatically regenerates Prisma Client first
 npm run start
 npm run test
 npm run lint
@@ -74,7 +76,7 @@ npm prune --omit=dev
 npm start
 ```
 
-Use `NODE_ENV=production`, a strong `JWT_SECRET`, a production MongoDB replica set, an explicit `CORS_ORIGIN`, and S3-compatible storage for horizontally scaled deployments. Keep `.env.example` as the configuration reference; never upload local credentials.
+Use `NODE_ENV=production`, separate strong JWT/traceability secrets, a production MongoDB replica set, HTTPS-only explicit `CORS_ORIGIN` values, `RATE_LIMIT_STORE=database`, and private S3-compatible storage for horizontally scaled deployments. Keep `.env.example` as the configuration reference; never upload local credentials.
 
 ## API
 
@@ -90,6 +92,8 @@ Collector endpoints are `GET /api/v1/recyclers`, `GET /api/v1/recyclers/{recycle
 Matching is deterministic and explainable: material +30, distance under 10 km +20 (10–25 km +10), availability +10, an available recycler offer +20, VERIFIED +10, and rating above 4 +5. Missing coordinates, rates, or ratings receive neutral points. Recycler offered rates are discovery data and are not market prices.
 
 Admin-only management endpoints are `GET /api/v1/admin/recyclers`, `GET /api/v1/admin/recyclers/{recyclerId}`, and `PUT /api/v1/admin/recyclers/{recyclerId}/authorization`; authorization changes create audit records. Development seed recyclers are clearly test fixtures, not real facilities or licenses.
+
+Moving a recycler to `VERIFIED` requires authority, registration number, authorization type, evidence reference, verification source and validity date. Admin data operations are `POST /api/v1/admin/datasets/prices/import` and `GET /api/v1/admin/datasets/export`.
 
 ## Quote API (Phase 6)
 

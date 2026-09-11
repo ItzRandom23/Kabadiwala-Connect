@@ -10,6 +10,8 @@ const config = {
   DATABASE_URL: 'mongodb://test',
   JWT_SECRET: 'a-secure-test-secret',
   JWT_EXPIRES_IN: '1h',
+  REFRESH_TOKEN_EXPIRES_IN_DAYS: 30,
+  TRACEABILITY_SIGNING_SECRET: 'a-separate-traceability-test-secret',
   CORS_ORIGIN: '*',
   APP_VERSION: '1.0.0',
   OTP_PROVIDER: 'development' as const,
@@ -19,6 +21,7 @@ const config = {
   LOCAL_UPLOAD_BASE_URL: '',
   LOCAL_UPLOAD_PUBLIC: true,
   S3_REGION: 'ap-south-1'
+  ,RATE_LIMIT_STORE: 'memory' as const
 };
 const db = { $runCommandRaw: async () => ({ ok: 1 }) } as never;
 const service = { getMe: async (id: string) => ({ id, phone: '9876543210', preferredLanguage: 'HINDI', areaName: 'Test', accountStatus: 'ACTIVE' }) } as unknown as CollectorService;

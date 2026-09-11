@@ -4,8 +4,9 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Product
 
-The Android APK contains two role-routed experiences:
+The Android APK contains three role-routed experiences:
 
+- Household seller: create a household scrap lot, compare nearby verified collectors, receive an estimate, accept/reject quotes, chat after acceptance and rematch after disagreement.
 - Collector: create lots offline, add photos, select material, enter weight, hear prices, find verified recyclers, compare offers, create a QR handover record, confirm final value, record optional cash/digital payment, and view earnings.
 - Recycler: submit facility details for verification, then browse matched lots, manage buying rates, make offers, manage orders and pickups, and load a handover by its server-side QR/reference.
 
@@ -30,7 +31,7 @@ cd backend
 copy .env.example .env
 npm install
 npm run db:generate
-npm run db:push
+npm run db:prepare
 npm run db:seed
 npm run dev
 ```
@@ -55,7 +56,7 @@ Open `android_app/` in Android Studio, or build from PowerShell:
 cd android_app
 ./gradlew.bat testDebugUnitTest
 ./gradlew.bat assembleDebug
-./gradlew.bat assembleRelease -PapiBaseUrl=https://your-host.example/api/v1/
+./gradlew.bat assembleRelease -PproductionApiBaseUrl=https://your-host.example/api/v1/
 ```
 
 The safe default API URL is `.invalid`, which keeps the debug build in its local/offline authentication path. Set a real HTTPS URL for backend integration. Release signing credentials are intentionally not included.
@@ -77,6 +78,10 @@ cd ../android_app
 ```
 
 The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote workflows, Room-backed state, and ViewModel transitions. Device validation is still required for CameraX permissions, QR camera scanning, TalkBack, GPS, and real network loss/recovery.
+
+## Submission evidence
+
+See `docs/REQUIREMENTS_EVIDENCE.md`, `docs/DEMO_RUNBOOK.md`, `docs/FIELD_RESEARCH_PROTOCOL.md`, `docs/UNIT_ECONOMICS.md`, `docs/AI_DATASET_CARD.md`, and `docs/PRIVACY_RETENTION.md`.
 
 ## Known limitations
 
