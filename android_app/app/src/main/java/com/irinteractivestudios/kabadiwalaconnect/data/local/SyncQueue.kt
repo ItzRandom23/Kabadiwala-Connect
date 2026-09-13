@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.data.local
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
@@ -16,7 +17,12 @@ import kotlinx.coroutines.flow.Flow
  * by WorkManager once connectivity returns. Each operation is replayed through
  * its idempotent API contract or retained with an error code when rejected.
  */
-@Entity(tableName = "sync_queue")
+@Entity(
+    tableName = "sync_queue",
+    // Migration 17->18 creates this index for retry scheduling. Keep it in
+    // the entity schema so Room validates upgraded databases successfully.
+    indices = [Index(value = ["nextAttemptAtEpochMs"])]
+)
 data class SyncQueueItemEntity(
     @PrimaryKey(autoGenerate = true) val uid: Long = 0L,
     /** One of SyncOperation names, e.g. "CREATE_LOT". */
