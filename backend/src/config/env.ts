@@ -4,10 +4,10 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1),
-  JWT_SECRET: z.string().min(16),
+  JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().min(1).default('15m'),
   REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().int().min(1).max(90).default(30),
-  TRACEABILITY_SIGNING_SECRET: z.string().min(16),
+  TRACEABILITY_SIGNING_SECRET: z.string().min(32),
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   APP_VERSION: z.string().min(1).default('1.0.0'),
   OTP_PROVIDER: z.enum(['development', 'twilio']).default('development'),
@@ -31,6 +31,10 @@ const schema = z.object({
   S3_PUBLIC_BASE_URL: z.string().url().optional().or(z.literal('')),
   RATE_LIMIT_STORE: z.enum(['memory', 'database']).default('memory')
 }).superRefine((value, ctx) => {
+  const placeholder = /^(replace-with|generate-a-random|change-me|your[-_])/i;
+  if (placeholder.test(value.JWT_SECRET)) ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'JWT_SECRET must be a real random secret, not a template placeholder' });
+  if (placeholder.test(value.TRACEABILITY_SIGNING_SECRET)) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must be a real random secret, not a template placeholder' });
+  if (value.JWT_SECRET === value.TRACEABILITY_SIGNING_SECRET) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must differ from JWT_SECRET' });
   if (value.NODE_ENV === 'production' && value.OTP_PROVIDER === 'development') ctx.addIssue({ code: 'custom', path: ['OTP_PROVIDER'], message: 'Development OTP provider is not allowed in production' });
   if (value.NODE_ENV === 'production' && value.CORS_ORIGIN === '*') ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Wildcard CORS is not allowed in production' });
   if (value.NODE_ENV === 'production' && value.CORS_ORIGIN.split(',').some(origin => !origin.trim().startsWith('https://'))) ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Production CORS origins must use HTTPS' });

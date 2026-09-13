@@ -35,6 +35,10 @@ interface ApiService {
     suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto): Response<ApiEnvelope<PickupRequestDto>>
     @GET("household/pickups")
     suspend fun getHouseholdPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    @POST("household/listings/{listingId}/cancel")
+    suspend fun cancelHouseholdListing(@Path("listingId") listingId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
+    @POST("household/pickups/{pickupId}/cancel")
+    suspend fun cancelHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/listings")
     suspend fun getKabadiwalaListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("kabadiwala/pickups")
@@ -139,6 +143,9 @@ interface ApiService {
 
     @GET("recycler/profile")
     suspend fun getRecyclerProfile(): Response<ApiEnvelope<RecyclerDto>>
+
+    @POST("recycler/verification-request")
+    suspend fun submitRecyclerVerificationRequest(@Body body: RecyclerVerificationRequestDto): Response<ApiEnvelope<RecyclerDto>>
 
     @PATCH("recycler/profile")
     suspend fun updateRecyclerProfile(@Body body: RecyclerProfileUpdateRequestDto): Response<ApiEnvelope<RecyclerDto>>

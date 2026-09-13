@@ -44,6 +44,15 @@ export class RecyclerService {
     _count: { select: { handovers: true } }
   } as const;
 
+  private readonly ownerInclude = {
+    ...this.include,
+    authorizationAudits: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: { reason: true, newStatus: true, createdAt: true }
+    }
+  } as const;
+
   constructor(private readonly db: PrismaClient) {}
 
   private verifiedWhere(
@@ -123,7 +132,8 @@ export class RecyclerService {
         verificationSource: recycler.verificationSource,
         verifiedBy: recycler.verifiedBy,
         verifiedAt: recycler.verifiedAt,
-        validUntil: recycler.authorizationValidUntil
+        validUntil: recycler.authorizationValidUntil,
+        reviewReason: recycler.authorizationAudits?.[0]?.newStatus === 'REJECTED' ? recycler.authorizationAudits[0].reason : null
       }
     };
   }
@@ -227,9 +237,60 @@ export class RecyclerService {
   }
 
   async selfProfile(id: string) {
-    const recycler = await this.db.recycler.findUnique({ where: { id }, include: this.include });
+    const recycler = await this.db.recycler.findUnique({ where: { id }, include: this.ownerInclude });
     if (!recycler) throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
     return this.ownerView(recycler);
+  }
+
+  async submitVerificationRequest(
+    id: string,
+    input: {
+      authority: string;
+      registrationNumber: string;
+      authorizationType: string;
+      evidenceReference: string;
+      verificationSource: string;
+      validUntil: Date;
+    }
+  ) {
+    return this.db.$transaction(async transaction => {
+      const previous = await transaction.recycler.findUnique({ where: { id } });
+      if (!previous) {
+        throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
+      }
+      if (previous.authorizationStatus === 'SUSPENDED') {
+        throw new AppError('CONFLICT', 'A suspended recycler must contact support before resubmitting verification', 409, { code: 'RECYCLER_VERIFICATION_SUSPENDED' });
+      }
+      if (previous.authorizationStatus === 'VERIFIED') {
+        throw new AppError('CONFLICT', 'This recycler profile is already verified', 409, { code: 'RECYCLER_ALREADY_VERIFIED' });
+      }
+
+      const recycler = await transaction.recycler.update({
+        where: { id },
+        data: {
+          authorizationStatus: 'PENDING',
+          authorizationAuthority: input.authority,
+          licenseNumber: input.registrationNumber,
+          authorizationType: input.authorizationType,
+          authorizationEvidenceReference: input.evidenceReference,
+          verificationSource: input.verificationSource,
+          authorizationValidUntil: input.validUntil,
+          verifiedAt: null,
+          verifiedBy: null
+        },
+        include: this.include
+      });
+      await transaction.recyclerAuthorizationAudit.create({
+        data: {
+          recyclerId: id,
+          actorId: id,
+          previousStatus: previous.authorizationStatus,
+          newStatus: 'PENDING',
+          reason: 'Recycler submitted authorization evidence for review'
+        }
+      });
+      return this.ownerView(recycler);
+    });
   }
 
   async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; operatingHours?: Prisma.InputJsonValue }) {
@@ -323,7 +384,7 @@ export class RecyclerService {
   }
 
   async adminDetail(id: string) {
-    const recycler = await this.db.recycler.findUnique({ where: { id }, include: this.include });
+    const recycler = await this.db.recycler.findUnique({ where: { id }, include: this.ownerInclude });
     if (!recycler) {
       throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
     }

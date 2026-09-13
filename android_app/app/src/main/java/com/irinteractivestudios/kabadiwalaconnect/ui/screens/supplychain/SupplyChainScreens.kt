@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,7 +75,11 @@ fun HouseholdSupplyScreen(
     state: SupplyChainState,
     onRefresh: () -> Unit,
     onCreateListing: (HouseholdListingCreateDto) -> Unit,
-    onRequestPickup: (String, String) -> Unit
+    onRequestPickup: (String, String) -> Unit,
+    onCancelListing: (String) -> Unit = {},
+    onCancelPickup: (String) -> Unit = {},
+    initialArea: String = "",
+    busy: Set<String> = emptySet()
 ) {
     var showCreate by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -81,19 +89,28 @@ fun HouseholdSupplyScreen(
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Have recyclable material?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("Post an approximate listing. Your estimate is a range, never a guaranteed price.", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Button(onClick = { showCreate = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Sell scrap") }
+                    Button(onClick = { showCreate = true }, enabled = "create-listing" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text(if ("create-listing" in busy) "Posting…" else "Sell scrap") }
                 }
             }
         }
         item { SummaryStrip("${state.listings.count { it.status == "POSTED" }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
         item { Text("Your listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (state.loading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
         if (!state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Your first listing will appear here after you post it.") }
         items(state.listings, key = { it.id }) { listing ->
-            HouseholdListingCard(listing, state.pickups.filter { it.listingId == listing.id }, state.kabadiwalas, onRequestPickup)
+            HouseholdListingCard(
+                listing = listing,
+                pickups = state.pickups.filter { it.listingId == listing.id },
+                kabadiwalas = state.kabadiwalas,
+                busy = busy,
+                onRequestPickup = onRequestPickup,
+                onCancelListing = onCancelListing,
+                onCancelPickup = onCancelPickup
+            )
         }
     }
-    if (showCreate) HouseholdListingDialog(onDismiss = { showCreate = false }, onSubmit = { onCreateListing(it); showCreate = false })
+    if (showCreate) HouseholdListingDialog(initialArea = initialArea, onDismiss = { showCreate = false }, onSubmit = { onCreateListing(it); showCreate = false })
 }
 
 /** Live directory for a household. Pickup requests are made from a listing,
@@ -121,49 +138,92 @@ fun HouseholdKabadiwalasScreen(state: SupplyChainState, onRefresh: () -> Unit) {
 }
 
 @Composable
-private fun HouseholdListingCard(listing: HouseholdListingDto, pickups: List<PickupRequestDto>, kabadiwalas: List<KabadiwalaProfileDto>, onRequestPickup: (String, String) -> Unit) {
-    val pickup = pickups.firstOrNull()
+private fun HouseholdListingCard(
+    listing: HouseholdListingDto,
+    pickups: List<PickupRequestDto>,
+    kabadiwalas: List<KabadiwalaProfileDto>,
+    busy: Set<String>,
+    onRequestPickup: (String, String) -> Unit,
+    onCancelListing: (String) -> Unit,
+    onCancelPickup: (String) -> Unit
+) {
+    val activePickupStatuses = setOf("REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
+    val pickup = pickups.firstOrNull { it.status in activePickupStatuses }
+    var showCancelListing by remember(listing.id) { mutableStateOf(false) }
+    var showCancelPickup by remember(pickup?.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(listing.areaName, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Text("Estimated value depends on the final weight and local rate.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (pickup == null && listing.status == "POSTED") {
                 if (kabadiwalas.isNotEmpty()) {
                     Text("Choose a collection partner", style = MaterialTheme.typography.labelLarge)
                     kabadiwalas.take(4).forEach { kabadiwala ->
-                        OutlinedButton(onClick = { onRequestPickup(listing.id, kabadiwala.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        val requestBusy = "pickup-${listing.id}" in busy
+                        OutlinedButton(onClick = { onRequestPickup(listing.id, kabadiwala.id) }, enabled = !requestBusy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Filled.LocalShipping, null); Spacer(Modifier.width(8.dp)); Text("Request pickup · ${kabadiwala.displayName ?: "Kabadiwala"} (${kabadiwala.areaName})")
                         }
                     }
                 } else Text("No active Kabadiwala is available in your area yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel listing") }
+            } else if (pickup == null && pickups.any { it.status == "CANCELLED" }) {
+                Text("A previous pickup request was cancelled. You can choose another partner.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             pickup?.let { item ->
                 Text("Pickup: ${statusName(item.status)}", fontWeight = FontWeight.SemiBold)
+                Text("Progress: request → accepted → scheduled → on the way → arrived → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 item.scheduledSlot?.let { Text("Scheduled: ${it.take(16).replace('T', ' ')}") }
                 if (item.finalAmount != null) Text("Final settlement: ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                if (item.status in setOf("REQUESTED", "ACCEPTED", "SCHEDULED")) {
+                    OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
+                }
             }
         }
+    }
+    if (showCancelListing) AlertDialog(
+        onDismissRequest = { showCancelListing = false },
+        title = { Text("Cancel this listing?") },
+        text = { Text("The listing and any pending pickup requests will be cancelled. You can create a new listing later.") },
+        confirmButton = { TextButton(onClick = { showCancelListing = false; onCancelListing(listing.id) }) { Text("Cancel listing") } },
+        dismissButton = { TextButton(onClick = { showCancelListing = false }) { Text("Keep listing") } }
+    )
+    pickup?.let { item ->
+        if (showCancelPickup) AlertDialog(
+            onDismissRequest = { showCancelPickup = false },
+            title = { Text("Cancel this pickup?") },
+            text = { Text("The request will be closed and this listing will be available again if the partner has not started the trip.") },
+            confirmButton = { TextButton(onClick = { showCancelPickup = false; onCancelPickup(item.id) }) { Text("Cancel pickup") } },
+            dismissButton = { TextButton(onClick = { showCancelPickup = false }) { Text("Keep pickup") } }
+        )
     }
 }
 
 @Composable
-private fun HouseholdListingDialog(onDismiss: () -> Unit, onSubmit: (HouseholdListingCreateDto) -> Unit) {
-    var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf("") }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }
+@OptIn(ExperimentalLayoutApi::class)
+private fun HouseholdListingDialog(initialArea: String, onDismiss: () -> Unit, onSubmit: (HouseholdListingCreateDto) -> Unit) {
+    var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf(initialArea) }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }
+    val parsedWeight = weight.toDoubleOrNull()
+    val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
+    val areaError = area.isNotBlank() && area.trim().length < 2
+    val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty()
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Sell scrap") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Tell us what you want collected. The partner confirms the final weight and price at pickup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Material", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { materials.take(4).forEach { FilterChip(selected = material == it, onClick = { material = it }, label = { Text(materialName(it)) }) } }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase()) }) } }
-            OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Approximate weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(area, { area = it.take(160) }, label = { Text("Pickup area") }, singleLine = true)
-            OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("Notes (optional)") }, minLines = 2)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { materials.forEach { FilterChip(selected = material == it, onClick = { material = it }, label = { Text(materialName(it), maxLines = 1) }) } }
+            Text("Condition", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase(), maxLines = 1) }) } }
+            OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(area, { area = it.take(160) }, modifier = Modifier.fillMaxWidth(), label = { Text("Pickup area") }, supportingText = { if (areaError) Text("Add a little more detail, for example an area or landmark") }, isError = areaError, singleLine = true)
+            OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4)
         }
-    }, confirmButton = { TextButton(onClick = { weight.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(HouseholdListingCreateDto(material, it, condition, notes.ifBlank { null }, null, area)) } }, enabled = weight.toDoubleOrNull()?.let { it > 0 } == true && area.isNotBlank()) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { onSubmit(HouseholdListingCreateDto(material, it, condition, notes.trim().ifBlank { null }, null, area.trim())) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList()) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area") {
     var showBulk by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Today's collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Collect from households · aggregate · sell to verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
@@ -173,7 +233,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" }} requests", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled") }
                 item { Text("Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests from households will appear here.") }
-                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, onAccept, onStatus, onComplete) }
+                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, onAccept, onSchedule, onStatus, onComplete) }
             }
             KabadiwalaSection.INVENTORY -> {
                 item { InventoryTotals(state.inventory) }
@@ -203,21 +263,27 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
             }
         }
     }
-    if (showBulk) BulkLotDialog(state.inventory, onDismiss = { showBulk = false }, onSubmit = { onCreateBulk(it); showBulk = false })
+    if (showBulk) BulkLotDialog(state.inventory, currentArea, onDismiss = { showBulk = false }, onSubmit = { onCreateBulk(it); showBulk = false })
 }
 
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, onAccept: (String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
+    var showSchedule by remember { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing?.materialCategory ?: "OTHER"), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup.status)) }
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · ${listing?.areaName ?: "Area unavailable"}")
             when (pickup.status) {
                 "REQUESTED" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Accept pickup") }
-                "ACCEPTED" -> Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
+                "ACCEPTED" -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { showSchedule = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Schedule") }
+                        Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Start now") }
+                    }
+                }
                 "SCHEDULED" -> Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
                 "IN_TRANSIT" -> Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
                 "ARRIVED" -> Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record weight and complete") }
@@ -225,13 +291,86 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             }
         }
     }
+    if (showSchedule) SchedulePickupDialog(
+        onDismiss = { showSchedule = false },
+        onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
+    )
     if (showComplete) CompletionDialog(pickup, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
 }
 
 @Composable
+private fun SchedulePickupDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit
+) {
+    // Near-term choices keep the field flow fast while the API still receives
+    // a real ISO-8601 timestamp rather than a display-only label.
+    val slots = remember {
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
+        val displayFormatter = java.text.SimpleDateFormat("EEE, d MMM · h:mm a", java.util.Locale.getDefault())
+        listOf(2, 4, 6).map { hours ->
+            java.util.Calendar.getInstance().apply {
+                add(java.util.Calendar.HOUR_OF_DAY, hours)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.time.let { time -> formatter.format(time) to displayFormatter.format(time) }
+        }
+    }
+    var selected by remember { mutableStateOf(slots.first().first) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Schedule collection") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Choose a time window for this household pickup.", style = MaterialTheme.typography.bodyMedium)
+                slots.forEach { slot ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        androidx.compose.material3.RadioButton(selected = selected == slot.first, onClick = { selected = slot.first })
+                        Text(slot.second, style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSubmit(selected.toString()) }) { Text("Confirm time") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun CompletionDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, onSubmit: (PickupCompletionDto) -> Unit) {
-    var weight by remember { mutableStateOf("") }; var rate by remember { mutableStateOf("") }; var category by remember { mutableStateOf(pickup.finalCategory ?: "PLASTIC") }; var grade by remember { mutableStateOf("UNSPECIFIED") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Final weighing") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("The household sees this calculation immediately."); OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(category, { category = it.uppercase().take(20) }, label = { Text("Final material") }, singleLine = true); OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true) } }, confirmButton = { TextButton(onClick = { val w = weight.toDoubleOrNull(); val r = rate.toDoubleOrNull(); if (w != null && r != null && w > 0 && r > 0) onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r)) }, enabled = weight.toDoubleOrNull()?.let { it > 0 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true) { Text("Complete purchase") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    var weight by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(pickup.finalCategory ?: "PLASTIC") }
+    var grade by remember { mutableStateOf("UNSPECIFIED") }
+    val total = (weight.toDoubleOrNull() ?: 0.0) * (rate.toDoubleOrNull() ?: 0.0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Final weighing") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("The household sees this calculation immediately.", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                Text("Final material", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    materials.forEach { option ->
+                        FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 1) })
+                    }
+                }
+                OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true)
+                if (total > 0) Text("Settlement preview · ₹${"%.2f".format(total)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { val w = weight.toDoubleOrNull(); val r = rate.toDoubleOrNull(); if (w != null && r != null && w > 0 && w <= 500 && r > 0) onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r)) },
+                enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true
+            ) { Text("Complete purchase") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -258,12 +397,14 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
 }
 @Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") } } } }
 @Composable private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}"); if (offer.status == "PENDING") Button(onClick = { onAccept(offer.id) }, modifier = Modifier.fillMaxWidth()) { Text("Accept offer") } } } }
-@Composable private fun BulkLotDialog(inventory: List<InventoryBalanceDto>, onDismiss: () -> Unit, onSubmit: (BulkLotCreateDto) -> Unit) {
+@Composable private fun BulkLotDialog(inventory: List<InventoryBalanceDto>, currentArea: String, onDismiss: () -> Unit, onSubmit: (BulkLotCreateDto) -> Unit) {
     val options = inventory.filter { it.availableKg > 0 }
     var selectedId by remember { mutableStateOf(options.firstOrNull()?.id) }
     val item = options.firstOrNull { it.id == selectedId } ?: options.firstOrNull()
     var quantity by remember(item?.id) { mutableStateOf(item?.availableKg?.toString().orEmpty()) }
     var rate by remember { mutableStateOf("") }
+    var minimumRate by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Create recycler bulk lot") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Only available inventory can be reserved. Households and other Kabadiwalas cannot buy this lot.")
@@ -278,8 +419,10 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
             Text("${materialName(item?.materialCategory ?: "OTHER")} · available ${"%.1f".format(item?.availableKg ?: 0.0)} kg")
             OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
             OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Asking rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(minimumRate, { minimumRate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Minimum acceptable rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("Notes for recyclers (optional)") }, minLines = 2)
         }
-    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, null, "Current area")) }, enabled = item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true) { Text("List for recyclers") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); val min = minimumRate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0 && (min == null || (min > 0 && min <= r))) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, min, currentArea.ifBlank { "Current area" }, notes = notes.ifBlank { null })) }, enabled = item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (minimumRate.toDoubleOrNull() == null || minimumRate.toDoubleOrNull()?.let { it > 0 && it <= (rate.toDoubleOrNull() ?: 0.0) } == true)) { Text("List for recyclers") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
@@ -311,4 +454,5 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
 @Composable private fun SummaryStrip(left: String, right: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(left, fontWeight = FontWeight.Bold); Text(right, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } } }
 @Composable private fun StatusChip(text: String) { Surface(shape = RoundedCornerShape(99.dp), color = MaterialTheme.colorScheme.tertiaryContainer) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
 @Composable private fun ErrorPanel(text: String, retry: () -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = retry) { Text("Retry") } } } }
+@Composable private fun LoadingPanel(text: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun EmptyPanel(title: String, detail: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .2f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }

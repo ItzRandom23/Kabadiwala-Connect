@@ -28,7 +28,7 @@ npm run db:prepare
 npm run db:seed
 ```
 
-Set `DATABASE_URL` to the MongoDB connection string and set a JWT secret of at least 16 characters in `.env`. Never commit the database password or other credentials. Use `db:prepare` for MongoDB: it creates the required runtime indexes while preserving partial unique indexes for optional phone/email fields. A direct `prisma db push` conflicts with those intentional partial indexes and is not part of deployment.
+Set `DATABASE_URL` to the MongoDB connection string and set a real, randomly generated JWT secret of at least 32 characters in `.env`. Every backend process in the same deployment must use the exact same `JWT_SECRET`; rotating it invalidates existing access and refresh tokens, so users must sign in again. Keep `TRACEABILITY_SIGNING_SECRET` at least 32 characters and different from `JWT_SECRET`. Never commit the database password or other credentials. Use `db:prepare` for MongoDB: it creates the required runtime indexes while preserving partial unique indexes for optional phone/email fields. A direct `prisma db push` conflicts with those intentional partial indexes and is not part of deployment.
 
 ## Authentication and roles
 
@@ -45,6 +45,10 @@ Recycler accounts are created with `authorizationStatus=PENDING`; only secure ba
 The phone/OTP contract below remains for older collector clients during migration.
 
 `POST /api/v1/auth/request-otp` accepts `{ "phone": "9876543210" }`. `POST /api/v1/auth/verify-otp` accepts the phone and six-digit OTP, creates or logs in a collector, and returns access/refresh tokens plus the public collector profile. Use the access token as `Authorization: Bearer <token>` for collector APIs. `PUT /api/v1/collectors/me` updates only language and primary location; latitude/longitude may be omitted for a manual area and must be valid when supplied.
+
+## Household seller API
+
+Household accounts use `POST /api/v1/household/listings` to post a material listing, `GET /api/v1/household/listings` to view owned listings, `GET /api/v1/household/kabadiwalas` to discover active collection partners, and `POST /api/v1/household/listings/{listingId}/pickups` to request a pickup. A household can cancel an open listing with `POST /api/v1/household/listings/{listingId}/cancel` or cancel a requested/accepted/scheduled pickup with `POST /api/v1/household/pickups/{pickupId}/cancel`. All routes are ownership- and role-gated; final weight, rate, settlement, and inventory are written by the Kabadiwala workflow.
 
 ## Android test updates
 
@@ -90,6 +94,8 @@ The implemented `/api/v1/prices`, `/recyclers`, `/quotes`, `/handovers`, `/payme
 Collector endpoints are `GET /api/v1/recyclers`, `GET /api/v1/recyclers/{recyclerId}`, and `GET /api/v1/recyclers/match?lotId=...`. Discovery returns VERIFIED recyclers only and supports `location`, radius `5|10|25|50`, `materialCategory`, `availability`, `sort=proximity|rate`, `page`, and `limit`. Matching additionally checks accepted material, weight limits, service area, and collector-owned lot access.
 
 Matching is deterministic and explainable: material +30, distance under 10 km +20 (10–25 km +10), availability +10, an available recycler offer +20, VERIFIED +10, and rating above 4 +5. Missing coordinates, rates, or ratings receive neutral points. Recycler offered rates are discovery data and are not market prices.
+
+Recycler applicants can read their own pending profile through `GET /api/v1/recycler/profile` and submit or resubmit authorization evidence through `POST /api/v1/recycler/verification-request`. The request records the issuing authority, authorization type, registration number, validity date, an official proof link/document reference, and where the record should be checked. It remains `PENDING` until an operator reviews it; suspended profiles must contact support and cannot resubmit.
 
 Admin-only management endpoints are `GET /api/v1/admin/recyclers`, `GET /api/v1/admin/recyclers/{recyclerId}`, and `PUT /api/v1/admin/recyclers/{recyclerId}/authorization`; authorization changes create audit records. Development seed recyclers are clearly test fixtures, not real facilities or licenses.
 

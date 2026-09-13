@@ -9,9 +9,31 @@ const page = z.coerce.number().int().min(1).default(1);
 const limit = z.coerce.number().int().min(1).max(100).default(20);
 const rateRows = z.array(z.object({ materialCategory: mat, pricePerKg: z.number().finite().positive().lt(1_000_000) }).strict()).max(20);
 const profileUpdate = z.object({ pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict();
+const parseDateOnly = (value: string): Date | null => {
+  const [year, month, day] = value.split('-').map(Number);
+  if (![year, month, day].every(Number.isInteger)) return null;
+  const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? date : null;
+};
+const verificationRequest = z.object({
+  authority: z.string().trim().min(2).max(160),
+  registrationNumber: z.string().trim().min(2).max(160),
+  authorizationType: z.string().trim().min(2).max(160),
+  evidenceReference: z.string().trim().min(2).max(500),
+  verificationSource: z.string().trim().min(2).max(500),
+  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+}).superRefine((value, ctx) => {
+  if (!parseDateOnly(value.validUntil)) ctx.addIssue({ code: 'custom', path: ['validUntil'], message: 'Enter a valid date' });
+});
 
 export const recyclerController = (s: RecyclerService) => ({
   selfProfile: async (req: Request, res: Response) => res.json({ success: true, data: await s.selfProfile(req.identity!.collectorId), message: 'Recycler profile retrieved' }),
+  submitVerificationRequest: async (req: Request, res: Response) => {
+    const p = verificationRequest.safeParse(req.body);
+    if (!p.success) throw new AppError('VALIDATION_ERROR', 'Add complete authorization details and a valid expiry date', 422, { code: 'INVALID_VERIFICATION_REQUEST' });
+    const { validUntil, ...details } = p.data;
+    return res.status(202).json({ success: true, data: await s.submitVerificationRequest(req.identity!.collectorId, { ...details, validUntil: parseDateOnly(validUntil)! }), message: 'Verification request submitted' });
+  },
   updateProfile: async (req: Request, res: Response) => { const p = profileUpdate.safeParse(req.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid recycler profile settings', 422, { code: 'INVALID_RECYCLER_PROFILE' }); return res.json({ success: true, data: await s.updateProfile(req.identity!.collectorId, p.data as any), message: 'Recycler profile updated' }); },
   updateRates: async (req: Request, res: Response) => { const p = rateRows.safeParse(req.body?.rates ?? req.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Add at least one valid buying rate', 422, { code: 'INVALID_RECYCLER_RATES' }); return res.json({ success: true, data: await s.updateRates(req.identity!.collectorId, p.data), message: 'Recycler rates updated' }); },
   list: async (req: Request, res: Response) => {

@@ -71,6 +71,8 @@ class SupplyChainViewModel(private val api: ApiService) : ViewModel() {
     }
     fun createListing(input: HouseholdListingCreateDto) = action("create-listing", { api.createHouseholdListing(input).requireData(); refreshHousehold(); "Listing posted — choose a nearby Kabadiwala." })
     fun requestPickup(listingId: String, kabadiwalaId: String) = action("pickup-$listingId", { api.requestHouseholdPickup(listingId, PickupRequestCreateDto(kabadiwalaId)).requireData(); refreshHousehold(); "Pickup request sent." })
+    fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Listing cancelled." })
+    fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Pickup cancelled." })
     fun acceptListing(listingId: String) = action("accept-$listingId", { api.acceptHouseholdListing(listingId).requireData(); refreshKabadiwala(); "Pickup accepted." })
     fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireData(); refreshKabadiwala(); "Pickup scheduled." })
     fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", { api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireData(); refreshKabadiwala(); "Pickup updated." })

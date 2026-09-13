@@ -17,6 +17,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionReposit
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RetrofitProvider
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.PreferencesUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.EarningsRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.FakeEarningsRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.FakeLotRepository
@@ -56,6 +57,8 @@ import com.irinteractivestudios.kabadiwalaconnect.util.SystemConnectivityObserve
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidPriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.readAccount
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
+import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import java.text.SimpleDateFormat
@@ -64,6 +67,9 @@ import java.util.TimeZone
 import androidx.room.withTransaction
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.Flow
@@ -78,6 +84,7 @@ import kotlinx.coroutines.flow.Flow
 class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
+    private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val database: AppDatabase by lazy { AppDatabase.get(appContext) }
 
@@ -132,7 +139,31 @@ class AppContainer(context: Context) {
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()
 
-    suspend fun refreshAccount() { authenticationRepository.refreshAccount() }
+    /** Keeps the cached account snapshot aligned with the app language setting. */
+    fun updateStoredAccountLanguage(tag: String) {
+        val normalized = LocaleManager.normalizeTag(tag)
+        val accountId = currentAccount()?.profileId ?: return
+        currentAccount()?.let { secureStorage.saveAccount(it.copy(preferredLanguage = normalized)) }
+
+        // Keep the account preference in sync when the backend is available,
+        // while preserving the offline-first behaviour of the picker.
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        preferenceScope.launch {
+            runCatching {
+                apiService.updatePreferences(
+                    PreferencesUpdateDto(preferredLanguage = LocaleManager.toBackendName(normalized))
+                ).requireData()
+            }.onSuccess {
+                // Do not let a late response update a different account after
+                // logout/login on a shared device.
+                currentAccount()
+                    ?.takeIf { it.profileId == accountId }
+                    ?.let { secureStorage.saveAccount(it.copy(preferredLanguage = normalized)) }
+            }
+        }
+    }
+
+    suspend fun refreshAccount(): AccountProfile? = authenticationRepository.refreshAccount()
 
     suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null) {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return

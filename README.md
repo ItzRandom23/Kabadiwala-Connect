@@ -8,9 +8,9 @@ The Android APK contains three role-routed experiences:
 
 - Household seller: post recyclable material with an approximate weight and area, choose an active Kabadiwala, request pickup, and view weighing, rate, status, and final settlement.
 - Kabadiwala: discover household pickup requests, schedule and weigh collections, manage owned inventory, create recycler-facing bulk lots, review offers, and respond to procurement demand.
-- Recycler: submit facility details for verification, browse Kabadiwala bulk lots, make and track procurement offers, confirm receipt, and publish material requirements.
+- Recycler: submit facility details and authorization evidence for verification, browse Kabadiwala bulk lots, make and track procurement offers, confirm receipt, and publish material requirements.
 
-Role is stored in the backend account profile and cached locally only to make offline launch sensible. The app never chooses a role from an email address or domain. Recycler verification remains backend-controlled; a new recycler starts as `PENDING`.
+Role is stored in the backend account profile and cached locally only to make offline launch sensible. The app never chooses a role from an email address or domain. A new recycler/aggregator starts as `PENDING`, submits authorization evidence in the app, and becomes `VERIFIED` only after an authorized operator checks the record and approves it.
 
 ## Architecture
 

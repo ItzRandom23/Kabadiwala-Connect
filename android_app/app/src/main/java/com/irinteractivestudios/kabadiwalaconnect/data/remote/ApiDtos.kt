@@ -13,6 +13,7 @@ data class HouseholdListingCreateDto(val materialCategory: String, val estimated
 data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
 data class KabadiwalaProfileDto(val id: String = "", val displayName: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null)
 data class PickupRequestCreateDto(val kabadiwalaId: String, val requestedSlot: String? = null)
+data class CancellationRequestDto(val reason: String? = null)
 data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String = "", val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val finalAmount: Double? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null)
 data class PickupScheduleDto(val scheduledSlot: String)
 data class PickupStatusDto(val status: String)
@@ -71,12 +72,30 @@ data class ValuationDto(val lotId: String, val basePricePerKg: Double, val weigh
 
 data class RecyclerPageDto(val items: List<RecyclerDto> = emptyList(), val pagination: PageDto = PageDto())
 data class RecyclerDto(val id: String, val name: String, val facilityLocation: LocationDto? = null, val authorizationStatus: String? = null, val authorizationDetails: AuthorizationDto? = null, val materialsAccepted: List<RecyclerMaterialDto> = emptyList(), val rates: List<RecyclerRateDto> = emptyList(), val pickupAvailability: String? = null, val serviceArea: ServiceAreaDto? = null, val operatingHours: JsonObject? = null, val averageHandoverTime: String? = null, val rating: Double? = null, val reviewCount: Int = 0, val completedHandovers: Int? = null, val lastUpdated: String? = null, val contact: ContactDto? = null, val distanceKm: Double? = null)
-data class AuthorizationDto(val authority: String? = null, val validUntil: String? = null)
+data class AuthorizationDto(
+    val authority: String? = null,
+    val type: String? = null,
+    val registrationNumber: String? = null,
+    val evidenceReference: String? = null,
+    val verificationSource: String? = null,
+    val verifiedBy: String? = null,
+    val verifiedAt: String? = null,
+    val reviewReason: String? = null,
+    val validUntil: String? = null
+)
 data class RecyclerMaterialDto(val category: String, val subcategories: List<String> = emptyList(), val minAcceptableWeight: Double? = null, val maxAcceptableWeight: Double? = null)
 data class RecyclerRateDto(val materialCategory: String, val pricePerKg: Double, val updatedAt: String? = null)
 data class RecyclerRateUpdateDto(val materialCategory: String, val pricePerKg: Double)
 data class RecyclerRatesUpdateRequestDto(val rates: List<RecyclerRateUpdateDto>)
 data class RecyclerProfileUpdateRequestDto(val pickupAvailability: String? = null, val maxPickupDistanceKm: Double? = null, val operatingHours: JsonObject? = null)
+data class RecyclerVerificationRequestDto(
+    val authority: String,
+    val registrationNumber: String,
+    val authorizationType: String,
+    val evidenceReference: String,
+    val verificationSource: String,
+    val validUntil: String
+)
 data class ServiceAreaDto(val maxPickupDistanceKm: Double? = null)
 data class ContactDto(val phone: String? = null, val email: String? = null, val alternatePhone: String? = null)
 data class RecyclerMatchesDto(val lotId: String, val matches: List<RecyclerMatchDto> = emptyList())

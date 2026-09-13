@@ -79,15 +79,18 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = !initialDark
         }
         val app = application as KabadiwalaApp
-        // Local-only QA entry point. Release builds ignore the extra, while
-        // designers can open the household journey without creating test accounts.
+        // Local-only QA entry points. Release builds ignore these extras. The
+        // live variant opens the real seller screen without creating an account,
+        // so UI/API error states can be inspected on a clean emulator.
         val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
+        val householdLivePreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHouseholdLive", false)
+        val householdPreviewMode = householdPreview || householdLivePreview
         // The collector id can be created by the remote OTP response during
         // this activity session, so ViewModels read it when they are created.
         val factory = KcViewModelFactory(app, app.container)
         setContent {
             var appearanceMode by remember { mutableStateOf(AppearanceManager.load(this@MainActivity)) }
-            var activeRole by remember { mutableStateOf(if (householdPreview) AccountRole.HOUSEHOLD else app.container.currentAccount()?.role ?: AccountRole.COLLECTOR) }
+            var activeRole by remember { mutableStateOf(if (householdPreviewMode) AccountRole.HOUSEHOLD else app.container.currentAccount()?.role ?: AccountRole.COLLECTOR) }
             KabadiwalaConnectTheme(
                 darkTheme = AppearanceManager.isDark(appearanceMode),
                 role = activeRole
@@ -102,7 +105,7 @@ class MainActivity : ComponentActivity() {
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
                 val cachedAccount = app.container.currentAccount()
-                val initialRoute = if (demoMode) Destinations.HOME else if (!app.container.hasRestorableSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!app.container.hasRestorableSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode)
@@ -129,20 +132,43 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                LaunchedEffect(languageSelected, route, demoMode, app.container.hasRestorableSession()) {
+                    if (languageSelected && !demoMode && !app.container.hasRestorableSession() && route != Destinations.AUTH && route != null) {
+                        navController.navigate(Destinations.AUTH) {
+                            popUpTo(0)
+                            launchSingleTop = true
+                        }
+                    }
+                }
 
                 val connection by app.container.connectivityObserver.state
                     .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
                 val unreadNotifications by app.container.unreadNotificationCount(app.container.currentAccount()?.profileId.orEmpty())
                     .collectAsStateWithLifecycle(initialValue = 0)
                 LaunchedEffect(connection) {
-                    if (connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
-                        app.container.refreshAccount()
+                    if (!householdLivePreview && connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
+                        val hadValidSession = app.container.hasValidSession()
+                        val refreshedAccount = app.container.refreshAccount()
                         if (app.container.hasValidSession()) {
                             // Pull server deltas after auth refresh so a
                             // reconnect repairs stale local state before the
                             // broader catalogue refresh runs.
                             runCatching { app.container.reconcileChanges() }
                             app.container.refreshCatalogs()
+                        } else if (!hadValidSession && refreshedAccount == null) {
+                            // A refresh token can be present after an expired
+                            // or revoked session. Do not strand the user on a
+                            // collector screen with a permanent “session
+                            // expired” banner: clear the account boundary and
+                            // return to the real sign-in route.
+                            app.container.clearAccount()
+                            activeRole = AccountRole.COLLECTOR
+                            if (route != Destinations.AUTH) {
+                                navController.navigate(Destinations.AUTH) {
+                                    popUpTo(0)
+                                    launchSingleTop = true
+                                }
+                            }
                         }
                     }
                 }

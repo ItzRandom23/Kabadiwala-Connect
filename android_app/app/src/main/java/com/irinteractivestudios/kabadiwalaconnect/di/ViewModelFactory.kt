@@ -58,6 +58,7 @@ class KcViewModelFactory(
     fun requestSync() = container.syncScheduler.requestSync()
     suspend fun resetSyncItem(uid: Long) = container.database.syncQueueDao().resetForRetry(uid)
     val currentAccount: AccountProfile? get() = container.currentAccount()
+    fun updateStoredAccountLanguage(tag: String) = container.updateStoredAccountLanguage(tag)
     suspend fun refreshCatalogs(location: String? = null, current: CurrentLocation? = null) =
         container.refreshCatalogs(location, current?.latitude, current?.longitude)
     suspend fun refreshEarnings() = container.refreshEarnings()

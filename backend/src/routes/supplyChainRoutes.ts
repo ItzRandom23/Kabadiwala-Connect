@@ -12,6 +12,8 @@ const positive = z.number().finite().positive();
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/);
 const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional() });
 const pickupRequest = z.object({ kabadiwalaId: id, requestedSlot: z.string().datetime().optional() });
+const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
+const activePickupStatuses = ['REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
 const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional() }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
@@ -46,11 +48,40 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!listing) throw new AppError('NOT_FOUND', 'Posted household listing not found', 404);
     const kabadiwala = await store.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' } });
     if (!kabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404);
-    const pickup = await store.pickupRequest.upsert({ where: { listingId_kabadiwalaId: { listingId, kabadiwalaId: input.kabadiwalaId } }, update: { requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : undefined, status: 'REQUESTED' }, create: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: input.kabadiwalaId, requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : undefined } });
-    res.status(201).json({ success: true, data: pickup });
+    const active = await store.pickupRequest.findFirst({ where: { listingId, status: { in: activePickupStatuses } }, select: { kabadiwalaId: true } });
+    if (active && active.kabadiwalaId !== input.kabadiwalaId) throw new AppError('CONFLICT', 'A pickup request is already active for this listing', 409);
+    const existing = await store.pickupRequest.findUnique({ where: { listingId_kabadiwalaId: { listingId, kabadiwalaId: input.kabadiwalaId } } });
+    // Repeating a request for the same partner is idempotent. Never move an
+    // accepted or scheduled pickup backwards to REQUESTED on a retry.
+    const pickup = existing && activePickupStatuses.includes(existing.status)
+      ? existing
+      : await store.pickupRequest.upsert({ where: { listingId_kabadiwalaId: { listingId, kabadiwalaId: input.kabadiwalaId } }, update: { requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : undefined, status: 'REQUESTED', cancelledBy: null, cancellationReason: null }, create: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: input.kabadiwalaId, requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : undefined } });
+    res.status(existing ? 200 : 201).json({ success: true, data: pickup });
   });
   router.get('/household/pickups', requireHousehold(jwt, collectors), async (req, res) => {
     res.json({ success: true, data: await store.pickupRequest.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+  });
+  router.post('/household/listings/:listingId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
+    const listingId = parse(id, req.params.listingId); const input = parse(cancellationInput, req.body ?? {});
+    await store.$transaction(async (tx: any) => {
+      const listing = await tx.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId, status: 'POSTED' } });
+      if (!listing) throw new AppError('CONFLICT', 'Only an open listing can be cancelled', 409);
+      await tx.householdListing.update({ where: { id: listingId }, data: { status: 'CANCELLED' } });
+      await tx.pickupRequest.updateMany({ where: { listingId, householdId: req.identity!.collectorId, status: { in: activePickupStatuses } }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: input.reason ?? null } });
+    });
+    res.json({ success: true });
+  });
+  router.post('/household/pickups/:pickupId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
+    const pickupId = parse(id, req.params.pickupId); const input = parse(cancellationInput, req.body ?? {});
+    await store.$transaction(async (tx: any) => {
+      const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['REQUESTED', 'ACCEPTED', 'SCHEDULED'] } } });
+      if (!pickup) throw new AppError('CONFLICT', 'This pickup can no longer be cancelled', 409);
+      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['REQUESTED', 'ACCEPTED', 'SCHEDULED'] } }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: input.reason ?? null } });
+      if (!updated.count) throw new AppError('CONFLICT', 'This pickup was already updated', 409);
+      const remaining = await tx.pickupRequest.count({ where: { listingId: pickup.listingId, status: { in: activePickupStatuses } } });
+      if (!remaining) await tx.householdListing.updateMany({ where: { id: pickup.listingId, householdId: req.identity!.collectorId, status: 'MATCHED' }, data: { status: 'POSTED' } });
+    });
+    res.json({ success: true });
   });
 
   router.get('/kabadiwala/listings', requireAuth(jwt, collectors), async (req, res) => {

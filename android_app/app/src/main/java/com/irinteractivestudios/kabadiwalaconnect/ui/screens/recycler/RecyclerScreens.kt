@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
@@ -50,6 +52,8 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
@@ -69,9 +73,28 @@ private val demoLots = listOf(
 )
 
 @Composable
-fun RecyclerVerificationScreen(profile: AccountProfile?, onRefresh: () -> Unit = {}) {
-    var checked by remember { mutableStateOf(false) }
-    val status = profile?.verificationStatus ?: RecyclerVerificationStatus.PENDING
+fun RecyclerVerificationScreen(
+    profile: AccountProfile?,
+    recyclerProfile: RecyclerDto? = null,
+    loading: Boolean = false,
+    saving: Boolean = false,
+    error: String? = null,
+    saved: Boolean = false,
+    onRefresh: () -> Unit = {},
+    onSubmit: (RecyclerVerificationRequestDto) -> Unit = {},
+    onOpenMarketplace: () -> Unit = {}
+) {
+    val status = recyclerProfile?.authorizationStatus?.let { value ->
+        runCatching { RecyclerVerificationStatus.valueOf(value) }.getOrNull()
+    } ?: profile?.verificationStatus ?: RecyclerVerificationStatus.PENDING
+    var authority by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.authority.orEmpty()) }
+    var registrationNumber by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.registrationNumber.orEmpty()) }
+    var authorizationType by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.type.orEmpty()) }
+    var validUntil by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.validUntil?.take(10).orEmpty()) }
+    var evidenceReference by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.evidenceReference.orEmpty()) }
+    var verificationSource by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.verificationSource.orEmpty()) }
+    var declarationAccepted by remember { mutableStateOf(false) }
+    var localError by remember { mutableStateOf<Int?>(null) }
     val detailRes = when (status) {
         RecyclerVerificationStatus.PENDING -> R.string.recycler_verification_pending_detail
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_rejected_detail
@@ -83,16 +106,124 @@ fun RecyclerVerificationScreen(profile: AccountProfile?, onRefresh: () -> Unit =
         RecyclerVerificationStatus.REJECTED, RecyclerVerificationStatus.SUSPENDED -> MaterialTheme.colorScheme.errorContainer
         RecyclerVerificationStatus.PENDING -> MaterialTheme.colorScheme.secondaryContainer
     }
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
-        Text(stringResource(if (status == RecyclerVerificationStatus.VERIFIED) R.string.recycler_verification_verified_title else R.string.recycler_verification_not_approved_title), style = MaterialTheme.typography.headlineMedium)
-        Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
-        StatusCard(status.name, "Backend verification status", statusColor)
-        profile?.businessName?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
-        Text("Approval status is controlled by the backend.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (checked) Text("Status checked: ${status.name}.", color = if (status == RecyclerVerificationStatus.REJECTED || status == RecyclerVerificationStatus.SUSPENDED) MaterialTheme.colorScheme.error else KcAmberSecondary, style = MaterialTheme.typography.bodyMedium)
-        OutlinedButton(onClick = { checked = true; onRefresh() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Check verification status") }
+    val canSubmit = status == RecyclerVerificationStatus.PENDING || status == RecyclerVerificationStatus.REJECTED
+    val statusLabelRes = when (status) {
+        RecyclerVerificationStatus.PENDING -> R.string.recycler_verification_status_pending
+        RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_status_verified
+        RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_status_rejected
+        RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+        Text(
+            stringResource(
+                when {
+                    status == RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_verified_title
+                    status == RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_rejected_title
+                    else -> R.string.recycler_verification_not_approved_title
+                }
+            ),
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
+        StatusCard(stringResource(statusLabelRes), stringResource(R.string.recycler_verification_status_detail), statusColor)
+        recyclerProfile?.name?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
+        Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (status == RecyclerVerificationStatus.VERIFIED) {
+            VerificationEvidenceSummary(recyclerProfile)
+            Button(onClick = onOpenMarketplace, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                Text(stringResource(R.string.recycler_verification_open_marketplace))
+            }
+        } else if (status == RecyclerVerificationStatus.SUSPENDED) {
+            Text(stringResource(R.string.recycler_verification_suspended_action), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        } else if (canSubmit) {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.recycler_verification_submit_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.recycler_verification_submit_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (status == RecyclerVerificationStatus.REJECTED) {
+                        recyclerProfile?.authorizationDetails?.reviewReason?.takeIf { it.isNotBlank() }?.let {
+                            Text(stringResource(R.string.recycler_verification_review_feedback, it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    OutlinedTextField(authority, { authority = it }, label = { Text(stringResource(R.string.recycler_verification_authority)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(authorizationType, { authorizationType = it }, label = { Text(stringResource(R.string.recycler_verification_type)) }, placeholder = { Text(stringResource(R.string.recycler_verification_type_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(registrationNumber, { registrationNumber = it }, label = { Text(stringResource(R.string.recycler_verification_registration_number)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(validUntil, { validUntil = it.filter { char -> char.isDigit() || char == '-' }.take(10) }, label = { Text(stringResource(R.string.recycler_verification_valid_until)) }, placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(evidenceReference, { evidenceReference = it }, label = { Text(stringResource(R.string.recycler_verification_evidence_reference)) }, placeholder = { Text(stringResource(R.string.recycler_verification_evidence_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(verificationSource, { verificationSource = it }, label = { Text(stringResource(R.string.recycler_verification_source)) }, placeholder = { Text(stringResource(R.string.recycler_verification_source_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = declarationAccepted, onCheckedChange = { declarationAccepted = it })
+                        Text(stringResource(R.string.recycler_verification_declaration), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    localError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    error?.let { Text(stringResource(R.string.recycler_verification_submit_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    Button(
+                        onClick = {
+                            val validationError = validateVerificationForm(authority, registrationNumber, authorizationType, validUntil, evidenceReference, verificationSource, declarationAccepted)
+                            localError = validationError
+                            if (validationError == null) onSubmit(RecyclerVerificationRequestDto(authority.trim(), registrationNumber.trim(), authorizationType.trim(), evidenceReference.trim(), verificationSource.trim(), validUntil.trim()))
+                        },
+                        enabled = !saving && !loading,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
+                    ) {
+                        if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+                        Text(stringResource(if (saving) R.string.recycler_verification_submitting else R.string.recycler_verification_submit))
+                    }
+                    if (saved) Text(stringResource(R.string.recycler_verification_submitted), color = KcAmberSecondary, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onRefresh, enabled = !loading && !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.recycler_verification_refresh)) }
+            if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcAmberSecondary, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun VerificationEvidenceSummary(profile: RecyclerDto?) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.recycler_verification_evidence_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            profile?.authorizationDetails?.authority?.let { Text(stringResource(R.string.recycler_verified_by, it)) }
+            profile?.authorizationDetails?.type?.let { Text(stringResource(R.string.recycler_verification_type_value, it)) }
+            profile?.authorizationDetails?.registrationNumber?.let { Text(stringResource(R.string.recycler_verification_registration_value, it)) }
+            profile?.authorizationDetails?.validUntil?.take(10)?.let { Text(stringResource(R.string.recycler_verification_valid_until_value, it)) }
+            Text(stringResource(R.string.recycler_verification_evidence_private), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun validateVerificationForm(
+    authority: String,
+    registrationNumber: String,
+    authorizationType: String,
+    validUntil: String,
+    evidenceReference: String,
+    verificationSource: String,
+    declarationAccepted: Boolean
+): Int? = when {
+    authority.trim().length < 2 -> R.string.recycler_verification_error_authority
+    authorizationType.trim().length < 2 -> R.string.recycler_verification_error_type
+    registrationNumber.trim().length < 2 -> R.string.recycler_verification_error_registration
+    !validUntil.trim().matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) -> R.string.recycler_verification_error_date
+    evidenceReference.trim().length < 2 -> R.string.recycler_verification_error_evidence
+    verificationSource.trim().length < 2 -> R.string.recycler_verification_error_source
+    !declarationAccepted -> R.string.recycler_verification_error_declaration
+    else -> null
 }
 
 @Composable
@@ -115,54 +246,164 @@ fun RecyclerMarketplaceScreen(
         val responseMatches = !needsResponseOnly || lot.id !in sentLots
         materialMatches && responseMatches
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.recycler_marketplace_title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
-            if (!demoMode) TextButton(onClick = onRefresh, enabled = !liveLoading) { Text(stringResource(R.string.future_refresh)) }
+            Text(
+                stringResource(R.string.recycler_marketplace_title),
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.weight(1f)
+            )
+            if (!demoMode) {
+                TextButton(onClick = onRefresh, enabled = !liveLoading) {
+                    Text(stringResource(R.string.future_refresh))
+                }
+            }
         }
-        Text("Verified collector lots that match your materials and service area.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Verified collector lots that match your materials and service area.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         OperationsPulse(
             openLots = if (demoMode) visibleLots.size else liveLots.size,
-            needsResponse = if (demoMode) visibleLots.count { it.id !in sentLots } else liveLots.count { it.requestId !in liveSubmittedIds }
+            needsResponse = if (demoMode) {
+                visibleLots.count { it.id !in sentLots }
+            } else {
+                liveLots.count { it.requestId !in liveSubmittedIds }
+            }
         )
+
         if (!demoMode) {
             if (liveLoading) {
-                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
             }
-            liveError?.let { error ->
-                Text("Could not refresh the marketplace. Your saved work is safe. Try again when the connection is better.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.common_retry)) }
+            if (liveError != null) {
+                Text(
+                    "Could not refresh the marketplace. Your saved work is safe. Try again when the connection is better.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                ) {
+                    Text(stringResource(R.string.common_retry))
+                }
             }
             if (!liveLoading && liveLots.isEmpty() && liveError == null) {
                 EmptyContent(modifier = Modifier.fillMaxWidth().weight(1f))
             } else if (liveLots.isNotEmpty()) {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f)
+                ) {
                     items(liveLots, key = { it.id }) { lot ->
-                        LiveMarketplaceCard(lot, submitted = lot.requestId in liveSubmittedIds, submitting = lot.requestId in liveSubmittingIds, onOfferSent = onLiveOfferSent)
+                        LiveMarketplaceCard(
+                            lot = lot,
+                            submitted = lot.requestId in liveSubmittedIds,
+                            submitting = lot.requestId in liveSubmittingIds,
+                            onOfferSent = onLiveOfferSent
+                        )
                     }
                 }
             }
         } else {
             DemoDataBanner()
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FilterChip(selected = materialFilter == "All", onClick = { materialFilter = "All" }, label = { Text("All") }) }
-                item { FilterChip(selected = materialFilter == "PCB", onClick = { materialFilter = "PCB" }, label = { Text("PCB") }) }
-                item { FilterChip(selected = materialFilter == "Copper", onClick = { materialFilter = "Copper" }, label = { Text("Copper") }) }
-                item { FilterChip(selected = needsResponseOnly, onClick = { needsResponseOnly = !needsResponseOnly }, label = { Text("Needs response") }) }
+                item {
+                    FilterChip(
+                        selected = materialFilter == "All",
+                        onClick = { materialFilter = "All" },
+                        label = { Text("All") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = materialFilter == "PCB",
+                        onClick = { materialFilter = "PCB" },
+                        label = { Text("PCB") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = materialFilter == "Copper",
+                        onClick = { materialFilter = "Copper" },
+                        label = { Text("Copper") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = needsResponseOnly,
+                        onClick = { needsResponseOnly = !needsResponseOnly },
+                        label = { Text("Needs response") }
+                    )
+                }
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
                 items(visibleLots, key = { it.id }) { lot ->
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.material, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(lot.id, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.weight, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary); Text("  ·  ${lot.range}", style = MaterialTheme.typography.bodyLarge, color = KcAmberSecondary) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, modifier = Modifier.padding(end = 5.dp)); Text("${lot.area} · ${lot.distance}", style = MaterialTheme.typography.bodyMedium) }
-                        if (lot.id in sentLots) Text("Offer saved. Collector will see it after sync.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
-                        else Button(onClick = { sentLots = sentLots + lot.id; onOfferSent(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Make an offer") }
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))
+                    ) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    lot.material,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    lot.id,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    lot.weight,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text("  ·  ${lot.range}", style = MaterialTheme.typography.bodyLarge, color = KcAmberSecondary)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.LocationOn, null, modifier = Modifier.padding(end = 5.dp))
+                                Text("${lot.area} · ${lot.distance}", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            if (lot.id in sentLots) {
+                                Text(
+                                    "Offer saved. Collector will see it after sync.",
+                                    color = KcTheme.extended.success,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            } else {
+                                Button(
+                                    onClick = {
+                                        sentLots = sentLots + lot.id
+                                        onOfferSent(lot.id)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                ) {
+                                    Text("Make an offer")
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
         }
     }
 }

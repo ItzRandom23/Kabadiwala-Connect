@@ -7,6 +7,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerProfileUpdateRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRatesUpdateRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +55,16 @@ class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
             runCatching { api.updateRecyclerProfile(RecyclerProfileUpdateRequestDto(pickupAvailability = value)).requireData() }
                 .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
                 .onFailure { error -> _state.value = _state.value.copy(saving = false, error = error.message ?: "Availability could not be saved") }
+        }
+    }
+
+    fun submitVerification(request: RecyclerVerificationRequestDto) {
+        if (_state.value.saving) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(saving = true, error = null, saved = false)
+            runCatching { api.submitRecyclerVerificationRequest(request).requireData() }
+                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = error.message ?: "Verification request could not be submitted") }
         }
     }
 }
