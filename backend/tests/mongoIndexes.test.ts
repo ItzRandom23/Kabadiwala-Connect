@@ -79,6 +79,6 @@ describe('Mongo optional unique indexes', () => {
 
     await expect(ensureOptionalUniqueIndexes(db)).resolves.toBe(false);
     expect(commands).toHaveLength(1);
-    expect(commands[0]).toEqual({ listIndexes: 'AiInference', cursor: {} });
+    expect(commands[0]).toEqual({ listIndexes: 'Collector', cursor: {} });
   });
 });
