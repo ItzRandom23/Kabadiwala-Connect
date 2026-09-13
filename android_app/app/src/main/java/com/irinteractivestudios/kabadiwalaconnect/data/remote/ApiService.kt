@@ -35,6 +35,9 @@ interface ApiService {
     @POST("auth/login")
     suspend fun login(@Body body: EmailAuthRequestDto): Response<ApiEnvelope<AccountAuthResponseDto>>
 
+    @POST("auth/admin-login")
+    suspend fun adminLogin(@Body body: EmailAuthRequestDto): Response<ApiEnvelope<AdminAuthResponseDto>>
+
     @GET("auth/profile")
     suspend fun getAccountProfile(): Response<ApiEnvelope<AccountProfileDto>>
 
@@ -84,11 +87,23 @@ interface ApiService {
     @GET("recyclers/{recyclerId}")
     suspend fun getRecycler(@Path("recyclerId") recyclerId: String): Response<ApiEnvelope<RecyclerDto>>
 
+    @GET("recycler/profile")
+    suspend fun getRecyclerProfile(): Response<ApiEnvelope<RecyclerDto>>
+
+    @PATCH("recycler/profile")
+    suspend fun updateRecyclerProfile(@Body body: RecyclerProfileUpdateRequestDto): Response<ApiEnvelope<RecyclerDto>>
+
+    @PUT("recycler/rates")
+    suspend fun updateRecyclerRates(@Body body: RecyclerRatesUpdateRequestDto): Response<ApiEnvelope<RecyclerDto>>
+
     @GET("recyclers/match")
     suspend fun matchRecyclers(@Query("lotId") lotId: String): Response<ApiEnvelope<RecyclerMatchesDto>>
 
     @POST("quotes/request")
     suspend fun requestQuote(@Body body: QuoteRequestDto): Response<ApiEnvelope<QuoteRequestResponseDto>>
+
+    @POST("quotes/request-batch")
+    suspend fun requestQuoteBatch(@Body body: QuoteBatchRequestDto): Response<ApiEnvelope<JsonObject>>
 
     @GET("quotes/pending")
     suspend fun getPendingQuotes(@Query("lotId") lotId: String?): Response<ApiEnvelope<List<QuoteDto>>>
@@ -123,8 +138,15 @@ interface ApiService {
     @PUT("handovers/{handoverId}/evidence")
     suspend fun updateHandoverEvidence(@Path("handoverId") handoverId: String, @Body body: HandoverEvidenceRequestDto): Response<ApiEnvelope<HandoverDto>>
 
+    @Multipart
+    @POST("handovers/{handoverId}/evidence/photo")
+    suspend fun uploadHandoverEvidencePhoto(@Path("handoverId") handoverId: String, @Part photo: MultipartBody.Part): Response<ApiEnvelope<HandoverDto>>
+
     @POST("handovers/{handoverId}/dispute")
     suspend fun disputeHandover(@Path("handoverId") handoverId: String, @Body body: JsonObject): Response<ApiEnvelope<DisputeDto>>
+
+    @GET("transactions/{lotId}/timeline")
+    suspend fun getTransactionTimeline(@Path("lotId") lotId: String): Response<ApiEnvelope<TransactionTimelineDto>>
 
     @GET("recycler/handovers")
     suspend fun getRecyclerHandovers(): Response<ApiEnvelope<List<HandoverDto>>>
@@ -146,6 +168,18 @@ interface ApiService {
 
     @GET("earnings/ledger")
     suspend fun getEarnings(): Response<ApiEnvelope<EarningsLedgerDto>>
+
+    @GET("notifications")
+    suspend fun getNotifications(@Query("unread") unreadOnly: Boolean = false, @Query("limit") limit: Int = 50): Response<ApiEnvelope<List<NotificationDto>>>
+
+    @GET("notifications/unread-count")
+    suspend fun getNotificationUnreadCount(): Response<ApiEnvelope<UnreadCountDto>>
+
+    @POST("notifications/{notificationId}/read")
+    suspend fun markNotificationRead(@Path("notificationId") notificationId: String): Response<ApiEnvelope<NotificationReadDto>>
+
+    @POST("notifications/read-all")
+    suspend fun markAllNotificationsRead(): Response<ApiEnvelope<NotificationReadDto>>
 
     @POST("sync")
     suspend fun sync(@Body body: SyncBatchRequestDto): Response<ApiEnvelope<SyncBatchResponseDto>>

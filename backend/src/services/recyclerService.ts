@@ -51,6 +51,7 @@ export class RecyclerService {
   ): Prisma.RecyclerWhereInput {
     return {
       authorizationStatus: 'VERIFIED',
+      OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { gte: new Date() } }],
       ...(opts.location?.trim()
         ? { areaName: { contains: opts.location.trim(), mode: 'insensitive' } }
         : {}),
@@ -63,21 +64,14 @@ export class RecyclerService {
     return {
       id: recycler.id,
       name: recycler.name,
-      facilityLocation: {
-        latitude: recycler.latitude,
-        longitude: recycler.longitude,
-        address: recycler.address,
-        areaName: recycler.areaName
-      },
+      // Discovery is intentionally area-level. Exact coordinates and street
+      // address are reserved for an authorized operational workflow.
+      facilityLocation: { latitude: null, longitude: null, address: null, areaName: recycler.areaName },
       authorizationStatus: recycler.authorizationStatus,
       authorizationDetails: {
         authority: recycler.authorizationAuthority,
-        registrationNumber: recycler.licenseNumber,
         type: recycler.authorizationType,
-        evidenceReference: recycler.authorizationEvidenceReference,
-        verificationSource: recycler.verificationSource,
         verifiedAt: recycler.verifiedAt,
-        verifiedBy: recycler.verifiedBy,
         validUntil: recycler.authorizationValidUntil
       },
       materialsAccepted: recycler.materials.map((material: any) => ({
@@ -103,12 +97,34 @@ export class RecyclerService {
       reviewCount: recycler.reviewCount,
       completedHandovers: recycler._count?.handovers ?? null,
       lastUpdated: recycler.updatedAt,
+      ...(distanceKm === undefined ? {} : { distanceKm: Number(distanceKm.toFixed(1)) })
+    };
+  }
+
+  private ownerView(recycler: any, distanceKm?: number) {
+    return {
+      ...this.publicView(recycler, distanceKm),
+      facilityLocation: {
+        latitude: recycler.latitude,
+        longitude: recycler.longitude,
+        address: recycler.address,
+        areaName: recycler.areaName
+      },
       contact: {
         phone: recycler.phone,
         email: recycler.email,
         alternatePhone: recycler.alternatePhone
       },
-      ...(distanceKm === undefined ? {} : { distanceKm: Number(distanceKm.toFixed(1)) })
+      authorizationDetails: {
+        authority: recycler.authorizationAuthority,
+        type: recycler.authorizationType,
+        registrationNumber: recycler.licenseNumber,
+        evidenceReference: recycler.authorizationEvidenceReference,
+        verificationSource: recycler.verificationSource,
+        verifiedBy: recycler.verifiedBy,
+        verifiedAt: recycler.verifiedAt,
+        validUntil: recycler.authorizationValidUntil
+      }
     };
   }
 
@@ -169,8 +185,13 @@ export class RecyclerService {
 
     candidates.sort((left, right) => {
       if (opts.sort === 'rate') {
-        const rateDifference = (right.recycler.rates[0]?.pricePerKg ?? 0)
-          - (left.recycler.rates[0]?.pricePerKg ?? 0);
+        const rightRate = opts.material
+          ? right.recycler.rates.find((rate: any) => rate.materialCategory === opts.material)?.pricePerKg
+          : Math.max(...right.recycler.rates.map((rate: any) => rate.pricePerKg), 0);
+        const leftRate = opts.material
+          ? left.recycler.rates.find((rate: any) => rate.materialCategory === opts.material)?.pricePerKg
+          : Math.max(...left.recycler.rates.map((rate: any) => rate.pricePerKg), 0);
+        const rateDifference = (rightRate ?? 0) - (leftRate ?? 0);
         if (rateDifference !== 0) return rateDifference;
       } else {
         const distanceDifference = (left.distanceKm ?? DISTANCE_FALLBACK_KM)
@@ -196,13 +217,44 @@ export class RecyclerService {
 
   async detail(id: string) {
     const recycler = await this.db.recycler.findFirst({
-      where: { id, authorizationStatus: 'VERIFIED' },
+      where: { id, authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { gte: new Date() } }] },
       include: this.include
     });
     if (!recycler) {
       throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
     }
     return this.publicView(recycler);
+  }
+
+  async selfProfile(id: string) {
+    const recycler = await this.db.recycler.findUnique({ where: { id }, include: this.include });
+    if (!recycler) throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
+    return this.ownerView(recycler);
+  }
+
+  async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; operatingHours?: Prisma.InputJsonValue }) {
+    const recycler = await this.db.recycler.update({ where: { id }, data: input, include: this.include }).catch(error => {
+      if (error?.code === 'P2025') throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
+      throw error;
+    });
+    return this.ownerView(recycler);
+  }
+
+  async updateRates(id: string, rates: Array<{ materialCategory: MaterialCategory; pricePerKg: number }>) {
+    const exists = await this.db.recycler.findUnique({ where: { id } });
+    if (!exists) throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
+    await this.db.$transaction(async tx => {
+      const categories = rates.map(rate => rate.materialCategory);
+      await tx.recyclerRate.deleteMany({ where: { recyclerId: id, ...(categories.length ? { materialCategory: { notIn: categories } } : {}) } });
+      for (const rate of rates) {
+        await tx.recyclerRate.upsert({
+          where: { recyclerId_materialCategory: { recyclerId: id, materialCategory: rate.materialCategory } },
+          create: { recyclerId: id, materialCategory: rate.materialCategory, pricePerKg: rate.pricePerKg, unit: 'KILOGRAM', qualityStatus: 'UNVERIFIED', effectiveAt: new Date() },
+          update: { pricePerKg: rate.pricePerKg, effectiveAt: new Date() }
+        });
+      }
+    });
+    return this.selfProfile(id);
   }
 
   async match(lotId: string, collectorId: string) {
@@ -275,7 +327,7 @@ export class RecyclerService {
     if (!recycler) {
       throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
     }
-    return this.publicView(recycler);
+    return this.ownerView(recycler);
   }
 
   async authorize(
@@ -300,7 +352,8 @@ export class RecyclerService {
           ...(details?.evidenceReference ? { authorizationEvidenceReference: details.evidenceReference } : {}),
           ...(details?.verificationSource ? { verificationSource: details.verificationSource } : {}),
           ...(details?.validUntil ? { authorizationValidUntil: details.validUntil } : {}),
-          ...(status === 'VERIFIED' ? { verifiedAt: new Date(), verifiedBy: actorId } : {})
+          ...(status === 'VERIFIED' ? { verifiedAt: new Date(), verifiedBy: actorId } : {}),
+          ...(status !== 'VERIFIED' ? { verifiedAt: null, verifiedBy: null } : {})
         },
         include: this.include
       });
@@ -313,7 +366,7 @@ export class RecyclerService {
           reason
         }
       });
-      return this.publicView(recycler);
+      return this.ownerView(recycler);
     });
   }
 }

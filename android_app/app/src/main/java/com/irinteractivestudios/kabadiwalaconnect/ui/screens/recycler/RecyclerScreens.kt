@@ -49,6 +49,7 @@ import com.irinteractivestudios.kabadiwalaconnect.R
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
@@ -84,7 +85,7 @@ fun RecyclerVerificationScreen(profile: AccountProfile?, onRefresh: () -> Unit =
     }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
-        Text(if (status == RecyclerVerificationStatus.VERIFIED) "Your facility is verified" else "Your facility is not yet approved", style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(if (status == RecyclerVerificationStatus.VERIFIED) R.string.recycler_verification_verified_title else R.string.recycler_verification_not_approved_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
         StatusCard(status.name, "Backend verification status", statusColor)
         profile?.businessName?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
@@ -101,6 +102,7 @@ fun RecyclerMarketplaceScreen(
     liveLoading: Boolean = false,
     liveError: String? = null,
     liveSubmittedIds: Set<String> = emptySet(),
+    liveSubmittingIds: Set<String> = emptySet(),
     onRefresh: () -> Unit = {},
     onOfferSent: (String) -> Unit = {},
     onLiveOfferSent: (String, Double) -> Unit = { _, _ -> }
@@ -114,7 +116,10 @@ fun RecyclerMarketplaceScreen(
         materialMatches && responseMatches
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Nearby lots", style = MaterialTheme.typography.headlineLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.recycler_marketplace_title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
+            if (!demoMode) TextButton(onClick = onRefresh, enabled = !liveLoading) { Text(stringResource(R.string.future_refresh)) }
+        }
         Text("Verified collector lots that match your materials and service area.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OperationsPulse(
             openLots = if (demoMode) visibleLots.size else liveLots.size,
@@ -126,14 +131,14 @@ fun RecyclerMarketplaceScreen(
             }
             liveError?.let { error ->
                 Text("Could not refresh the marketplace. Your saved work is safe. Try again when the connection is better.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
+                OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.common_retry)) }
             }
             if (!liveLoading && liveLots.isEmpty() && liveError == null) {
                 EmptyContent(modifier = Modifier.fillMaxWidth().weight(1f))
             } else if (liveLots.isNotEmpty()) {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
                     items(liveLots, key = { it.id }) { lot ->
-                        LiveMarketplaceCard(lot, submitted = lot.requestId in liveSubmittedIds, onOfferSent = onLiveOfferSent)
+                        LiveMarketplaceCard(lot, submitted = lot.requestId in liveSubmittedIds, submitting = lot.requestId in liveSubmittingIds, onOfferSent = onLiveOfferSent)
                     }
                 }
             }
@@ -163,7 +168,7 @@ fun RecyclerMarketplaceScreen(
 }
 
 @Composable
-private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, onOfferSent: (String, Double) -> Unit) {
+private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, submitting: Boolean, onOfferSent: (String, Double) -> Unit) {
     var rateText by remember(lot.id) { mutableStateOf("") }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -173,7 +178,7 @@ private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, onOffer
             if (submitted) Text("Offer sent. Collector will see it after sync.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
             else {
                 OutlinedTextField(rateText, { rateText = it.filter { char -> char.isDigit() || char == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { val rate = rateText.toDoubleOrNull() ?: return@Button; onOfferSent(lot.requestId, rate) }, enabled = rateText.toDoubleOrNull()?.let { it > 0 } == true, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Send offer") }
+                Button(onClick = { val rate = rateText.toDoubleOrNull() ?: return@Button; onOfferSent(lot.requestId, rate) }, enabled = rateText.toDoubleOrNull()?.let { it > 0 } == true && !submitting, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { if (submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp)); Text(if (submitting) "Sending…" else "Send offer") }
             }
         }
     }
@@ -223,7 +228,7 @@ fun RecyclerOrdersScreen(
         if (demoMode) {
             item { DemoDataBanner() }
             item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text("Copper Cable · 12.4 kg", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text("Pulkit · Kothrud, Pune", style = MaterialTheme.typography.bodyMedium); Text("₹535/kg · Pickup arranged", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text("  Scan handover QR") } } } }
-            item { Text("No other active orders", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text(stringResource(R.string.recycler_no_orders), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else if (liveLoading) {
             item { LoadingContent(Modifier.fillMaxWidth().heightIn(min = 300.dp)) }
         } else if (liveError) {
@@ -294,7 +299,7 @@ fun RecyclerScanScreen(
                     OutlinedTextField(actualWeight, { actualWeight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.handover_final_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
                     OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
-                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 } == true && !state.confirming && !state.confirmed, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(if (state.confirmed) R.string.recycler_scan_confirmed else R.string.recycler_scan_confirm)) }
+                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && !state.confirming && !state.confirmed, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(if (state.confirmed) R.string.recycler_scan_confirmed else R.string.recycler_scan_confirm)) }
                 }
             }
         }
@@ -303,10 +308,19 @@ fun RecyclerScanScreen(
 }
 
 @Composable
-fun RecyclerPickupsScreen(demoMode: Boolean = false) {
+fun RecyclerPickupsScreen(
+    demoMode: Boolean = false,
+    availability: String? = null,
+    loading: Boolean = false,
+    saving: Boolean = false,
+    error: String? = null,
+    onRefresh: () -> Unit = {},
+    onSave: (String) -> Unit = {}
+) {
     var pickupReady by remember { mutableStateOf(false) }
+    var selectedAvailability by remember(availability) { mutableStateOf(availability ?: "FLEXIBLE") }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Pickup schedule", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.recycler_pickups_title), style = MaterialTheme.typography.headlineLarge)
         if (demoMode) {
             DemoDataBanner()
             OperationalSurface {
@@ -318,24 +332,67 @@ fun RecyclerPickupsScreen(demoMode: Boolean = false) {
                     else Button(onClick = { pickupReady = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Mark pickup ready") }
                 }
             }
-        } else EmptyContent(modifier = Modifier.fillMaxWidth().weight(1f))
+        } else {
+            Text("Tell collectors when your facility can receive a handover. This setting is used in matching.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (loading) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            error?.let { Text("Could not load your availability. Your last saved setting is unchanged.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                listOf("TODAY" to "Today", "THIS_WEEK" to "This week", "FLEXIBLE" to "Flexible").forEach { (value, label) ->
+                    FilterChip(selected = selectedAvailability == value, onClick = { selectedAvailability = value }, label = { Text(label) })
+                }
+            }
+            OperationalSurface {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Current availability: ${selectedAvailability.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.titleMedium)
+                    Text("Collectors will see this before requesting a quote.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            error?.let { OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") } }
+            Button(onClick = { onSave(selectedAvailability) }, enabled = !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+                Text(if (saving) "Saving…" else "Save availability")
+            }
+        }
     }
 }
 
 @Composable
-fun RecyclerRatesScreen() {
-    var pcb by remember { mutableStateOf("340") }
-    var cable by remember { mutableStateOf("535") }
-    var saved by remember { mutableStateOf(false) }
-    val valid = pcb.toDoubleOrNull()?.takeIf { it > 0 } != null && cable.toDoubleOrNull()?.takeIf { it > 0 } != null
+fun RecyclerRatesScreen(
+    rates: List<com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto> = emptyList(),
+    acceptedMaterials: List<String> = listOf("PCB", "COPPER"),
+    loading: Boolean = false,
+    saving: Boolean = false,
+    saved: Boolean = false,
+    error: String? = null,
+    onRefresh: () -> Unit = {},
+    onSave: (List<RecyclerRateUpdateDto>) -> Unit = {}
+) {
+    val categories = remember(acceptedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory }).filter { it.isNotBlank() }.distinct() }
+    var values by remember(categories, rates) { mutableStateOf(categories.associateWith { category -> rates.firstOrNull { it.materialCategory == category }?.pricePerKg?.toString().orEmpty() }) }
+    val valid = values.values.any { it.toDoubleOrNull()?.let { value -> value > 0 } == true }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("My buying rates", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineLarge)
         Text("These rates are shared with matched collectors and added to your rate history when saved.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        RateEditor("PCB / Circuit Board", pcb, { pcb = it })
-        RateEditor("Copper Cable", cable, { cable = it })
+        if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        error?.let { Text("Could not load your current rates. Enter a value to replace them, or try again.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        categories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
         if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcAmberSecondary, style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = { saved = true }, enabled = valid, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save rates") }
+        if (error != null) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
+        Button(onClick = {
+            onSave(values.mapNotNull { (category, value) -> value.toDoubleOrNull()?.takeIf { it > 0 }?.let { RecyclerRateUpdateDto(category, it) } })
+        }, enabled = valid && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+            Text(if (saving) "Saving…" else "Save rates")
+        }
     }
+}
+
+private fun String.displayMaterial(): String = when (this) {
+    "LCD_PANEL" -> "LCD panel"
+    "PCB" -> "PCB / circuit board"
+    "CABLE" -> "Cables"
+    else -> replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
 
 @Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text("$label · ₹/kg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }

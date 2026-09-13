@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.EarningsSummary
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.Payment
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
@@ -26,17 +28,21 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcMetric
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ProofRow
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
-import java.util.Locale
+import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 
 /**
- * Earnings tab: local totals with large rupee figures.
- * Fully offline. Payment recording arrives in Phase 4+.
+ * Earnings tab: local-first totals with large rupee figures and an explicit
+ * server refresh affordance for reconciliation.
  */
 @Composable
 fun EarningsScreen(
     state: UiState<EarningsSummary>,
     onRetry: (() -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null,
+    refreshing: Boolean = false,
+    refreshError: Boolean = false,
     onRecordPayment: () -> Unit = {},
+    payments: List<Payment> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val hasActivity = when (state) {
@@ -56,6 +62,12 @@ fun EarningsScreen(
             text = stringResource(R.string.earnings_title),
             style = MaterialTheme.typography.headlineLarge
         )
+        onRefresh?.let { refresh ->
+            OutlinedButton(onClick = refresh, enabled = !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(if (refreshing) R.string.handover_saving else R.string.future_refresh))
+            }
+        }
+        if (refreshError) Text(stringResource(R.string.earnings_refresh_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         when (state) {
             is UiState.Loading -> LoadingContent()
             is UiState.Error -> ErrorContent(onRetry = onRetry)
@@ -64,6 +76,7 @@ fun EarningsScreen(
             is UiState.Offline -> if (state.cached?.hasActivity() == true) EarningsCards(state.cached) else EarningsEmptyState()
             is UiState.Syncing -> if (state.cached?.hasActivity() == true) EarningsCards(state.cached) else EarningsEmptyState()
         }
+        if (payments.isNotEmpty()) PaymentLedger(payments)
         if (hasActivity) {
             KcPrimaryButton(text = stringResource(R.string.payment_record), onClick = onRecordPayment)
         }
@@ -83,6 +96,21 @@ private fun EarningsSummary.hasActivity(): Boolean =
     totalRupees > 0.0 || pendingRupees > 0.0 || thisMonthRupees > 0.0 || averageLotValueRupees > 0.0
 
 @Composable
+private fun PaymentLedger(payments: List<Payment>) {
+    EvidenceSection(title = stringResource(R.string.earnings_ledger_title)) {
+        payments.take(8).forEach { payment ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.earnings_lot_reference, payment.lotId.takeLast(8)), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.earnings_payment_status, payment.method.name.replace('_', ' '), payment.syncState.name.replace('_', ' ')), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(rupees(payment.amountRupees), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
 private fun EarningsCards(summary: EarningsSummary) {
     EvidenceSection(title = stringResource(R.string.earnings_total)) {
         Text(rupees(summary.totalRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
@@ -100,4 +128,4 @@ private fun EarningsCards(summary: EarningsSummary) {
 
 @Composable
 private fun rupees(amount: Double): String =
-    stringResource(R.string.earnings_rupees, String.format(Locale.US, "%,.0f", amount))
+    stringResource(R.string.earnings_rupees, IndiaFormat.number(amount))

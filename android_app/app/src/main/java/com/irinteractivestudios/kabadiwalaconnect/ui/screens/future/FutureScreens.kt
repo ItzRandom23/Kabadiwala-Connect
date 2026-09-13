@@ -58,6 +58,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DiyActivityDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DisputeAnalyticsDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.GovernmentSchemeDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RewardLedgerDto
 import java.text.NumberFormat
 import java.util.Locale
@@ -274,6 +275,50 @@ fun DisputeAnalyticsScreen(analytics: DisputeAnalyticsDto?, modifier: Modifier =
             item { BreakdownCard(stringResource(R.string.future_by_status), data.byStatus) }
             if (data.averageResolutionHours != null) item { StatCard(stringResource(R.string.future_average_resolution), stringResource(R.string.future_hours, data.averageResolutionHours), stringResource(R.string.future_based_on_resolved)) }
             if (data.insufficientData) item { Text(stringResource(R.string.future_more_data), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+@Composable
+fun NotificationsScreen(
+    notifications: List<NotificationDto>,
+    unreadCount: Int,
+    onRefresh: () -> Unit,
+    onOpen: (NotificationDto) -> Unit,
+    onMarkAllRead: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.notifications_title), style = MaterialTheme.typography.headlineLarge)
+                    Text(
+                        stringResource(if (unreadCount == 0) R.string.notifications_all_caught_up else R.string.notifications_unread, unreadCount),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, stringResource(R.string.future_refresh)) }
+            }
+        }
+        if (unreadCount > 0) {
+            item { TextButton(onClick = onMarkAllRead, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.notifications_mark_all_read)) } }
+        }
+        if (notifications.isEmpty()) item { EmptyFeatureCard(stringResource(R.string.notifications_empty_title), stringResource(R.string.notifications_empty_detail)) }
+        items(notifications, key = { it.id }) { notification ->
+            FeatureSurface(
+                modifier = Modifier.clickable { onOpen(notification) },
+                containerColor = if (notification.readAt.isNullOrBlank()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(notification.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (notification.readAt.isNullOrBlank()) AssistChip(onClick = { onOpen(notification) }, label = { Text(stringResource(R.string.notifications_new)) })
+                    }
+                    Text(notification.body, style = MaterialTheme.typography.bodyMedium)
+                    notification.createdAt?.take(16)?.let { Text(it.replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
         }
     }
 }

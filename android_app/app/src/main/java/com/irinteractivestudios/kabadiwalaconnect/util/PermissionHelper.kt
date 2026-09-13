@@ -5,12 +5,12 @@ import androidx.annotation.StringRes
 import com.irinteractivestudios.kabadiwalaconnect.R
 
 /**
- * Permission foundation (Phase 1).
+ * Permission helpers for on-demand feature access.
  *
  * Rule: permissions are declared in the manifest but NEVER requested on
  * app launch. Each permission is requested only when its feature is used:
- * - [CAMERA] -> lot photos (Phase 2+)
- * - [LOCATION] -> collection location (Phase 2+)
+ * - [CAMERA] -> lot and handover evidence photos
+ * - [LOCATION] -> collection location
  *
  * [PermissionDecisions] keeps the rationale flow unit-testable without
  * Android dependencies.

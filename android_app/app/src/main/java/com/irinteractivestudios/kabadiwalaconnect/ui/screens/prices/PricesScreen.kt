@@ -45,9 +45,10 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
-import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: PriceSpeaker, demoMode: Boolean = false, modifier: Modifier = Modifier) {
@@ -108,23 +109,34 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TrendIcon(current.trend)
                 Text(
-                    trendText(current.trend),
+                    trendText(current.trend, current.trendPercentage),
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(start = 6.dp)
                 )
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(R.string.prices_range, current.minRatePerKg, current.maxRatePerKg),
+                    stringResource(R.string.prices_range, current.minRatePerKg, current.maxRatePerKg, current.unit.toDisplayUnit()),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    stringResource(R.string.prices_last_updated, DateFormat.getDateInstance(DateFormat.SHORT).format(Date(current.updatedAtEpochMs))),
+                    stringResource(R.string.prices_last_updated, IndiaFormat.shortDate(current.updatedAtEpochMs)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            Text(
+                stringResource(R.string.prices_source, current.source),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (current.qualityStatus.equals("STALE", ignoreCase = true) || System.currentTimeMillis() - current.updatedAtEpochMs > TimeUnit.DAYS.toMillis(7)) {
+                Text(stringResource(R.string.prices_stale), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+            }
+            current.disclaimer?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -153,14 +165,15 @@ private fun History(values: List<Double>) {
 
 @Composable
 private fun TrendIcon(trend: String) {
-    Icon(when (trend) { "up" -> Icons.Filled.KeyboardArrowUp; "down" -> Icons.Filled.KeyboardArrowDown; else -> Icons.Filled.Remove }, contentDescription = null, tint = if (trend == "down") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+    Icon(when (trend) { "up" -> Icons.Filled.KeyboardArrowUp; "down" -> Icons.Filled.KeyboardArrowDown; else -> Icons.Filled.Remove }, contentDescription = trendText(trend, 0.0), tint = if (trend == "down") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
 }
 
 @Composable
-private fun trendText(trend: String): String = stringResource(
+private fun trendText(trend: String, percentage: Double): String = stringResource(
     when (trend) {
         "up" -> R.string.prices_trend_up
         "down" -> R.string.prices_trend_down
         else -> R.string.prices_trend_stable
-    }
-)
+    }) + if (percentage == 0.0) "" else " (${"%.1f".format(Locale.US, percentage)}%)"
+
+private fun String.toDisplayUnit() = when (uppercase()) { "GRAM" -> "g"; "PIECE" -> "piece"; else -> "kg" }

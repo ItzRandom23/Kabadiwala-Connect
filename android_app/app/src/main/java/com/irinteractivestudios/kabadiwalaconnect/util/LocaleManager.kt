@@ -11,7 +11,8 @@ import java.util.Locale
  *
  * Uses a tiny synchronous SharedPreferences file so the saved language can
  * be applied in [attachBaseContext] before any UI is inflated (works fully
- * offline). Heavier settings move to DataStore in a later phase.
+ * offline). This deliberately keeps the startup preference synchronous so the
+ * selected locale is applied before Compose renders.
  */
 object LocaleManager {
 

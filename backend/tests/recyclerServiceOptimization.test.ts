@@ -53,6 +53,10 @@ describe('RecyclerService optimized queries', () => {
 
     const expectedWhere = {
       authorizationStatus: 'VERIFIED',
+      OR: [
+        { authorizationValidUntil: null },
+        { authorizationValidUntil: { gte: expect.any(Date) } }
+      ],
       areaName: { contains: 'pune', mode: 'insensitive' },
       materials: { some: { category: 'PCB' } },
       pickupAvailability: 'TODAY'
@@ -89,6 +93,10 @@ describe('RecyclerService optimized queries', () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         authorizationStatus: 'VERIFIED',
+        OR: [
+          { authorizationValidUntil: null },
+          { authorizationValidUntil: { gte: expect.any(Date) } }
+        ],
         materials: { some: { category: 'PCB' } },
         pickupAvailability: 'TODAY'
       }
@@ -114,6 +122,10 @@ describe('RecyclerService optimized queries', () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         authorizationStatus: 'VERIFIED',
+        OR: [
+          { authorizationValidUntil: null },
+          { authorizationValidUntil: { gte: expect.any(Date) } }
+        ],
         materials: { some: { category: 'PCB' } }
       }
     }));

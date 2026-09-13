@@ -1,12 +1,12 @@
 package com.irinteractivestudios.kabadiwalaconnect.util
 
 /**
- * Shared screen-state model for every Phase 1 screen.
+ * Shared screen-state model for the app's cache-backed screens.
  *
  * Offline-first rule: screens always render from local state first.
  * Server-dependent actions are represented as [Syncing] (queued) or
- * [Offline] (unavailable until connectivity returns) — real sync lands
- * in a later phase.
+ * [Offline] (unavailable until connectivity returns); the sync worker
+ * reconciles queued mutations when the network is available.
  */
 sealed interface UiState<out T> {
     /** Initial load from the local database / cache. */

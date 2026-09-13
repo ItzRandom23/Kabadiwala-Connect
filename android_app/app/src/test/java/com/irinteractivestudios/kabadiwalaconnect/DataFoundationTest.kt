@@ -7,13 +7,15 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.FakePriceRepos
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.FakeRecyclerRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.EarningsSummary
 import com.irinteractivestudios.kabadiwalaconnect.util.InMemorySecureStorage
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
+import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Verifies Phase 1 local-data foundations start empty and behave. */
+/** Verifies local-data foundations start empty and preserve security invariants. */
 class DataFoundationTest {
 
     @Test
@@ -33,6 +35,7 @@ class DataFoundationTest {
         )
         assertEquals(0L, item.uid)
         assertEquals(0, item.attempts)
+        assertNull(item.lastErrorCode)
     }
 
     @Test
@@ -43,5 +46,15 @@ class DataFoundationTest {
         assertEquals("v", storage.get("k"))
         storage.remove("k")
         assertNull(storage.get("k"))
+    }
+
+    @Test
+    fun sessionSave_withoutRefreshToken_clearsPreviousRefreshCredential() {
+        val storage = InMemorySecureStorage()
+        val session = SecureSessionRepository(storage)
+        session.save("token-a", 10_000L, "refresh-a")
+        assertEquals("refresh-a", storage.get(SecureStorage.REFRESH_TOKEN))
+        session.save("token-b", 20_000L)
+        assertNull(storage.get(SecureStorage.REFRESH_TOKEN))
     }
 }

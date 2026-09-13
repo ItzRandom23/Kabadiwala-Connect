@@ -48,13 +48,13 @@ import com.irinteractivestudios.kabadiwalaconnect.util.InstallUpdateResult
 import kotlinx.coroutines.launch
 
 /**
- * Single-activity host (Phase 1).
+ * Single-activity Compose host.
  *
  * - Launches directly into Home via the nav graph.
  * - Shows the 5-tab bottom bar on top-level destinations only.
  * - Shows the offline banner on every screen when disconnected.
  * - Applies the saved locale before inflation; recreates on language change.
- * - Requests NO permissions on launch (or anywhere in Phase 1).
+ * - Requests no permissions on launch; features request access on demand.
  */
 class MainActivity : ComponentActivity() {
 
@@ -135,7 +135,13 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(connection) {
                     if (connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
                         app.container.refreshAccount()
-                        if (app.container.hasValidSession()) app.container.refreshCatalogs()
+                        if (app.container.hasValidSession()) {
+                            // Pull server deltas after auth refresh so a
+                            // reconnect repairs stale local state before the
+                            // broader catalogue refresh runs.
+                            runCatching { app.container.reconcileChanges() }
+                            app.container.refreshCatalogs()
+                        }
                     }
                 }
                 LaunchedEffect(languageSelected) {

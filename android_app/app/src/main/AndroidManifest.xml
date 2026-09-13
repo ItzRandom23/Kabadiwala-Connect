@@ -3,11 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        Phase 1 permission foundation.
-        Declared here, but NEVER requested on app launch. Camera / location
-        are requested only when the corresponding feature is used
-        (see util/PermissionHelper.kt). retired in later phases:
-        lot photos (camera), collection location (location).
+        Permissions are declared up front but NEVER requested on app launch.
+        Camera and location are requested only when the corresponding feature
+        is used (see util/PermissionHelper.kt).
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

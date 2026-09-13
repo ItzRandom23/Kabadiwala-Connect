@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Phase 1 typography: deliberately large.
+ * Typography tuned for field use: deliberately large and legible.
  *
  * Collectors may have limited reading ability, so nothing important is set
  * below 16sp. Prices and status text use headline sizes.

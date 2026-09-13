@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,11 +49,11 @@ import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.SectionCard
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 
 /**
  * Settings tab: language picker, Safety, Help, About.
- * Everything works offline. Safety/Help open secondary screens
- * (full content arrives in a later phase).
+ * Everything works offline. Safety and Help open the app's secondary screens.
  */
 @Composable
 fun SettingsScreen(
@@ -68,7 +69,11 @@ fun SettingsScreen(
     onOpenSchemes: () -> Unit = {},
     onOpenActivities: () -> Unit = {},
     onOpenChat: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     onOpenDisputes: () -> Unit = {},
+    syncItems: List<SyncQueueItemEntity> = emptyList(),
+    syncPendingCount: Int = 0,
+    onRetrySync: () -> Unit = {},
     onLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -137,6 +142,7 @@ fun SettingsScreen(
         }
 
         SectionCard(title = stringResource(R.string.settings_trust_tools)) {
+            SettingsRow(Icons.Filled.Notifications, stringResource(R.string.notifications_title), onOpenNotifications, "settings_notifications")
             SettingsRow(Icons.Filled.AutoAwesome, stringResource(R.string.settings_rewards), onOpenRewards, "settings_rewards")
             SettingsRow(Icons.Filled.School, stringResource(R.string.settings_schemes), onOpenSchemes, "settings_schemes")
             SettingsRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.settings_messages), onOpenChat, "settings_messages")
@@ -163,6 +169,23 @@ fun SettingsScreen(
                 text = stringResource(R.string.settings_offline_note),
                 style = MaterialTheme.typography.bodyMedium
             )
+        }
+        SectionCard(title = stringResource(R.string.settings_sync_center)) {
+            SettingsRow(
+                icon = Icons.Filled.CloudOff,
+                label = if (syncPendingCount > 0) stringResource(R.string.settings_sync_pending, syncPendingCount) else stringResource(R.string.settings_sync_synced),
+                onClick = onRetrySync,
+                testTag = "settings_sync_status"
+            )
+            if (syncItems.isNotEmpty()) {
+                Text(stringResource(R.string.settings_sync_details), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 40.dp, top = 4.dp))
+                syncItems.take(6).forEach { item ->
+                    val operation = item.operation.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+                    val status = item.lastErrorCode?.let { stringResource(R.string.settings_sync_failed, it) }
+                        ?: if (item.attempts > 0) stringResource(R.string.settings_sync_retrying, item.attempts) else stringResource(R.string.settings_sync_waiting)
+                    Text("$operation · $status", style = MaterialTheme.typography.bodySmall, color = if (item.lastErrorCode != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 40.dp, top = 4.dp, end = 12.dp))
+                }
+            }
         }
         SettingsRow(
             icon = Icons.AutoMirrored.Filled.Logout,

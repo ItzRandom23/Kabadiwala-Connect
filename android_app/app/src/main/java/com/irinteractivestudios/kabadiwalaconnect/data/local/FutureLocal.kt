@@ -9,6 +9,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ChatMessageDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DiyActivityDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.GovernmentSchemeDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 
 @Entity(tableName = "future_schemes")
 data class SchemeCacheEntity(
@@ -60,6 +61,18 @@ data class MessageCacheEntity(
     val readAt: String?
 )
 
+@Entity(tableName = "future_notifications")
+data class NotificationCacheEntity(
+    @androidx.room.PrimaryKey val id: String,
+    val accountId: String,
+    val type: String,
+    val title: String,
+    val body: String,
+    val route: String?,
+    val readAt: String?,
+    val createdAt: String?
+)
+
 @Dao
 interface FutureCacheDao {
     @Query("SELECT * FROM future_schemes ORDER BY lastVerifiedAt DESC")
@@ -91,6 +104,17 @@ interface FutureCacheDao {
     suspend fun deleteMessage(id: String)
     @Query("DELETE FROM future_messages")
     suspend fun clearMessages()
+
+    @Query("SELECT * FROM future_notifications ORDER BY createdAt DESC")
+    suspend fun notifications(): List<NotificationCacheEntity>
+    @Query("SELECT * FROM future_notifications WHERE accountId = :accountId ORDER BY createdAt DESC")
+    suspend fun notificationsForAccount(accountId: String): List<NotificationCacheEntity>
+    @Query("DELETE FROM future_notifications WHERE accountId = :accountId")
+    suspend fun clearNotificationsForAccount(accountId: String)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveNotifications(items: List<NotificationCacheEntity>)
+    @Query("DELETE FROM future_notifications")
+    suspend fun clearNotifications()
 }
 
 class FutureCacheStore(private val dao: FutureCacheDao) {
@@ -98,11 +122,21 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
     suspend fun saveSchemes(items: List<GovernmentSchemeDto>) { dao.clearSchemes(); dao.saveSchemes(items.map { SchemeCacheEntity(it.id, it.slug, it.title, it.description, it.requiredDocuments.joinToString("\u001f"), it.sourceUrl, it.lastVerifiedAt.orEmpty(), System.currentTimeMillis()) }) }
     suspend fun activities(): List<DiyActivityDto> = dao.activities().map { DiyActivityDto(it.id, it.slug, it.title, it.description, it.materialsCsv.csv(), it.stepsCsv.csv(), it.warningsCsv.csv(), it.difficulty, it.minutes) }
     suspend fun saveActivities(items: List<DiyActivityDto>) { dao.clearActivities(); dao.saveActivities(items.map { ActivityCacheEntity(it.id, it.slug, it.title, it.description, it.materials.joinToString("\u001f"), it.steps.joinToString("\u001f"), it.safetyWarnings.joinToString("\u001f"), it.difficulty, it.minutes, System.currentTimeMillis()) }) }
-    suspend fun conversations(): List<ConversationDto> = dao.conversations().map { ConversationDto(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }
+    suspend fun conversations(accountId: String? = null): List<ConversationDto> = dao.conversations()
+        .filter { accountId.isNullOrBlank() || it.collectorId == accountId }
+        .map { ConversationDto(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }
     suspend fun saveConversations(items: List<ConversationDto>) { dao.saveConversations(items.map { ConversationCacheEntity(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }) }
     suspend fun messages(conversationId: String): List<ChatMessageDto> = dao.messages(conversationId).map { ChatMessageDto(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }
     suspend fun saveMessages(items: List<ChatMessageDto>) { dao.saveMessages(items.map { MessageCacheEntity(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }) }
     suspend fun deleteMessage(id: String) { dao.deleteMessage(id) }
+    suspend fun notifications(accountId: String? = null): List<NotificationDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.notificationsForAccount(it) } ?: dao.notifications()).map { NotificationDto(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) }
+    suspend fun saveNotifications(items: List<NotificationDto>) {
+        for (accountId in items.map { it.accountId }.filter { it.isNotBlank() }.distinct()) {
+            dao.clearNotificationsForAccount(accountId)
+        }
+        dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
+    }
+    suspend fun clearNotifications() { dao.clearNotifications() }
 }
 
 private fun String.csv(): List<String> = split('\u001f').filter { it.isNotBlank() }

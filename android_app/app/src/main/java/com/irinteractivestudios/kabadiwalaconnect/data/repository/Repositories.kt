@@ -10,12 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Repository contracts (Phase 1).
+ * Repository contracts shared by local caches and live integrations.
  *
- * UI layers depend ONLY on these interfaces. Current implementations are
- * local-cache fakes returning empty data (a fresh install has no cache);
- * Room-backed and network-backed implementations arrive with their
- * feature phases without touching the UI.
+ * UI layers depend ONLY on these interfaces. Room-backed repositories provide
+ * the offline cache while remote calls and WorkManager reconcile server state.
  */
 
 interface LotRepository {
@@ -26,6 +24,9 @@ interface LotWriter {
     fun observeLot(id: String): Flow<Lot?>
     suspend fun save(lot: Lot)
     suspend fun cancel(id: String, updatedAt: Long): Boolean
+    suspend fun lock(id: String, updatedAt: Long): Boolean = false
+    /** Keeps the lot eligible for another quote after the last offer is rejected. */
+    suspend fun reopenQuote(id: String, updatedAt: Long): Boolean = false
     suspend fun confirm(id: String, updatedAt: Long): Boolean = false
     suspend fun markPaid(id: String, amount: Double, updatedAt: Long): Boolean = false
 }
@@ -64,7 +65,8 @@ interface DisputeRepository {
 }
 
 /**
- * Phase 1 fakes: always return empty local state.
+ * Development fakes used by isolated previews/tests; production uses Room
+ * and the configured backend repositories.
  * They deliberately do NOT invent prices/recyclers/earnings — the screens
  * show the Empty state until real cached data exists.
  */

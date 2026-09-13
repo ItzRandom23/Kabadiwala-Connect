@@ -40,6 +40,9 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.RecyclerEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.LotEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PaymentEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toSyncEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentRecordState
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentSyncState
@@ -53,6 +56,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.AndroidPriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.readAccount
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -63,7 +67,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 
 /**
- * Manual service locator (Phase 1).
+ * Manual service locator for the app's local and remote repositories.
  *
  * No DI framework is added on purpose: keeps the APK small and the
  * startup path simple on entry-level devices. ViewModels receive what
@@ -84,14 +88,14 @@ class AppContainer(context: Context) {
         )
     }
 
-    val lotRepository: LotRepository by lazy { RoomLotRepository(database.lotDao(), database.syncQueueDao()) { syncScheduler.requestSync() } }
+    val lotRepository: LotRepository by lazy { RoomLotRepository(database.lotDao(), database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId } }
     val lotWriter: LotWriter by lazy { lotRepository as LotWriter }
     val priceRepository: PriceRepository by lazy { RoomPriceRepository(database.priceDao()) }
     val priceSpeaker: PriceSpeaker by lazy { AndroidPriceSpeaker(appContext) }
     val recyclerRepository: RecyclerRepository by lazy { RoomRecyclerRepository(database.recyclerDao()) }
     val quoteRepository: QuoteRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomQuoteRepository(database.quoteDao())
-        else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao()) { syncScheduler.requestSync() }
+        else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId }
     }
     val handoverRepository: HandoverRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomHandoverRepository(database.handoverDao())
@@ -101,7 +105,7 @@ class AppContainer(context: Context) {
             database.syncQueueDao()
         ) { syncScheduler.requestSync() }
     }
-    val paymentRepository: PaymentRepository by lazy { RoomPaymentRepository(database.paymentDao(), database.syncQueueDao()) { syncScheduler.requestSync() } }
+    val paymentRepository: PaymentRepository by lazy { RoomPaymentRepository(database.paymentDao(), database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId } }
     val earningsRepository: EarningsRepository get() = paymentRepository
     val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository by lazy { RoomDisputeRepository(database.disputeDao()) }
 
@@ -128,27 +132,48 @@ class AppContainer(context: Context) {
 
     suspend fun refreshAccount() { authenticationRepository.refreshAccount() }
 
-    suspend fun refreshCatalogs(location: String = "Pune", latitude: Double? = null, longitude: Double? = null) {
+    suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null) {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
-        val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
+        // Price, lot, quote and payment catalogues are collector-facing
+        // resources. Recycler sessions have their own operational endpoints;
+        // avoid predictable 403 traffic every time connectivity changes.
+        if (currentAccount()?.role == AccountRole.RECYCLER) return
+        val account = currentAccount()
+        val resolvedLocation = location?.trim()?.takeIf { it.isNotBlank() }
+            ?: account?.areaName?.trim()?.takeIf { it.isNotBlank() }
+            ?: return
+        val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "COPPER", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
         val prices = categories.mapNotNull { category ->
-            runCatching { apiService.getPriceBoard(category, location).requireData() }.getOrNull()?.let { board ->
+            runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }.getOrNull()?.let { board ->
+                // Keep the trend chart backed by the same server snapshot as
+                // the headline rate. History is optional so a partial outage
+                // never removes an otherwise valid price board.
+                val history = runCatching {
+                    apiService.getPriceHistory(category, resolvedLocation, 30).requireData().history
+                        .map { it.marketPrice }
+                        .joinToString(",")
+                }.getOrDefault("")
                 PriceEntity(
-                    id = "${location}_$category",
-                    location = board.location ?: location,
+                    id = "${resolvedLocation}_$category",
+                    location = board.location ?: resolvedLocation,
                     materialLabel = category.toDisplayMaterial(),
                     ratePerKg = board.marketPrice,
                     minRatePerKg = board.priceMin,
                     maxRatePerKg = board.priceMax,
                     updatedAtEpochMs = board.lastUpdated?.let(::parseRemoteTimestamp) ?: System.currentTimeMillis(),
                     trend = board.trend?.direction?.lowercase() ?: "stable",
-                    historyCsv = ""
+                    historyCsv = history,
+                    unit = board.unit,
+                    source = listOfNotNull(board.source?.organization, board.source?.type).joinToString(" · ").ifBlank { "SYSTEM" },
+                    qualityStatus = board.qualityStatus,
+                    disclaimer = board.disclaimer,
+                    trendPercentage = board.trend?.percentage ?: 0.0,
+                    complianceRegime = board.complianceRegime
                 )
             }
         }
-        if (prices.isNotEmpty()) database.priceDao().replaceLocation(location, prices)
-        val account = currentAccount()
-        val recyclers = runCatching { apiService.getRecyclers(location, 50, null, null, "proximity", 1, 100, latitude ?: account?.latitude, longitude ?: account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
+        if (prices.isNotEmpty()) database.priceDao().replaceLocation(resolvedLocation, prices)
+        val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account?.latitude, longitude ?: account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,
                 name = recycler.name,
@@ -177,7 +202,7 @@ class AppContainer(context: Context) {
 
         val remoteLots = runCatching { apiService.getLots(page = 1, limit = 100).requireData() }.getOrNull()?.items.orEmpty()
         if (remoteLots.isNotEmpty()) {
-            val unsyncedIds = database.lotDao().observeAll().first().filterNot { it.synced }.map { it.id }.toSet()
+            val unsyncedIds = currentAccount()?.profileId?.let { database.lotDao().observeForCollector(it).first() }?.filterNot { it.synced }?.map { it.id }?.toSet().orEmpty()
             database.lotDao().saveAll(remoteLots.filterNot { it.id in unsyncedIds }.map { lot ->
                 LotEntity(
                     id = lot.id,
@@ -195,7 +220,16 @@ class AppContainer(context: Context) {
                     updatedAtEpochMs = lot.updatedAt?.let(::parseRemoteTimestamp) ?: System.currentTimeMillis(),
                     status = lot.status.toLocalLotStatus().name,
                     notes = lot.notes.orEmpty(),
-                    synced = true
+                    synced = true,
+                    materialSubcategory = lot.materialSubcategory,
+                    sourceType = lot.sourceType,
+                    wasteRegime = lot.wasteRegime ?: "E_WASTE",
+                    originalWeight = lot.originalWeight,
+                    originalWeightUnit = lot.originalWeightUnit,
+                    imageProvenance = lot.imageProvenance,
+                    imageQualityStatus = lot.imageQualityStatus ?: "UNVERIFIED",
+                    locationPrecision = lot.collectionLocation?.precision,
+                    serverUpdatedAtEpochMs = lot.updatedAt?.let(::parseRemoteTimestamp)
                 )
             })
         }
@@ -211,11 +245,116 @@ class AppContainer(context: Context) {
                     method = runCatching { com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.valueOf(payment.method) }.getOrDefault(com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.CASH).name,
                     paidAtEpochMs = payment.date?.let(::parseRemoteTimestamp) ?: System.currentTimeMillis(),
                     notes = "",
-                    syncState = PaymentSyncState.SAVED_LOCALLY.name,
-                    recordState = if (payment.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name
+                    syncState = PaymentSyncState.SYNCED.name,
+                    recordState = if (payment.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
+                    accountId = currentAccount()?.profileId
                 )
             })
         }
+    }
+
+    /** Refreshes the authoritative earnings ledger without requiring a full catalogue reload. */
+    suspend fun refreshEarnings(): Boolean {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
+        if (currentAccount()?.role == AccountRole.RECYCLER) return false
+        val payments = apiService.getEarnings().requireData().payments
+        database.paymentDao().insertAll(payments.map { payment ->
+            PaymentEntity(
+                id = payment.id,
+                lotId = payment.lotId,
+                handoverId = payment.handoverId,
+                amountRupees = payment.amount,
+                method = runCatching { com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.valueOf(payment.method) }
+                    .getOrDefault(com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.CASH).name,
+                paidAtEpochMs = payment.date?.let(::parseRemoteTimestamp) ?: System.currentTimeMillis(),
+                notes = "",
+                syncState = PaymentSyncState.SYNCED.name,
+                recordState = if (payment.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
+                accountId = currentAccount()?.profileId
+            )
+        })
+        return true
+    }
+
+    /**
+     * Pulls server-authoritative changes after queued mutations have been
+     * uploaded. The cursor is deliberately opaque: only the server decides
+     * its format and it is advanced after the Room transaction succeeds.
+     * Unsynced local rows are never overwritten, so a reconnect cannot erase
+     * work that is still waiting in the outbox.
+     */
+    suspend fun reconcileChanges(): Boolean {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
+        if (currentAccount()?.role == AccountRole.RECYCLER) return false
+        val cursor = secureStorage.get(SecureStorage.SYNC_CURSOR)
+        val payload = apiService.getChanges(cursor).requireData()
+        database.withTransaction {
+            payload.changes.lots.forEach { remote ->
+                val local = database.lotDao().findById(remote.id)
+                if (local == null || local.synced) {
+                    val now = System.currentTimeMillis()
+                    database.lotDao().save(
+                        LotEntity(
+                            id = remote.id,
+                            collectorId = remote.collectorId ?: currentAccount()?.profileId.orEmpty(),
+                            materialLabel = remote.materialCategory.toDisplayMaterial(),
+                            condition = remote.condition,
+                            weightKg = remote.weight,
+                            localPhotoPath = local?.localPhotoPath,
+                            serverPhotoUrl = remote.photoUrl,
+                            estimatedValueRupees = remote.estimatedValue,
+                            quoteRupees = remote.quotedPrice,
+                            finalValueRupees = remote.finalPrice,
+                            location = remote.collectionAreaName ?: remote.collectionLocation?.areaName.orEmpty(),
+                            createdAtEpochMs = remote.createdAt?.let(::parseRemoteTimestamp) ?: local?.createdAtEpochMs ?: now,
+                            updatedAtEpochMs = remote.updatedAt?.let(::parseRemoteTimestamp) ?: now,
+                            status = remote.status.toLocalLotStatus().name,
+                            notes = remote.notes.orEmpty(),
+                            synced = true,
+                            materialSubcategory = remote.materialSubcategory,
+                            sourceType = remote.sourceType,
+                            wasteRegime = remote.wasteRegime ?: "E_WASTE",
+                            originalWeight = remote.originalWeight,
+                            originalWeightUnit = remote.originalWeightUnit,
+                            imageProvenance = remote.imageProvenance,
+                            imageQualityStatus = remote.imageQualityStatus ?: "UNVERIFIED",
+                            locationPrecision = remote.collectionLocation?.precision,
+                            serverUpdatedAtEpochMs = remote.updatedAt?.let(::parseRemoteTimestamp)
+                        )
+                    )
+                }
+            }
+            payload.changes.payments.forEach { remote ->
+                val local = database.paymentDao().findById(remote.id)
+                if (local == null || local.syncState == PaymentSyncState.SYNCED.name) {
+                    database.paymentDao().insert(
+                        PaymentEntity(
+                            id = remote.id,
+                            lotId = remote.lotId,
+                            handoverId = remote.handoverId,
+                            amountRupees = remote.amount,
+                            method = runCatching { com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.valueOf(remote.method) }
+                                .getOrDefault(com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentMethod.CASH).name,
+                            paidAtEpochMs = remote.date?.let(::parseRemoteTimestamp) ?: local?.paidAtEpochMs ?: System.currentTimeMillis(),
+                            notes = local?.notes.orEmpty(),
+                            syncState = PaymentSyncState.SYNCED.name,
+                            recordState = if (remote.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
+                            accountId = currentAccount()?.profileId
+                        )
+                    )
+                }
+            }
+            payload.changes.handovers.forEach { remote ->
+                val local = database.handoverDao().get(remote.id)
+                if (local == null) {
+                    database.handoverDao().insert(remote.toSyncEntity())
+                } else if (local.synced) {
+                    database.handoverDao().insert(remote.toDomain(local.toDomain()).toEntity())
+                }
+            }
+        }
+        payload.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.SYNC_CURSOR, it) }
+        return true
     }
 
     /**
@@ -234,6 +373,7 @@ class AppContainer(context: Context) {
             database.disputeDao().clearAll()
             database.futureCacheDao().clearConversations()
             database.futureCacheDao().clearMessages()
+            database.futureCacheDao().clearNotifications()
         }
         withContext(Dispatchers.IO) {
             File(appContext.filesDir, "lot_photos").deleteRecursively()
@@ -242,11 +382,15 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)
         secureStorage.remove(SecureStorage.ACCOUNT_ROLE)
         secureStorage.remove(SecureStorage.ACCOUNT_VERIFICATION_STATUS)
+        secureStorage.remove(SecureStorage.ACCOUNT_PHONE)
+        secureStorage.remove(SecureStorage.ACCOUNT_DISPLAY_NAME)
+        secureStorage.remove(SecureStorage.ACCOUNT_AREA_NAME)
         secureStorage.remove(SecureStorage.ACCOUNT_LANGUAGE)
         secureStorage.remove(SecureStorage.ACCOUNT_PROFILE_ID)
         secureStorage.remove(SecureStorage.ACCOUNT_LATITUDE)
         secureStorage.remove(SecureStorage.ACCOUNT_LONGITUDE)
         secureStorage.remove(SecureStorage.COLLECTOR_ID)
+        secureStorage.remove(SecureStorage.SYNC_CURSOR)
     }
 
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }
@@ -261,8 +405,12 @@ private fun String.toDisplayMaterial() = when (this) {
 
 private fun String.toLocalLotStatus() = when (this) {
     "PAID" -> LotStatus.PAID
-    "CANCELLED", "DISPUTED" -> LotStatus.CANCELLED
-    "COLLECTOR_CONFIRMED", "RECYCLER_CONFIRMED", "HANDED_OVER" -> LotStatus.COLLECTOR_CONFIRMED
+    "CANCELLED" -> LotStatus.CANCELLED
+    "DISPUTED" -> LotStatus.DISPUTED
+    "COLLECTOR_CONFIRMED" -> LotStatus.COLLECTOR_CONFIRMED
+    "RECYCLER_CONFIRMED", "HANDED_OVER" -> LotStatus.HANDED_OVER
+    "QUOTE_RECEIVED" -> LotStatus.QUOTE_RECEIVED
+    "QUOTE_REQUESTED" -> LotStatus.LOCKED
     else -> LotStatus.SAVED
 }
 

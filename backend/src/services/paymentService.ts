@@ -15,6 +15,10 @@ export class PaymentService {
     return p;
   }
   async record(cid: string, p: any) {
+    if (typeof p.id === 'string' && p.id.trim()) {
+      const existing = await this.db.payment.findFirst({ where: { id: p.id.trim(), collectorId: cid } });
+      if (existing) return existing;
+    }
     const lot = await this.db.lot.findFirst({ where: { id: p.lotId, collectorId: cid }, include: { handovers: true, quotes: true } });
     if (!lot) throw new AppError('NOT_FOUND', 'Lot not found', 404, { code: 'LOT_NOT_FOUND' });
     if (!['HANDED_OVER', 'PAID'].includes(lot.status) || !lot.handovers.some(h => ['CONFIRMED_BY_RECYCLER', 'COMPLETED'].includes(h.status))) throw new AppError('CONFLICT', 'Confirmed handover required', 409, { code: 'HANDOVER_NOT_CONFIRMED' });
@@ -28,7 +32,13 @@ export class PaymentService {
     return this.db.$transaction(async tx => {
       const claimed = await tx.lot.updateMany({ where: { id: lot.id, status: 'HANDED_OVER' }, data: { status: 'PAID' } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Payment already exists', 409, { code: 'PAYMENT_ALREADY_EXISTS' });
-      const x = await tx.payment.create({ data: { lotId: lot.id, collectorId: cid, amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, recordedAt: when, notes: p.notes, anomaly, anomalyReason: anomaly ? 'Payment differs materially from accepted quote' : null } });
+      const x = await tx.payment.create({ data: { ...(typeof p.id === 'string' && p.id.trim() ? { id: p.id.trim() } : {}), lotId: lot.id, collectorId: cid, amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, recordedAt: when, notes: p.notes, anomaly, anomalyReason: anomaly ? 'Payment differs materially from accepted quote' : null } });
+      // A recorded payment completes the physical handover. Payment keeps
+      // its own RECORDED/VERIFIED state for reconciliation, while the
+      // handover becomes eligible for rewards and verified reviews.
+      const handover = await tx.handover.findFirst({ where: { lotId: lot.id, status: { in: ['CONFIRMED_BY_RECYCLER', 'COMPLETED'] } }, select: { id: true, status: true } });
+      if (!handover) throw new AppError('CONFLICT', 'Confirmed handover required', 409, { code: 'HANDOVER_NOT_CONFIRMED' });
+      if (handover.status === 'CONFIRMED_BY_RECYCLER') await tx.handover.update({ where: { id: handover.id }, data: { status: 'COMPLETED' } });
       await tx.paymentAudit.create({ data: { paymentId: x.id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_RECORDED', newValues: { amount: x.amount, method: x.paymentMethod } } });
       return x;
     });
@@ -37,7 +47,7 @@ export class PaymentService {
   async get(id: string, cid: string) { return this.owned(id, cid); }
   async edit(id: string, cid: string, p: any) {
     const old = await this.owned(id, cid);
-    if (old.status === 'VERIFIED' || Date.now() - old.createdAt.getTime() > 86400000) throw new AppError('CONFLICT', 'Payment correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
+    if (old.status === 'VERIFIED' || old.status === 'DISPUTED' || Date.now() - old.createdAt.getTime() > 86400000) throw new AppError('CONFLICT', 'Payment correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
     if (!Number.isFinite(p.amount) || p.amount <= 0 || p.amount >= 1000000) throw new AppError('VALIDATION_ERROR', 'Invalid payment amount', 422, { code: 'PAYMENT_AMOUNT_INVALID' });
     if (!['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET'].includes(p.method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method', 422, { code: 'PAYMENT_METHOD_INVALID' });
     return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, notes: p.notes } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_EDITED', oldValues: { amount: old.amount, paymentMethod: old.paymentMethod }, newValues: { amount: x.amount, paymentMethod: x.paymentMethod } } }); return x; });
@@ -50,7 +60,37 @@ export class PaymentService {
       return tx.paymentDispute.create({ data: { paymentId: id, reportedBy: cid, type: p.reason, description: p.description } });
     });
   }
-  async ledger(cid: string) { const payments = await this.list(cid); const settled = payments.filter(p => p.status !== 'DISPUTED'); const total = settled.reduce((s, p) => s + p.amount, 0); const now = new Date(), month = now.getMonth(), year = now.getFullYear(); const thisMonth = settled.filter(p => p.recordedAt.getMonth() === month && p.recordedAt.getFullYear() === year).reduce((s, p) => s + p.amount, 0); return { summary: { totalEarnings: Number(total.toFixed(2)), pendingAmount: 0, thisMonthEarnings: Number(thisMonth.toFixed(2)), averageLotValue: settled.length ? Number((total / settled.length).toFixed(2)) : 0 }, transactions: payments }; }
+  async ledger(cid: string) {
+    const payments = await this.list(cid);
+    const settled = payments.filter(p => p.status !== 'DISPUTED');
+    const total = settled.reduce((s, p) => s + p.amount, 0);
+    // Ledger months are business months in India, independent of the host
+    // machine's timezone (which is commonly UTC in production).
+    const indiaParts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric' }).formatToParts(new Date());
+    const year = Number(indiaParts.find(part => part.type === 'year')?.value);
+    const month = Number(indiaParts.find(part => part.type === 'month')?.value) - 1;
+    const offsetMs = 5.5 * 60 * 60 * 1000;
+    const monthStart = new Date(Date.UTC(year, month, 1) - offsetMs);
+    const nextMonthStart = new Date(Date.UTC(year, month + 1, 1) - offsetMs);
+    const thisMonth = settled.filter(p => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s, p) => s + p.amount, 0);
+    const summary = {
+      totalEarnings: Number(total.toFixed(2)),
+      pendingAmount: 0,
+      thisMonthEarnings: Number(thisMonth.toFixed(2)),
+      averageLotValue: settled.length ? Number((total / settled.length).toFixed(2)) : 0
+    };
+    // Keep the historical summary/transactions shape for existing clients,
+    // while exposing the flat contract consumed by the Android ledger cache.
+    return {
+      total: summary.totalEarnings,
+      pending: summary.pendingAmount,
+      currentMonth: summary.thisMonthEarnings,
+      averagePerLot: summary.averageLotValue,
+      payments,
+      summary,
+      transactions: payments
+    };
+  }
   async adminList() { return this.db.payment.findMany({ orderBy: { createdAt: 'desc' } }); }
   async verify(id: string, admin: string) { const p = await this.db.payment.findUnique({ where: { id } }); if (!p) throw new AppError('NOT_FOUND', 'Payment not found', 404, { code: 'PAYMENT_NOT_FOUND' }); if (p.status === 'VERIFIED') throw new AppError('CONFLICT', 'Payment already verified', 409, { code: 'PAYMENT_ALREADY_VERIFIED' }); return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { status: 'VERIFIED', confirmedAt: new Date() } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: admin, actorRole: 'ADMIN', event: 'PAYMENT_VERIFIED' } }); return x; }); }
 }

@@ -1,5 +1,49 @@
 # Kabadiwala Connect — Progress
 
+> This file is a historical implementation log. The entries below describe
+> the milestones when they were completed and may mention earlier placeholders
+> or mock boundaries. For the current production-readiness baseline, use the
+> root README and the latest audit update below.
+
+## Current production-readiness baseline — 2026-09-12
+
+- Android and backend builds, tests, lint, and the release compilation pass.
+- Collector lot, quote, handover, payment, recycler discovery, and offline
+  sync flows are connected to the backend with validation, retry/error states,
+  idempotency, and Room persistence.
+- Android now consumes server change deltas with an encrypted cursor, preserves
+  unsynced local rows, shows queued work in Settings, and uploads handover scale
+  evidence to private backend storage with retry support.
+- Quote rejection reopens the request lifecycle for rematching; an in-app
+  notification inbox is populated by quote, handover, payment, dispute, and
+  verification events.
+- Household preview screens disclose sample data and simulated interactions so
+  they cannot be mistaken for a live backend role.
+- Recycler profile and material-rate editing are backed by authenticated API
+  endpoints; Copper is supported consistently across the schema, APIs, and UI.
+- Debug-only authentication, sample price fixtures, and the `.invalid` API
+  default are intentionally isolated from production builds. Supply a real
+  HTTPS endpoint and production providers before shipping.
+
+## Roadmap integration pass — 2026-09-13
+
+- Added a persisted household role with role-preserving email/OTP sessions.
+- Completed payment settlement by moving a confirmed handover to `COMPLETED`
+  in the same backend transaction as the payment record.
+- Preserved lot provenance, waste regime, original weight/unit, image quality,
+  price source, freshness, and trend metadata across the API and Room cache.
+- Added account-scoped local reads, durable retry metadata, notification read
+  replay, and a visible sync center; logout clears account-owned local data.
+- Added privacy-safe recycler/quote views, persistent scoped admin login and
+  permissions, pseudonymized dataset export, and the transaction passport UI.
+- Added a real multi-recycler quote request path with an offline fallback and
+  updated OpenAPI for the new auth, provenance, batch quote, and timeline APIs.
+
+The remaining production work is environment-dependent or intentionally later:
+FCM push delivery, an admin web console, pickup scheduling/capacity, payment
+provider integration, signed release distribution, and device validation for
+camera, GPS, QR, TalkBack, large-font, and real network-loss scenarios.
+
 ## Final audit update — 2026-09-04
 
 - Fixed the minSdk 23 connectivity callback path.
@@ -7,7 +51,9 @@
 - Added missing Hindi and Marathi translations for handover, payment, earnings, and safety strings.
 - `./gradlew.bat lint` now passes; remaining output is non-blocking deprecation/dependency guidance.
 - `./gradlew.bat testDebugUnitTest` and `./gradlew.bat assembleRelease` pass.
-- Android now supports a configured backend auth path and queued lot/payment sync; feature cache refreshers remain local-first. See the root `ISSUES.md`.
+- Android now supports a configured backend auth path, queued collector mutations,
+  encrypted-cursor delta reconciliation, and server-backed catalogue/earnings
+  refresh. See the root `ISSUES.md` for environment-only deployment work.
 
 ## Phase 10 — Configurable backend transport & sync
 

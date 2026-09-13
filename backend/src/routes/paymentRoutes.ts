@@ -5,8 +5,8 @@ import type { PaymentService } from '../services/paymentService.js';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { paymentController } from '../controllers/paymentController.js';
 
-export const paymentRoutes = (jwt: JwtService, c: CollectorRepository, s: PaymentService) => {
-  const x = paymentController(s);
+export const paymentRoutes = (jwt: JwtService, c: CollectorRepository, s: PaymentService, db?: import('@prisma/client').PrismaClient) => {
+  const x = paymentController(s, db);
   return Router()
     .post('/payments/record', requireAuth(jwt, c), x.record)
     .get('/payments', requireAuth(jwt, c), x.list)
@@ -14,7 +14,7 @@ export const paymentRoutes = (jwt: JwtService, c: CollectorRepository, s: Paymen
     .put('/payments/:paymentId', requireAuth(jwt, c), x.edit)
     .post('/payments/:paymentId/dispute', requireAuth(jwt, c), x.dispute)
     .get('/earnings/ledger', requireAuth(jwt, c), x.ledger)
-    .get('/admin/payments', requireAdmin(jwt), x.adminList)
-    .get('/admin/payments/:paymentId', requireAdmin(jwt), x.adminGet)
-    .post('/admin/payments/:paymentId/verify', requireAdmin(jwt), x.verify);
+    .get('/admin/payments', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), x.adminList)
+    .get('/admin/payments/:paymentId', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), x.adminGet)
+    .post('/admin/payments/:paymentId/verify', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), x.verify);
 };

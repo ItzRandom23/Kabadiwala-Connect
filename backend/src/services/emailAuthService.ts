@@ -8,7 +8,7 @@ import type { AuthenticationRateLimiter } from './rateLimiter.js';
 export type EmailAccountInput = {
   email: string;
   password: string;
-  role: 'COLLECTOR' | 'RECYCLER';
+  role: 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER';
   preferredLanguage: 'ENGLISH' | 'HINDI' | 'MARATHI' | 'ASSAMESE' | 'BENGALI' | 'BODO' | 'DOGRI' | 'GUJARATI' | 'KANNADA' | 'KASHMIRI' | 'KONKANI' | 'MAITHILI' | 'MALAYALAM' | 'MANIPURI' | 'NEPALI' | 'ODIA' | 'PUNJABI' | 'SANSKRIT' | 'SANTALI' | 'SINDHI' | 'TAMIL' | 'TELUGU' | 'URDU';
   areaName?: string;
   businessName?: string;
@@ -61,8 +61,10 @@ export class EmailAuthService {
     const existing = await this.db.user.findUnique({ where: { email } });
     if (existing) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
 
-    const created = await this.db.$transaction(async (tx) => {
-      if (input.role === 'COLLECTOR') {
+    let created: { user: any; profile: any };
+    try {
+      created = await this.db.$transaction(async (tx) => {
+      if (input.role !== 'RECYCLER') {
         const profile = await tx.collector.create({
           data: { phone: null, email, preferredLanguage: input.preferredLanguage, areaName: input.areaName?.trim() ?? '' }
         });
@@ -82,11 +84,21 @@ export class EmailAuthService {
           operatingHours: {}
         }
       });
-      const accepted = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'].includes(value)))];
+      const accepted = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'].includes(value)))];
+      if (!accepted.length) throw new AppError('VALIDATION_ERROR', 'At least one supported material is required for recycler registration', 422, { code: 'INVALID_RECYCLER_MATERIALS' });
       for (const category of accepted) await tx.recyclerMaterial.create({ data: { recyclerId: profile.id, category: category as any, subcategories: [], minAcceptableWeight: 0.1, maxAcceptableWeight: 500 } });
       const user = await tx.user.create({ data: { email, passwordHash: hashPassword(input.password), role: input.role, preferredLanguage: input.preferredLanguage, recyclerProfileId: profile.id } });
       return { user, profile };
-    });
+      });
+    } catch (error) {
+      // The preflight lookup above cannot prevent two simultaneous signups
+      // from racing. Surface the unique-email race as the same stable API
+      // contract as the normal duplicate path.
+      if ((error as { code?: string })?.code === 'P2002') {
+        throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
+      }
+      throw error;
+    }
     const issued = await this.issue(created.user, created.profile);
     await this.audit('EMAIL_SIGNUP', 'SUCCESS', ip, userAgent, created.user.id, created.user.role);
     return issued;
@@ -107,7 +119,25 @@ export class EmailAuthService {
     return issued;
   }
 
-  async profile(profileId: string, role: 'COLLECTOR' | 'RECYCLER') {
+  async adminLogin(emailInput: string, password: string, ip = 'unknown', userAgent?: string) {
+    const email = normalizedEmail(emailInput);
+    await this.limiter?.check(email, ip, 'login');
+    const admin = await this.db.adminAccount.findUnique({ where: { email } });
+    if (!admin || !admin.passwordHash || !verifyPassword(password, admin.passwordHash)) {
+      await this.audit('ADMIN_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent);
+      throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' });
+    }
+    if (!admin.active) {
+      await this.audit('ADMIN_LOGIN', 'INACTIVE_ACCOUNT', ip, userAgent, admin.id, 'ADMIN');
+      throw new AppError('ADMIN_SUSPENDED', 'This admin account is inactive', 403);
+    }
+    await this.db.adminAccount.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
+    const issued = this.sessions ? await this.sessions.issue(admin.id, 'ADMIN') : { token: this.jwt.generateAdminToken(admin.id) };
+    await this.audit('ADMIN_LOGIN', 'SUCCESS', ip, userAgent, admin.id, 'ADMIN');
+    return { ...issued, user: { id: admin.id, email: admin.email, displayName: admin.displayName, role: 'ADMIN', permissions: admin.permissions } };
+  }
+
+  async profile(profileId: string, role: 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER') {
     const user = await this.db.user.findFirst({ where: role === 'RECYCLER' ? { recyclerProfileId: profileId } : { collectorProfileId: profileId } });
     if (!user) throw new AppError('NOT_FOUND', 'Account profile not found', 404, { code: 'PROFILE_NOT_FOUND' });
     if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
@@ -121,7 +151,7 @@ export class EmailAuthService {
   private async issue(user: any, profile: any) {
     const profileId = user.role === 'RECYCLER' ? user.recyclerProfileId : user.collectorProfileId;
     if (!profileId) throw new AppError('INTERNAL_SERVER_ERROR', 'Account profile is incomplete', 500);
-    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId) };
+    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : user.role === 'HOUSEHOLD' ? this.jwt.generateHouseholdToken(profileId) : this.jwt.generateToken(profileId) };
     return { ...issued, user: publicProfile(user, profile) };
   }
 }

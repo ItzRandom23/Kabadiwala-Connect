@@ -15,7 +15,9 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementV
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerOrdersViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerProfileViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.FutureFeatureViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineViewModel
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
@@ -32,7 +34,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 
 /**
- * Builds the Phase 1 ViewModels from the [AppContainer].
+ * Builds screen ViewModels from the [AppContainer].
  * Keeps Android framework types out of the ViewModels that don't need them.
  */
 class KcViewModelFactory(
@@ -54,8 +56,10 @@ class KcViewModelFactory(
     val syncQueue get() = container.database.syncQueueDao()
     fun requestSync() = container.syncScheduler.requestSync()
     val currentAccount: AccountProfile? get() = container.currentAccount()
-    suspend fun refreshCatalogs(location: String = "Pune", current: CurrentLocation? = null) =
+    suspend fun refreshCatalogs(location: String? = null, current: CurrentLocation? = null) =
         container.refreshCatalogs(location, current?.latitude, current?.longitude)
+    suspend fun refreshEarnings() = container.refreshEarnings()
+    suspend fun refreshAccount() = container.refreshAccount()
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
@@ -85,8 +89,12 @@ class KcViewModelFactory(
             RecyclerOrdersViewModel(container.apiService)
         modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
             RecyclerScanViewModel(container.apiService)
+        modelClass.isAssignableFrom(RecyclerProfileViewModel::class.java) ->
+            RecyclerProfileViewModel(container.apiService)
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
-            FutureFeatureViewModel(container.apiService, FutureCacheStore(container.database.futureCacheDao()), container.database.syncQueueDao()) { container.syncScheduler.requestSync() }
+            FutureFeatureViewModel(container.apiService, FutureCacheStore(container.database.futureCacheDao()), container.database.syncQueueDao(), { container.syncScheduler.requestSync() }) { container.currentAccount()?.profileId }
+        modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
+            TransactionTimelineViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")
     } as T
 

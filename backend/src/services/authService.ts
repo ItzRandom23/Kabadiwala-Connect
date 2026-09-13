@@ -7,7 +7,7 @@ import { OtpRateLimiter, type AuthenticationRateLimiter } from './rateLimiter.js
 import type { SessionService } from './sessionService.js';
 
 export type PhoneAccountInput = {
-  role?: 'COLLECTOR' | 'RECYCLER';
+  role?: 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER';
   preferredLanguage?: string;
   areaName?: string;
   latitude?: number;
@@ -22,7 +22,7 @@ export type PhoneAccountInput = {
 };
 
 const normalizedEmail = (value?: string | null) => value?.trim().toLowerCase() || null;
-const acceptedMaterials = new Set(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
+const acceptedMaterials = new Set(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const supportedLanguages = new Set([
   'ENGLISH', 'ASSAMESE', 'BENGALI', 'BODO', 'DOGRI', 'GUJARATI', 'HINDI', 'KANNADA',
   'KASHMIRI', 'KONKANI', 'MAITHILI', 'MALAYALAM', 'MANIPURI', 'MARATHI', 'NEPALI',
@@ -210,7 +210,7 @@ export class AuthService {
           user = await tx.user.update({ where: { id: user.id }, data: { email: accountEmail } });
         }
 
-        if (user.role === 'COLLECTOR') {
+        if (user.role === 'COLLECTOR' || user.role === 'HOUSEHOLD') {
           await tx.collector.update({
             where: { id: user.collectorProfileId ?? '' },
             data: {
@@ -230,13 +230,13 @@ export class AuthService {
         return this.issuePhone(user, profile);
       }
 
-      if (requestedRole === 'COLLECTOR' && !displayName) {
+      if (requestedRole !== 'RECYCLER' && !displayName) {
         throw new AppError('VALIDATION_ERROR', 'Name is required for collector registration', 422, { code: 'DISPLAY_NAME_REQUIRED' });
       }
 
       const accountEmail = await usableEmail(email);
 
-      if (requestedRole === 'COLLECTOR') {
+      if (requestedRole !== 'RECYCLER') {
         const profile = await tx.collector.create({
           data: {
             phone,
@@ -254,7 +254,7 @@ export class AuthService {
             phone,
             email: accountEmail,
             passwordHash: null,
-            role: 'COLLECTOR',
+            role: requestedRole,
             preferredLanguage: preferredLanguage as any,
             collectorProfileId: profile.id
           }
@@ -279,6 +279,7 @@ export class AuthService {
         }
       });
       const materials = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => acceptedMaterials.has(value)))];
+      if (!materials.length) throw new AppError('VALIDATION_ERROR', 'At least one supported material is required for recycler registration', 422, { code: 'INVALID_RECYCLER_MATERIALS' });
       for (const category of materials) {
         await tx.recyclerMaterial.create({ data: { recyclerId: profile.id, category: category as any, subcategories: [], minAcceptableWeight: 0.1, maxAcceptableWeight: 500 } });
       }
@@ -299,9 +300,9 @@ export class AuthService {
   private async issuePhone(user: any, profile: any) {
     const profileId = user.role === 'RECYCLER' ? user.recyclerProfileId : user.collectorProfileId;
     if (!profileId) throw new AppError('INTERNAL_SERVER_ERROR', 'Account profile is incomplete', 500);
-    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : this.jwt.generateToken(profileId) };
+    const issued = this.sessions ? await this.sessions.issue(profileId, user.role) : { token: user.role === 'RECYCLER' ? this.jwt.generateRecyclerToken(profileId) : user.role === 'HOUSEHOLD' ? this.jwt.generateHouseholdToken(profileId) : this.jwt.generateToken(profileId) };
     const account = publicPhoneProfile(user, profile);
-    return { ...issued, user: account, collector: user.role === 'COLLECTOR' ? profile : null };
+    return { ...issued, user: account, collector: user.role !== 'RECYCLER' ? profile : null };
   }
 
   async refresh(refreshToken: string, ip: string) { if (!this.sessions) throw new AppError('INTERNAL_SERVER_ERROR', 'Session rotation is unavailable', 503); await this.limiter.check(refreshToken, ip, 'login'); return this.sessions.rotate(refreshToken); }

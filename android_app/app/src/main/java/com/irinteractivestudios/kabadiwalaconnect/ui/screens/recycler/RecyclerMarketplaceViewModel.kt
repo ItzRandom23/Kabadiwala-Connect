@@ -13,6 +13,7 @@ data class RecyclerMarketplaceState(
     val loading: Boolean = true,
     val lots: List<MarketplaceLot> = emptyList(),
     val submittedIds: Set<String> = emptySet(),
+    val submittingIds: Set<String> = emptySet(),
     val error: String? = null
 )
 
@@ -29,6 +30,7 @@ class RecyclerMarketplaceViewModel(private val api: ApiService) : ViewModel() {
                 .onSuccess { requests ->
                     _state.value = _state.value.copy(
                         loading = false,
+                        submittedIds = requests.filter { it.status == "ACCEPTED" }.map { it.id }.toSet(),
                         lots = requests.map { request ->
                             MarketplaceLot(
                                 id = request.id,
@@ -48,11 +50,12 @@ class RecyclerMarketplaceViewModel(private val api: ApiService) : ViewModel() {
     }
 
     fun submitOffer(requestId: String, rate: Double) {
-        if (requestId in _state.value.submittedIds || rate <= 0) return
+        if (requestId in _state.value.submittedIds || requestId in _state.value.submittingIds || rate <= 0) return
+        _state.value = _state.value.copy(submittingIds = _state.value.submittingIds + requestId, error = null)
         viewModelScope.launch {
             runCatching { api.submitRecyclerQuote(com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitRecyclerQuoteRequestDto(requestId, rate)).requireData() }
-                .onSuccess { _state.value = _state.value.copy(submittedIds = _state.value.submittedIds + requestId) }
-                .onFailure { error -> _state.value = _state.value.copy(error = error.message ?: "Offer could not be sent") }
+                .onSuccess { _state.value = _state.value.copy(submittedIds = _state.value.submittedIds + requestId, submittingIds = _state.value.submittingIds - requestId) }
+                .onFailure { error -> _state.value = _state.value.copy(submittingIds = _state.value.submittingIds - requestId, error = error.message ?: "Offer could not be sent") }
         }
     }
 

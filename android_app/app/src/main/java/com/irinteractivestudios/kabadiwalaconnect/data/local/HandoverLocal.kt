@@ -6,6 +6,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateHandoverRequ
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
@@ -17,8 +18,12 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 import java.io.IOException
+import java.io.File
 import com.google.gson.JsonObject
 import kotlin.random.Random
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 
 @Entity(tableName = "handovers")
 data class HandoverEntity(
@@ -115,7 +120,7 @@ class RemoteHandoverRepository(
         scalePhotoPath: String?
     ): Boolean {
         val local = dao.observe(id).firstOrNullValue() ?: return false
-        val dto = api.updateHandoverEvidence(
+        var dto = api.updateHandoverEvidence(
             id,
             HandoverEvidenceRequestDto(
                 actualWeight = actualWeightKg,
@@ -126,6 +131,18 @@ class RemoteHandoverRepository(
                 collectorConfirmed = collectorConfirmed
             )
         ).requireData()
+        // The JSON evidence mutation and the binary upload are separate so a
+        // large photo can retry independently without losing the measured
+        // weight/material confirmation. The server stores only a private key.
+        scalePhotoPath?.let { path ->
+            val file = File(path)
+            if (file.exists()) {
+                dto = api.uploadHandoverEvidencePhoto(
+                    id,
+                    MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody("image/*".toMediaTypeOrNull()))
+                ).requireData()
+            }
+        }
         val updated = dto.toDomain(local.toDomain()).copy(
             scalePhotoPath = scalePhotoPath,
             evidenceUpdatedAtEpochMs = System.currentTimeMillis()
@@ -147,37 +164,53 @@ class OfflineFirstHandoverRepository(
 
     override suspend fun create(lot: Lot, quote: Quote, collectorId: String, locationType: HandoverLocationType, location: String, timestampEpochMs: Long): Handover = try {
         remote.create(lot, quote, collectorId, locationType, location, timestampEpochMs)
-    } catch (_: IOException) {
+    } catch (error: Exception) {
+        if (!error.isRetryableTransportFailure()) throw error
         val handover = local.create(lot, quote, collectorId, locationType, location, timestampEpochMs)
         enqueue("CREATE_HANDOVER", JsonObject().apply {
             addProperty("id", handover.id); addProperty("lotId", lot.id); addProperty("quoteId", quote.id)
-            addProperty("locationType", locationType.name); addProperty("location", location); addProperty("timestampEpochMs", timestampEpochMs)
-        })
+            addProperty("locationType", locationType.name); addProperty("location", location); addProperty("timestampEpochMs", timestampEpochMs); addProperty("collectorId", collectorId)
+        }, collectorId)
         handover
     }
 
-    override suspend fun markHandedOver(id: String): Boolean = try {
+    override suspend fun markHandedOver(id: String): Boolean {
+        val cached = local.observe(id).firstOrNullValue()
+        return try {
         remote.markHandedOver(id)
-    } catch (_: IOException) {
+    } catch (error: Exception) {
+        if (!error.isRetryableTransportFailure()) throw error
         val updated = local.markHandedOver(id)
-        if (updated) enqueue("MARK_HANDOVER", JsonObject().apply { addProperty("id", id) })
+        if (updated) enqueue("MARK_HANDOVER", JsonObject().apply { addProperty("id", id); addProperty("collectorId", cached?.collectorId.orEmpty()) }, cached?.collectorId)
         updated
     }
+    }
 
-    override suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?): Boolean = try {
+    override suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?): Boolean {
+        val cached = local.observe(id).firstOrNullValue()
+        return try {
         remote.updateEvidence(id, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath)
-    } catch (_: IOException) {
+    } catch (error: Exception) {
+        if (!error.isRetryableTransportFailure()) throw error
         val updated = local.updateEvidence(id, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath)
         if (updated) enqueue("UPDATE_HANDOVER_EVIDENCE", JsonObject().apply {
             addProperty("id", id); addProperty("actualWeight", actualWeightKg); addProperty("materialMatch", materialConfirmed); addProperty("collectorConfirmed", collectorConfirmed)
-        })
+            scalePhotoPath?.let { addProperty("scalePhotoPath", it) }
+        }, cached?.collectorId)
         updated
     }
+    }
 
-    private suspend fun enqueue(operation: String, payload: JsonObject) {
-        queue.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+    private suspend fun enqueue(operation: String, payload: JsonObject, accountId: String? = null) {
+        queue.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId))
         requestSync()
     }
+}
+
+private fun Throwable.isRetryableTransportFailure(): Boolean = when (this) {
+    is IOException -> true
+    is RemoteApiException -> httpCode == 408 || httpCode == 429 || (httpCode ?: 0) >= 500
+    else -> false
 }
 
 private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.firstOrNullValue(): T? =
@@ -239,6 +272,39 @@ internal fun HandoverDto.toDomain(fallback: Handover) = fallback.copy(
     referenceId = referenceId ?: fallback.referenceId,
     expiresAtEpochMs = expiresAt?.let(::parseHandoverTimestamp) ?: fallback.expiresAtEpochMs
 )
+
+/**
+ * Builds a complete Room row for a server delta when no local handover row
+ * exists yet. Delta reconciliation must not silently discard a handover just
+ * because the user cleared a stale cache or restored a new device.
+ */
+internal fun HandoverDto.toSyncEntity(): HandoverEntity {
+    val created = createdAt?.let(::parseHandoverTimestamp) ?: System.currentTimeMillis()
+    return HandoverEntity(
+        id = id,
+        lotId = lotId,
+        recyclerId = recyclerId.orEmpty(),
+        collectorId = collectorId.orEmpty(),
+        recyclerName = "Recycler",
+        materialLabel = materialCategory?.toDisplayLabel().orEmpty(),
+        weightKg = weight ?: 0.0,
+        quotedPriceRupees = quotedPrice ?: 0.0,
+        collectionLocation = collectionLocation?.areaName.orEmpty(),
+        handoverLocation = handoverLocation?.address.orEmpty(),
+        handoverLocationType = handoverLocation?.type ?: HandoverLocationType.COLLECTOR_LOCATION.name,
+        timestampEpochMs = timestamp?.let(::parseHandoverTimestamp) ?: created,
+        createdAtEpochMs = created,
+        quoteId = quoteId.orEmpty(),
+        status = status.toLocalHandoverStatus().name,
+        synced = true,
+        actualWeightKg = actualWeight,
+        materialConfirmed = materialConfirmedAt != null,
+        collectorConfirmed = collectorConfirmedAt != null,
+        qrCodeData = qrCodeData,
+        referenceId = referenceId,
+        expiresAtEpochMs = expiresAt?.let(::parseHandoverTimestamp)
+    )
+}
 
 private fun String.toLocalHandoverStatus() = when (this) {
     "CONFIRMED_BY_RECYCLER", "COMPLETED", "PAID" -> HandoverStatus.HANDED_OVER

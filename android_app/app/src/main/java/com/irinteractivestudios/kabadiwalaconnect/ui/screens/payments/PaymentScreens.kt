@@ -26,8 +26,10 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
     var method by remember { mutableStateOf(PaymentMethod.CASH) }
     var notes by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf(false) }
     val amount = amountText.toDoubleOrNull()
-    val valid = lot != null && amount != null && amount > 0.0 && amount <= 1_000_000.0
+    val valid = lot != null && amount != null && amount > 0.0 && amount < 1_000_000.0 && !saving
     val scope = rememberCoroutineScope()
 
     Column(
@@ -87,7 +89,8 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
                 FilterChip(selected = method == item, onClick = { method = item }, label = { Text(paymentMethodLabel(item)) })
             }
         }
-        OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.payment_notes)) }, minLines = 2)
+        OutlinedTextField(value = notes, onValueChange = { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.payment_notes)) }, minLines = 2)
+        if (saveError) Text(stringResource(R.string.payment_save_error), color = MaterialTheme.colorScheme.error)
         if (amountText.isNotBlank() && !valid) Text(stringResource(R.string.payment_amount_error), color = MaterialTheme.colorScheme.error)
         KcPrimaryButton(text = stringResource(R.string.payment_save), onClick = { confirm = true }, enabled = valid)
     }
@@ -99,9 +102,15 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
             confirmButton = {
                 TextButton(onClick = {
                     val item = lot!!
+                    confirm = false
+                    saving = true
+                    saveError = false
                     scope.launch {
-                        repo.record(Payment(UUID.randomUUID().toString(), item.id, null, amount!!, method, System.currentTimeMillis(), notes, PaymentSyncState.WAITING_TO_SYNC))
-                        onSaved(item.id, amount)
+                        runCatching {
+                            repo.record(Payment(UUID.randomUUID().toString(), item.id, null, amount!!, method, System.currentTimeMillis(), notes, PaymentSyncState.WAITING_TO_SYNC))
+                            onSaved(item.id, amount)
+                        }.onFailure { saveError = true }
+                        saving = false
                     }
                 }) { Text(stringResource(R.string.payment_confirm)) }
             },

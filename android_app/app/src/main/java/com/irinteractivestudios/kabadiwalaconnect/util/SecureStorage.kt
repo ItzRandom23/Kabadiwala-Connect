@@ -4,14 +4,15 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Encrypted key-value storage backed by the Android Keystore (Phase 1).
+ * Encrypted key-value storage backed by the Android Keystore.
  *
  * Holds sensitive local credentials, including the configured backend JWT.
- * Falls back to plain SharedPreferences if the Keystore is unavailable
- * (seen on some entry-level devices) so the app never crashes; callers
- * must treat stored secrets as best-effort until real auth exists.
+ * If the Keystore is unavailable, values are kept in memory for the current
+ * process only. Persisting bearer/refresh tokens in plaintext would turn a
+ * device compatibility fallback into an account-takeover vulnerability.
  */
 interface SecureStorage {
     fun put(key: String, value: String)
@@ -37,6 +38,9 @@ interface SecureStorage {
         const val ACCOUNT_PROFILE_ID = "account_profile_id"
         const val ACCOUNT_LATITUDE = "account_latitude"
         const val ACCOUNT_LONGITUDE = "account_longitude"
+
+        /** Opaque server cursor used by bidirectional change reconciliation. */
+        const val SYNC_CURSOR = "sync_cursor"
     }
 }
 
@@ -44,9 +48,10 @@ class KeystoreSecureStorage(context: Context) : SecureStorage {
 
     private val appContext = context.applicationContext
 
-    private val prefs: SharedPreferences by lazy { openPrefs() }
+    private val prefs: SharedPreferences? by lazy { openPrefs() }
+    private val processOnlyValues = ConcurrentHashMap<String, String>()
 
-    private fun openPrefs(): SharedPreferences {
+    private fun openPrefs(): SharedPreferences? {
         return try {
             val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
             EncryptedSharedPreferences.create(
@@ -56,24 +61,18 @@ class KeystoreSecureStorage(context: Context) : SecureStorage {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (_: Exception) {
-            // Keystore broken/missing on this device — stay functional.
-            appContext.getSharedPreferences("kc_secure_fallback", Context.MODE_PRIVATE)
-        }
+        } catch (_: Exception) { null }
     }
 
     override fun put(key: String, value: String) {
-        prefs.edit().putString(key, value).apply()
+        prefs?.edit()?.putString(key, value)?.apply() ?: processOnlyValues.put(key, value)
     }
 
-    override fun get(key: String): String? = try {
-        prefs.getString(key, null)
-    } catch (_: Exception) {
-        null
-    }
+    override fun get(key: String): String? = try { prefs?.getString(key, null) ?: processOnlyValues[key] } catch (_: Exception) { processOnlyValues[key] }
 
     override fun remove(key: String) {
-        prefs.edit().remove(key).apply()
+        prefs?.edit()?.remove(key)?.apply()
+        processOnlyValues.remove(key)
     }
 }
 

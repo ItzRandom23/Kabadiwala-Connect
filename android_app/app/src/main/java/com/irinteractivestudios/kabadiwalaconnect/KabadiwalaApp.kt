@@ -24,6 +24,10 @@ class KabadiwalaApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.connectivityObserver.start()
+        // Re-arm durable offline work after a process death or device reboot.
+        // WorkManager still waits for connectivity and exits immediately when
+        // there is no authenticated session.
+        if (container.hasRestorableSession()) container.syncScheduler.requestSync()
     }
 
     override fun onTerminate() {

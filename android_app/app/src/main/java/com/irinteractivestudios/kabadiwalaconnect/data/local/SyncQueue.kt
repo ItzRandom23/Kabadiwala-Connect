@@ -12,9 +12,9 @@ import kotlinx.coroutines.flow.Flow
  * Offline-first sync queue for server-dependent collector actions.
  *
  * Server-dependent actions (lot creation, payments, quote requests,
- * handovers — are recorded here when offline and uploaded by WorkManager once
- * connectivity returns. The backend currently accepts lot and payment
- * operations; other actions remain local until their server contracts exist.
+ * handovers, chat, and disputes) are recorded here when offline and uploaded
+ * by WorkManager once connectivity returns. Each operation is replayed through
+ * its idempotent API contract or retained with an error code when rejected.
  */
 @Entity(tableName = "sync_queue")
 data class SyncQueueItemEntity(
@@ -24,7 +24,12 @@ data class SyncQueueItemEntity(
     /** JSON payload describing the operation (schema per operation). */
     val payloadJson: String,
     val createdAtEpochMs: Long,
-    val attempts: Int = 0
+    val attempts: Int = 0,
+    /** Stable server/client error code for a permanently rejected operation. */
+    val lastErrorCode: String? = null,
+    /** WorkManager may run again before a transient provider failure is safe to retry. */
+    val nextAttemptAtEpochMs: Long = 0L,
+    val accountId: String? = null
 )
 
 @Dao
@@ -35,14 +40,27 @@ interface SyncQueueDao {
     @Query("SELECT * FROM sync_queue ORDER BY createdAtEpochMs ASC")
     fun observeAll(): Flow<List<SyncQueueItemEntity>>
 
+    @Query("SELECT * FROM sync_queue WHERE accountId = :accountId ORDER BY createdAtEpochMs ASC")
+    fun observeForAccount(accountId: String): Flow<List<SyncQueueItemEntity>>
+
+    /** Rows that still need automatic processing. Rejected rows are retained for inspection/recovery, but are not retried forever. */
+    @Query("SELECT * FROM sync_queue WHERE (lastErrorCode IS NULL OR attempts < 3) AND nextAttemptAtEpochMs <= CAST(strftime('%s','now') AS INTEGER) * 1000 ORDER BY createdAtEpochMs ASC")
+    fun observePending(): Flow<List<SyncQueueItemEntity>>
+
+    @Query("SELECT * FROM sync_queue WHERE accountId = :accountId AND (lastErrorCode IS NULL OR attempts < 3) AND nextAttemptAtEpochMs <= CAST(strftime('%s','now') AS INTEGER) * 1000 ORDER BY createdAtEpochMs ASC")
+    fun observePendingForAccount(accountId: String): Flow<List<SyncQueueItemEntity>>
+
     @Query("SELECT COUNT(*) FROM sync_queue")
     suspend fun count(): Int
 
     @Query("DELETE FROM sync_queue WHERE uid = :uid")
     suspend fun remove(uid: Long)
 
-    @Query("UPDATE sync_queue SET attempts = attempts + 1 WHERE uid = :uid")
-    suspend fun incrementAttempts(uid: Long)
+    @Query("UPDATE sync_queue SET attempts = attempts + 1, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid")
+    suspend fun incrementAttempts(uid: Long, nextAttemptAtEpochMs: Long)
+
+    @Query("UPDATE sync_queue SET attempts = attempts + 1, lastErrorCode = :errorCode, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid")
+    suspend fun markFailed(uid: Long, errorCode: String, nextAttemptAtEpochMs: Long)
 
     @Query("DELETE FROM sync_queue")
     suspend fun clear()

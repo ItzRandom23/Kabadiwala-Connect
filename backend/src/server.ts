@@ -61,7 +61,7 @@ const app = createApp(
   new PriceService(new PriceRepository(prisma), prisma),
   new RecyclerService(prisma),
   new QuoteService(prisma),
-  new HandoverService(prisma, config.TRACEABILITY_SIGNING_SECRET, authenticationRateLimiter),
+  new HandoverService(prisma, config.TRACEABILITY_SIGNING_SECRET, authenticationRateLimiter, storage),
   paymentService,
   new SyncService(prisma, paymentService),
   new EmailAuthService(prisma, jwt, sessionService, authenticationRateLimiter)

@@ -73,9 +73,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerSortMode
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 
 @Composable
 fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOpen: (String) -> Unit, demoMode: Boolean = false, modifier: Modifier = Modifier) {
@@ -253,7 +251,7 @@ private fun RecyclerCard(recycler: Recycler, vm: RecyclersViewModel, onOpen: (St
 }
 
 @Composable
-fun RecyclerDetailScreen(recycler: Recycler, onCall: () -> Unit) {
+fun RecyclerDetailScreen(recycler: Recycler, onCall: () -> Unit, onRequestQuote: () -> Unit = {}) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(recycler.name, style = MaterialTheme.typography.headlineLarge)
@@ -263,7 +261,7 @@ fun RecyclerDetailScreen(recycler: Recycler, onCall: () -> Unit) {
             title = stringResource(R.string.recycler_detail_authorization),
             status = stringResource(if (recycler.authorized) R.string.recyclers_authorized else R.string.recycler_not_verified)
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(stringResource(R.string.recycler_detail_authorization), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(if (recycler.authorized) stringResource(R.string.recyclers_authorized) else stringResource(R.string.recycler_not_verified), color = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.recycler_rate_value, recycler.offeredRatePerKg), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.recycler_materials, recycler.acceptedMaterials.joinToString(", "))); Text(stringResource(R.string.recycler_hours, recycler.operatingHours)); Text(stringResource(R.string.recycler_handover, recycler.typicalHandoverHours)); Text(stringResource(R.string.recycler_map_placeholder, recycler.latitude ?: 0.0, recycler.longitude ?: 0.0), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { Text(stringResource(R.string.recycler_detail_authorization), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(if (recycler.authorized) stringResource(R.string.recyclers_authorized) else stringResource(R.string.recycler_not_verified), color = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.recycler_rate_value, recycler.offeredRatePerKg), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.recycler_materials, recycler.acceptedMaterials.joinToString(", "))); Text(stringResource(R.string.recycler_hours, recycler.operatingHours)); Text(stringResource(R.string.recycler_handover, recycler.typicalHandoverHours)); if (recycler.latitude != null && recycler.longitude != null) Text(stringResource(R.string.recycler_map_placeholder, recycler.latitude, recycler.longitude), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         EvidenceSection(title = stringResource(R.string.recycler_trust_passport)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -274,9 +272,10 @@ fun RecyclerDetailScreen(recycler: Recycler, onCall: () -> Unit) {
                 Text(stringResource(R.string.recycler_trust_explainer), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCall, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) { Icon(Icons.Filled.Call, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.recycler_call)) }; OutlinedButton(onClick = { val lat = recycler.latitude ?: 0.0; val lon = recycler.longitude ?: 0.0; runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=${Uri.encode(recycler.address)}"))) } }, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) { Icon(Icons.Filled.Directions, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.recycler_map)) } }
-        Text(stringResource(R.string.recycler_contact_note, recycler.contactPhone), style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = onRequestQuote, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.quote_request_button)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCall, enabled = recycler.contactPhone.isNotBlank(), modifier = Modifier.weight(1f).heightIn(min = 56.dp)) { Icon(Icons.Filled.Call, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.recycler_call)) }; OutlinedButton(onClick = { val lat = recycler.latitude ?: 0.0; val lon = recycler.longitude ?: 0.0; runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=${Uri.encode(recycler.address)}"))) } }, enabled = recycler.latitude != null && recycler.longitude != null, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) { Icon(Icons.Filled.Directions, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.recycler_map)) } }
+        if (recycler.contactPhone.isNotBlank()) Text(stringResource(R.string.recycler_contact_note, recycler.contactPhone), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
-private fun formatTrustDate(epochMs: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(epochMs))
+private fun formatTrustDate(epochMs: Long): String = IndiaFormat.date(epochMs)

@@ -197,7 +197,7 @@ class LotManagementViewModel(
         _state.value = s.copy(isSaving = true, saveError = false)
         viewModelScope.launch {
             try {
-                writer.save(Lot(id, collectorId, s.material.key, s.condition.name, weight, s.photoPath, null, s.valuation?.estimatedValue, quotePrice, null, s.location, timestamp, timestamp, LotStatus.SAVED, s.notes, false))
+                writer.save(Lot(id = id, collectorId = collectorId, materialLabel = s.material.key, condition = s.condition.name, weightKg = weight, localPhotoPath = s.photoPath, estimatedValueRupees = s.valuation?.estimatedValue, quoteRupees = quotePrice, location = s.location, createdAtEpochMs = timestamp, updatedAtEpochMs = timestamp, status = LotStatus.SAVED, notes = s.notes, synced = false, sourceType = "FIELD_CAPTURE", wasteRegime = if (s.material.hazardous && s.material == Material.BATTERY) "BATTERY_WASTE" else "E_WASTE", originalWeight = s.weightText.toDoubleOrNull(), originalWeightUnit = s.weightUnit.toBackendUnit(), locationPrecision = "MANUAL"))
                 _state.value = _state.value.copy(step = LotStep.SAVED, savedLotId = id, isSaving = false, saveError = false)
             } catch (_: Exception) {
                 _state.value = _state.value.copy(isSaving = false, saveError = true)
@@ -225,6 +225,11 @@ class LotManagementViewModel(
         "OTHER" -> Material.OTHER
         else -> null
     }
+}
+
+private fun WeightUnit.toBackendUnit() = when (this) {
+    WeightUnit.KG -> "KILOGRAM"
+    WeightUnit.GRAMS -> "GRAM"
 }
 
 fun LotDraftState.weightKgOrNull(): Double? {

@@ -6,22 +6,17 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /**
- * Local Room database (Phase 1).
+ * Local Room database for the offline-first collector and recycler flows.
+ * Every feature table is versioned through an explicit migration so cached
+ * work remains recoverable across app upgrades.
  *
- * Version 1 contains only the tables Phase 1 needs:
- * - sync_queue: offline operation queue foundation.
- *
- * Future entities (collector profile, lots, prices, recyclers, quotes,
- * handovers, payments) get their own tables + migrations in their
- * feature phases — they are NOT created here.
- *
- * Encryption capability: SQLCipher integration point is documented and
- * reserved (pass a SupportFactory via [builder] in a later phase); the
- * DAO/repository boundaries already isolate callers from that change.
+ * Encryption capability: SQLCipher integration can be supplied through the
+ * builder without changing DAO/repository callers; secure session material is
+ * already kept outside this database in Keystore-backed storage.
  */
 @Database(
-    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class],
-    version = 14,
+    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class],
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
                     .build().also { instance = it }
             }
 
@@ -126,6 +121,53 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE handovers ADD COLUMN qrCodeData TEXT")
                 db.execSQL("ALTER TABLE handovers ADD COLUMN referenceId TEXT")
                 db.execSQL("ALTER TABLE handovers ADD COLUMN expiresAtEpochMs INTEGER")
+            }
+        }
+        val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sync_queue ADD COLUMN lastErrorCode TEXT")
+            }
+        }
+        val MIGRATION_15_16 = object : androidx.room.migration.Migration(15, 16) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS future_notifications (id TEXT NOT NULL PRIMARY KEY, accountId TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, route TEXT, readAt TEXT, createdAt TEXT)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_future_notifications_accountId_createdAt ON future_notifications(accountId, createdAt)")
+            }
+        }
+        val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lots ADD COLUMN materialSubcategory TEXT")
+                db.execSQL("ALTER TABLE lots ADD COLUMN sourceType TEXT")
+                db.execSQL("ALTER TABLE lots ADD COLUMN wasteRegime TEXT NOT NULL DEFAULT 'E_WASTE'")
+                db.execSQL("ALTER TABLE lots ADD COLUMN originalWeight REAL")
+                db.execSQL("ALTER TABLE lots ADD COLUMN originalWeightUnit TEXT")
+                db.execSQL("ALTER TABLE lots ADD COLUMN imageProvenance TEXT")
+                db.execSQL("ALTER TABLE lots ADD COLUMN imageQualityStatus TEXT NOT NULL DEFAULT 'UNVERIFIED'")
+                db.execSQL("ALTER TABLE lots ADD COLUMN locationPrecision TEXT")
+                db.execSQL("ALTER TABLE lots ADD COLUMN serverUpdatedAtEpochMs INTEGER")
+            }
+        }
+        val MIGRATION_17_18 = object : androidx.room.migration.Migration(17, 18) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sync_queue ADD COLUMN nextAttemptAtEpochMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE sync_queue ADD COLUMN accountId TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_queue_nextAttemptAtEpochMs ON sync_queue(nextAttemptAtEpochMs)")
+            }
+        }
+        val MIGRATION_18_19 = object : androidx.room.migration.Migration(18, 19) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE prices ADD COLUMN unit TEXT NOT NULL DEFAULT 'KILOGRAM'")
+                db.execSQL("ALTER TABLE prices ADD COLUMN source TEXT NOT NULL DEFAULT 'SYSTEM'")
+                db.execSQL("ALTER TABLE prices ADD COLUMN qualityStatus TEXT NOT NULL DEFAULT 'UNVERIFIED'")
+                db.execSQL("ALTER TABLE prices ADD COLUMN disclaimer TEXT")
+                db.execSQL("ALTER TABLE prices ADD COLUMN trendPercentage REAL NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE prices ADD COLUMN complianceRegime TEXT")
+            }
+        }
+        val MIGRATION_19_20 = object : androidx.room.migration.Migration(19, 20) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE payments ADD COLUMN accountId TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_accountId_paidAtEpochMs ON payments(accountId, paidAtEpochMs)")
             }
         }
 

@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 
 /**
  * Prices tab state: cached market prices, offline-first.
- * Empty on a fresh install (no fabricated prices); real cache in Phase 2+.
+ * Empty on a fresh install (no fabricated prices); populated by the backend
+ * catalog refresh when a session and connection are available.
  */
 class PricesViewModel(
     prices: PriceRepository,

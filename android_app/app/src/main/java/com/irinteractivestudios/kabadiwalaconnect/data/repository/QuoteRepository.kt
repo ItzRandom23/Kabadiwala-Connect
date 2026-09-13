@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.Flow
 interface QuoteRepository {
     fun observeForLot(lotId: String): Flow<List<Quote>>
     suspend fun submitRequest(lot: Lot, recycler: Recycler, nowEpochMs: Long = System.currentTimeMillis()): List<Quote>
+    suspend fun submitBatchRequest(lot: Lot, recyclers: List<Recycler>, nowEpochMs: Long = System.currentTimeMillis()): List<Quote> = recyclers.flatMap { submitRequest(lot, it, nowEpochMs) }
+    /** Refresh server-owned offers while keeping Room as the UI source of truth. */
+    suspend fun refresh(lot: Lot, recycler: Recycler? = null): List<Quote> = emptyList()
     suspend fun accept(quoteId: String): Boolean
     suspend fun reject(quoteId: String): Boolean
 }

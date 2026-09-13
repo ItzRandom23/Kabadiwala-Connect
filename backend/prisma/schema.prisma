@@ -34,6 +34,7 @@ enum PreferredLanguage {
 }
 
 enum AccountRole {
+  HOUSEHOLD
   COLLECTOR
   RECYCLER
 }
@@ -49,6 +50,7 @@ enum MaterialCategory {
   LCD_PANEL
   PCB
   CABLE
+  COPPER
   BATTERY
   MOTOR
   MAGNET
@@ -278,6 +280,24 @@ model User {
   @@index([role, accountStatus])
 }
 
+// Administrative identity is deliberately separate from marketplace
+// accounts. Admin tokens are accepted only while this record is active, so a
+// compromised or retired token can be revoked without changing marketplace
+// role semantics.
+model AdminAccount {
+  id           String   @id @default(cuid()) @map("_id")
+  email        String   @unique
+  passwordHash String?
+  displayName  String?
+  permissions  String[]
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastLoginAt  DateTime?
+
+  @@index([active, updatedAt])
+}
+
 model Price {
   id                 String            @id @default(cuid()) @map("_id")
   materialCategory   MaterialCategory
@@ -407,7 +427,7 @@ model RecyclerRate {
   updatedAt        DateTime          @updatedAt
 
   @@index([materialCategory, pricePerKg])
-  @@index([recyclerId, materialCategory])
+  @@unique([recyclerId, materialCategory])
 }
 
 model RecyclerAuthorizationAudit {
@@ -444,6 +464,7 @@ model QuoteRequest {
   @@index([recyclerId, status, createdAt])
   @@index([lotId, status])
   @@index([expiresAt])
+  @@unique([collectorId, lotId, recyclerId, status])
 }
 
 model Quote {
@@ -498,6 +519,8 @@ model Lot {
   condition                   LotCondition
   weight                      Float
   weightUnit                  WeightUnit         @default(KILOGRAM)
+  originalWeight              Float?
+  originalWeightUnit          WeightUnit?
   photoPath                   String?
   photoUrl                    String?
   imageProvenance             ImageProvenance?

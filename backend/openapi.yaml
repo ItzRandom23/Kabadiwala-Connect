@@ -24,6 +24,25 @@ paths:
         '200': { description: Authenticated collector and JWT }
         '400': { description: Invalid or expired OTP }
         '429': { description: Attempts exceeded }
+  /auth/signup:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailSignup' } } } }
+      responses:
+        '201': { description: Account created with access and refresh tokens }
+        '409': { description: Email already in use }
+  /auth/login:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailLogin' } } } }
+      responses:
+        '200': { description: Authenticated role account }
+        '401': { description: Invalid credentials }
+  /auth/admin-login:
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EmailLogin' } } } }
+      responses:
+        '200': { description: Authenticated scoped admin account }
+        '401': { description: Invalid credentials }
+        '403': { description: Inactive admin account }
   /auth/logout:
     post: { responses: { '200': { description: Stateless logout acknowledgement } } }
   /auth/refresh:
@@ -54,15 +73,22 @@ paths:
     get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Authenticated private lot photo, content: { image/jpeg: { schema: { type: string, format: binary } } } }, '404': { description: Photo not found or not owned by caller } } }
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [photo], properties: { photo: { type: string, format: binary } } } } } }, responses: { '200': { description: Photo uploaded }, '400': { description: Invalid photo }, '413': { description: File too large } } }
   /prices/board:
-    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] } }, { in: query, name: location, schema: { type: string } }], responses: { '200': { description: Current trusted/development price board }, '404': { description: No price available } } }
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] } }, { in: query, name: location, schema: { type: string } }], responses: { '200': { description: Current trusted/development price board }, '404': { description: No price available } } }
   /prices/history:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: materialCategory, required: true, schema: { type: string } }, { in: query, name: location, schema: { type: string } }, { in: query, name: days, schema: { type: integer, minimum: 1, maximum: 90, default: 30 } }], responses: { '200': { description: Chronological price history } } }
   /lots/{lotId}/valuation:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: lotId, required: true, schema: { type: string } }], responses: { '200': { description: Server-calculated owned lot valuation }, '404': { description: Lot or price not found } } }
+  /recycler/profile:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Authenticated recycler profile }, '403': { description: Verified recycler access required } } }
+    patch: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RecyclerProfileUpdate' } } } }, responses: { '200': { description: Updated recycler availability and profile settings }, '422': { description: Invalid profile settings } } }
+  /recycler/rates:
+    put: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RecyclerRatesUpdate' } } } }, responses: { '200': { description: Updated recycler buying rates }, '422': { description: Invalid buying rates } } }
   /admin/prices/{priceId}:
     put: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: priceId, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PriceUpdate' } } } }, responses: { '200': { description: Updated price with audit trail }, '403': { description: Admin access required }, '422': { description: Invalid price range } } }
   /quotes/request:
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [lotId, recyclerId] } } } }, responses: { '201': { description: Quote request created }, '409': { description: Ineligible or duplicate request } } }
+  /quotes/request-batch:
+    post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuoteBatchRequest' } } } }, responses: { '200': { description: Quote requests created for eligible recyclers }, '409': { description: No eligible recycler or lot is already accepted } } }
   /quotes/pending:
     get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Collector quote requests and quotes } } }
   /quotes/{quoteId}:
@@ -87,6 +113,8 @@ paths:
     post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Collector confirmation recorded } } }
   /handovers/{handoverId}/evidence:
     put: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '200': { description: Weight and material evidence saved }, '409': { description: Evidence is locked } } }
+  /handovers/{handoverId}/evidence/photo:
+    post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [photo], properties: { photo: { type: string, format: binary } } } } } }, responses: { '200': { description: Private scale evidence uploaded }, '409': { description: Evidence is locked }, '413': { description: File too large } } }
   /handovers/{handoverId}/dispute:
     post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: handoverId, required: true, schema: { type: string } }], responses: { '201': { description: Idempotent collector dispute created } } }
   /recycler/handovers:
@@ -97,13 +125,28 @@ paths:
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [operations], properties: { operations: { type: array, maxItems: 100, items: { type: object } } } } } } }, responses: { '200': { description: Per-operation sync results }, '422': { description: Invalid batch } } }
   /sync/changes:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: since, schema: { type: string, format: date-time } }], responses: { '200': { description: Collector-owned delta changes } } }
+  /notifications:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: unread, schema: { type: boolean } }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100 } }], responses: { '200': { description: Account-scoped notification inbox } } }
+  /notifications/unread-count:
+    get: { security: [{ bearerAuth: [] }], responses: { '200': { description: Unread notification count } } }
+  /notifications/{notificationId}/read:
+    post: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: notificationId, required: true, schema: { type: string } }], responses: { '200': { description: Notification marked read } } }
+  /notifications/read-all:
+    post: { security: [{ bearerAuth: [] }], responses: { '200': { description: Notifications marked read } } }
+  /transactions/{lotId}/timeline:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: path, name: lotId, required: true, schema: { type: string } }], responses: { '200': { description: Privacy-safe participant transaction passport }, '404': { description: Transaction not found } } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   schemas:
-    LotCreate: { type: object, required: [materialCategory, condition, weight, collectionLocation], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, materialSubcategory: { type: string }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, weight: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 500 }, collectionLocation: { type: object, properties: { latitude: { type: number }, longitude: { type: number }, areaName: { type: string }, precision: { type: string, enum: [GPS, MANUAL] } } }, notes: { type: string, maxLength: 1000 } } }
+    EmailLogin: { type: object, required: [email, password], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 } } }
+    EmailSignup: { type: object, required: [email, password, role], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 }, role: { type: string, enum: [HOUSEHOLD, COLLECTOR, RECYCLER] }, preferredLanguage: { type: string }, areaName: { type: string }, businessName: { type: string }, authorizationNumber: { type: string }, materialsAccepted: { type: array, items: { type: string } }, pickupAvailable: { type: boolean }, serviceRadiusKm: { type: number } } }
+    LotCreate: { type: object, required: [materialCategory, condition, weight, collectionLocation], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, materialSubcategory: { type: string }, sourceType: { type: string }, wasteRegime: { type: string, enum: [E_WASTE, BATTERY_WASTE, OTHER] }, imageProvenance: { type: string, enum: [CAMERA, GALLERY, IMPORTED, LEGACY] }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, weight: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 500000 }, weightUnit: { type: string, enum: [KILOGRAM, GRAM, PIECE] }, collectionLocation: { type: object, properties: { latitude: { type: number }, longitude: { type: number }, areaName: { type: string }, precision: { type: string, enum: [GPS, MANUAL] } } }, notes: { type: string, maxLength: 1000 } } }
     LotUpdate: { type: object, required: [version], properties: { weight: { type: number }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, notes: { type: string }, version: { type: integer, minimum: 1 } } }
     PhoneRequest: { type: object, required: [phone], properties: { phone: { type: string, pattern: '^[6-9]\\d{9}$' } } }
     VerifyRequest: { type: object, required: [phone, otp], properties: { phone: { type: string }, otp: { type: string, pattern: '^\\d{6}$' } } }
     ProfileUpdate: { type: object, properties: { preferredLanguage: { type: string, enum: [MARATHI, HINDI] }, primaryLocation: { type: object, properties: { latitude: { type: number, minimum: -90, maximum: 90 }, longitude: { type: number, minimum: -180, maximum: 180 }, areaName: { type: string, maxLength: 160 } } } } }
     PriceUpdate: { type: object, required: [priceMin, priceMax, marketPrice], properties: { priceMin: { type: number, exclusiveMinimum: 0 }, priceMax: { type: number, exclusiveMinimum: 0 }, marketPrice: { type: number, exclusiveMinimum: 0 }, reason: { type: string, maxLength: 500 } } }
+    RecyclerProfileUpdate: { type: object, properties: { pickupAvailability: { type: string, enum: [TODAY, THIS_WEEK, FLEXIBLE] }, maxPickupDistanceKm: { type: number, exclusiveMinimum: 0, maximum: 200 }, operatingHours: { type: object } } }
+    RecyclerRatesUpdate: { type: object, required: [rates], properties: { rates: { type: array, minItems: 0, maxItems: 20, items: { type: object, required: [materialCategory, pricePerKg], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, pricePerKg: { type: number, exclusiveMinimum: 0 } } } } } }
+    QuoteBatchRequest: { type: object, required: [lotId, recyclerIds], properties: { lotId: { type: string }, recyclerIds: { type: array, minItems: 1, maxItems: 10, items: { type: string } } } }

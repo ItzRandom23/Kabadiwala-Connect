@@ -1,8 +1,17 @@
 import { PrismaClient, PreferredLanguage, AccountStatus, MaterialCategory, PriceSource, RecyclerAuthorizationStatus, PickupAvailability } from '@prisma/client';
-import { scryptSync } from 'node:crypto';
+import { randomBytes, scryptSync } from 'node:crypto';
 const prisma = new PrismaClient();
 const demoPasswordHash = `${Buffer.from('kabadiwala-demo-salt').toString('hex')}:${scryptSync('DemoPass123!', Buffer.from('kabadiwala-demo-salt'), 64).toString('hex')}`;
 async function main() {
+  const adminEmail = process.env.ADMIN_SEED_EMAIL?.trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (adminEmail && adminPassword) {
+    const salt = randomBytes(16);
+    const passwordHash = `${salt.toString('hex')}:${scryptSync(adminPassword, salt, 64).toString('hex')}`;
+    await prisma.adminAccount.upsert({ where: { email: adminEmail }, update: { passwordHash, active: true, permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] }, create: { email: adminEmail, passwordHash, displayName: 'Operations admin', permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] } });
+  } else if (adminEmail || adminPassword) {
+    throw new Error('ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD must be provided together');
+  }
   const demoCollector = await prisma.collector.upsert({ where: { phone: '9876543210' }, update: { email: 'dev-collector@kabadiwala.example' }, create: { phone: '9876543210', email: 'dev-collector@kabadiwala.example', preferredLanguage: PreferredLanguage.HINDI, areaName: 'Development Area', accountStatus: AccountStatus.ACTIVE } });
   await prisma.user.upsert({ where: { email: 'dev-collector@kabadiwala.example' }, update: { collectorProfileId: demoCollector.id, role: 'COLLECTOR', preferredLanguage: PreferredLanguage.HINDI, accountStatus: AccountStatus.ACTIVE }, create: { email: 'dev-collector@kabadiwala.example', passwordHash: demoPasswordHash, role: 'COLLECTOR', preferredLanguage: PreferredLanguage.HINDI, collectorProfileId: demoCollector.id, accountStatus: AccountStatus.ACTIVE } });
   const rows = [{ id: 'dev-mumbai-pcb', materialCategory: MaterialCategory.PCB, city: 'Mumbai', priceMin: 2200, priceMax: 2800, marketPrice: 2500 }, { id: 'dev-mumbai-cable', materialCategory: MaterialCategory.CABLE, city: 'Mumbai', priceMin: 500, priceMax: 700, marketPrice: 600 }, { id: 'dev-pune-pcb', materialCategory: MaterialCategory.PCB, city: 'Pune', priceMin: 2100, priceMax: 2700, marketPrice: 2400 }];

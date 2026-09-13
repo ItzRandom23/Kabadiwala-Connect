@@ -98,7 +98,7 @@ sealed interface OtpVerification {
     data object NetworkError : OtpVerification
 }
 
-/** Development-only OTP boundary. Replace this implementation with Retrofit later. */
+/** Development-only OTP boundary used only by the offline debug configuration. */
 class MockOtpService(
     private val code: String = "123456",
     private val ttlMs: Long = 60_000L,
@@ -146,7 +146,8 @@ class SecureSessionRepository(private val storage: SecureStorage) : SessionRepos
     override fun save(token: String, expiresAtEpochMs: Long, refreshToken: String?) {
         storage.put(SecureStorage.AUTH_TOKEN, token)
         storage.put(SecureStorage.SESSION_EXPIRY, expiresAtEpochMs.toString())
-        refreshToken?.let { storage.put(SecureStorage.REFRESH_TOKEN, it) }
+        if (!refreshToken.isNullOrBlank()) storage.put(SecureStorage.REFRESH_TOKEN, refreshToken)
+        else storage.remove(SecureStorage.REFRESH_TOKEN)
     }
 
     override fun clear() {

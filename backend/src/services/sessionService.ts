@@ -12,7 +12,7 @@ export class SessionService {
   async issue(actorId: string, role: AuthIdentity['role'], familyId: string = randomUUID()) {
     const refreshToken = randomBytes(48).toString('base64url');
     await this.db.refreshToken.create({ data: { actorId, actorRole: role, tokenHash: hash(refreshToken), familyId, expiresAt: new Date(Date.now() + this.config.REFRESH_TOKEN_EXPIRES_IN_DAYS * 86400000) } });
-    const token = role === 'RECYCLER' ? this.jwt.generateRecyclerToken(actorId) : role === 'ADMIN' ? this.jwt.generateAdminToken(actorId) : this.jwt.generateToken(actorId);
+    const token = role === 'RECYCLER' ? this.jwt.generateRecyclerToken(actorId) : role === 'ADMIN' ? this.jwt.generateAdminToken(actorId) : role === 'HOUSEHOLD' ? this.jwt.generateHouseholdToken(actorId) : this.jwt.generateToken(actorId);
     return { token, refreshToken };
   }
 
@@ -35,7 +35,7 @@ export class SessionService {
     });
     if (!rotated) throw new AppError('TOKEN_INVALID', 'Refresh token was already used', 401);
     const role = existing.actorRole as AuthIdentity['role'];
-    const token = role === 'RECYCLER' ? this.jwt.generateRecyclerToken(existing.actorId) : role === 'ADMIN' ? this.jwt.generateAdminToken(existing.actorId) : this.jwt.generateToken(existing.actorId);
+    const token = role === 'RECYCLER' ? this.jwt.generateRecyclerToken(existing.actorId) : role === 'ADMIN' ? this.jwt.generateAdminToken(existing.actorId) : role === 'HOUSEHOLD' ? this.jwt.generateHouseholdToken(existing.actorId) : this.jwt.generateToken(existing.actorId);
     return { token, refreshToken: nextRefreshToken };
   }
 

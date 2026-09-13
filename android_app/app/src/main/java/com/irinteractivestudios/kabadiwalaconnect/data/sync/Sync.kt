@@ -29,6 +29,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDt
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.QuoteStatus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,23 +48,55 @@ class SyncWorker(
         if (token.isNullOrBlank()) return Result.success()
 
         val queue = app.container.database.syncQueueDao()
-        val pending = queue.observeAll().first().take(BATCH_SIZE)
-        if (pending.isEmpty()) return Result.success()
+        val accountId = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.ACCOUNT_PROFILE_ID)
+        if (accountId.isNullOrBlank()) return Result.success()
+        // A worker can outlive the account that scheduled it. Only replay
+        // rows owned by the currently authenticated account; legacy rows with
+        // no owner remain visible as unresolved instead of crossing accounts.
+        val pending = queue.observePendingForAccount(accountId).first().take(BATCH_SIZE)
+        if (pending.isEmpty()) return pullChanges(app)
+        val pendingCreateLotIds = pending
+            .filter { it.operation == "CREATE_LOT" }
+            .mapNotNull { item -> runCatching { JsonParser.parseString(item.payloadJson).asJsonObject.get("id")?.asString }.getOrNull() }
+            .toSet()
+        var deferredOperation = false
 
         // Operations with dedicated idempotent API contracts are replayed
         // before the legacy batch. They retain their queue row on any
         // uncertain response so WorkManager can safely retry them.
         for (item in pending.filterNot { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }) {
+            if (item.operation == "REQUEST_QUOTE") {
+                val quotePayload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull()
+                val localLot = quotePayload?.get("lotId")?.asString?.let { app.container.database.lotDao().findByIdForCollector(it, accountId) }
+                when {
+                    // A queued quote can depend on a lot queued in the same
+                    // worker run. Let the CREATE_LOT batch complete first so
+                    // a temporary server 404 is not recorded as permanent.
+                    localLot != null && !localLot.synced && localLot.status != "CANCELLED" && localLot.id in pendingCreateLotIds -> {
+                        deferredOperation = true
+                        continue
+                    }
+                    // Cancellation removes an unsent lot's create operation;
+                    // its dependent quote request must not be resurrected.
+                    localLot?.status == "CANCELLED" -> {
+                        queue.remove(item.uid)
+                        continue
+                    }
+                }
+            }
             when (processExtended(app, item)) {
                 QueueResult.APPLIED -> queue.remove(item.uid)
-                QueueResult.RETRY -> { queue.incrementAttempts(item.uid); return Result.retry() }
-                QueueResult.REJECTED -> { queue.incrementAttempts(item.uid); return Result.failure() }
+                QueueResult.RETRY -> { queue.incrementAttempts(item.uid, retryAt(item.attempts)); return Result.retry() }
+                QueueResult.REJECTED -> {
+                    queue.markFailed(item.uid, "EXTENDED_OPERATION_REJECTED", retryAt(item.attempts))
+                    return Result.failure()
+                }
             }
         }
 
         val batchPending = pending.filter { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }
         val operations = batchPending.mapNotNull { item -> item.toOperationOrNull() }
-        if (operations.isEmpty()) return Result.success()
+        if (operations.isEmpty()) return if (deferredOperation) Result.retry() else pullChanges(app)
 
         return try {
             val response = app.container.apiService.sync(SyncBatchRequestDto(operations))
@@ -90,16 +123,35 @@ class SyncWorker(
                             }
                             "PAYMENT" -> app.container.database.paymentDao().markSynced(operation.entityId)
                         }
+                        queue.remove(item.uid)
+                    } else {
+                        // Keep rejected/conflicting work visible locally instead of
+                        // silently dropping the user's action. The pending query
+                        // stops automatic retries after three attempts.
+                        queue.markFailed(item.uid, result.errorCode ?: "SYNC_${result.status}", retryAt(item.attempts))
                     }
-                    queue.remove(item.uid)
                 }
             }
-            if (results.size < operations.size) Result.retry() else Result.success()
+            if (deferredOperation || results.size < operations.size) Result.retry() else pullChanges(app)
         } catch (_: IOException) {
             Result.retry()
         } catch (_: Exception) {
             Result.failure()
         }
+    }
+
+    private suspend fun pullChanges(app: KabadiwalaApp): Result = try {
+        app.container.reconcileChanges()
+        Result.success()
+    } catch (_: IOException) {
+        Result.retry()
+    } catch (error: RemoteApiException) {
+        // Authentication refresh is handled by Retrofit. Other transient
+        // server responses should remain recoverable through WorkManager.
+        if (error.httpCode == 408 || error.httpCode == 429 || (error.httpCode ?: 0) >= 500) Result.retry()
+        else Result.failure()
+    } catch (_: Exception) {
+        Result.retry()
     }
 
     private suspend fun processExtended(app: KabadiwalaApp, item: SyncQueueItemEntity): QueueResult {
@@ -117,6 +169,9 @@ class SyncWorker(
                 "REJECT_QUOTE" -> {
                     val quote = app.container.apiService.rejectQuote(payload.string("id")).requireData()
                     app.container.database.quoteDao().updateStatus(quote.id, QuoteStatus.REJECTED.name)
+                }
+                "CANCEL_LOT" -> {
+                    app.container.apiService.cancelLot(payload.string("id")).requireData()
                 }
                 "CREATE_HANDOVER" -> {
                     val id = payload.string("id")
@@ -137,7 +192,13 @@ class SyncWorker(
                 "UPDATE_HANDOVER_EVIDENCE" -> {
                     val id = payload.string("id")
                     val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
-                    val dto = app.container.apiService.updateHandoverEvidence(id, HandoverEvidenceRequestDto(payload.double("actualWeight"), payload.boolean("materialMatch"), collectorConfirmed = payload.boolean("collectorConfirmed"))).requireData()
+                    var dto = app.container.apiService.updateHandoverEvidence(id, HandoverEvidenceRequestDto(payload.double("actualWeight"), payload.boolean("materialMatch"), collectorConfirmed = payload.boolean("collectorConfirmed"))).requireData()
+                    payload.get("scalePhotoPath")?.takeUnless { it.isJsonNull }?.asString?.let { path ->
+                        val file = File(path)
+                        if (!file.exists()) return QueueResult.REJECTED
+                        val response = app.container.apiService.uploadHandoverEvidencePhoto(id, MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody("image/*".toMediaTypeOrNull())))
+                        dto = response.requireData()
+                    }
                     app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
                 }
                 "SEND_CHAT_MESSAGE" -> {
@@ -145,6 +206,8 @@ class SyncWorker(
                     val message = app.container.apiService.sendMessage(payload.string("conversationId"), SendMessageRequestDto(clientId, payload.string("body"))).requireData()
                     FutureCacheStore(app.container.database.futureCacheDao()).apply { deleteMessage("local-$clientId"); saveMessages(listOf(message)) }
                 }
+                "MARK_NOTIFICATION_READ" -> app.container.apiService.markNotificationRead(payload.string("id")).requireData()
+                "MARK_ALL_NOTIFICATIONS_READ" -> app.container.apiService.markAllNotificationsRead().requireData()
                 "CREATE_DISPUTE" -> {
                     val localId = payload.string("id")
                     val handoverId = payload.string("handoverId")
@@ -171,11 +234,17 @@ class SyncWorker(
             "REJECT_QUOTE" -> app.container.apiService.getQuote(payload.string("id")).requireData().status == "REJECTED"
             "MARK_HANDOVER" -> app.container.apiService.getHandover(payload.string("id")).requireData().collectorConfirmedAt != null
             "UPDATE_HANDOVER_EVIDENCE" -> app.container.apiService.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
+            "CANCEL_LOT" -> app.container.apiService.getLot(payload.string("id")).requireData().status == "CANCELLED"
             else -> false
         }
     }.getOrDefault(false)
 
     private enum class QueueResult { APPLIED, RETRY, REJECTED }
+
+    private fun retryAt(attempts: Int): Long {
+        val exponent = attempts.coerceIn(0, 6)
+        return System.currentTimeMillis() + (30_000L * (1L shl exponent)).coerceAtMost(30L * 60L * 1000L)
+    }
 
     private suspend fun uploadLotPhotoIfPresent(app: KabadiwalaApp, operation: SyncOperationDto): PhotoUploadResult {
         if (operation.entityType != "LOT") return PhotoUploadResult.NOT_NEEDED

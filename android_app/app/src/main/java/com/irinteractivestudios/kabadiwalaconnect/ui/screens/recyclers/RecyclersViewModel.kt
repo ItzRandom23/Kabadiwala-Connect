@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Recyclers tab state: cached authorized recyclers, offline-first.
- * Discovery flow arrives in Phase 3+.
+ * Recycler discovery reads the Room cache populated by catalog refresh.
  */
 class RecyclersViewModel(
     recyclers: RecyclerRepository,

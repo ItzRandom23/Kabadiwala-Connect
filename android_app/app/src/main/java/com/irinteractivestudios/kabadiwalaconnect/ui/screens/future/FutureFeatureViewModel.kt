@@ -11,6 +11,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.DisputeAnalyticsDt
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.GovernmentSchemeDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RewardLedgerDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import kotlinx.coroutines.Job
@@ -33,6 +34,8 @@ data class FutureFeatureState(
     val conversations: List<ConversationDto> = emptyList(),
     val messages: Map<String, List<ChatMessageDto>> = emptyMap(),
     val analytics: DisputeAnalyticsDto? = null,
+    val notifications: List<NotificationDto> = emptyList(),
+    val unreadNotifications: Int = 0,
     val sending: Boolean = false,
     val drafts: Map<String, String> = emptyMap(),
     val draftingConversationId: String? = null
@@ -42,7 +45,8 @@ class FutureFeatureViewModel(
     private val api: ApiService,
     private val cache: FutureCacheStore? = null,
     private val syncQueue: SyncQueueDao? = null,
-    private val requestSync: () -> Unit = {}
+    private val requestSync: () -> Unit = {},
+    private val accountId: () -> String? = { null }
 ) : ViewModel() {
     private val _state = MutableStateFlow(FutureFeatureState())
     val state: StateFlow<FutureFeatureState> = _state.asStateFlow()
@@ -51,14 +55,50 @@ class FutureFeatureViewModel(
     fun refresh() {
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
+            var failures = 0
             val cachedSchemes = cache?.schemes().orEmpty()
             val cachedActivities = cache?.activities().orEmpty()
-            val schemes = runCatching { api.getGovernmentSchemes().requireData().also { cache?.saveSchemes(it) } }.getOrDefault(_state.value.schemes.ifEmpty { cachedSchemes })
-            val activities = runCatching { api.getDiyActivities().requireData().also { cache?.saveActivities(it) } }.getOrDefault(_state.value.activities.ifEmpty { cachedActivities.ifEmpty { offlineActivities } })
-            val rewards = runCatching { api.getRewards().requireData() }.getOrDefault(_state.value.rewards)
-            val conversations = runCatching { api.getConversations().requireData().also { cache?.saveConversations(it) } }.getOrDefault(_state.value.conversations.ifEmpty { cachedConversations() })
-            val analytics = runCatching { api.getDisputeAnalytics().requireData() }.getOrNull() ?: _state.value.analytics
-            _state.value = _state.value.copy(loading = false, schemes = schemes, activities = activities, rewards = rewards, conversations = conversations, analytics = analytics)
+            val schemes = runCatching { api.getGovernmentSchemes().requireData().also { cache?.saveSchemes(it) } }.onFailure { failures++ }.getOrDefault(_state.value.schemes.ifEmpty { cachedSchemes })
+            val activities = runCatching { api.getDiyActivities().requireData().also { cache?.saveActivities(it) } }.onFailure { failures++ }.getOrDefault(_state.value.activities.ifEmpty { cachedActivities.ifEmpty { offlineActivities } })
+            val rewards = runCatching { api.getRewards().requireData() }.onFailure { failures++ }.getOrDefault(_state.value.rewards)
+            val conversations = runCatching { api.getConversations().requireData().also { cache?.saveConversations(it) } }.onFailure { failures++ }.getOrDefault(_state.value.conversations.ifEmpty { cachedConversations() })
+            val analytics = runCatching { api.getDisputeAnalytics().requireData() }.onFailure { failures++ }.getOrNull() ?: _state.value.analytics
+            val cachedNotifications = cache?.notifications(accountId()).orEmpty()
+            val notifications = runCatching { api.getNotifications(limit = 100).requireData().also { cache?.saveNotifications(it) } }.onFailure { failures++ }
+                .getOrDefault(_state.value.notifications.ifEmpty { cachedNotifications })
+            val unread = runCatching { api.getNotificationUnreadCount().requireData().count }.onFailure { failures++ }.getOrDefault(notifications.count { it.readAt.isNullOrBlank() })
+            _state.value = _state.value.copy(loading = false, error = if (failures > 0) "Some information could not be refreshed. Cached data is shown." else null, schemes = schemes, activities = activities, rewards = rewards, conversations = conversations, analytics = analytics, notifications = notifications, unreadNotifications = unread)
+        }
+    }
+
+    fun markNotificationRead(id: String) {
+        viewModelScope.launch {
+            val wasUnread = _state.value.notifications.firstOrNull { it.id == id }?.readAt.isNullOrBlank()
+            val result = runCatching { api.markNotificationRead(id).requireData() }.getOrNull()
+            if (result == null) {
+                syncQueue?.enqueue(SyncQueueItemEntity(operation = "MARK_NOTIFICATION_READ", payloadJson = JsonObject().apply { addProperty("id", id) }.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
+                requestSync()
+            }
+            if (_state.value.notifications.any { it.id == id }) {
+                val updated = _state.value.notifications.map { if (it.id == id) it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) else it }
+                cache?.saveNotifications(updated)
+                _state.value = _state.value.copy(notifications = updated, unreadNotifications = if (wasUnread) (_state.value.unreadNotifications - 1).coerceAtLeast(0) else _state.value.unreadNotifications)
+            }
+        }
+    }
+
+    fun markAllNotificationsRead() {
+        viewModelScope.launch {
+            val result = runCatching { api.markAllNotificationsRead().requireData() }.getOrNull()
+            if (result == null) {
+                syncQueue?.enqueue(SyncQueueItemEntity(operation = "MARK_ALL_NOTIFICATIONS_READ", payloadJson = "{}", createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
+                requestSync()
+            }
+            if (result != null || _state.value.notifications.isNotEmpty()) {
+                val updated = _state.value.notifications.map { it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) }
+                cache?.saveNotifications(updated)
+                _state.value = _state.value.copy(notifications = updated, unreadNotifications = 0)
+            }
         }
     }
 
@@ -137,7 +177,7 @@ class FutureFeatureViewModel(
                     addProperty("clientMessageId", clientId)
                     addProperty("body", trimmed)
                 }
-                syncQueue?.enqueue(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+                syncQueue?.enqueue(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
                 requestSync()
             }
             _state.value = _state.value.copy(sending = false)
@@ -152,7 +192,7 @@ class FutureFeatureViewModel(
         viewModelScope.launch { cache?.saveMessages(listOf(message)) }
     }
 
-    private suspend fun cachedConversations(): List<ConversationDto> = cache?.conversations().orEmpty()
+    private suspend fun cachedConversations(): List<ConversationDto> = cache?.conversations(accountId()).orEmpty()
 
     override fun onCleared() {
         stopPolling()

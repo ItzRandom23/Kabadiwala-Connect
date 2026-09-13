@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.stateIn
 
 /**
  * Earnings tab state: purely local summary, so it works fully offline.
- * Payment recording/tracking arrives in Phase 4+.
+ * The summary is local-first and is refreshed from the authoritative ledger
+ * when the user asks for a remote refresh.
  */
 class EarningsViewModel(earnings: EarningsRepository) : ViewModel() {
 

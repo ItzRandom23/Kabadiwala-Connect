@@ -23,6 +23,8 @@
     <string name="recycler_rates_title">My buying rates</string>
     <string name="recycler_profile_title">Recycler profile</string>
     <string name="recycler_verification_title">Verification in progress</string>
+    <string name="recycler_verification_verified_title">Your facility is verified</string>
+    <string name="recycler_verification_not_approved_title">Your facility is not yet approved</string>
 
     <!-- Connectivity -->
     <string name="offline_banner">Saved on this phone · will sync when you’re back online.</string>
@@ -154,7 +156,7 @@
     <string name="prices_title">Market prices</string>
     <string name="prices_per_kg">per kg</string>
     <string name="prices_updated_offline">Saved prices shown. No internet.</string>
-    <string name="prices_location_label">Location</string><string name="prices_cached">Cached price — offline</string><string name="prices_rate_value">₹%1$.0f / kg</string><string name="prices_range">Typical range: ₹%1$.0f–₹%2$.0f / kg</string><string name="prices_last_updated">Last updated: %1$s</string><string name="prices_hear">Hear prices</string><string name="prices_history_title">30-day trend</string><string name="prices_recycler_placeholder">Recycler rates will appear here when connected.</string>
+    <string name="prices_location_label">Location</string><string name="prices_cached">Cached price — offline</string><string name="prices_rate_value">₹%1$.0f / kg</string><string name="prices_range">Typical range: ₹%1$.0f–₹%2$.0f / %3$s</string><string name="prices_last_updated">Last updated: %1$s</string><string name="prices_source">Source: %1$s</string><string name="prices_stale">Stale price — confirm the current rate before sale</string><string name="prices_hear">Hear prices</string><string name="prices_history_title">30-day trend</string><string name="prices_recycler_placeholder">Recycler rates vary by facility. Compare verified recyclers for the best current offer.</string>
 
     <!-- Recyclers -->
     <string name="recyclers_title">Recyclers</string>
@@ -163,7 +165,7 @@
     <string name="recycler_search">Search name or area</string><string name="recycler_radius">Radius</string><string name="recycler_km">%1$d km</string><string name="recycler_material">Material</string><string name="recycler_pickup_only">Pickup available only</string><string name="recycler_sort">Sort:</string><string name="recycler_nearby">Nearby</string><string name="recycler_rate">Rate</string><string name="recycler_cached">Cached recyclers — offline</string><string name="recycler_rate_value">₹%1$.0f / kg</string><string name="recycler_pickup_yes">Pickup available</string><string name="recycler_pickup_no">Drop-off only</string><string name="recycler_match">Match %1$d%%</string><string name="recycler_detail_authorization">Authorization and rates</string><string name="recycler_not_verified">Authorization not verified</string><string name="recycler_materials">Materials: %1$s</string><string name="recycler_hours">Hours: %1$s</string><string name="recycler_handover">Typical handover: %1$d hours</string><string name="recycler_map_placeholder">Map location: %1$.3f, %2$.3f</string><string name="recycler_call">Call</string><string name="recycler_map">Map</string><string name="recycler_contact_note">Contact: %1$s</string>
     <string name="recycler_trust_passport">Trust passport</string><string name="recycler_verified_by">Verified by %1$s</string><string name="recycler_valid_until">Authorization valid until %1$s</string><string name="recycler_rating">Rating %1$.1f · %2$d reviews</string><string name="recycler_completed_handovers">%1$d completed verified handovers</string><string name="recycler_trust_explainer">These signals come from the recycler profile and completed records. They are not an opaque score.</string>
 
-    <string name="quote_request_button">Request quote</string><string name="quote_request_title">Request a quote</string><string name="quote_request_detail">Choose your lot and recycler. This request is saved on this phone.</string><string name="quote_choose_lot">Choose lot</string><string name="quote_choose_recycler">Choose recycler</string><string name="quote_summary">Request summary</string><string name="quote_lot_summary">%1$s • %2$.1f kg</string><string name="quote_recycler_summary">Recycler: %1$s</string><string name="quote_estimated">Estimated value: ₹%1$.0f</string><string name="quote_user_price">Your requested price: ₹%1$.0f</string><string name="quote_confirmation">Submit this mock request?</string><string name="quote_submit">Submit request</string><string name="quote_saved">Saved locally</string><string name="quote_compare_title">Compare quotes</string><string name="quote_delivery_state">Request state: %1$s</string><string name="quote_best">Best offer</string><string name="quote_price">₹%1$.0f / kg</string><string name="quote_total">Total: ₹%1$.0f</string><string name="quote_market_compare">Market basis: ₹%1$.0f / kg</string><string name="quote_distance">Distance: %1$.1f km</string><string name="quote_validity">Valid for 24 hours</string><string name="quote_status">Status: %1$s</string><string name="quote_accept">Accept</string><string name="quote_reject">Reject</string>
+    <string name="quote_request_button">Request quote</string><string name="quote_request_title">Request a quote</string><string name="quote_request_detail">Choose your lot and recycler. Your request is saved locally and synced when connected.</string><string name="quote_choose_lot">Choose lot</string><string name="quote_choose_recycler">Choose recycler</string><string name="quote_summary">Request summary</string><string name="quote_lot_summary">%1$s • %2$.1f kg</string><string name="quote_recycler_summary">Recycler: %1$s</string><string name="quote_estimated">Estimated value: ₹%1$.0f</string><string name="quote_user_price">Your requested price: ₹%1$.0f</string><string name="quote_confirmation">Submit this quote request?</string><string name="quote_submit">Submit request</string><string name="quote_saved">Saved locally</string><string name="quote_compare_title">Compare quotes</string><string name="quote_delivery_state">Request state: %1$s</string><string name="quote_best">Best offer</string><string name="quote_price">₹%1$.0f / kg</string><string name="quote_total">Total: ₹%1$.0f</string><string name="quote_market_compare">Market basis: ₹%1$.0f / kg</string><string name="quote_distance">Distance: %1$.1f km</string><string name="quote_validity">Valid for 24 hours</string><string name="quote_status">Status: %1$s</string><string name="quote_accept">Accept</string><string name="quote_reject">Reject</string>
     <string name="deal_sheet_title">No-surprise deal sheet</string><string name="deal_market_reference">Market reference</string><string name="deal_offered_rate">Recycler offer</string><string name="deal_weight">Expected weight</string><string name="deal_expected_total">Expected total</string><string name="deal_transport">Transport impact</string><string name="deal_not_included">Not included</string><string name="deal_not_available">Not available</string><string name="deal_final_values">Final recorded values</string><string name="deal_final_weight">Final weight</string><string name="deal_final_amount">Final amount</string><string name="deal_explainer">Reference prices are guidance. The recycler offer and final measured values decide the payment.</string>
 
     <!-- Handover -->
@@ -175,12 +177,19 @@
     <string name="earnings_total">Total earned</string>
     <string name="earnings_pending">Pending payment</string>
     <string name="earnings_rupees">₹%1$s</string>
-    <string name="earnings_this_month">This month</string><string name="earnings_average">Average lot value</string><string name="payment_record">Record payment</string><string name="payment_title">Record payment</string><string name="payment_date_now">Date and time: now (cannot be in the future)</string><string name="payment_choose_lot">Choose lot</string><string name="payment_amount">Amount in rupees</string><string name="payment_method">Payment method</string><string name="payment_notes">Notes</string><string name="payment_amount_error">Enter an amount greater than 0 and within a reasonable limit.</string><string name="payment_save">Continue</string><string name="payment_confirm_title">Confirm payment</string><string name="payment_confirm_text">Record ₹%1$.0f as received?</string><string name="payment_confirm">Save payment</string>
+    <string name="earnings_this_month">This month</string><string name="earnings_average">Average lot value</string><string name="payment_record">Record payment</string><string name="payment_title">Record payment</string><string name="payment_date_now">Date and time: now (cannot be in the future)</string><string name="payment_choose_lot">Choose lot</string><string name="payment_amount">Amount in rupees</string><string name="payment_method">Payment method</string><string name="payment_notes">Notes</string><string name="payment_amount_error">Enter an amount greater than 0 and within a reasonable limit.</string><string name="payment_save_error">Payment could not be saved. Try again.</string><string name="payment_save">Continue</string><string name="payment_confirm_title">Confirm payment</string><string name="payment_confirm_text">Record ₹%1$.0f as received?</string><string name="payment_confirm">Save payment</string>
 
     <string name="earnings_chart">Monthly earnings</string><string name="earnings_chart_month">Current month: %1$s</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_all_caught_up">You’re all caught up</string>
+    <string name="notifications_unread">%1$d unread update(s)</string>
+    <string name="notifications_mark_all_read">Mark all as read</string>
+    <string name="notifications_new">New</string>
+    <string name="notifications_empty_title">No updates yet</string>
+    <string name="notifications_empty_detail">Quote, handover, payment and verification updates will appear here.</string>
     <string name="settings_language">Language / भाषा</string>
     <string name="settings_change_language">Choose from all supported Indian languages</string>
     <string name="cancel">Cancel</string>
@@ -240,6 +249,14 @@
     <string name="future_no_messages_detail">Messages appear after a quote or accepted handover.</string>
     <string name="future_transaction">Transaction %1$s</string>
     <string name="future_transaction_chat">Transaction chat</string>
+    <string name="transaction_passport_title">Transaction passport</string>
+    <string name="transaction_passport_error">The transaction timeline is unavailable right now.</string>
+    <string name="transaction_passport_cached">Showing the last available timeline.</string>
+    <string name="transaction_status">Status: %1$s</string>
+    <string name="transaction_quoted_value">Quoted value: ₹%1$.0f</string>
+    <string name="transaction_final_value">Final value: ₹%1$.0f</string>
+    <string name="transaction_refresh">Refresh timeline</string>
+    <string name="loading">Loading…</string>
     <string name="future_chat_privacy">Keep contact details and exact locations private until pickup is confirmed.</string>
     <string name="future_message">Message</string>
     <string name="future_send">Send</string>
@@ -404,6 +421,9 @@
     <string name="lot_use_demo_photo">Use the Pune demo photo</string>
     <string name="lot_choose_photo">Choose from gallery</string>
     <string name="quote_submit_failed">Could not send the request. Check your connection and try again.</string>
+    <string name="quote_action_failed">That quote is no longer available. Refresh and try again.</string>
+    <string name="lot_repeat_failed">Could not create a repeat lot. Check your connection and try again.</string>
+    <string name="lot_repeat_sending">Creating repeat lot…</string>
     <string name="quote_request_detail_live">Send this request to the selected recycler. Offers appear here when they respond.</string>
     <string name="dispute_title">Report a problem</string>
     <string name="dispute_detail">Tell us what changed. Your original and final handover values stay saved with this report.</string>
@@ -509,4 +529,23 @@
     <string name="recycler_scan_confirmed">Receipt confirmed</string>
     <string name="recycler_scan_clear">Clear and scan another</string>
     <string name="handover_collector_confirmed">Awaiting recycler confirmation</string>
+    <string name="household_demo_banner_title">Preview mode · sample data</string>
+    <string name="household_demo_banner_detail">Nearby businesses and chat are demonstrations. No live request is sent from this preview.</string>
+    <string name="handover_saving">Saving…</string>
+    <string name="handover_save_failed">Handover could not be saved. Try again.</string>
+    <string name="handover_mark_failed">Could not update this handover. Check your connection and try again.</string>
+    <string name="earnings_refresh_failed">Earnings could not be refreshed. Your last saved totals are still shown.</string>
+    <string name="earnings_ledger_title">Recent transactions</string>
+    <string name="earnings_lot_reference">Lot …%1$s</string>
+    <string name="earnings_payment_status">%1$s · %2$s</string>
+    <string name="settings_sync_pending">%1$d actions waiting to sync</string>
+    <string name="settings_sync_synced">All local actions synced</string>
+    <string name="settings_sync_center">Sync center</string>
+    <string name="settings_sync_details">Recent local actions</string>
+    <string name="settings_sync_waiting">waiting</string>
+    <string name="settings_sync_retrying">retry %1$d</string>
+    <string name="settings_sync_failed">failed: %1$s</string>
+    <string name="quote_choose_recyclers">Choose recyclers</string>
+    <string name="quote_selected_recyclers">Selected recyclers</string>
+    <string name="home_area_not_set">Set your area to see nearby prices and recyclers</string>
 </resources>

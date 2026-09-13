@@ -18,6 +18,8 @@ import { paymentRoutes } from './routes/paymentRoutes.js';
 import { syncRoutes } from './routes/syncRoutes.js';
 import { futureRoutes } from './routes/futureRoutes.js';
 import { datasetRoutes } from './routes/datasetRoutes.js';
+import { notificationRoutes } from './routes/notificationRoutes.js';
+import { transactionRoutes } from './routes/transactionRoutes.js';
 import type { JwtService } from './services/jwt.js';
 import type { CollectorService } from './services/collectorService.js';
 import type { AuthService } from './services/authService.js';
@@ -53,7 +55,10 @@ export function createApp(
   const allowedOrigins = config.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || config.NODE_ENV !== 'production' && config.CORS_ORIGIN === '*' || allowedOrigins.includes(origin)) return callback(null, true);
+      const allowed = !origin
+        || (config.NODE_ENV !== 'production' && config.CORS_ORIGIN === '*')
+        || allowedOrigins.includes(origin);
+      if (allowed) return callback(null, true);
       return callback(null, false);
     },
     credentials: false,
@@ -73,13 +78,15 @@ export function createApp(
   if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db));
   if (collectorRepository) api.use('/collectors', collectorRoutes(jwt, collectorRepository, collectorService));
   if (lotService && collectorRepository) api.use('/lots', lotRoutes(jwt, collectorRepository, lotService));
-  if (priceService && collectorRepository) api.use(priceRoutes(jwt, collectorRepository, priceService));
-  if (recyclerService && collectorRepository) api.use(recyclerRoutes(jwt, collectorRepository, recyclerService));
+  if (priceService && collectorRepository) api.use(priceRoutes(jwt, collectorRepository, priceService, db));
+  if (recyclerService && collectorRepository) api.use(recyclerRoutes(jwt, collectorRepository, recyclerService, db));
   if (quoteService && collectorRepository) api.use(quoteRoutes(jwt, collectorRepository, quoteService, db));
   if (handoverService && collectorRepository) api.use(handoverRoutes(jwt, collectorRepository, handoverService, db));
-  if (paymentService && collectorRepository) api.use(paymentRoutes(jwt, collectorRepository, paymentService));
+  if (paymentService && collectorRepository) api.use(paymentRoutes(jwt, collectorRepository, paymentService, db));
   if (syncService && collectorRepository) api.use(syncRoutes(jwt, collectorRepository, syncService));
+  if (collectorRepository) api.use(transactionRoutes(jwt, collectorRepository, db));
   api.use('/future', futureRoutes(jwt, db));
+  api.use('/notifications', notificationRoutes(jwt, db));
   api.use(datasetRoutes(jwt, db));
   app.use('/api/v1', api);
   app.use(notFound);

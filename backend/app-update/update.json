@@ -1,6 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "0.0.18-beta",
-  "apkUrl": "kabadiwala-connect-0.0.18-beta.apk",
-  "releaseNotes": "Nearby now shows demo and testing shops reliably, refreshes the catalog with the detected location, and keeps the current-location fallback visible."
+  "versionCode": 20,
+  "versionName": "0.0.19-beta",
+  "apkUrl": "kabadiwala-connect-0.0.19-beta.apk",
+  "sha256": "736c844e1bf0275fbe128236e7956be54384efc0fc58bd7063029cdf435495c6",
+  "sizeBytes": 17671299,
+  "releaseNotes": "Adds the transaction passport and payment ledger, completes household and multi-recycler flows, improves offline sync visibility, preserves lot provenance, and surfaces fresher price metadata."
 }

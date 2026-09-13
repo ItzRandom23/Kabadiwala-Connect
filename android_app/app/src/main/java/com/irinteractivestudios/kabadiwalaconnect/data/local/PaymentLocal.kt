@@ -8,19 +8,28 @@ import java.util.Calendar
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-@Entity(tableName = "payments") data class PaymentEntity(@PrimaryKey val id: String, val lotId: String, val handoverId: String?, val amountRupees: Double, val method: String, val paidAtEpochMs: Long, val notes: String, val syncState: String, val recordState: String)
-@Dao interface PaymentDao { @Query("SELECT * FROM payments ORDER BY paidAtEpochMs DESC") fun observeAll(): Flow<List<PaymentEntity>>; @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(item: PaymentEntity); @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(items: List<PaymentEntity>); @Query("UPDATE payments SET syncState = 'SAVED_LOCALLY' WHERE id = :id") suspend fun markSynced(id: String): Int; @Query("DELETE FROM payments") suspend fun clearAll() }
-class RoomPaymentRepository(private val dao: PaymentDao, private val syncQueue: SyncQueueDao? = null, private val requestSync: (() -> Unit)? = null) : PaymentRepository {
-    override fun observePayments() = dao.observeAll().map { it.map(PaymentEntity::toDomain) }
-    override fun observeSummary() = observePayments().map { payments -> val now = Calendar.getInstance(); val total = payments.sumOf { it.amountRupees }; val current = payments.filter { p -> Calendar.getInstance().apply { timeInMillis = p.paidAtEpochMs }.let { it.get(Calendar.MONTH) == now.get(Calendar.MONTH) && it.get(Calendar.YEAR) == now.get(Calendar.YEAR) } }.sumOf { it.amountRupees }; EarningsSummary(total, 0.0, current, if (payments.isEmpty()) 0.0 else total / payments.size) }
+import java.util.TimeZone
+@Entity(tableName = "payments", indices = [Index(value = ["accountId", "paidAtEpochMs"])]) data class PaymentEntity(@PrimaryKey val id: String, val lotId: String, val handoverId: String?, val amountRupees: Double, val method: String, val paidAtEpochMs: Long, val notes: String, val syncState: String, val recordState: String, val accountId: String? = null)
+@Dao interface PaymentDao { @Query("SELECT * FROM payments ORDER BY paidAtEpochMs DESC") fun observeAll(): Flow<List<PaymentEntity>>; @Query("SELECT * FROM payments WHERE accountId = :accountId ORDER BY paidAtEpochMs DESC") fun observeForAccount(accountId: String): Flow<List<PaymentEntity>>; @Query("SELECT * FROM payments WHERE id = :id LIMIT 1") suspend fun findById(id: String): PaymentEntity?; @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(item: PaymentEntity); @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(items: List<PaymentEntity>); @Query("UPDATE payments SET syncState = 'SYNCED' WHERE id = :id") suspend fun markSynced(id: String): Int; @Query("DELETE FROM payments") suspend fun clearAll() }
+class RoomPaymentRepository(private val dao: PaymentDao, private val syncQueue: SyncQueueDao? = null, private val requestSync: (() -> Unit)? = null, private val accountId: () -> String? = { null }) : PaymentRepository {
+    override fun observePayments() = accountId()?.let { dao.observeForAccount(it) }?.map { it.map(PaymentEntity::toDomain) } ?: dao.observeAll().map { it.map(PaymentEntity::toDomain) }
+    override fun observeSummary() = observePayments().map { payments ->
+        val settled = payments.filter { it.recordState != PaymentRecordState.DISCREPANCY && it.syncState == PaymentSyncState.SYNCED }
+        val pending = payments.filter { it.recordState != PaymentRecordState.DISCREPANCY && it.syncState != PaymentSyncState.SYNCED }
+        val now = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+        val total = settled.sumOf { it.amountRupees }
+        val current = settled.filter { p -> Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata")).apply { timeInMillis = p.paidAtEpochMs }.let { it.get(Calendar.MONTH) == now.get(Calendar.MONTH) && it.get(Calendar.YEAR) == now.get(Calendar.YEAR) } }.sumOf { it.amountRupees }
+        EarningsSummary(total, pending.sumOf { it.amountRupees }, current, if (settled.isEmpty()) 0.0 else total / settled.size)
+    }
     override suspend fun record(payment: Payment) {
-        dao.insert(payment.toEntity())
+        dao.insert(payment.toEntity().copy(accountId = accountId()))
         try {
             syncQueue?.enqueue(
                 SyncQueueItemEntity(
                     operation = "RECORD_PAYMENT",
                     payloadJson = com.google.gson.Gson().toJson(payment.toSyncPayload()),
-                    createdAtEpochMs = payment.paidAtEpochMs
+                    createdAtEpochMs = payment.paidAtEpochMs,
+                    accountId = accountId()
                 )
             )
             requestSync?.invoke()
@@ -36,7 +45,7 @@ private fun Payment.toSyncPayload() = mapOf(
     "lotId" to lotId,
     "amount" to amountRupees,
     "method" to method.name,
-    "date" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(paidAtEpochMs)),
-    "time" to SimpleDateFormat("HH:mm", Locale.US).format(Date(paidAtEpochMs)),
+    "date" to SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("Asia/Kolkata") }.format(Date(paidAtEpochMs)),
+    "time" to SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("Asia/Kolkata") }.format(Date(paidAtEpochMs)),
     "notes" to notes.takeIf { it.isNotBlank() }
 )

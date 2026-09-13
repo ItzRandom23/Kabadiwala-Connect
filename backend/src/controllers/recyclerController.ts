@@ -3,12 +3,17 @@ import { z } from 'zod';
 import { RecyclerService } from '../services/recyclerService.js';
 import { AppError } from '../utils/errors.js';
 
-const mat = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
+const mat = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const avail = z.enum(['TODAY', 'THIS_WEEK', 'FLEXIBLE']);
 const page = z.coerce.number().int().min(1).default(1);
 const limit = z.coerce.number().int().min(1).max(100).default(20);
+const rateRows = z.array(z.object({ materialCategory: mat, pricePerKg: z.number().finite().positive().lt(1_000_000) }).strict()).max(20);
+const profileUpdate = z.object({ pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict();
 
 export const recyclerController = (s: RecyclerService) => ({
+  selfProfile: async (req: Request, res: Response) => res.json({ success: true, data: await s.selfProfile(req.identity!.collectorId), message: 'Recycler profile retrieved' }),
+  updateProfile: async (req: Request, res: Response) => { const p = profileUpdate.safeParse(req.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid recycler profile settings', 422, { code: 'INVALID_RECYCLER_PROFILE' }); return res.json({ success: true, data: await s.updateProfile(req.identity!.collectorId, p.data as any), message: 'Recycler profile updated' }); },
+  updateRates: async (req: Request, res: Response) => { const p = rateRows.safeParse(req.body?.rates ?? req.body); if (!p.success) throw new AppError('VALIDATION_ERROR', 'Add at least one valid buying rate', 422, { code: 'INVALID_RECYCLER_RATES' }); return res.json({ success: true, data: await s.updateRates(req.identity!.collectorId, p.data), message: 'Recycler rates updated' }); },
   list: async (req: Request, res: Response) => {
     const p = page.parse(req.query.page);
     const l = limit.parse(req.query.limit);

@@ -3,6 +3,7 @@ package com.irinteractivestudios.kabadiwalaconnect.data.local
 import androidx.room.*
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteBatchRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteExpiry
@@ -43,9 +44,16 @@ class RemoteQuoteRepository(
     private val dao: QuoteDao,
     private val api: ApiService,
     private val queue: SyncQueueDao? = null,
-    private val requestSync: () -> Unit = {}
+    private val requestSync: () -> Unit = {},
+    private val accountId: () -> String? = { null }
 ) : QuoteRepository {
     override fun observeForLot(lotId: String): Flow<List<Quote>> = dao.observeForLot(lotId).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
+
+    override suspend fun refresh(lot: Lot, recycler: Recycler?): List<Quote> {
+        val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
+        dao.insertAll(quotes.map { it.toEntity() })
+        return quotes
+    }
 
     override suspend fun submitRequest(lot: Lot, recycler: Recycler, nowEpochMs: Long): List<Quote> {
         return try {
@@ -66,6 +74,19 @@ class RemoteQuoteRepository(
             dao.insertAll(listOf(placeholder.toEntity()))
             enqueue("REQUEST_QUOTE", JsonObject().apply { addProperty("id", placeholder.id); addProperty("lotId", lot.id); addProperty("recyclerId", recycler.id) })
             listOf(placeholder)
+        }
+    }
+
+    override suspend fun submitBatchRequest(lot: Lot, recyclers: List<Recycler>, nowEpochMs: Long): List<Quote> {
+        val selected = recyclers.distinctBy { it.id }.take(10)
+        if (selected.isEmpty()) return emptyList()
+        return try {
+            api.requestQuoteBatch(QuoteBatchRequestDto(lot.id, selected.map { it.id })).requireData()
+            refresh(lot)
+        } catch (_: IOException) {
+            // Preserve the existing offline contract for each recipient. The
+            // backend batch endpoint remains the preferred online path.
+            selected.flatMap { submitRequest(lot, it, nowEpochMs) }
         }
     }
 
@@ -92,12 +113,12 @@ class RemoteQuoteRepository(
     }
 
     private suspend fun enqueue(operation: String, payload: JsonObject) {
-        queue?.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis()))
+        queue?.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
         requestSync()
     }
 }
 
-private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteDto.toDomain(lot: Lot, fallback: Recycler): Quote {
+private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteDto.toDomain(lot: Lot, fallback: Recycler?): Quote {
     val created = createdAt?.let(::parseQuoteTimestamp) ?: System.currentTimeMillis()
     val expires = validUntil?.let(::parseQuoteTimestamp) ?: created + 24L * 60L * 60L * 1000L
     return Quote(
@@ -105,16 +126,28 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteDto.toDo
         recyclerId = recyclerId,
         lotId = lotId,
         amountRupees = totalQuotedPrice ?: totalPrice ?: pricePerKg * lot.weightKg,
-        recyclerName = recycler?.name ?: fallback.name,
+        recyclerName = recycler?.name ?: fallback?.name ?: "Recycler",
         pricePerKg = pricePerKg,
         marketRatePerKg = lot.estimatedValueRupees?.div(lot.weightKg)?.takeUnless { it == 0.0 } ?: pricePerKg,
-        distanceKm = recycler?.distanceKm ?: fallback.distanceKm ?: 0.0,
-        pickupAvailable = recycler?.pickupAvailability == "TODAY" || recycler?.pickupAvailability == "THIS_WEEK" || fallback.pickupAvailable,
+        distanceKm = recycler?.distanceKm ?: fallback?.distanceKm ?: 0.0,
+        pickupAvailable = recycler?.pickupAvailability == "TODAY" || recycler?.pickupAvailability == "THIS_WEEK" || fallback?.pickupAvailable == true,
         createdAtEpochMs = created,
         expiresAtEpochMs = expires,
-        status = runCatching { QuoteStatus.valueOf(status) }.getOrDefault(QuoteStatus.PENDING),
+        status = status.toLocalQuoteStatus(),
         deliveryState = QuoteDeliveryState.RESPONSE_RECEIVED
     )
+}
+
+private fun String?.toLocalQuoteStatus(): QuoteStatus = when (this?.uppercase()) {
+    // The API calls an offer SENT; the collector UI calls the same actionable
+    // state PENDING. Keep the translation at the boundary so accept/reject
+    // controls remain available for live offers.
+    "SENT", "PENDING" -> QuoteStatus.PENDING
+    "DRAFT" -> QuoteStatus.DRAFT
+    "ACCEPTED" -> QuoteStatus.ACCEPTED
+    "REJECTED" -> QuoteStatus.REJECTED
+    "EXPIRED" -> QuoteStatus.EXPIRED
+    else -> QuoteStatus.DRAFT
 }
 
 private fun parseQuoteTimestamp(value: String): Long? = listOf(
@@ -123,5 +156,5 @@ private fun parseQuoteTimestamp(value: String): Long? = listOf(
 ).firstNotNullOfOrNull { pattern ->
     runCatching { java.text.SimpleDateFormat(pattern, java.util.Locale.US).parse(value)?.time }.getOrNull()
 }
-private fun QuoteEntity.toDomain() = Quote(id, recyclerId, lotId, amountRupees, recyclerName, pricePerKg, marketRatePerKg, distanceKm, pickupAvailable, createdAtEpochMs, expiresAtEpochMs, runCatching { QuoteStatus.valueOf(status) }.getOrDefault(QuoteStatus.PENDING), runCatching { QuoteDeliveryState.valueOf(deliveryState) }.getOrDefault(QuoteDeliveryState.SAVED_LOCALLY))
+private fun QuoteEntity.toDomain() = Quote(id, recyclerId, lotId, amountRupees, recyclerName, pricePerKg, marketRatePerKg, distanceKm, pickupAvailable, createdAtEpochMs, expiresAtEpochMs, status.toLocalQuoteStatus(), runCatching { QuoteDeliveryState.valueOf(deliveryState) }.getOrDefault(QuoteDeliveryState.SAVED_LOCALLY))
 private fun Quote.toEntity() = QuoteEntity(id, recyclerId, lotId, amountRupees, recyclerName, pricePerKg, marketRatePerKg, distanceKm, pickupAvailable, createdAtEpochMs, expiresAtEpochMs, status.name, deliveryState.name)

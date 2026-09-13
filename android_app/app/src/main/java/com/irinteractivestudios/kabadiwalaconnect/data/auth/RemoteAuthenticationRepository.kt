@@ -12,6 +12,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifyOtpRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RefreshTokenRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
@@ -36,10 +37,10 @@ class RemoteAuthenticationRepository(
             phoneNumber,
             now + OTP_TTL_MS,
             now + RESEND_COOLDOWN_MS,
-            // SMS delivery is intentionally disabled for the current beta.
-            // Keep the configured development code available on every build
-            // so sideloaded APKs behave exactly like local ADB builds.
-            developmentCodeHint = DEVELOPMENT_OTP_CODE
+            // SMS delivery is intentionally disabled for local debug builds.
+            // Never expose the development code in a release APK: the hint is
+            // rendered by the sign-in UI and would bypass the OTP channel.
+            developmentCodeHint = DEVELOPMENT_OTP_CODE.takeIf { BuildConfig.DEBUG }
         )
     }
 
@@ -161,7 +162,19 @@ class RemoteAuthenticationRepository(
 
     override suspend fun refreshAccount(): AccountProfile? = runCatching {
         if (!session.isSessionValid() && refreshAccessToken() == null) return@runCatching null
-        api.getAccountProfile().requireData().toDomain().also { storage?.saveAccount(it) }
+        val remote = api.getAccountProfile().requireData().toDomain()
+        // The backend deliberately treats household sellers as collector
+        // accounts for permissions and data ownership. Preserve the local
+        // household presentation role across refreshes so a network recovery
+        // does not unexpectedly move the user into the collector dashboard.
+        val previousRole = storage?.readAccount()?.role
+        val profile = if (previousRole == AccountRole.HOUSEHOLD && remote.role == AccountRole.COLLECTOR) {
+            remote.copy(role = AccountRole.HOUSEHOLD)
+        } else {
+            remote
+        }
+        storage?.saveAccount(profile)
+        profile
     }.getOrNull()
 
     override fun isSessionValid() = session.isSessionValid()
@@ -204,7 +217,7 @@ class RemoteAuthenticationRepository(
 private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfileDto.toDomain() = AccountProfile(
     id = id,
     email = email.orEmpty(),
-    role = if (role == "RECYCLER") AccountRole.RECYCLER else AccountRole.COLLECTOR,
+    role = when (role) { "RECYCLER" -> AccountRole.RECYCLER; "HOUSEHOLD" -> AccountRole.HOUSEHOLD; else -> AccountRole.COLLECTOR },
     preferredLanguage = LocaleManager.fromBackendName(preferredLanguage),
     accountStatus = accountStatus,
     verificationStatus = runCatching { RecyclerVerificationStatus.valueOf(verificationStatus) }.getOrDefault(RecyclerVerificationStatus.VERIFIED),
@@ -217,4 +230,4 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     longitude = longitude
 )
 
-private fun AccountRole.wireName(): String = if (this == AccountRole.RECYCLER) "RECYCLER" else "COLLECTOR"
+private fun AccountRole.wireName(): String = when (this) { AccountRole.RECYCLER -> "RECYCLER"; AccountRole.HOUSEHOLD -> "HOUSEHOLD"; AccountRole.COLLECTOR -> "COLLECTOR" }

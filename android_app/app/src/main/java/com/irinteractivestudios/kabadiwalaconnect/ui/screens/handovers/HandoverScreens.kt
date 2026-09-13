@@ -23,11 +23,10 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DealSheetCard
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ProofRow
-import java.text.DateFormat
-import java.util.Date
+import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 
 @Composable
-fun HandoverCreateScreen(lot: Lot, quote: Quote, collectorId: String, onSave: (HandoverLocationType, String, Long) -> Unit) {
+fun HandoverCreateScreen(lot: Lot, quote: Quote, collectorId: String, saving: Boolean = false, saveError: Boolean = false, onSave: (HandoverLocationType, String, Long) -> Unit) {
     var type by remember { mutableStateOf(HandoverLocationType.RECYCLER_FACILITY) }
     var location by remember { mutableStateOf(quote.recyclerName) }
     val label = when (type) { HandoverLocationType.COLLECTOR_LOCATION -> stringResource(R.string.handover_collector); HandoverLocationType.RECYCLER_FACILITY -> stringResource(R.string.handover_recycler); HandoverLocationType.THIRD_PARTY -> stringResource(R.string.handover_third_party) }
@@ -42,9 +41,10 @@ fun HandoverCreateScreen(lot: Lot, quote: Quote, collectorId: String, onSave: (H
         Text(stringResource(R.string.handover_choose_location), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { HandoverLocationType.entries.forEach { item -> FilterChip(selected = type == item, onClick = { type = item; location = if (item == HandoverLocationType.RECYCLER_FACILITY) quote.recyclerName else "" }, label = { Text(when (item) { HandoverLocationType.COLLECTOR_LOCATION -> stringResource(R.string.handover_collector); HandoverLocationType.RECYCLER_FACILITY -> stringResource(R.string.handover_recycler); HandoverLocationType.THIRD_PARTY -> stringResource(R.string.handover_third_party) }) }) } }
         OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.handover_location_label, label)) }, minLines = 2)
-        Text(stringResource(R.string.handover_time_review, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date())), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.handover_time_review, IndiaFormat.dateTime(System.currentTimeMillis())), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.handover_offline_note))
-        Button(onClick = { if (location.isNotBlank()) onSave(type, location.trim(), System.currentTimeMillis()) }, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = location.isNotBlank()) { Text(stringResource(R.string.handover_save)) }
+        if (saveError) Text(stringResource(R.string.handover_save_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = { if (location.isNotBlank()) onSave(type, location.trim(), System.currentTimeMillis()) }, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = location.isNotBlank() && !saving) { Text(stringResource(if (saving) R.string.handover_saving else R.string.handover_save)) }
     }
 }
 
@@ -57,13 +57,17 @@ fun HandoverDocumentScreen(
     onCaptureScalePhoto: () -> Unit = {},
     onOpenDispute: () -> Unit = {},
     onRate: () -> Unit = {},
+    actionInFlight: Boolean = false,
+    actionError: Boolean = false,
     onMark: () -> Unit
 ) {
     val context = LocalContext.current
     val publicReference = handover.referenceId ?: handover.id
     val shareText = stringResource(R.string.handover_share_text, publicReference, handover.materialLabel, handover.quotedPriceRupees)
-    val qrValue = handover.qrCodeData ?: handover.id
-    val qr = remember(qrValue) { createQr(qrValue) }
+    // An offline handover has no server signature yet. Never render a local
+    // identifier as if it were a verifiable QR code.
+    val qrValue = handover.qrCodeData
+    val qr = remember(qrValue) { qrValue?.let(::createQr) }
     var actualWeightText by remember(handover.id, handover.actualWeightKg) { mutableStateOf(handover.actualWeightKg?.toString() ?: handover.weightKg.toString()) }
     var materialConfirmed by remember(handover.id, handover.materialConfirmed) { mutableStateOf(handover.materialConfirmed) }
     val actualWeight = actualWeightText.toDoubleOrNull()
@@ -75,7 +79,7 @@ fun HandoverDocumentScreen(
         item { Text(stringResource(R.string.handover_document_title), style = MaterialTheme.typography.headlineMedium) }
         item { photoPath?.let { path -> android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap()?.let { Image(it, stringResource(R.string.handover_photo), Modifier.fillMaxWidth().height(180.dp)) } } }
         item { DealSheetCard(dealLot, dealQuote, referencePrice, handover.actualWeightKg, handover.actualWeightKg?.let { dealQuote.pricePerKg * it }) }
-        item { EvidenceSection(title = publicReference, status = stringResource(if (handover.status == HandoverStatus.HANDED_OVER) R.string.handover_status_done else R.string.handover_status_saved)) { Text("₹%.0f".format(handover.quotedPriceRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold); ProofRow(stringResource(R.string.handover_material), handover.materialLabel); ProofRow(stringResource(R.string.handover_weight), "%.1f kg".format(handover.weightKg)); ProofRow(stringResource(R.string.handover_collection), handover.collectionLocation); ProofRow(stringResource(R.string.handover_handover_location), handover.handoverLocation); ProofRow(stringResource(R.string.handover_date), DateFormat.getDateTimeInstance().format(Date(handover.timestampEpochMs))); ProofRow(stringResource(R.string.handover_recycler), handover.recyclerName); ProofRow(stringResource(R.string.handover_collector_id), handover.collectorId) } }
+        item { EvidenceSection(title = publicReference, status = stringResource(if (handover.status == HandoverStatus.HANDED_OVER) R.string.handover_status_done else R.string.handover_status_saved)) { Text("₹${IndiaFormat.number(handover.quotedPriceRupees)}", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold); ProofRow(stringResource(R.string.handover_material), handover.materialLabel); ProofRow(stringResource(R.string.handover_weight), "${IndiaFormat.number(handover.weightKg, 1)} kg"); ProofRow(stringResource(R.string.handover_collection), handover.collectionLocation); ProofRow(stringResource(R.string.handover_handover_location), handover.handoverLocation); ProofRow(stringResource(R.string.handover_date), IndiaFormat.dateTime(handover.timestampEpochMs)); ProofRow(stringResource(R.string.handover_recycler), handover.recyclerName); ProofRow(stringResource(R.string.handover_collector_id), handover.collectorId) } }
         item {
             EvidenceSection(title = stringResource(R.string.handover_scale_proof_title), status = if (evidenceReady) stringResource(R.string.handover_proof_saved) else null) {
                     Text(stringResource(R.string.handover_scale_proof_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -91,11 +95,12 @@ fun HandoverDocumentScreen(
                     if (handover.evidenceUpdatedAtEpochMs != null) Text(stringResource(R.string.handover_proof_saved), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
             }
         }
-        item { qr?.let { Image(it.asImageBitmap(), stringResource(R.string.handover_qr), Modifier.size(180.dp)) }; Text(stringResource(R.string.handover_expiry), style = MaterialTheme.typography.bodyMedium) }
+        item { qr?.let { Image(it.asImageBitmap(), stringResource(R.string.handover_qr), Modifier.size(180.dp)) } ?: Text(stringResource(R.string.handover_status_saved), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(stringResource(R.string.handover_expiry), style = MaterialTheme.typography.bodyMedium) }
         item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }, null)) }) { Text(stringResource(R.string.handover_share)) }; OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_SENDTO).apply { data = android.net.Uri.parse("smsto:"); putExtra("sms_body", shareText) }) }) { Text(stringResource(R.string.handover_sms)) } } }
         item { OutlinedButton(onClick = onOpenDispute, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_report_problem)) } }
         if (handover.status == HandoverStatus.HANDED_OVER) item { OutlinedButton(onClick = onRate, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_rate_recycler)) } }
-        item { Button(onClick = onMark, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = handover.status != HandoverStatus.HANDED_OVER && !handover.collectorConfirmed) { Text(stringResource(if (handover.collectorConfirmed) R.string.handover_collector_confirmed else R.string.handover_mark_done)) } }
+        if (actionError) item { Text(stringResource(R.string.handover_mark_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        item { Button(onClick = onMark, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = handover.status != HandoverStatus.HANDED_OVER && !handover.collectorConfirmed && !actionInFlight) { Text(stringResource(if (actionInFlight) R.string.handover_saving else if (handover.collectorConfirmed) R.string.handover_collector_confirmed else R.string.handover_mark_done)) } }
     }
 }
 

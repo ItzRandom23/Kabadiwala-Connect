@@ -3,7 +3,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Kabadiwala Connect Phase 1 palette.
+ * Kabadiwala Connect field-operations palette.
  *
  * High-contrast light theme for outdoor readability on entry-level devices.
  * Dark text on light surfaces everywhere; color is never the only signal

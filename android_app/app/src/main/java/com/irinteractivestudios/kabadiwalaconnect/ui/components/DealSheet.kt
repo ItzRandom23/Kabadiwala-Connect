@@ -52,4 +52,4 @@ private fun DealRow(label: String, value: String) {
     }
 }
 
-private fun format(value: Double): String = String.format(Locale.US, "%,.0f", value)
+private fun format(value: Double): String = com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.number(value)

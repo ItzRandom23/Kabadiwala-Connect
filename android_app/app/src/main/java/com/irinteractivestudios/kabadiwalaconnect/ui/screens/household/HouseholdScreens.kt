@@ -103,6 +103,7 @@ fun HouseholdHomeScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                DemoDataBanner()
                 LocationPill(area)
                 Text(stringResource(R.string.household_home_title), style = MaterialTheme.typography.headlineLarge)
                 Text(stringResource(R.string.household_home_subtitle), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -169,6 +170,8 @@ fun NearbyKabadiwalasScreen(area: String, onInvite: (String) -> Unit, modifier: 
         item {
             LocationPill(area)
             Spacer(Modifier.height(10.dp))
+            DemoDataBanner()
+            Spacer(Modifier.height(10.dp))
             Text(stringResource(R.string.household_nearby_title), style = MaterialTheme.typography.headlineLarge)
             Text(stringResource(R.string.household_nearby_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -205,6 +208,7 @@ fun HouseholdDealScreen(kabadiwalaId: String, onFindAnother: () -> Unit, modifie
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DemoDataBanner()
             Text(stringResource(R.string.household_pickup_request), style = MaterialTheme.typography.headlineLarge)
             AnimatedContent(dealState, label = "deal-status") { status ->
                 if (status == DealState.WAITING) WaitingBanner(kabadiwala.name)
@@ -250,6 +254,21 @@ fun HouseholdDealScreen(kabadiwalaId: String, onFindAnother: () -> Unit, modifie
         confirmButton = { TextButton(onClick = onFindAnother) { Text(stringResource(R.string.household_find_another)) } },
         dismissButton = { TextButton(onClick = { showRematch = false }) { Text(stringResource(R.string.household_keep_chat)) } }
     )
+}
+
+@Composable
+private fun DemoDataBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().testTag("demo_data_banner")
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(stringResource(R.string.household_demo_banner_title), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.household_demo_banner_detail), style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable private fun LocationPill(area: String) = Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = CircleShape) {

@@ -12,7 +12,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.FeaturePermission
 /**
  * Explains WHY a permission is needed before the system dialog appears.
  * Shown only at the moment a feature needs it — never on app launch.
- * Phase 1 provides the dialog; camera/location features wire it up in Phase 2+.
+ * Shared rationale shown before camera/location features request access.
  */
 @Composable
 fun PermissionRationaleDialog(

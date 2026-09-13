@@ -9,7 +9,9 @@ plugins {
 android {
     namespace = "com.irinteractivestudios.kabadiwalaconnect"
     val testingApiBaseUrl = providers.gradleProperty("testingApiBaseUrl")
-        .orElse("http://140.245.232.208:4000/api/v1/")
+        // Do not ship a debug build pointed at a shared host by accident.
+        // Supply -PtestingApiBaseUrl explicitly for emulator/device testing.
+        .orElse("https://api.invalid/api/v1/")
         .get()
         .let { if (it.endsWith('/')) it else "$it/" }
     val productionApiBaseUrl = providers.gradleProperty("productionApiBaseUrl")
@@ -27,8 +29,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 19
-        versionName = "0.0.18-beta"
+        versionCode = 20
+        versionName = "0.0.19-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -107,10 +109,10 @@ dependencies {
     // Settings / locale persistence (offline-first).
     implementation(libs.androidx.datastore.preferences)
 
-    // Deferred synchronization (queued while offline; real sync in later phase).
+    // WorkManager synchronization for offline collector actions.
     implementation(libs.androidx.work.runtime.ktx)
 
-    // API integration layer (endpoints connected in a later phase).
+    // Retrofit/OkHttp API integration layer.
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp)

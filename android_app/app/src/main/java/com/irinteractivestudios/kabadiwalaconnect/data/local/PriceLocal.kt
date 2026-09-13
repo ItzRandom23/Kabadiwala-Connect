@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Entity(tableName = "prices", primaryKeys = ["id", "location"])
-data class PriceEntity(val id: String, val location: String, val materialLabel: String, val ratePerKg: Double, val minRatePerKg: Double, val maxRatePerKg: Double, val updatedAtEpochMs: Long, val trend: String, val historyCsv: String)
+data class PriceEntity(val id: String, val location: String, val materialLabel: String, val ratePerKg: Double, val minRatePerKg: Double, val maxRatePerKg: Double, val updatedAtEpochMs: Long, val trend: String, val historyCsv: String, val unit: String = "KILOGRAM", val source: String = "SYSTEM", val qualityStatus: String = "UNVERIFIED", val disclaimer: String? = null, val trendPercentage: Double = 0.0, val complianceRegime: String? = null)
 
 @Dao
 interface PriceDao {
@@ -60,5 +60,5 @@ object MockPriceData {
     private fun price(m: String, l: String, r: Double, min: Double, max: Double, t: String, h: List<Int>) = Price("${l}_$m", m, r, UPDATED, l, min, max, t, h.map { it.toDouble() })
 }
 
-private fun Price.toEntity() = PriceEntity(id, location, materialLabel, ratePerKg, minRatePerKg, maxRatePerKg, updatedAtEpochMs, trend, history.joinToString(","))
-private fun PriceEntity.toDomain() = Price(id, materialLabel, ratePerKg, updatedAtEpochMs, location, minRatePerKg, maxRatePerKg, trend, historyCsv.split(",").mapNotNull { it.toDoubleOrNull() })
+private fun Price.toEntity() = PriceEntity(id, location, materialLabel, ratePerKg, minRatePerKg, maxRatePerKg, updatedAtEpochMs, trend, history.joinToString(","), unit, source, qualityStatus, disclaimer, trendPercentage, complianceRegime)
+private fun PriceEntity.toDomain() = Price(id, materialLabel, ratePerKg, updatedAtEpochMs, location, minRatePerKg, maxRatePerKg, trend, historyCsv.split(",").mapNotNull { it.toDoubleOrNull() }, unit, source, qualityStatus, disclaimer, trendPercentage, complianceRegime)

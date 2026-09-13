@@ -18,7 +18,14 @@ const materialUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
 });
-const materialCategories = ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'] as const;
+const materialCategories = ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'] as const;
+
+function indiaMonthKey(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).formatToParts(date);
+  const year = parts.find(part => part.type === 'year')?.value ?? '0000';
+  const month = parts.find(part => part.type === 'month')?.value ?? '01';
+  return `${year}-${month}`;
+}
 
 function actor(req: Request) {
   if (!req.identity) throw new AppError('AUTHENTICATION_REQUIRED', 'Sign in to continue', 401);
@@ -27,7 +34,8 @@ function actor(req: Request) {
 
 function requireRole(req: Request, role: 'COLLECTOR' | 'RECYCLER') {
   const identity = actor(req);
-  if (identity.role !== role) throw new AppError('AUTHORIZATION_ERROR', `${role === 'COLLECTOR' ? 'Collector' : 'Recycler'} access required`, 403);
+  const collectorLike = role === 'COLLECTOR' && (identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD');
+  if (identity.role !== role && !collectorLike) throw new AppError('AUTHORIZATION_ERROR', `${role === 'COLLECTOR' ? 'Collector or household' : 'Recycler'} access required`, 403);
   return identity.collectorId;
 }
 
@@ -43,7 +51,7 @@ async function refreshRewards(db: PrismaClient, collectorId: string) {
   const handovers = await db.handover.findMany({ where: { collectorId, status: 'COMPLETED' }, select: { id: true, weight: true, actualWeight: true } });
   const totalRupees = payments.reduce((sum, item) => sum + item.amount, 0);
   const totalKg = handovers.reduce((sum, item) => sum + (item.actualWeight ?? item.weight), 0);
-  const periodKey = now.toISOString().slice(0, 7);
+  const periodKey = indiaMonthKey(now);
   for (const program of programs) {
     const qualifies = (program.thresholdKg == null || totalKg >= program.thresholdKg) && (program.thresholdRupees == null || totalRupees >= program.thresholdRupees);
     await db.rewardLedger.upsert({
@@ -371,7 +379,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       const previous = await db.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: collectorId, operationId } } });
       if (previous?.action === 'REPEAT_LOT') return res.status(201).json({ success: true, data: previous.response, message: 'Repeat lot already created' });
     }
-    const newLot = await db.lot.create({ data: { id: randomUUID(), collectorId, materialCategory: original.materialCategory, materialSubcategory: original.materialSubcategory, condition: original.condition, weight: original.weight, photoPath: original.photoPath, photoUrl: original.photoUrl, collectionLatitude: original.collectionLatitude, collectionLongitude: original.collectionLongitude, collectionAreaName: original.collectionAreaName, collectionLocationPrecision: original.collectionLocationPrecision, notes: original.notes, status: 'CREATED', version: 1 } });
+    const newLot = await db.lot.create({ data: { id: randomUUID(), collectorId, materialCategory: original.materialCategory, materialSubcategory: original.materialSubcategory, sourceType: original.sourceType, wasteRegime: original.wasteRegime, condition: original.condition, weight: original.weight, weightUnit: original.weightUnit, originalWeight: original.originalWeight, originalWeightUnit: original.originalWeightUnit, photoPath: null, photoUrl: null, imageProvenance: null, imageQualityStatus: 'UNVERIFIED', collectionLatitude: original.collectionLatitude, collectionLongitude: original.collectionLongitude, collectionAreaName: original.collectionAreaName, collectionLocationPrecision: original.collectionLocationPrecision, notes: original.notes, status: 'CREATED', version: 1 } });
     if (operationId) await db.idempotencyRecord.create({ data: { actorId: collectorId, operationId, action: 'REPEAT_LOT', entityId: newLot.id, response: newLot } });
     return res.status(201).json({ success: true, data: newLot, message: 'New lot created from history' });
   });
@@ -383,7 +391,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const since = new Date(); since.setMonth(since.getMonth() - months + 1); since.setDate(1); since.setHours(0, 0, 0, 0);
     const disputes = await db.dispute.findMany({ where: { ...where, createdAt: { gte: since } }, select: { type: true, status: true, resolution: true, createdAt: true, resolvedAt: true } });
     const byType: Record<string, number> = {}; const byStatus: Record<string, number> = {}; const byMonth: Record<string, number> = {}; const resolutions: Record<string, number> = {}; let resolutionMs = 0; let resolvedCount = 0;
-    for (const dispute of disputes) { byType[dispute.type] = (byType[dispute.type] ?? 0) + 1; byStatus[dispute.status] = (byStatus[dispute.status] ?? 0) + 1; const key = dispute.createdAt.toISOString().slice(0, 7); byMonth[key] = (byMonth[key] ?? 0) + 1; if (dispute.resolution) resolutions[dispute.resolution] = (resolutions[dispute.resolution] ?? 0) + 1; if (dispute.resolvedAt) { resolutionMs += dispute.resolvedAt.getTime() - dispute.createdAt.getTime(); resolvedCount++; } }
+    for (const dispute of disputes) { byType[dispute.type] = (byType[dispute.type] ?? 0) + 1; byStatus[dispute.status] = (byStatus[dispute.status] ?? 0) + 1; const key = indiaMonthKey(dispute.createdAt); byMonth[key] = (byMonth[key] ?? 0) + 1; if (dispute.resolution) resolutions[dispute.resolution] = (resolutions[dispute.resolution] ?? 0) + 1; if (dispute.resolvedAt) { resolutionMs += dispute.resolvedAt.getTime() - dispute.createdAt.getTime(); resolvedCount++; } }
     return res.json({ success: true, data: { months, total: disputes.length, byType, byStatus, byMonth, resolutions, averageResolutionHours: resolvedCount ? Math.round(resolutionMs / resolvedCount / 360000) / 10 : null, insufficientData: disputes.length < 3 }, message: 'Dispute analytics retrieved' });
   });
 
