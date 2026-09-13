@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +77,7 @@ fun SettingsScreen(
     syncPendingCount: Int = 0,
     onRetrySync: () -> Unit = {},
     onRetrySyncItem: (Long) -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
     onLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -163,6 +165,12 @@ fun SettingsScreen(
                 text = stringResource(R.string.settings_version, appVersion),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp)
+            )
+            SettingsRow(
+                icon = Icons.Filled.Refresh,
+                label = stringResource(R.string.settings_check_for_updates),
+                onClick = onCheckForUpdates,
+                testTag = "settings_check_for_updates"
             )
         }
 

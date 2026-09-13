@@ -39,7 +39,15 @@ object AppUpdateManager {
         if (manifestUrl.isBlank() || manifestUrl.contains(".invalid")) return@withContext null
 
         runCatching {
-            val request = Request.Builder().url(manifestUrl).get().build()
+            // Update manifests may be cached by the device/network proxy.
+            // Explicitly bypass that cache so a newly published testing APK
+            // is discoverable without waiting for a stale response to expire.
+            val request = Request.Builder()
+                .url(manifestUrl)
+                .header("Cache-Control", "no-cache")
+                .header("Pragma", "no-cache")
+                .get()
+                .build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 val body = response.body?.string().orEmpty()

@@ -1,8 +1,8 @@
 {
-  "versionCode": 27,
-  "versionName": "0.0.26-beta",
-  "apkUrl": "kabadiwala-connect-0.0.26-beta-debug.apk",
-  "sha256": "bc169b4d0bf66df008f158fc888e8e592becc7a449ebe36ca75c8ad84778445f",
-  "sizeBytes": 25135475,
-  "releaseNotes": "Testing build: created lots remain visible, bulk lots appear immediately after creation, sync errors are actionable, and photo uploads use backend-compatible MIME types."
+  "versionCode": 28,
+  "versionName": "0.0.27-beta",
+  "apkUrl": "kabadiwala-connect-0.0.27-beta-debug.apk",
+  "sha256": "144b5f09751466a23692ba26c5f099386e36dc3cd895bb93f2bcd5490faccd88",
+  "sizeBytes": 25135939,
+  "releaseNotes": "Testing build: update checks retry after reconnect, bypass stale manifest caches, and can be started manually from Settings."
 }

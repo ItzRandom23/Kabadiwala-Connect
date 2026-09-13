@@ -106,6 +106,7 @@ fun AppNavHost(
     factory: KcViewModelFactory,
     onLanguageChange: (String) -> Unit,
     onAppearanceChange: (String) -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
     startDestination: String = Destinations.HOME,
     onLogout: () -> Unit = {},
     onDemo: () -> Unit = {},
@@ -560,6 +561,7 @@ fun AppNavHost(
                     onLanguageChange(tag)
                 },
                 onAppearanceChange = { mode -> vm.setAppearance(mode); onAppearanceChange(mode) },
+                onCheckForUpdates = onCheckForUpdates,
                 onOpenProfile = { navController.navigate(Destinations.PROFILE) },
                 onOpenSafety = { navController.navigate(Destinations.SAFETY) },
                 onOpenHelp = { navController.navigate(Destinations.HELP) },

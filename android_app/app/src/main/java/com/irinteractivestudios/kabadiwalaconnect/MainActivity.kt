@@ -146,9 +146,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                LaunchedEffect(languageSelected) {
-                    if (languageSelected) {
-                        availableUpdate = AppUpdateManager.check(this@MainActivity)
+                LaunchedEffect(languageSelected, connection) {
+                    // Retry after connectivity comes online. The first check can
+                    // otherwise race the network observer during cold start.
+                    if (languageSelected && connection == ConnectionState.ONLINE) {
+                        AppUpdateManager.check(this@MainActivity)?.let { update ->
+                            availableUpdate = update
+                        }
                     }
                 }
 
@@ -258,6 +262,13 @@ class MainActivity : ComponentActivity() {
                                 factory = factory,
                                 onLanguageChange = { recreate() },
                                 onAppearanceChange = { appearanceMode = AppearanceManager.normalize(it) },
+                                onCheckForUpdates = {
+                                    uiScope.launch {
+                                        AppUpdateManager.check(this@MainActivity)?.let { update ->
+                                            availableUpdate = update
+                                        }
+                                    }
+                                },
                                 startDestination = initialRoute,
                                 onLogout = {
                                     uiScope.launch {
