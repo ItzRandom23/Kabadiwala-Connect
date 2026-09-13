@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
                     .build().also { instance = it }
             }
 
@@ -167,6 +167,17 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_19_20 = object : androidx.room.migration.Migration(19, 20) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE payments ADD COLUMN accountId TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_accountId_paidAtEpochMs ON payments(accountId, paidAtEpochMs)")
+            }
+        }
+        val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // Older prototypes reached the same database version with
+                // different subsets of these indexes. Normalize every index
+                // Room expects without deleting offline user data.
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_disputes_handoverId ON disputes(handoverId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_future_notifications_accountId_createdAt ON future_notifications(accountId, createdAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_queue_nextAttemptAtEpochMs ON sync_queue(nextAttemptAtEpochMs)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_payments_accountId_paidAtEpochMs ON payments(accountId, paidAtEpochMs)")
             }
         }
