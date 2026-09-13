@@ -56,6 +56,9 @@ object Destinations {
     const val RECYCLER_PROFILE = "recycler/profile"
     const val RECYCLER_VERIFY = "recycler/verification"
     const val RECYCLER_SCAN = "recycler/scan"
+    const val KABADIWALA_INVENTORY = "kabadiwala/inventory"
+    const val KABADIWALA_PICKUPS = "kabadiwala/pickups"
+    const val KABADIWALA_LOTS = "kabadiwala/lots"
 
     /** Secondary screens, reachable only through Settings (no bottom tab). */
     const val SAFETY = "settings/safety"
@@ -71,14 +74,17 @@ object Destinations {
     const val DISPUTE_ANALYTICS = "disputes/analytics"
     fun chatDetail(id: String) = "messages/$id"
 
+    // Legacy demo tabs are retained only for the offline demonstration entry
+    // point. Live Kabadiwala sessions use KABADIWALA_TOP_LEVEL below.
     val TOP_LEVEL = listOf(HOME, PRICES, RECYCLERS, EARNINGS, SETTINGS)
+    val KABADIWALA_TOP_LEVEL = listOf(HOME, KABADIWALA_INVENTORY, KABADIWALA_PICKUPS, KABADIWALA_LOTS, SETTINGS)
     val RECYCLER_TOP_LEVEL = listOf(RECYCLER_MARKETPLACE, RECYCLER_ORDERS, RECYCLER_PICKUPS, RECYCLER_RATES, RECYCLER_PROFILE)
     const val START = HOME
 
-    fun topLevelFor(role: AccountRole) = when (role) {
+    fun topLevelFor(role: AccountRole, newNavigation: Boolean = false) = when (role) {
         AccountRole.RECYCLER -> RECYCLER_TOP_LEVEL
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS.map { it.route }
-        AccountRole.COLLECTOR -> TOP_LEVEL
+        AccountRole.COLLECTOR -> if (newNavigation) KABADIWALA_TOP_LEVEL else TOP_LEVEL
     }
 }
 
@@ -95,6 +101,14 @@ val BOTTOM_TABS = listOf(
     BottomTab(Destinations.PRICES, R.string.nav_prices, Icons.Filled.CurrencyRupee, "nav_prices"),
     BottomTab(Destinations.RECYCLERS, R.string.nav_recyclers, Icons.Filled.Recycling, "nav_recyclers"),
     BottomTab(Destinations.EARNINGS, R.string.nav_earnings, Icons.Filled.AccountBalanceWallet, "nav_earnings"),
+    BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
+)
+
+val KABADIWALA_BOTTOM_TABS = listOf(
+    BottomTab(Destinations.HOME, R.string.nav_home, Icons.Filled.Home, "nav_home"),
+    BottomTab(Destinations.KABADIWALA_INVENTORY, R.string.nav_kabadiwala_inventory, Icons.Filled.Inventory2, "nav_inventory"),
+    BottomTab(Destinations.KABADIWALA_PICKUPS, R.string.nav_kabadiwala_pickups, Icons.Filled.LocalShipping, "nav_pickups"),
+    BottomTab(Destinations.KABADIWALA_LOTS, R.string.nav_kabadiwala_lots, Icons.Filled.Storefront, "nav_bulk_lots"),
     BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
 )
 

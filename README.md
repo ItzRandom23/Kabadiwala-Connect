@@ -6,9 +6,9 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 The Android APK contains three role-routed experiences:
 
-- Household seller: create a household scrap lot, compare nearby verified collectors, receive an estimate, accept/reject quotes, chat after acceptance and rematch after disagreement.
-- Collector: create lots offline, add photos, select material, enter weight, hear prices, find verified recyclers, compare offers, create a QR handover record, attach scale evidence, confirm final value, record optional cash/digital payment, receive in-app event notifications, and view server-backed earnings.
-- Recycler: submit facility details for verification, then browse matched lots, manage buying rates, make offers, manage orders and pickups, and load a handover by its server-side QR/reference.
+- Household seller: post recyclable material with an approximate weight and area, choose an active Kabadiwala, request pickup, and view weighing, rate, status, and final settlement.
+- Kabadiwala: discover household pickup requests, schedule and weigh collections, manage owned inventory, create recycler-facing bulk lots, review offers, and respond to procurement demand.
+- Recycler: submit facility details for verification, browse Kabadiwala bulk lots, make and track procurement offers, confirm receipt, and publish material requirements.
 
 Role is stored in the backend account profile and cached locally only to make offline launch sensible. The app never chooses a role from an email address or domain. Recycler verification remains backend-controlled; a new recycler starts as `PENDING`.
 
@@ -30,13 +30,21 @@ Requirements: Node.js 20+, npm, and MongoDB/Atlas.
 cd backend
 copy .env.example .env
 npm install
-npm run db:generate
-npm run db:prepare
+npm run db:push
 npm run db:seed
 npm run dev
 ```
 
 The backend owns role, recycler authorization, ownership, lot/offer/handover transitions, price ranges, valuation, payment records, and traceability-related audit data. MongoDB indexes cover account lookup, roles, authorization, material, lot status, timestamps, and transaction references. Secrets remain environment-only.
+
+The supply-chain boundary is explicit: a Household posts material and requests a
+Kabadiwala pickup; only a Kabadiwala can weigh it into inventory and reserve
+that inventory in a bulk lot; only a verified Recycler can offer on and receive
+that lot. See [the role architecture audit](docs/ROLE_ARCHITECTURE_AUDIT.md)
+for the route-level capability matrix and inventory/state invariants. After
+pulling schema changes into a testing database, run `npm run db:push` before
+starting the API. The seeded end-to-end accounts and conflict checks are
+documented in [the supply-chain test runbook](docs/SUPPLY_CHAIN_TEST_RUNBOOK.md).
 
 ### Authentication
 
@@ -60,7 +68,10 @@ cd android_app
 ./gradlew.bat assembleRelease -PproductionApiBaseUrl=https://your-host.example/api/v1/
 ```
 
-The safe default API URL is `.invalid`, which keeps the debug build in its local/offline authentication path. Set `-PtestingApiBaseUrl=http://10.0.2.2:4000/api/v1/` for an emulator-backed local server (or an explicit HTTPS host for device testing). Release signing credentials are intentionally not included.
+The debug testing build targets `http://140.245.232.208:4000/api/v1/` by
+default. Override it with `-PtestingApiBaseUrl=...` when using another test
+host. Release builds remain HTTPS-only and use a separate
+`-PproductionApiBaseUrl=...` value; release signing credentials are intentionally not included.
 
 ## Offline and AI integration boundaries
 

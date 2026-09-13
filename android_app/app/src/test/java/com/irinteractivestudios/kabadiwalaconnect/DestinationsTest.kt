@@ -2,6 +2,8 @@ package com.irinteractivestudios.kabadiwalaconnect
 
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
+import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,5 +47,12 @@ class DestinationsTest {
         val tabRoutes = BOTTOM_TABS.map { it.route }.toSet()
         assertTrue(!tabRoutes.contains(Destinations.SAFETY))
         assertTrue(!tabRoutes.contains(Destinations.HELP))
+    }
+
+    @Test
+    fun liveKabadiwalaNavigation_usesSupplyChainTabs() {
+        assertEquals(5, KABADIWALA_BOTTOM_TABS.size)
+        assertEquals(KABADIWALA_BOTTOM_TABS.map { it.route }, Destinations.topLevelFor(AccountRole.COLLECTOR, newNavigation = true))
+        assertTrue(Destinations.KABADIWALA_TOP_LEVEL.contains(Destinations.KABADIWALA_INVENTORY))
     }
 }

@@ -6,6 +6,24 @@ import com.google.gson.annotations.SerializedName
 data class ApiErrorEnvelope(val success: Boolean = false, val error: ApiErrorDto? = null, val requestId: String? = null)
 data class ApiErrorDto(val code: String? = null, val message: String? = null, val details: JsonObject? = null)
 data class ApiEnvelope<T>(val success: Boolean = false, val data: T? = null, val message: String? = null)
+
+// Dedicated role-correct supply-chain DTOs. Dates are ISO-8601 strings at the
+// transport boundary; the UI formats them locally and never renders nulls.
+data class HouseholdListingCreateDto(val materialCategory: String, val estimatedWeight: Double, val condition: String, val notes: String? = null, val photoReference: String? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null)
+data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
+data class KabadiwalaProfileDto(val id: String = "", val displayName: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null)
+data class PickupRequestCreateDto(val kabadiwalaId: String, val requestedSlot: String? = null)
+data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String = "", val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val finalAmount: Double? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null)
+data class PickupScheduleDto(val scheduledSlot: String)
+data class PickupStatusDto(val status: String)
+data class PickupCompletionDto(val actualWeight: Double, val finalCategory: String, val grade: String = "UNSPECIFIED", val ratePerKg: Double)
+data class InventoryBalanceDto(val id: String = "", val kabadiwalaId: String = "", val materialCategory: String = "OTHER", val grade: String = "UNSPECIFIED", val availableKg: Double = 0.0, val reservedKg: Double = 0.0, val soldKg: Double = 0.0, val purchaseCost: Double = 0.0, val updatedAt: String? = null)
+data class BulkLotCreateDto(val materialCategory: String, val grade: String = "UNSPECIFIED", val quantityKg: Double, val askingRatePerKg: Double, val minimumRatePerKg: Double? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null, val notes: String? = null)
+data class BulkLotDto(val id: String = "", val kabadiwalaId: String = "", val materialCategory: String = "OTHER", val grade: String = "UNSPECIFIED", val quantityKg: Double = 0.0, val askingRatePerKg: Double = 0.0, val minimumRatePerKg: Double? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val notes: String? = null, val status: String = "LISTED", val reservedForId: String? = null, val createdAt: String? = null, val updatedAt: String? = null)
+data class BulkOfferCreateDto(val offeredRatePerKg: Double)
+data class BulkOfferDto(val id: String = "", val bulkLotId: String = "", val recyclerId: String = "", val offeredRatePerKg: Double = 0.0, val status: String = "PENDING", val createdAt: String? = null, val updatedAt: String? = null)
+data class ProcurementRequirementCreateDto(val materialCategory: String, val minimumLotKg: Double, val requiredQuantityKg: Double, val preferredGrade: String? = null, val maxRatePerKg: Double? = null, val procurementRadiusKm: Double, val deadline: String? = null)
+data class ProcurementRequirementDto(val id: String = "", val recyclerId: String = "", val materialCategory: String = "OTHER", val minimumLotKg: Double = 0.0, val requiredQuantityKg: Double = 0.0, val preferredGrade: String? = null, val maxRatePerKg: Double? = null, val procurementRadiusKm: Double = 0.0, val deadline: String? = null, val status: String = "OPEN", val createdAt: String? = null, val updatedAt: String? = null)
 data class OtpRequestDto(val phone: String)
 data class VerifyOtpRequestDto(
     val phone: String,

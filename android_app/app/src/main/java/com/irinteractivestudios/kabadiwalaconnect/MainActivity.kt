@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
                 val initialRoute = if (demoMode) Destinations.HOME else if (!app.container.hasRestorableSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
-                val isTopLevel = route in Destinations.topLevelFor(activeRole)
+                val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode)
                 val languageSelected = LocaleManager.hasPersistedTag(this@MainActivity)
                 var navGuardReady by remember { mutableStateOf(false) }
 
@@ -176,6 +176,9 @@ class MainActivity : ComponentActivity() {
                     Destinations.RECYCLER_RATES -> stringResource(R.string.recycler_rates_title)
                     Destinations.RECYCLER_PROFILE -> stringResource(R.string.recycler_profile_title)
                     Destinations.RECYCLER_VERIFY -> stringResource(R.string.recycler_verification_title)
+                    Destinations.KABADIWALA_INVENTORY -> stringResource(R.string.nav_kabadiwala_inventory)
+                    Destinations.KABADIWALA_PICKUPS -> stringResource(R.string.nav_kabadiwala_pickups)
+                    Destinations.KABADIWALA_LOTS -> stringResource(R.string.nav_kabadiwala_lots)
                     Destinations.HOUSEHOLD_DEAL -> stringResource(R.string.future_transaction_chat)
                     Destinations.REWARDS -> stringResource(R.string.settings_rewards)
                     Destinations.SCHEMES -> stringResource(R.string.settings_schemes)
@@ -223,7 +226,7 @@ class MainActivity : ComponentActivity() {
                         },
                         bottomBar = {
                             if (isTopLevel) {
-                                KcBottomBar(currentRoute = route, role = activeRole, unreadNotifications = unreadNotifications, onNavigate = { target ->
+                                KcBottomBar(currentRoute = route, role = activeRole, unreadNotifications = unreadNotifications, demoMode = demoMode, onNavigate = { target ->
                                     navController.navigate(target) {
                                         popUpTo(Destinations.START) { saveState = true }
                                         launchSingleTop = true

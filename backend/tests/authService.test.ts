@@ -44,11 +44,11 @@ describe('collector authentication service', () => {
     const tx = {
       user: {
         findUnique: async ({ where }: any) => 'phone' in where ? existingUser : { id: 'other-user' },
-        findFirst: async () => null,
+        findFirst: async ({ where }: any) => 'phone' in where ? existingUser : null,
         update: async ({ data }: any) => Object.assign(existingUser, data)
       },
       collector: {
-        findFirst: async () => null,
+        findFirst: async ({ where }: any) => 'email' in where ? { id: 'other-collector' } : null,
         findUnique: async ({ where }: any) => 'email' in where ? { id: 'other-collector' } : existingProfile,
         update: async () => existingProfile
       }
@@ -70,7 +70,7 @@ describe('collector authentication service', () => {
 
   it('requires a name when creating a new collector phone account', async () => {
     const tx = {
-      user: { findUnique: async () => null },
+      user: { findFirst: async () => null },
       collector: { findFirst: async () => null }
     };
     const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;

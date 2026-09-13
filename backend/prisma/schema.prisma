@@ -81,6 +81,48 @@ enum LotStatus {
   DISPUTED
 }
 
+// Supply-chain records are deliberately separate from the legacy collector
+// lot model. A household listing is not kabadiwala inventory, and a bulk lot
+// is not a household pickup request.
+enum HouseholdListingStatus {
+  DRAFT
+  POSTED
+  MATCHED
+  CANCELLED
+  COMPLETED
+}
+enum PickupStatus {
+  REQUESTED
+  ACCEPTED
+  SCHEDULED
+  IN_TRANSIT
+  ARRIVED
+  WEIGHED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+enum BulkLotStatus {
+  DRAFT
+  LISTED
+  RESERVED
+  SOLD
+  CANCELLED
+}
+enum BulkOfferStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+enum ProcurementStatus {
+  OPEN
+  PAUSED
+  FULFILLED
+  CANCELLED
+}
+
 enum PriceSource {
   ADMIN
   RECYCLER
@@ -240,8 +282,8 @@ enum MessageStatus {
 
 model Collector {
   id                String            @id @default(cuid()) @map("_id")
-  phone             String?           @unique
-  email             String?           @unique
+  phone             String?
+  email             String?
   displayName       String?
   preferredLanguage PreferredLanguage
   latitude          Float?
@@ -258,6 +300,8 @@ model Collector {
 
   @@index([accountStatus])
   @@index([areaName])
+  @@index([phone])
+  @@index([email])
 }
 
 // Account identity is separate from business profiles. The profile ids are
@@ -265,19 +309,23 @@ model Collector {
 // string or domain.
 model User {
   id                 String            @id @default(cuid()) @map("_id")
-  email              String?           @unique
-  phone              String?           @unique
+  email              String?
+  phone              String?
   passwordHash       String?
   role               AccountRole
   preferredLanguage  PreferredLanguage @default(ENGLISH)
   appearanceMode     String            @default("SYSTEM")
   accountStatus      AccountStatus     @default(ACTIVE)
-  collectorProfileId String?           @unique
-  recyclerProfileId  String?           @unique
+  collectorProfileId String?
+  recyclerProfileId  String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
   @@index([role, accountStatus])
+  @@index([email])
+  @@index([phone])
+  @@index([collectorProfileId])
+  @@index([recyclerProfileId])
 }
 
 // Administrative identity is deliberately separate from marketplace
@@ -914,4 +962,108 @@ model IdempotencyRecord {
 
   @@unique([actorId, operationId])
   @@index([actorId, action, createdAt])
+}
+
+model HouseholdListing {
+  id              String                 @id @default(cuid()) @map("_id")
+  householdId     String
+  materialCategory MaterialCategory
+  estimatedWeight Float
+  condition       LotCondition
+  notes           String?
+  photoReference  String?
+  areaName        String
+  latitude        Float?
+  longitude       Float?
+  status          HouseholdListingStatus @default(DRAFT)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  @@index([householdId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
+}
+
+model PickupRequest {
+  id                String       @id @default(cuid()) @map("_id")
+  listingId         String
+  householdId       String
+  kabadiwalaId      String
+  status            PickupStatus @default(REQUESTED)
+  requestedSlot     DateTime?
+  scheduledSlot     DateTime?
+  actualWeight      Float?
+  finalCategory     MaterialCategory?
+  grade             String?
+  ratePerKg         Float?
+  finalAmount       Float?
+  cancelledBy       String?
+  cancellationReason String?
+  completedAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  @@unique([listingId, kabadiwalaId])
+  @@index([householdId, status, createdAt])
+  @@index([kabadiwalaId, status, scheduledSlot])
+}
+
+model InventoryBalance {
+  id              String           @id @default(cuid()) @map("_id")
+  kabadiwalaId    String
+  materialCategory MaterialCategory
+  grade           String           @default("UNSPECIFIED")
+  availableKg     Float            @default(0)
+  reservedKg      Float            @default(0)
+  soldKg          Float            @default(0)
+  purchaseCost    Float            @default(0)
+  updatedAt       DateTime         @updatedAt
+  @@unique([kabadiwalaId, materialCategory, grade])
+  @@index([kabadiwalaId, materialCategory])
+}
+
+model BulkLot {
+  id              String        @id @default(cuid()) @map("_id")
+  kabadiwalaId    String
+  materialCategory MaterialCategory
+  grade           String        @default("UNSPECIFIED")
+  quantityKg      Float
+  askingRatePerKg Float
+  minimumRatePerKg Float?
+  areaName        String
+  latitude        Float?
+  longitude       Float?
+  notes           String?
+  status          BulkLotStatus @default(DRAFT)
+  reservedForId   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@index([kabadiwalaId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
+}
+
+model BulkOffer {
+  id            String          @id @default(cuid()) @map("_id")
+  bulkLotId     String
+  recyclerId    String
+  offeredRatePerKg Float
+  status        BulkOfferStatus @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  @@unique([bulkLotId, recyclerId])
+  @@index([recyclerId, status, createdAt])
+}
+
+model ProcurementRequirement {
+  id                String            @id @default(cuid()) @map("_id")
+  recyclerId        String
+  materialCategory  MaterialCategory
+  minimumLotKg      Float
+  requiredQuantityKg Float
+  preferredGrade    String?
+  maxRatePerKg      Float?
+  procurementRadiusKm Float
+  deadline          DateTime?
+  status            ProcurementStatus @default(OPEN)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  @@index([recyclerId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
 }

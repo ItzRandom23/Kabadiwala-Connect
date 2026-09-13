@@ -79,6 +79,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.VerifiedRati
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.NotificationsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.*
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitReviewRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Dispute
@@ -109,7 +110,10 @@ fun AppNavHost(
 ) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
-    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
+    val demoCollectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
+    val liveCollectorRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
+    val collectorRoutes = if (demoMode) demoCollectorRoutes else liveCollectorRoutes
+    val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode) {
         if (!demoMode) {
             while (true) {
@@ -124,6 +128,15 @@ fun AppNavHost(
         if (role == AccountRole.RECYCLER && collectorRoute) {
             navController.navigate(if (factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
         } else if ((role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD) && recyclerRoute) {
+            navController.navigate(Destinations.HOME) { popUpTo(0) }
+        } else if (role == AccountRole.COLLECTOR && !demoMode && currentRoute !in liveCollectorRoutes) {
+            // Live Kabadiwala sessions use only the supply-chain workspace;
+            // old lot/quote/handover/payment routes remain demo-only.
+            navController.navigate(Destinations.HOME) { popUpTo(0) }
+        } else if (role == AccountRole.HOUSEHOLD && currentRoute !in householdRoutes) {
+            // A deep link must not turn a household session into the legacy
+            // kabadiwala operating console. Backend authorization enforces
+            // this too; the guard keeps the client truthful and unsurprising.
             navController.navigate(Destinations.HOME) { popUpTo(0) }
         }
     }
@@ -192,14 +205,25 @@ fun AppNavHost(
             TransactionTimelineScreen(id, vm, onBack = { navController.popBackStack() })
         }
         composable(Destinations.HOME) {
-            val vm: HomeViewModel = viewModel(factory = factory)
-            val state by vm.uiState.collectAsStateWithLifecycle()
-            if (role == AccountRole.HOUSEHOLD) HouseholdHomeScreen(
+            if (role == AccountRole.HOUSEHOLD && !demoMode) {
+                val vm: SupplyChainViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refreshHousehold() }
+                HouseholdSupplyScreen(state, vm::refreshHousehold, vm::createListing, vm::requestPickup)
+            } else if (role == AccountRole.HOUSEHOLD) HouseholdHomeScreen(
                 area = factory.currentAccount?.areaName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.home_area_not_set),
-                onCreateLot = { navController.navigate(Destinations.CREATE_LOT) },
+                onCreateLot = { navController.navigate(Destinations.HOME) },
                 onFindKabadiwala = { navController.navigate(Destinations.RECYCLERS) },
-                onOpenDeal = { navController.navigate(if (demoMode) Destinations.householdDeal("kb-01") else Destinations.CHAT) }
-            ) else HomeScreen(
+                onOpenDeal = { navController.navigate(Destinations.HOME) }
+            ) else if (!demoMode) {
+                val vm: SupplyChainViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer)
+            } else {
+                val vm: HomeViewModel = viewModel(factory = factory)
+                val state by vm.uiState.collectAsStateWithLifecycle()
+                HomeScreen(
                 state = state,
                 demoMode = demoMode,
                 household = role == AccountRole.HOUSEHOLD,
@@ -223,7 +247,23 @@ fun AppNavHost(
                         HomeNextAction.REVIEW_DISPUTE -> navController.navigate(Destinations.DISPUTE_ANALYTICS)
                     }
                 }
-            )
+                )
+            }
+        }
+        composable(Destinations.KABADIWALA_INVENTORY) {
+            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+            KabadiwalaSupplyScreen(state, KabadiwalaSection.INVENTORY, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer)
+        }
+        composable(Destinations.KABADIWALA_PICKUPS) {
+            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+            KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer)
+        }
+        composable(Destinations.KABADIWALA_LOTS) {
+            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+            KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer)
         }
         composable(Destinations.PRICES) {
             val vm: PricesViewModel = viewModel(factory = factory)
@@ -237,7 +277,12 @@ fun AppNavHost(
             if (role == AccountRole.HOUSEHOLD && demoMode) NearbyKabadiwalasScreen(
                 area = factory.currentAccount?.areaName ?: "Kothrud, Pune",
                 onInvite = { navController.navigate(Destinations.householdDeal(it)) }
-            ) else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
+            ) else if (role == AccountRole.HOUSEHOLD) {
+                val supplyVm: SupplyChainViewModel = viewModel(factory = factory)
+                val supplyState by supplyVm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { supplyVm.refreshHousehold() }
+                HouseholdKabadiwalasScreen(supplyState, supplyVm::refreshHousehold)
+            } else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
         }
         composable(Destinations.RECYCLERS_FOR_LOT, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
             val lotId = entry.arguments?.getString("lotId")
@@ -251,13 +296,13 @@ fun AppNavHost(
         }
         composable(Destinations.HOUSEHOLD_DEAL, arguments = listOf(navArgument("kabadiwalaId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("kabadiwalaId").orEmpty()
-            if (demoMode) HouseholdDealScreen(
+            if (demoMode && role == AccountRole.HOUSEHOLD) HouseholdDealScreen(
                 kabadiwalaId = id,
                 onFindAnother = {
                     if (!navController.popBackStack(Destinations.RECYCLERS, false)) navController.navigate(Destinations.RECYCLERS)
                 }
             ) else LaunchedEffect(Unit) {
-                navController.navigate(Destinations.CHAT) { popUpTo(Destinations.HOUSEHOLD_DEAL) { inclusive = true } }
+                navController.navigate(Destinations.HOME) { popUpTo(0) }
             }
         }
         composable(Destinations.RECYCLER_DETAIL, arguments = listOf(navArgument("recyclerId") { type = NavType.StringType })) { entry ->
@@ -479,6 +524,10 @@ fun AppNavHost(
                 onOpenChat = { navController.navigate(Destinations.CHAT) },
                 onOpenNotifications = { navController.navigate(Destinations.NOTIFICATIONS) },
                 onOpenDisputes = { navController.navigate(Destinations.DISPUTE_ANALYTICS) },
+                // The legacy rewards/chat/dispute tools describe the old
+                // collector↔recycler marketplace. Keep them in the offline
+                // demo only; live roles use the supply-chain workspace.
+                showRoleTools = demoMode,
                 syncItems = syncItems,
                 syncPendingCount = syncItems.size,
                 onRetrySync = factory::requestSync,
@@ -507,7 +556,7 @@ fun AppNavHost(
                 onRefresh = vm::refresh,
                 onOpen = { notification ->
                     vm.markNotificationRead(notification.id)
-                    notification.route?.takeIf { isSafeNotificationRoute(it, role) }
+                    notification.route?.takeIf { isSafeNotificationRoute(it, role, demoMode) }
                         ?.let { route -> navController.navigate(route) }
                 },
                 onMarkAllRead = vm::markAllNotificationsRead
@@ -580,9 +629,10 @@ fun AppNavHost(
         composable(Destinations.RECYCLER_MARKETPLACE) {
             if (demoMode) RecyclerMarketplaceScreen(demoMode = true)
             else {
-                val vm: RecyclerMarketplaceViewModel = viewModel(factory = factory)
+                val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                RecyclerMarketplaceScreen(liveLots = state.lots, liveLoading = state.loading, liveError = state.error, liveSubmittedIds = state.submittedIds, liveSubmittingIds = state.submittingIds, onRefresh = vm::refresh, onLiveOfferSent = vm::submitOffer)
+                LaunchedEffect(Unit) { vm.refreshRecycler() }
+                RecyclerSupplyScreen(state, vm::refreshRecycler, vm::makeOffer, vm::receiveLot, vm::createRequirement)
             }
         }
         composable(Destinations.RECYCLER_ORDERS) {
@@ -618,18 +668,18 @@ fun AppNavHost(
     }
 }
 
-private fun isSafeNotificationRoute(route: String, role: AccountRole): Boolean {
+private fun isSafeNotificationRoute(route: String, role: AccountRole, demoMode: Boolean): Boolean {
     if (route.length > 120 || !route.matches(Regex("^[A-Za-z0-9_/-]+$"))) return false
-    val collectorRoute = route == Destinations.EARNINGS ||
+    val collectorRoute = if (demoMode) route == Destinations.EARNINGS ||
         route == Destinations.DISPUTE_ANALYTICS ||
         route.startsWith("quotes/compare/") ||
         route.startsWith("handovers/create/") ||
         route.startsWith("handovers/document/") ||
-        route.startsWith("handovers/dispute/")
+        route.startsWith("handovers/dispute/") else route == Destinations.HOME || route == Destinations.KABADIWALA_INVENTORY || route == Destinations.KABADIWALA_PICKUPS || route == Destinations.KABADIWALA_LOTS
     val recyclerRoute = route == Destinations.RECYCLER_MARKETPLACE || route == Destinations.RECYCLER_ORDERS
     return when (role) {
         AccountRole.RECYCLER -> recyclerRoute
         AccountRole.COLLECTOR -> collectorRoute
-        AccountRole.HOUSEHOLD -> route == Destinations.DISPUTE_ANALYTICS
+        AccountRole.HOUSEHOLD -> if (demoMode) route == Destinations.DISPUTE_ANALYTICS else route == Destinations.HOME || route == Destinations.PRICES || route == Destinations.RECYCLERS
     }
 }

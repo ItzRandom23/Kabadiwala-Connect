@@ -9,9 +9,9 @@ plugins {
 android {
     namespace = "com.irinteractivestudios.kabadiwalaconnect"
     val testingApiBaseUrl = providers.gradleProperty("testingApiBaseUrl")
-        // Do not ship a debug build pointed at a shared host by accident.
-        // Supply -PtestingApiBaseUrl explicitly for emulator/device testing.
-        .orElse("https://api.invalid/api/v1/")
+        // This is the shared non-production testing host. Override it with
+        // -PtestingApiBaseUrl for a local emulator/device backend.
+        .orElse("http://140.245.232.208:4000/api/v1/")
         .get()
         .let { if (it.endsWith('/')) it else "$it/" }
     val productionApiBaseUrl = providers.gradleProperty("productionApiBaseUrl")

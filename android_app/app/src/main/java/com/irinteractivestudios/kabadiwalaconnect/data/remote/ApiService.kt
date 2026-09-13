@@ -23,6 +23,56 @@ import retrofit2.http.Query
  * isolated to this package and its mappers.
  */
 interface ApiService {
+    // Explicit supply-chain contract. These endpoints are separate from the
+    // legacy collector-to-recycler lot/quote APIs below.
+    @POST("household/listings")
+    suspend fun createHouseholdListing(@Body body: HouseholdListingCreateDto): Response<ApiEnvelope<HouseholdListingDto>>
+    @GET("household/listings")
+    suspend fun getHouseholdListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    @GET("household/kabadiwalas")
+    suspend fun getHouseholdKabadiwalas(): Response<ApiEnvelope<List<KabadiwalaProfileDto>>>
+    @POST("household/listings/{listingId}/pickups")
+    suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto): Response<ApiEnvelope<PickupRequestDto>>
+    @GET("household/pickups")
+    suspend fun getHouseholdPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    @GET("kabadiwala/listings")
+    suspend fun getKabadiwalaListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    @GET("kabadiwala/pickups")
+    suspend fun getKabadiwalaPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    @POST("kabadiwala/listings/{listingId}/accept")
+    suspend fun acceptHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/schedule")
+    suspend fun schedulePickup(@Path("pickupId") pickupId: String, @Body body: PickupScheduleDto): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/status")
+    suspend fun updatePickupStatus(@Path("pickupId") pickupId: String, @Body body: PickupStatusDto): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/complete")
+    suspend fun completePickup(@Path("pickupId") pickupId: String, @Body body: PickupCompletionDto): Response<ApiEnvelope<PickupRequestDto>>
+    @GET("kabadiwala/inventory")
+    suspend fun getKabadiwalaInventory(): Response<ApiEnvelope<List<InventoryBalanceDto>>>
+    @POST("kabadiwala/bulk-lots")
+    suspend fun createBulkLot(@Body body: BulkLotCreateDto): Response<ApiEnvelope<BulkLotDto>>
+    @GET("kabadiwala/bulk-lots")
+    suspend fun getKabadiwalaBulkLots(): Response<ApiEnvelope<List<BulkLotDto>>>
+    @POST("kabadiwala/bulk-lots/{lotId}/cancel")
+    suspend fun cancelBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
+    @GET("kabadiwala/bulk-offers")
+    suspend fun getKabadiwalaBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
+    @GET("recycler/bulk-lots")
+    suspend fun getRecyclerBulkLots(): Response<ApiEnvelope<List<BulkLotDto>>>
+    @POST("recycler/bulk-lots/{lotId}/offers")
+    suspend fun makeBulkLotOffer(@Path("lotId") lotId: String, @Body body: BulkOfferCreateDto): Response<ApiEnvelope<BulkOfferDto>>
+    @GET("recycler/offers")
+    suspend fun getRecyclerBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
+    @GET("kabadiwala/procurement-requirements")
+    suspend fun getProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
+    @POST("kabadiwala/bulk-offers/{offerId}/accept")
+    suspend fun acceptBulkOffer(@Path("offerId") offerId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("recycler/bulk-lots/{lotId}/receive")
+    suspend fun receiveBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("recycler/procurement-requirements")
+    suspend fun createProcurementRequirement(@Body body: ProcurementRequirementCreateDto): Response<ApiEnvelope<ProcurementRequirementDto>>
+    @GET("recycler/procurement-requirements")
+    suspend fun getRecyclerProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
     @POST("auth/request-otp")
     suspend fun requestOtp(@Body body: OtpRequestDto): Response<ApiEnvelope<OtpRequestedDto>>
 

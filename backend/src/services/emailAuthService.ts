@@ -58,7 +58,7 @@ export class EmailAuthService {
   async signup(input: EmailAccountInput, ip = 'unknown', userAgent?: string) {
     const email = normalizedEmail(input.email);
     await this.limiter?.check(email, ip, 'signup');
-    const existing = await this.db.user.findUnique({ where: { email } });
+    const existing = await this.db.user.findFirst({ where: { email } });
     if (existing) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
 
     let created: { user: any; profile: any };
@@ -107,7 +107,7 @@ export class EmailAuthService {
   async login(emailInput: string, password: string, ip = 'unknown', userAgent?: string) {
     const email = normalizedEmail(emailInput);
     await this.limiter?.check(email, ip, 'login');
-    const user = await this.db.user.findUnique({ where: { email } });
+    const user = await this.db.user.findFirst({ where: { email } });
     if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) { await this.audit('EMAIL_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent); throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' }); }
     if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
     if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);

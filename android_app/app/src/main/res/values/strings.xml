@@ -12,6 +12,9 @@
     <string name="nav_pickups">Pickups</string>
     <string name="nav_rates">Rates</string>
     <string name="nav_profile">Profile</string>
+    <string name="nav_kabadiwala_inventory">Inventory</string>
+    <string name="nav_kabadiwala_pickups">Pickups</string>
+    <string name="nav_kabadiwala_lots">Recycler sales</string>
     <string name="recycler_marketplace_title">Nearby lots</string>
     <string name="recycler_orders_title">Active orders</string>
     <string name="recycler_orders_subtitle">Accepted lots and handover confirmation.</string>

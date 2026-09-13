@@ -34,9 +34,14 @@ function actor(req: Request) {
 
 function requireRole(req: Request, role: 'COLLECTOR' | 'RECYCLER') {
   const identity = actor(req);
-  const collectorLike = role === 'COLLECTOR' && (identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD');
-  if (identity.role !== role && !collectorLike) throw new AppError('AUTHORIZATION_ERROR', `${role === 'COLLECTOR' ? 'Collector or household' : 'Recycler'} access required`, 403);
+  if (identity.role !== role) throw new AppError('AUTHORIZATION_ERROR', `${role === 'COLLECTOR' ? 'Kabadiwala' : 'Recycler'} access required`, 403);
   return identity.collectorId;
+}
+
+function requireLegacyTransactionParticipant(req: Request) {
+  const identity = actor(req);
+  if (identity.role !== 'COLLECTOR' && identity.role !== 'RECYCLER') throw new AppError('AUTHORIZATION_ERROR', 'This conversation belongs to a kabadiwala-to-recycler transaction', 403);
+  return identity;
 }
 
 function pageNumber(value: unknown, fallback: number, max: number) {
@@ -189,7 +194,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
 
   router.get('/preferences', async (req, res) => {
     const identity = actor(req);
-    const user = identity.role === 'COLLECTOR'
+    const user = identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD'
       ? await db.user.findFirst({ where: { collectorProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true } })
       : await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true } });
     return res.json({ success: true, data: { preferredLanguage: user?.preferredLanguage ?? 'ENGLISH', appearanceMode: user?.appearanceMode ?? 'SYSTEM' }, message: 'Preferences retrieved' });
@@ -199,7 +204,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const identity = actor(req);
     const parsed = z.object({ preferredLanguage: languageSchema.optional(), appearanceMode: appearanceSchema.optional() }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Invalid preferences', 422);
-    const user = identity.role === 'COLLECTOR'
+    const user = identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD'
       ? await db.user.findFirst({ where: { collectorProfileId: identity.collectorId } })
       : await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId } });
     if (!user) throw new AppError('NOT_FOUND', 'Account not found', 404);
@@ -306,13 +311,13 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.get('/conversations', async (req, res) => {
-    const identity = actor(req);
+    const identity = requireLegacyTransactionParticipant(req);
     const conversations = await db.conversation.findMany({ where: identity.role === 'COLLECTOR' ? { collectorId: identity.collectorId } : { recyclerId: identity.collectorId }, orderBy: { lastMessageAt: 'desc' } });
     return res.json({ success: true, data: conversations, message: 'Conversations retrieved' });
   });
 
   router.post('/conversations', async (req, res) => {
-    const identity = actor(req);
+    const identity = requireLegacyTransactionParticipant(req);
     const parsed = z.object({ lotId: z.string().min(1), quoteId: z.string().optional(), collectorId: z.string().optional(), recyclerId: z.string().optional() }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Conversation details are invalid', 422);
     const collectorId = identity.role === 'COLLECTOR' ? identity.collectorId : parsed.data.collectorId;
@@ -329,7 +334,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.get('/conversations/:conversationId/messages', async (req, res) => {
-    const identity = actor(req);
+    const identity = requireLegacyTransactionParticipant(req);
     await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
     const limit = pageNumber(req.query.limit, 50, 100);
     const messages = await db.chatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit });
@@ -338,7 +343,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.post('/conversations/:conversationId/messages', async (req, res) => {
-    const identity = actor(req);
+    const identity = requireLegacyTransactionParticipant(req);
     const conversation = await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
     if (conversation.status !== 'OPEN') throw new AppError('CONFLICT', 'This conversation is closed', 409);
     const parsed = z.object({ clientMessageId: z.string().min(8).max(120), body: z.string().trim().min(1).max(1000) }).safeParse(req.body);
@@ -351,7 +356,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.post('/conversations/:conversationId/draft-reply', async (req, res) => {
-    const identity = actor(req);
+    const identity = requireLegacyTransactionParticipant(req);
     const conversation = await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
     const parsed = z.object({ language: z.string().max(24).optional(), instruction: z.string().trim().max(240).optional() }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Draft instructions are invalid', 422);

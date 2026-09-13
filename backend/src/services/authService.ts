@@ -125,7 +125,7 @@ export class AuthService {
 
   private async findExistingPhoneAccount(phone: string) {
     if (!this.db) return null;
-    const user = await this.db.user.findUnique({ where: { phone } });
+    const user = await this.db.user.findFirst({ where: { phone } });
     if (!user || user.accountStatus === 'SUSPENDED' || user.accountStatus === 'DELETED') return null;
     const profile = user.role === 'RECYCLER'
       ? await this.db.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
@@ -152,13 +152,13 @@ export class AuthService {
       // or create the phone account without attaching the duplicate email.
       const usableEmail = async (candidate: string | null, existingUserId?: string, existingCollectorId?: string) => {
         if (!candidate) return null;
-        const emailOwner = await tx.user.findUnique({ where: { email: candidate } });
-        const collectorEmailOwner = await tx.collector.findUnique({ where: { email: candidate } });
+        const emailOwner = await tx.user.findFirst({ where: { email: candidate } });
+        const collectorEmailOwner = await tx.collector.findFirst({ where: { email: candidate } });
         if ((emailOwner && emailOwner.id !== existingUserId) || (collectorEmailOwner && collectorEmailOwner.id !== existingCollectorId)) return null;
         return candidate;
       };
 
-      let user = await tx.user.findUnique({ where: { phone } });
+      let user = await tx.user.findFirst({ where: { phone } });
 
       // Link legacy OTP-created records to the account identity model without
       // creating a second account for the same verified mobile number.
@@ -205,7 +205,11 @@ export class AuthService {
       if (user) {
         if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
         if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
-        const accountEmail = await usableEmail(email, user.id, user.collectorProfileId ?? undefined);
+        // A verified phone may not silently replace an existing recovery email
+        // during login. Email changes belong to an explicit account-settings
+        // flow; this prevents a conflicting optional field from hijacking an
+        // established identity.
+        const accountEmail = user.email && email !== user.email ? null : await usableEmail(email, user.id, user.collectorProfileId ?? undefined);
         if (accountEmail && accountEmail !== user.email) {
           user = await tx.user.update({ where: { id: user.id }, data: { email: accountEmail } });
         }
