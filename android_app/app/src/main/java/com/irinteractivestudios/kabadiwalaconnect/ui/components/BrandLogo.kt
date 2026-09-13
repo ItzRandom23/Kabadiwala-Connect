@@ -15,6 +15,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme
 
 /** Keeps the dark-green brand mark legible on both light and dark surfaces. */
@@ -25,10 +26,10 @@ fun KcBrandLogo(
     size: Dp = 88.dp
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = KcTheme.extended.logoPlate,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shape = CircleShape,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .14f)),
+        border = BorderStroke(1.dp, KcTheme.extended.logoPlateBorder),
         modifier = modifier
             .size(size)
             .shadow(8.dp, CircleShape, ambientColor = MaterialTheme.colorScheme.primary)

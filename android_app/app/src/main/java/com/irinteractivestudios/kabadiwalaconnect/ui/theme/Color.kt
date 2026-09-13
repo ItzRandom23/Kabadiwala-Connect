@@ -67,3 +67,8 @@ val KcDarkSurfaceRaised = Color(0xFF163127)
 val KcDarkSurfaceHigh = Color(0xFF1C3B2F)
 val KcDarkOutline = Color(0xFF52665C)
 val KcDarkMuted = Color(0xFFB6C5BB)
+
+// The transparent logo asset contains a deep-green recycling loop. A warm,
+// high-contrast plate keeps that mark readable on dark teal surfaces.
+val KcLogoPlateDark = Color(0xFFF4F1D8)
+val KcLogoPlateDarkBorder = Color(0xFFD5E59A)

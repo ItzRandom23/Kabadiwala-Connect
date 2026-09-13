@@ -1,8 +1,8 @@
 {
-  "versionCode": 25,
-  "versionName": "0.0.24-beta",
-  "apkUrl": "kabadiwala-connect-0.0.24-beta-debug.apk",
-  "sha256": "a59fb86f6345626a3bc867ff1f188a65871192b463d7b110fbbbdca26a47d371",
-  "sizeBytes": 24913958,
-  "releaseNotes": "Testing build with a forward Room schema-normalization migration for existing sync, notification, dispute, and payment databases."
+  "versionCode": 26,
+  "versionName": "0.0.25-beta",
+  "apkUrl": "kabadiwala-connect-0.0.25-beta-debug.apk",
+  "sha256": "2210733be5335194d7143d85cff806f0561caaa9e9b0af89cec2f0305b79c3f6",
+  "sizeBytes": 24913964,
+  "releaseNotes": "Testing build with improved dark-mode logo contrast and the Room schema-normalization migration for existing sync, notification, dispute, and payment databases."
 }

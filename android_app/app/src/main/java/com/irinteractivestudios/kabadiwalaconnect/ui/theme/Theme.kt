@@ -75,11 +75,20 @@ data class KcExtendedColors(
     val value: androidx.compose.ui.graphics.Color,
     val success: androidx.compose.ui.graphics.Color,
     val warning: androidx.compose.ui.graphics.Color,
+    val logoPlate: androidx.compose.ui.graphics.Color,
+    val logoPlateBorder: androidx.compose.ui.graphics.Color,
     val isOperations: Boolean
 )
 
 private val LocalKcExtendedColors = staticCompositionLocalOf {
-    KcExtendedColors(KcAmberSecondary, KcSuccess, KcWarning, false)
+    KcExtendedColors(
+        value = KcAmberSecondary,
+        success = KcSuccess,
+        warning = KcWarning,
+        logoPlate = KcGreenPrimaryContainer,
+        logoPlateBorder = KcGreenPrimary.copy(alpha = .14f),
+        isOperations = false
+    )
 }
 
 object KcTheme {
@@ -116,6 +125,8 @@ fun KabadiwalaConnectTheme(
         value = if (effectiveDark) KcAmberSecondaryContainer else KcAmberSecondary,
         success = if (effectiveDark) KcSuccessContainer else KcSuccess,
         warning = if (effectiveDark) KcWarningContainer else KcWarning,
+        logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,
+        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcGreenPrimary.copy(alpha = .14f),
         isOperations = role == AccountRole.RECYCLER
     )
     val view = LocalView.current
