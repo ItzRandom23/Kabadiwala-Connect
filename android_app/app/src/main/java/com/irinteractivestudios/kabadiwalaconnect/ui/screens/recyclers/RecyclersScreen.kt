@@ -103,11 +103,13 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) refreshLocation() else locationError = true
     }
-    LaunchedEffect(Unit) {
-        vm.refreshCatalogs(null)
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (granted) refreshLocation()
-        else locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    LaunchedEffect(demoMode) {
+        if (!demoMode) {
+            vm.refreshCatalogs(null)
+            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (granted) refreshLocation()
+            else locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
     }
     LaunchedEffect(lotId) {
         if (lotId.isNullOrBlank()) vm.clearMatches() else vm.loadMatches(lotId)

@@ -1,8 +1,8 @@
 {
-  "versionCode": 30,
-  "versionName": "0.0.29-beta",
-  "apkUrl": "kabadiwala-connect-0.0.29-beta-debug.apk",
-  "sha256": "46874594271D79FC673536870300D95761A5B457B6A77DCF8153B01BDB58BD67",
-  "sizeBytes": 25205489,
-  "releaseNotes": "Fixes household role sync authorization errors, enables household price and recycler discovery, and adds location-aware price fallbacks."
+  "versionCode": 31,
+  "versionName": "0.0.30-beta",
+  "apkUrl": "kabadiwala-connect-0.0.30-beta-debug.apk",
+  "sha256": "00F613A8FB6CD348221891AD0141B4A4B5097641513B25CD4612B08C64AF7D6C",
+  "sizeBytes": 8689187,
+  "releaseNotes": "Smooths cold-start session bootstrap and offline re-sync, adds manual price refresh with location context and empty-state guidance, parallelizes catalog fetching with 30s deduplication, speeds up fresh-install startup by deferring Keystore init, and polishes bottom navigation and pricing UI."
 }

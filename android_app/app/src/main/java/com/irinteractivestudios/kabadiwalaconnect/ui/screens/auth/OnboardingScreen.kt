@@ -46,6 +46,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -249,8 +250,18 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 }
 
 @Composable private fun AreaEntry(state: OnboardingState, vm: OnboardingViewModel) {
-    Text(stringResource(R.string.auth_area_title), style = MaterialTheme.typography.headlineMedium)
-    Text(stringResource(R.string.auth_area_detail), style = MaterialTheme.typography.bodyLarge)
+    val title = when (state.role) {
+        AccountRole.HOUSEHOLD -> R.string.auth_area_household_title
+        AccountRole.RECYCLER -> R.string.auth_area_recycler_title
+        AccountRole.COLLECTOR -> R.string.auth_area_title
+    }
+    val detail = when (state.role) {
+        AccountRole.HOUSEHOLD -> R.string.auth_area_household_detail
+        AccountRole.RECYCLER -> R.string.auth_area_recycler_detail
+        AccountRole.COLLECTOR -> R.string.auth_area_detail
+    }
+    Text(stringResource(title), style = MaterialTheme.typography.headlineMedium)
+    Text(stringResource(detail), style = MaterialTheme.typography.bodyLarge)
     if (state.locationChoice == LocationChoice.GPS && state.area.isNotBlank()) {
         Text(stringResource(R.string.auth_location_detected, state.area), color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else if (state.locationChoice == LocationChoice.GPS && !state.locationError) {
@@ -329,6 +340,14 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     )
     if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
     KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
+    if (state.returningUser) {
+        TextButton(
+            onClick = vm::useEmailSignIn,
+            modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_use_email")
+        ) {
+            Text(stringResource(R.string.auth_use_email_instead))
+        }
+    }
 }
 
 @Composable private fun OtpEntry(state: OnboardingState, vm: OnboardingViewModel) {

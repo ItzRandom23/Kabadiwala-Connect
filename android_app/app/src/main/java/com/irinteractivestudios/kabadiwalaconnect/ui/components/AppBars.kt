@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
@@ -102,8 +105,8 @@ fun KcBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.Start
         ) {
         tabs.forEach { tab ->
             val isSelected = currentRoute == tab.route
@@ -125,22 +128,22 @@ fun KcBottomBar(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(tab.testTag)
-                    .heightIn(min = 64.dp)
+                    .height(68.dp)
                     .clickable { onNavigate(tab.route) }
                     .semantics(mergeDescendants = true) { this.role = Role.Tab; selected = isSelected }
-                    .padding(vertical = 5.dp)
+                    .padding(horizontal = 2.dp, vertical = 4.dp)
             )
             {
                 androidx.compose.foundation.layout.Box(
                     Modifier
                         .width(indicatorWidth)
-                        .heightIn(min = 3.dp)
+                        .height(3.dp)
                         .background(
                             if (isSelected) selectedColor else MaterialTheme.colorScheme.outline.copy(alpha = .22f),
                             RoundedCornerShape(99.dp)
                         )
                 )
-                androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 6.dp))
+                Spacer(Modifier.height(7.dp))
                 if (tab.route == com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations.SETTINGS && unreadNotifications > 0) {
                     BadgedBox(badge = { Badge { Text(unreadNotifications.coerceAtMost(99).toString()) } }) {
                         Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
@@ -148,9 +151,10 @@ fun KcBottomBar(
                 } else {
                     Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                 }
+                Spacer(Modifier.height(3.dp))
                 Text(
                     stringResource(tab.labelRes),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
                     color = itemColor,
                     maxLines = 1
                 )

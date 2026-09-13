@@ -73,6 +73,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Manual service locator for the app's local and remote repositories.
@@ -85,6 +90,9 @@ class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
     private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val catalogRefreshMutex = Mutex()
+    private var lastCatalogRefreshKey: String? = null
+    private var lastCatalogRefreshElapsedMs: Long = 0L
 
     val database: AppDatabase by lazy { AppDatabase.get(appContext) }
 
@@ -165,20 +173,26 @@ class AppContainer(context: Context) {
 
     suspend fun refreshAccount(): AccountProfile? = authenticationRepository.refreshAccount()
 
-    suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null) {
-        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+    suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null, force: Boolean = false) = catalogRefreshMutex.withLock {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return@withLock
         val account = currentAccount()
         // Recycler sessions have their own operational endpoints. Household
         // sessions may read the public price and recycler catalogues, but must
         // never enter collector-only lot/payment sync below.
-        if (account?.role == AccountRole.RECYCLER) return
-        if (account == null) return
+        if (account?.role == AccountRole.RECYCLER) return@withLock
+        if (account == null) return@withLock
         val resolvedLocation = location?.trim()?.takeIf { it.isNotBlank() }
             ?: account.areaName?.trim()?.takeIf { it.isNotBlank() }
-            ?: return
+            ?: return@withLock
+        val refreshKey = listOf(account.profileId, resolvedLocation, latitude, longitude).joinToString("|")
+        val refreshStartedAt = android.os.SystemClock.elapsedRealtime()
+        if (!force && refreshKey == lastCatalogRefreshKey && refreshStartedAt - lastCatalogRefreshElapsedMs < 30_000L) {
+            return@withLock
+        }
         val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "COPPER", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
-        val prices = categories.mapNotNull { category ->
-            runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }.getOrNull()?.let { board ->
+        val prices = coroutineScope {
+            categories.map { category -> async {
+                runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }.getOrNull()?.let { board ->
                 // Keep the trend chart backed by the same server snapshot as
                 // the headline rate. History is optional so a partial outage
                 // never removes an otherwise valid price board.
@@ -204,7 +218,8 @@ class AppContainer(context: Context) {
                     trendPercentage = board.trend?.percentage ?: 0.0,
                     complianceRegime = board.complianceRegime
                 )
-            }
+                }
+            } }.awaitAll().filterNotNull()
         }
         if (prices.isNotEmpty()) database.priceDao().replaceLocation(resolvedLocation, prices)
         val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account.latitude, longitude ?: account.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
@@ -234,7 +249,10 @@ class AppContainer(context: Context) {
         }
         if (recyclers.isNotEmpty()) database.recyclerDao().replaceAll(recyclers)
 
-        if (account.role == AccountRole.HOUSEHOLD) return
+        lastCatalogRefreshKey = refreshKey
+        lastCatalogRefreshElapsedMs = android.os.SystemClock.elapsedRealtime()
+
+        if (account.role == AccountRole.HOUSEHOLD) return@withLock
 
         val remoteLots = runCatching { apiService.getLots(page = 1, limit = 100).requireData() }.getOrNull()?.items.orEmpty()
         if (remoteLots.isNotEmpty()) {
@@ -325,7 +343,7 @@ class AppContainer(context: Context) {
         // Collector catalogue reconciliation already protects unsynced local
         // rows. Refreshing it here means a remote quote/handover notification
         // is reflected the next time the affected screen is opened.
-        if (accountId != null && currentAccount()?.role == AccountRole.COLLECTOR) {
+        if (response.notifications.isNotEmpty() && accountId != null && currentAccount()?.role == AccountRole.COLLECTOR) {
             runCatching { reconcileChanges() }
         }
         return true

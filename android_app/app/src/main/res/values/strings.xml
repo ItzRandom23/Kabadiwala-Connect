@@ -7,14 +7,14 @@
     <string name="nav_recyclers">Recyclers</string>
     <string name="nav_earnings">Earnings</string>
     <string name="nav_settings">Settings</string>
-    <string name="nav_marketplace">Marketplace</string>
+    <string name="nav_marketplace">Market</string>
     <string name="nav_orders">Orders</string>
     <string name="nav_pickups">Pickups</string>
     <string name="nav_rates">Rates</string>
     <string name="nav_profile">Profile</string>
     <string name="nav_kabadiwala_inventory">Inventory</string>
     <string name="nav_kabadiwala_pickups">Pickups</string>
-    <string name="nav_kabadiwala_lots">Recycler sales</string>
+    <string name="nav_kabadiwala_lots">Buyers</string>
     <string name="recycler_marketplace_title">Nearby lots</string>
     <string name="recycler_orders_title">Active orders</string>
     <string name="recycler_orders_subtitle">Accepted lots and handover confirmation.</string>
@@ -198,6 +198,13 @@
 
     <!-- Prices -->
     <string name="prices_title">Market prices</string>
+    <string name="prices_subtitle">A local reference before you agree a sale.</string>
+    <string name="prices_location_context">Showing prices around %1$s</string>
+    <string name="prices_location_help">Choose another area to compare availability.</string>
+    <string name="prices_empty_title">No prices for %1$s yet</string>
+    <string name="prices_empty_detail">The test server has not published verified rates for this area. Try another location or check again later.</string>
+    <string name="prices_refresh">Refresh prices</string>
+    <string name="prices_refreshing">Checking for updates…</string>
     <string name="prices_per_kg">per kg</string>
     <string name="prices_updated_offline">Saved prices shown. No internet.</string>
     <string name="prices_location_label">Location</string><string name="prices_cached">Cached price — offline</string><string name="prices_rate_value">₹%1$.0f / kg</string><string name="prices_range">Typical range: ₹%1$.0f–₹%2$.0f / %3$s</string><string name="prices_last_updated">Last updated: %1$s</string><string name="prices_source">Source: %1$s</string><string name="prices_stale">Stale price — confirm the current rate before sale</string><string name="prices_hear">Hear prices</string><string name="prices_history_title">30-day trend</string><string name="prices_recycler_placeholder">Recycler rates vary by facility. Compare verified recyclers for the best current offer.</string>
@@ -356,6 +363,7 @@
     <string name="auth_password_error">Use at least 8 characters.</string>
     <string name="auth_continue">Continue</string>
     <string name="auth_sign_in">Sign in</string>
+    <string name="auth_use_email_instead">Sign in with email instead</string>
     <string name="auth_role_title">How do you use Kabadiwala Connect?</string>
     <string name="auth_role_detail">Choose the work you do. You can’t change this from the app.</string>
     <string name="auth_role_household">I am a household / local seller</string>
@@ -421,6 +429,10 @@
     <string name="auth_location_coordinates_saved">Your GPS coordinates were saved. Check the area name below.</string>
     <string name="auth_area_title">Your primary collection area</string>
     <string name="auth_area_detail">A neighbourhood, town, or landmark is enough.</string>
+    <string name="auth_area_household_title">Where should we collect your scrap?</string>
+    <string name="auth_area_household_detail">Your neighbourhood or a nearby landmark is enough. An exact address can be confirmed with the kabadiwala.</string>
+    <string name="auth_area_recycler_title">Where is your facility?</string>
+    <string name="auth_area_recycler_detail">Add the facility area used to match nearby Kabadiwala suppliers.</string>
     <string name="auth_area_label">Area name</string>
     <string name="auth_finish">Save and continue</string>
     <string name="auth_complete_title">You are ready!</string>
@@ -585,7 +597,7 @@
     <string name="household_chat_open">Chat is now open · pickup around 5:30 PM</string>
     <string name="household_estimated_range">ESTIMATED RANGE</string>
     <string name="household_final_after_inspection">Final price after inspection and agreement</string>
-    <string name="testing_mode_banner">Testing mode · Connected to the test server</string>
+    <string name="testing_mode_banner">TEST · Server connected</string>
     <string name="recycler_scan_title">Scan handover QR</string>
     <string name="recycler_scan_explanation">Scan the complete signed code. It is checked against the server before the material can be accepted.</string>
     <string name="recycler_scan_camera">Open camera scanner</string>

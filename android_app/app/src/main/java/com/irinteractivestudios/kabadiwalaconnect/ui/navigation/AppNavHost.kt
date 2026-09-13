@@ -122,10 +122,10 @@ fun AppNavHost(
     val collectorRoutes = if (demoMode) demoCollectorRoutes else liveCollectorRoutes
     val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode) {
-        if (!demoMode) {
+        if (!demoMode && factory.currentAccount?.profileId?.isNotBlank() == true) {
             while (true) {
                 runCatching { factory.refreshActivity() }
-                delay(5_000)
+                delay(30_000)
             }
         }
     }
@@ -322,6 +322,7 @@ fun AppNavHost(
         }
         composable(Destinations.PRICES) {
             val vm: PricesViewModel = viewModel(factory = factory)
+            vm.setCatalogRefresher { location -> factory.refreshCatalogs(location = location, force = true) }
             val state by vm.uiState.collectAsStateWithLifecycle()
             PricesScreen(state = state, vm = vm, speaker = factory.priceSpeaker, demoMode = demoMode)
         }

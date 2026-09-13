@@ -29,8 +29,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 30
-        versionName = "0.0.29-beta"
+        versionCode = 31
+        versionName = "0.0.30-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -42,6 +42,15 @@ android {
             // Cleartext is limited to the debug/testing variant. Move this host
             // behind TLS before supplying it to a production build.
             manifestPlaceholders["apiUsesCleartext"] = testingApiBaseUrl.startsWith("http://").toString()
+            // The testing update channel distributes this variant. Keep it
+            // debuggable, but apply the same code/resource optimization users
+            // receive in production so field builds are not artificially slow.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
         release {
             require(productionApiBaseUrl.startsWith("https://")) {
@@ -51,9 +60,8 @@ android {
             buildConfigField("String", "APP_ENVIRONMENT", "\"PRODUCTION\"")
             buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${productionApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
             manifestPlaceholders["apiUsesCleartext"] = "false"
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -20,11 +20,15 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,24 +58,73 @@ import java.util.concurrent.TimeUnit
 fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: PriceSpeaker, demoMode: Boolean = false, modifier: Modifier = Modifier) {
     val location by vm.selectedLocation.collectAsStateWithLifecycle()
     val locations by vm.locations.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
+    val refreshFailed by vm.refreshFailed.collectAsStateWithLifecycle()
     var selectedMaterial by remember { mutableStateOf("") }
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(stringResource(R.string.prices_title), style = MaterialTheme.typography.headlineLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.width(38.dp).height(4.dp)) {}
+                Spacer(Modifier.height(9.dp))
+                Text(stringResource(R.string.prices_title), style = MaterialTheme.typography.headlineLarge)
+                Text(stringResource(R.string.prices_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = vm::refresh, enabled = !refreshing) {
+                if (refreshing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Filled.Refresh, stringResource(R.string.prices_refresh))
+            }
+        }
         if (demoMode) DemoDataBanner()
-        Text(stringResource(R.string.prices_location_label), style = MaterialTheme.typography.titleMedium)
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.medium,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.padding(start = 10.dp)) {
+                    Text(stringResource(R.string.prices_location_context, location), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.prices_location_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             locations.forEach { place -> FilterChip(selected = place == location, onClick = { vm.selectLocation(place) }, label = { Text(place) }) }
         }
+        if (refreshFailed) Text(stringResource(R.string.common_error_title), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         when (state) {
             is UiState.Loading -> LoadingContent()
-            is UiState.Error -> ErrorContent()
-            is UiState.Empty -> EmptyContent()
-            is UiState.Offline -> PriceBoard(state.cached.orEmpty(), true, selectedMaterial, { selectedMaterial = it }, speaker)
+            is UiState.Error -> ErrorContent(onRetry = vm::refresh)
+            is UiState.Empty -> MarketPriceEmpty(location, refreshing, vm::refresh)
+            is UiState.Offline -> if (state.cached.isNullOrEmpty()) MarketPriceEmpty(location, refreshing, vm::refresh) else PriceBoard(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
             is UiState.Success -> PriceBoard(state.data, false, selectedMaterial, { selectedMaterial = it }, speaker)
-            is UiState.Syncing -> PriceBoard(state.cached.orEmpty(), true, selectedMaterial, { selectedMaterial = it }, speaker)
+            is UiState.Syncing -> if (state.cached.isNullOrEmpty()) LoadingContent() else PriceBoard(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
+        }
+    }
+}
+
+@Composable
+private fun MarketPriceEmpty(location: String, refreshing: Boolean, onRefresh: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(36.dp))
+            Text(stringResource(R.string.prices_empty_title, location), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.prices_empty_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                if (refreshing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Filled.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(if (refreshing) R.string.prices_refreshing else R.string.prices_refresh))
+            }
         }
     }
 }

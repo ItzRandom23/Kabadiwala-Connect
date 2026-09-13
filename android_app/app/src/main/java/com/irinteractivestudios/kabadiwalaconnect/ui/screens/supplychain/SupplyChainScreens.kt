@@ -306,7 +306,9 @@ private fun SchedulePickupDialog(
     // Near-term choices keep the field flow fast while the API still receives
     // a real ISO-8601 timestamp rather than a display-only label.
     val slots = remember {
-        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         val displayFormatter = java.text.SimpleDateFormat("EEE, d MMM · h:mm a", java.util.Locale.getDefault())
         listOf(2, 4, 6).map { hours ->
             java.util.Calendar.getInstance().apply {

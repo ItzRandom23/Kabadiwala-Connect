@@ -77,6 +77,14 @@ class OnboardingViewModel(
     private var authenticatedCollectorId: String? = null
 
     fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE) }
+    fun useEmailSignIn() {
+        _state.value = _state.value.copy(
+            returningUser = true,
+            step = OnboardingStep.EMAIL,
+            authError = false,
+            phoneError = false
+        )
+    }
     fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = false) }
     fun goBack() {
         val current = _state.value

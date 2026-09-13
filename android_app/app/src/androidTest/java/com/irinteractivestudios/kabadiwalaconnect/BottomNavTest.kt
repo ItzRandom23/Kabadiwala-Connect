@@ -62,10 +62,20 @@ class BottomNavTest {
             composeTestRule.onNodeWithTag(tag)
                 .assertIsDisplayed()
                 .performClick()
+            try {
+                composeTestRule.waitUntil(timeoutMillis = 10_000) {
+                    runCatching { composeTestRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+                }
+            } catch (error: Throwable) {
+                throw AssertionError("Navigation did not settle for $tag", error)
+            }
             composeTestRule.onNodeWithTag(tag).assertIsSelected()
         }
         // Back to Home.
         composeTestRule.onNodeWithTag("nav_home").performClick()
+        composeTestRule.waitUntil(timeoutMillis = 10_000) {
+            runCatching { composeTestRule.onAllNodesWithTag("nav_home").fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+        }
         composeTestRule.onNodeWithTag("nav_home").assertIsSelected()
     }
 
@@ -77,9 +87,13 @@ class BottomNavTest {
             .performClick()
         composeTestRule.onNodeWithTag("lang_hi")
             .performClick()
-        composeTestRule.waitForIdle()
+        // Locale application recreates MainActivity asynchronously. Wait for
+        // the restored navigation hierarchy instead of racing the recreation.
+        composeTestRule.waitUntil(timeoutMillis = 10_000) {
+            runCatching { composeTestRule.onAllNodesWithTag("nav_settings").fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+        }
 
-        composeTestRule.onNodeWithTag("nav_home")
+        composeTestRule.onNodeWithTag("nav_settings")
             .assertIsDisplayed()
             .assertIsSelected()
         assertTrue(composeTestRule.onAllNodesWithTag("auth_get_started").fetchSemanticsNodes().isEmpty())

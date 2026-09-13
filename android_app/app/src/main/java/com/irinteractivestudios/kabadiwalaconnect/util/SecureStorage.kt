@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -54,6 +55,18 @@ class KeystoreSecureStorage(context: Context) : SecureStorage {
     private val prefs: SharedPreferences? by lazy { openPrefs() }
     private val processOnlyValues = ConcurrentHashMap<String, String>()
 
+    /**
+     * Creating the Android Keystore master key is relatively expensive on a
+     * first launch. A clean install cannot contain an encrypted session, so do
+     * not initialize Keystore merely to prove that an absent preferences file
+     * contains no value. Existing installs still open the encrypted store and
+     * retain full session compatibility.
+     */
+    private fun encryptedStoreExists(): Boolean = File(
+        appContext.applicationInfo.dataDir,
+        "shared_prefs/kc_secure_prefs.xml"
+    ).isFile
+
     private fun openPrefs(): SharedPreferences? {
         return try {
             val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
@@ -71,7 +84,15 @@ class KeystoreSecureStorage(context: Context) : SecureStorage {
         prefs?.edit()?.putString(key, value)?.apply() ?: processOnlyValues.put(key, value)
     }
 
-    override fun get(key: String): String? = try { prefs?.getString(key, null) ?: processOnlyValues[key] } catch (_: Exception) { processOnlyValues[key] }
+    override fun get(key: String): String? {
+        processOnlyValues[key]?.let { return it }
+        if (!encryptedStoreExists()) return null
+        return try {
+            prefs?.getString(key, null)?.also { processOnlyValues[key] = it }
+        } catch (_: Exception) {
+            processOnlyValues[key]
+        }
+    }
 
     override fun remove(key: String) {
         prefs?.edit()?.remove(key)?.apply()

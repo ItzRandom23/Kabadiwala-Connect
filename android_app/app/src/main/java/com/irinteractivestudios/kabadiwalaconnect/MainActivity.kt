@@ -33,11 +33,14 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBottomBar
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcTopBar
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.OfflineBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.AppUpdatePrompt
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.TestingEnvironmentIndicator
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.AppNavHost
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.InitialLanguageScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
@@ -46,6 +49,13 @@ import com.irinteractivestudios.kabadiwalaconnect.util.AppUpdateManager
 import com.irinteractivestudios.kabadiwalaconnect.util.AvailableAppUpdate
 import com.irinteractivestudios.kabadiwalaconnect.util.InstallUpdateResult
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private data class SessionBootstrap(
+    val restorable: Boolean,
+    val account: AccountProfile?
+)
 
 /**
  * Single-activity Compose host.
@@ -85,12 +95,13 @@ class MainActivity : ComponentActivity() {
         val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
         val householdLivePreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHouseholdLive", false)
         val householdPreviewMode = householdPreview || householdLivePreview
+        val languageWasSelected = LocaleManager.hasPersistedTag(this)
         // The collector id can be created by the remote OTP response during
         // this activity session, so ViewModels read it when they are created.
         val factory = KcViewModelFactory(app, app.container)
         setContent {
             var appearanceMode by remember { mutableStateOf(AppearanceManager.load(this@MainActivity)) }
-            var activeRole by remember { mutableStateOf(if (householdPreviewMode) AccountRole.HOUSEHOLD else app.container.currentAccount()?.role ?: AccountRole.COLLECTOR) }
+            var activeRole by remember { mutableStateOf(if (householdPreviewMode) AccountRole.HOUSEHOLD else AccountRole.COLLECTOR) }
             KabadiwalaConnectTheme(
                 darkTheme = AppearanceManager.isDark(appearanceMode),
                 role = activeRole
@@ -104,12 +115,37 @@ class MainActivity : ComponentActivity() {
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
-                val cachedAccount = app.container.currentAccount()
-                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!app.container.hasRestorableSession() || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                var sessionBootstrap by remember {
+                    mutableStateOf<SessionBootstrap?>(
+                        if (householdPreviewMode || !languageWasSelected) SessionBootstrap(false, null) else null
+                    )
+                }
+                LaunchedEffect(languageWasSelected, householdPreviewMode) {
+                    if (sessionBootstrap == null) {
+                        sessionBootstrap = withContext(Dispatchers.IO) {
+                            SessionBootstrap(
+                                restorable = app.container.hasRestorableSession(),
+                                account = app.container.currentAccount()
+                            )
+                        }
+                    }
+                }
+                val bootstrap = sessionBootstrap
+                if (bootstrap == null) {
+                    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+                        LoadingContent(Modifier.fillMaxSize())
+                    }
+                    return@KabadiwalaConnectTheme
+                }
+                LaunchedEffect(bootstrap.account?.role) {
+                    bootstrap.account?.role?.let { activeRole = it }
+                }
+                val cachedAccount = bootstrap.account
+                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode)
-                val languageSelected = LocaleManager.hasPersistedTag(this@MainActivity)
+                val languageSelected = languageWasSelected
                 var navGuardReady by remember { mutableStateOf(false) }
 
                 // A restored NavHost back stack can outlive a session (for
@@ -132,8 +168,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                LaunchedEffect(languageSelected, route, demoMode, app.container.hasRestorableSession()) {
-                    if (languageSelected && !demoMode && !app.container.hasRestorableSession() && route != Destinations.AUTH && route != null) {
+                LaunchedEffect(languageSelected, route, demoMode, bootstrap.restorable) {
+                    if (languageSelected && !demoMode && !bootstrap.restorable && route != Destinations.AUTH && route != null) {
                         navController.navigate(Destinations.AUTH) {
                             popUpTo(0)
                             launchSingleTop = true
@@ -143,25 +179,37 @@ class MainActivity : ComponentActivity() {
 
                 val connection by app.container.connectivityObserver.state
                     .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
-                val unreadNotifications by app.container.unreadNotificationCount(app.container.currentAccount()?.profileId.orEmpty())
+                val unreadNotifications by app.container.unreadNotificationCount(cachedAccount?.profileId.orEmpty())
                     .collectAsStateWithLifecycle(initialValue = 0)
-                LaunchedEffect(connection) {
-                    if (!householdLivePreview && connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
-                        val hadValidSession = app.container.hasValidSession()
-                        val refreshedAccount = app.container.refreshAccount()
-                        if (app.container.hasValidSession()) {
+                LaunchedEffect(connection, bootstrap.restorable) {
+                    if (!householdLivePreview && connection == ConnectionState.ONLINE && bootstrap.restorable) {
+                        val (hadValidSession, refreshedAccount, hasValidSession) = withContext(Dispatchers.IO) {
+                            val wasValid = app.container.hasValidSession()
+                            val refreshed = app.container.refreshAccount()
+                            val isValid = app.container.hasValidSession()
+                            if (isValid) {
                             // Pull server deltas after auth refresh so a
                             // reconnect repairs stale local state before the
                             // broader catalogue refresh runs.
-                            runCatching { app.container.reconcileChanges() }
-                            app.container.refreshCatalogs()
+                                runCatching { app.container.reconcileChanges() }
+                                app.container.refreshCatalogs()
+                            } else if (!wasValid && refreshed == null) {
+                                app.container.clearAccount()
+                            }
+                            Triple(wasValid, refreshed, isValid)
+                        }
+                        if (hasValidSession) {
+                            refreshedAccount?.let {
+                                sessionBootstrap = SessionBootstrap(true, it)
+                                activeRole = it.role
+                            }
                         } else if (!hadValidSession && refreshedAccount == null) {
                             // A refresh token can be present after an expired
                             // or revoked session. Do not strand the user on a
                             // collector screen with a permanent “session
                             // expired” banner: clear the account boundary and
                             // return to the real sign-in route.
-                            app.container.clearAccount()
+                            sessionBootstrap = SessionBootstrap(false, null)
                             activeRole = AccountRole.COLLECTOR
                             if (route != Destinations.AUTH) {
                                 navController.navigate(Destinations.AUTH) {
@@ -274,14 +322,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             OfflineBanner(state = connection)
                             if (BuildConfig.APP_ENVIRONMENT == "TESTING") {
-                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = stringResource(R.string.testing_mode_banner),
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                }
+                                TestingEnvironmentIndicator(Modifier.padding(vertical = 4.dp))
                             }
                             AppNavHost(
                                 navController = navController,
@@ -300,12 +341,14 @@ class MainActivity : ComponentActivity() {
                                     uiScope.launch {
                                         app.container.authenticationRepository.logout()
                                         app.container.clearAccount()
+                                        sessionBootstrap = SessionBootstrap(false, null)
                                         activeRole = AccountRole.COLLECTOR
                                         navController.navigate(Destinations.AUTH) { popUpTo(0) }
                                     }
                                 },
                                 onDemo = {
                                     demoMode = true
+                                    sessionBootstrap = SessionBootstrap(false, null)
                                     activeRole = AccountRole.COLLECTOR
                                     navController.navigate(Destinations.HOME) {
                                         popUpTo(Destinations.AUTH) { inclusive = true }
@@ -314,8 +357,9 @@ class MainActivity : ComponentActivity() {
                                 demoMode = demoMode,
                                 role = activeRole,
                                 onAuthFinished = {
-                                    activeRole = app.container.currentAccount()?.role ?: AccountRole.COLLECTOR
                                     val account = app.container.currentAccount()
+                                    sessionBootstrap = SessionBootstrap(account != null, account)
+                                    activeRole = account?.role ?: AccountRole.COLLECTOR
                                     val target = if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                                     navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }
                                 },
