@@ -1,8 +1,8 @@
 {
-  "versionCode": 23,
-  "versionName": "0.0.22-beta",
-  "apkUrl": "kabadiwala-connect-0.0.22-beta-debug.apk",
-  "sha256": "45fbde25c7eb5acb5d8fd71770e8a979ce245c5f6f2b94c536f7914651bf2b2d",
-  "sizeBytes": 24913957,
-  "releaseNotes": "Testing build with a Room sync-queue migration fix, lifecycle next actions, lot-specific recycler matching, activity polling, notification badges, targeted offline retry, and fair settlement calculation."
+  "versionCode": 24,
+  "versionName": "0.0.23-beta",
+  "apkUrl": "kabadiwala-connect-0.0.23-beta-debug.apk",
+  "sha256": "2d193ad1ddc27f2aa99b0ddc9e7c437681b818405fb00aa3a51ce30fbe5bdee0",
+  "sizeBytes": 24913959,
+  "releaseNotes": "Testing build with complete Room index-schema alignment for sync, notifications, disputes, and payments, plus lifecycle next actions, recycler matching, activity polling, and fair settlement calculation."
 }

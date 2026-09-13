@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.data.local
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -12,7 +13,10 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-@Entity(tableName = "disputes")
+@Entity(
+    tableName = "disputes",
+    indices = [Index(value = ["handoverId"])]
+)
 data class DisputeEntity(
     @androidx.room.PrimaryKey val id: String,
     val handoverId: String,

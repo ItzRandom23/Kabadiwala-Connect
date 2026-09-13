@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.data.local
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -62,7 +63,10 @@ data class MessageCacheEntity(
     val readAt: String?
 )
 
-@Entity(tableName = "future_notifications")
+@Entity(
+    tableName = "future_notifications",
+    indices = [Index(value = ["accountId", "createdAt"])]
+)
 data class NotificationCacheEntity(
     @androidx.room.PrimaryKey val id: String,
     val accountId: String,
