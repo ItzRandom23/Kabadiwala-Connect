@@ -2,7 +2,7 @@
   "versionCode": 28,
   "versionName": "0.0.27-beta",
   "apkUrl": "kabadiwala-connect-0.0.27-beta-debug.apk",
-  "sha256": "144b5f09751466a23692ba26c5f099386e36dc3cd895bb93f2bcd5490faccd88",
-  "sizeBytes": 25135939,
-  "releaseNotes": "Testing build: update checks retry after reconnect, bypass stale manifest caches, and can be started manually from Settings."
+  "sha256": "D4D0406464E82288B783C9AFFEB069F8C83B4E40EE64FB3F9025E7AA8CAE0AE8",
+  "sizeBytes": 25205483,
+  "releaseNotes": "Household seller phase: polished scrap listing form, responsive material and condition chips, pickup cancellation, and session recovery improvements."
 }
