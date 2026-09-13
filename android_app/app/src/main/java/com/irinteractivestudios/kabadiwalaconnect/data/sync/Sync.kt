@@ -32,6 +32,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.QuoteStatus
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,6 +49,9 @@ class SyncWorker(
         val queue = app.container.database.syncQueueDao()
         val accountId = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.ACCOUNT_PROFILE_ID)
         if (accountId.isNullOrBlank()) return Result.success()
+        // Household listings use dedicated online endpoints. Do not replay
+        // collector lot/payment operations with a household token.
+        if (app.container.currentAccount()?.role != AccountRole.COLLECTOR) return Result.success()
 
         // A worker can wake after the short-lived access token has expired.
         // Previously we returned success when the token was missing, leaving

@@ -167,13 +167,14 @@ class AppContainer(context: Context) {
 
     suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null) {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
-        // Price, lot, quote and payment catalogues are collector-facing
-        // resources. Recycler sessions have their own operational endpoints;
-        // avoid predictable 403 traffic every time connectivity changes.
-        if (currentAccount()?.role == AccountRole.RECYCLER) return
         val account = currentAccount()
+        // Recycler sessions have their own operational endpoints. Household
+        // sessions may read the public price and recycler catalogues, but must
+        // never enter collector-only lot/payment sync below.
+        if (account?.role == AccountRole.RECYCLER) return
+        if (account == null) return
         val resolvedLocation = location?.trim()?.takeIf { it.isNotBlank() }
-            ?: account?.areaName?.trim()?.takeIf { it.isNotBlank() }
+            ?: account.areaName?.trim()?.takeIf { it.isNotBlank() }
             ?: return
         val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "COPPER", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
         val prices = categories.mapNotNull { category ->
@@ -206,7 +207,7 @@ class AppContainer(context: Context) {
             }
         }
         if (prices.isNotEmpty()) database.priceDao().replaceLocation(resolvedLocation, prices)
-        val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account?.latitude, longitude ?: account?.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
+        val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account.latitude, longitude ?: account.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,
                 name = recycler.name,
@@ -232,6 +233,8 @@ class AppContainer(context: Context) {
             )
         }
         if (recyclers.isNotEmpty()) database.recyclerDao().replaceAll(recyclers)
+
+        if (account.role == AccountRole.HOUSEHOLD) return
 
         val remoteLots = runCatching { apiService.getLots(page = 1, limit = 100).requireData() }.getOrNull()?.items.orEmpty()
         if (remoteLots.isNotEmpty()) {
@@ -290,7 +293,7 @@ class AppContainer(context: Context) {
     /** Refreshes the authoritative earnings ledger without requiring a full catalogue reload. */
     suspend fun refreshEarnings(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
-        if (currentAccount()?.role == AccountRole.RECYCLER) return false
+        if (currentAccount()?.role != AccountRole.COLLECTOR) return false
         val payments = apiService.getEarnings().requireData().payments
         database.paymentDao().insertAll(payments.map { payment ->
             PaymentEntity(
@@ -322,7 +325,7 @@ class AppContainer(context: Context) {
         // Collector catalogue reconciliation already protects unsynced local
         // rows. Refreshing it here means a remote quote/handover notification
         // is reflected the next time the affected screen is opened.
-        if (accountId != null && currentAccount()?.role != AccountRole.RECYCLER) {
+        if (accountId != null && currentAccount()?.role == AccountRole.COLLECTOR) {
             runCatching { reconcileChanges() }
         }
         return true
@@ -339,7 +342,7 @@ class AppContainer(context: Context) {
      */
     suspend fun reconcileChanges(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
-        if (currentAccount()?.role == AccountRole.RECYCLER) return false
+        if (currentAccount()?.role != AccountRole.COLLECTOR) return false
         val cursor = secureStorage.get(SecureStorage.SYNC_CURSOR)
         val payload = apiService.getChanges(cursor).requireData()
         database.withTransaction {

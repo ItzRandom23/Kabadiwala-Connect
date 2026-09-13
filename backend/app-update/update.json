@@ -1,8 +1,8 @@
 {
-  "versionCode": 29,
-  "versionName": "0.0.28-beta",
-  "apkUrl": "kabadiwala-connect-0.0.28-beta-debug.apk",
-  "sha256": "1F33F4E2AF7FED203B14A73AE08E11D2A28E6FD4A695CADD4861666E89385A9A",
+  "versionCode": 30,
+  "versionName": "0.0.29-beta",
+  "apkUrl": "kabadiwala-connect-0.0.29-beta-debug.apk",
+  "sha256": "46874594271D79FC673536870300D95761A5B457B6A77DCF8153B01BDB58BD67",
   "sizeBytes": 25205489,
-  "releaseNotes": "Household seller phase: polished scrap listing form, responsive material and condition chips, pickup cancellation, session recovery improvements, and version 0.0.28 packaging."
+  "releaseNotes": "Fixes household role sync authorization errors, enables household price and recycler discovery, and adds location-aware price fallbacks."
 }
