@@ -74,6 +74,7 @@ fun SettingsScreen(
     syncItems: List<SyncQueueItemEntity> = emptyList(),
     syncPendingCount: Int = 0,
     onRetrySync: () -> Unit = {},
+    onRetrySyncItem: (Long) -> Unit = {},
     onLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -183,7 +184,10 @@ fun SettingsScreen(
                     val operation = item.operation.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
                     val status = item.lastErrorCode?.let { stringResource(R.string.settings_sync_failed, it) }
                         ?: if (item.attempts > 0) stringResource(R.string.settings_sync_retrying, item.attempts) else stringResource(R.string.settings_sync_waiting)
-                    Text("$operation · $status", style = MaterialTheme.typography.bodySmall, color = if (item.lastErrorCode != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 40.dp, top = 4.dp, end = 12.dp))
+                    Row(Modifier.fillMaxWidth().padding(start = 40.dp, top = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("$operation · $status", style = MaterialTheme.typography.bodySmall, color = if (item.lastErrorCode != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        if (item.lastErrorCode != null) TextButton(onClick = { onRetrySyncItem(item.uid) }, modifier = Modifier.heightIn(min = 44.dp)) { Text(stringResource(R.string.settings_sync_retry_action)) }
+                    }
                 }
             }
         }

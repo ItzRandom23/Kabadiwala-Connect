@@ -10,6 +10,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DiyActivityDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.GovernmentSchemeDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
+import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "future_schemes")
 data class SchemeCacheEntity(
@@ -109,6 +110,8 @@ interface FutureCacheDao {
     suspend fun notifications(): List<NotificationCacheEntity>
     @Query("SELECT * FROM future_notifications WHERE accountId = :accountId ORDER BY createdAt DESC")
     suspend fun notificationsForAccount(accountId: String): List<NotificationCacheEntity>
+    @Query("SELECT COUNT(*) FROM future_notifications WHERE accountId = :accountId AND readAt IS NULL")
+    fun unreadNotificationCount(accountId: String): Flow<Int>
     @Query("DELETE FROM future_notifications WHERE accountId = :accountId")
     suspend fun clearNotificationsForAccount(accountId: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -134,6 +137,9 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
         for (accountId in items.map { it.accountId }.filter { it.isNotBlank() }.distinct()) {
             dao.clearNotificationsForAccount(accountId)
         }
+        dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
+    }
+    suspend fun appendNotifications(items: List<NotificationDto>) {
         dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
     }
     suspend fun clearNotifications() { dao.clearNotifications() }

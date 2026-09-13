@@ -55,20 +55,22 @@ class KcViewModelFactory(
     val apiService get() = container.apiService
     val syncQueue get() = container.database.syncQueueDao()
     fun requestSync() = container.syncScheduler.requestSync()
+    suspend fun resetSyncItem(uid: Long) = container.database.syncQueueDao().resetForRetry(uid)
     val currentAccount: AccountProfile? get() = container.currentAccount()
     suspend fun refreshCatalogs(location: String? = null, current: CurrentLocation? = null) =
         container.refreshCatalogs(location, current?.latitude, current?.longitude)
     suspend fun refreshEarnings() = container.refreshEarnings()
     suspend fun refreshAccount() = container.refreshAccount()
+    suspend fun refreshActivity() = container.refreshActivity()
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
         modelClass.isAssignableFrom(HomeViewModel::class.java) ->
-            HomeViewModel(container.lotRepository, container.connectivityObserver)
+            HomeViewModel(container.lotRepository, container.connectivityObserver, container.database.syncQueueDao()) { container.currentAccount()?.profileId.orEmpty() }
         modelClass.isAssignableFrom(PricesViewModel::class.java) ->
             PricesViewModel(container.priceRepository, container.connectivityObserver)
         modelClass.isAssignableFrom(RecyclersViewModel::class.java) ->
-            RecyclersViewModel(container.recyclerRepository, container.connectivityObserver)
+            RecyclersViewModel(container.recyclerRepository, container.connectivityObserver, container.apiService)
         modelClass.isAssignableFrom(EarningsViewModel::class.java) ->
             EarningsViewModel(container.earningsRepository)
         modelClass.isAssignableFrom(SettingsViewModel::class.java) ->

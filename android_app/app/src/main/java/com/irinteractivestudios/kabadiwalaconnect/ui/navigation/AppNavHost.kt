@@ -27,6 +27,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsSc
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeNextAction
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.HouseholdDealScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.HouseholdHomeScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.household.NearbyKabadiwalasScreen
@@ -50,6 +51,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteRequestScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteComparisonScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers.HandoverCreateScreen
@@ -107,7 +109,15 @@ fun AppNavHost(
 ) {
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
-    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
+    val collectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
+    LaunchedEffect(role, factory.currentAccount?.profileId, demoMode) {
+        if (!demoMode) {
+            while (true) {
+                runCatching { factory.refreshActivity() }
+                delay(5_000)
+            }
+        }
+    }
     LaunchedEffect(currentRoute, role) {
         val collectorRoute = currentRoute in collectorRoutes || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
         val recyclerRoute = currentRoute in recyclerRoutes
@@ -203,6 +213,16 @@ fun AppNavHost(
                 onOpenActivities = { navController.navigate(Destinations.ACTIVITIES) },
                 onOpenChat = { navController.navigate(Destinations.CHAT) },
                 onOpenDisputes = { navController.navigate(Destinations.DISPUTE_ANALYTICS) }
+                ,onNextAction = { action, lotId ->
+                    when (action) {
+                        HomeNextAction.CREATE_LOT -> navController.navigate(Destinations.CREATE_LOT)
+                        HomeNextAction.FIND_RECYCLERS -> navController.navigate(lotId?.let(Destinations::recyclersForLot) ?: Destinations.RECYCLERS)
+                        HomeNextAction.REVIEW_QUOTES -> lotId?.let { navController.navigate(Destinations.quoteCompare(it)) }
+                        HomeNextAction.PREPARE_HANDOVER -> lotId?.let { navController.navigate(Destinations.lotDetail(it)) }
+                        HomeNextAction.RECORD_PAYMENT -> navController.navigate(Destinations.PAYMENT_CREATE)
+                        HomeNextAction.REVIEW_DISPUTE -> navController.navigate(Destinations.DISPUTE_ANALYTICS)
+                    }
+                }
             )
         }
         composable(Destinations.PRICES) {
@@ -219,6 +239,16 @@ fun AppNavHost(
                 onInvite = { navController.navigate(Destinations.householdDeal(it)) }
             ) else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
         }
+        composable(Destinations.RECYCLERS_FOR_LOT, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
+            val lotId = entry.arguments?.getString("lotId")
+            val vm: RecyclersViewModel = viewModel(factory = factory)
+            vm.setCatalogRefresher { current -> factory.refreshCatalogs(current = current) }
+            val state by vm.uiState.collectAsStateWithLifecycle()
+            RecyclersScreen(state = state, vm = vm, onOpen = { recyclerId ->
+                navController.currentBackStackEntry?.savedStateHandle?.set("matchLotId", lotId)
+                navController.navigate(Destinations.recyclerDetail(recyclerId))
+            }, demoMode = demoMode, lotId = lotId)
+        }
         composable(Destinations.HOUSEHOLD_DEAL, arguments = listOf(navArgument("kabadiwalaId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("kabadiwalaId").orEmpty()
             if (demoMode) HouseholdDealScreen(
@@ -232,10 +262,11 @@ fun AppNavHost(
         }
         composable(Destinations.RECYCLER_DETAIL, arguments = listOf(navArgument("recyclerId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("recyclerId").orEmpty()
+            val matchedLotId = navController.previousBackStackEntry?.savedStateHandle?.get<String>("matchLotId")
             val recycler by factory.recyclerCatalog!!.observeRecycler(id).collectAsStateWithLifecycle(initialValue = null)
             val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
             recycler?.let { item -> RecyclerDetailScreen(item, onCall = { /* Contact access is enabled only after an accepted quote or booking. */ }, onRequestQuote = {
-                val lot = lots.firstOrNull { it.status == LotStatus.SAVED }
+                val lot = lots.firstOrNull { it.id == matchedLotId } ?: lots.firstOrNull { it.status == LotStatus.SAVED }
                 if (lot != null) navController.navigate(Destinations.quoteRequest(lot.id, item.id)) else navController.navigate(Destinations.CREATE_LOT)
             }) }
         }
@@ -426,6 +457,7 @@ fun AppNavHost(
         }
         composable(Destinations.SETTINGS) {
             val vm: SettingsViewModel = viewModel(factory = factory)
+            val scope = rememberCoroutineScope()
             val language by vm.language.collectAsStateWithLifecycle()
             val appearance by vm.appearance.collectAsStateWithLifecycle()
             val syncItems by factory.syncQueue.observeForAccount(factory.currentAccount?.profileId.orEmpty()).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -450,6 +482,12 @@ fun AppNavHost(
                 syncItems = syncItems,
                 syncPendingCount = syncItems.size,
                 onRetrySync = factory::requestSync,
+                onRetrySyncItem = { uid ->
+                    scope.launch {
+                        factory.resetSyncItem(uid)
+                        factory.requestSync()
+                    }
+                },
                 onLogout = {
                     onLogout()
                     navController.navigate(Destinations.AUTH) {
@@ -469,7 +507,7 @@ fun AppNavHost(
                 onRefresh = vm::refresh,
                 onOpen = { notification ->
                     vm.markNotificationRead(notification.id)
-                    notification.route?.takeIf(::isSafeNotificationRoute)
+                    notification.route?.takeIf { isSafeNotificationRoute(it, role) }
                         ?.let { route -> navController.navigate(route) }
                 },
                 onMarkAllRead = vm::markAllNotificationsRead
@@ -580,14 +618,18 @@ fun AppNavHost(
     }
 }
 
-private fun isSafeNotificationRoute(route: String): Boolean {
+private fun isSafeNotificationRoute(route: String, role: AccountRole): Boolean {
     if (route.length > 120 || !route.matches(Regex("^[A-Za-z0-9_/-]+$"))) return false
-    return route == Destinations.EARNINGS ||
-        route == Destinations.RECYCLER_MARKETPLACE ||
-        route == Destinations.RECYCLER_ORDERS ||
+    val collectorRoute = route == Destinations.EARNINGS ||
         route == Destinations.DISPUTE_ANALYTICS ||
         route.startsWith("quotes/compare/") ||
         route.startsWith("handovers/create/") ||
         route.startsWith("handovers/document/") ||
         route.startsWith("handovers/dispute/")
+    val recyclerRoute = route == Destinations.RECYCLER_MARKETPLACE || route == Destinations.RECYCLER_ORDERS
+    return when (role) {
+        AccountRole.RECYCLER -> recyclerRoute
+        AccountRole.COLLECTOR -> collectorRoute
+        AccountRole.HOUSEHOLD -> route == Destinations.DISPUTE_ANALYTICS
+    }
 }

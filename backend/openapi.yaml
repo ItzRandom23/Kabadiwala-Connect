@@ -125,6 +125,8 @@ paths:
     post: { security: [{ bearerAuth: [] }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [operations], properties: { operations: { type: array, maxItems: 100, items: { type: object } } } } } } }, responses: { '200': { description: Per-operation sync results }, '422': { description: Invalid batch } } }
   /sync/changes:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: since, schema: { type: string, format: date-time } }], responses: { '200': { description: Collector-owned delta changes } } }
+  /activity/changes:
+    get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: since, schema: { type: string, format: date-time } }], responses: { '200': { description: Role-scoped activity events and changed entity references } } }
   /notifications:
     get: { security: [{ bearerAuth: [] }], parameters: [{ in: query, name: unread, schema: { type: boolean } }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100 } }], responses: { '200': { description: Account-scoped notification inbox } } }
   /notifications/unread-count:

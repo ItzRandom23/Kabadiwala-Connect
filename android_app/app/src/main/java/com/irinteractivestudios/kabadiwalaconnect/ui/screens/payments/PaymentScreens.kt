@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (String, Double) -> Unit) {
     var lot by remember(lots) { mutableStateOf(lots.firstOrNull()) }
-    var amountText by remember { mutableStateOf("") }
+    var amountText by remember(lots) { mutableStateOf(lots.firstOrNull()?.finalValueRupees?.takeIf { it > 0 }?.toString().orEmpty()) }
     var method by remember { mutableStateOf(PaymentMethod.CASH) }
     var notes by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf(false) }
@@ -48,7 +48,10 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
                         val item = lots[index]
                         FilterChip(
                             selected = lot?.id == item.id,
-                            onClick = { lot = item },
+                            onClick = {
+                                lot = item
+                                amountText = (item.finalValueRupees ?: item.quoteRupees)?.takeIf { it > 0 }?.toString().orEmpty()
+                            },
                             label = { Text(item.materialLabel) }
                         )
                     }
@@ -57,8 +60,8 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
                     ProofRow(stringResource(R.string.handover_material), selected.materialLabel)
                     ProofRow(stringResource(R.string.handover_weight), stringResource(R.string.lot_weight_value, selected.weightKg))
                     ProofRow(
-                        stringResource(R.string.quote_estimated),
-                        selected.estimatedValueRupees?.let { value -> rupees(value) } ?: stringResource(R.string.lot_value_placeholder)
+                        stringResource(if (selected.finalValueRupees != null) R.string.payment_calculated_amount else R.string.quote_estimated),
+                        (selected.finalValueRupees ?: selected.estimatedValueRupees)?.let { value -> rupees(value) } ?: stringResource(R.string.lot_value_placeholder)
                     )
                 }
             }

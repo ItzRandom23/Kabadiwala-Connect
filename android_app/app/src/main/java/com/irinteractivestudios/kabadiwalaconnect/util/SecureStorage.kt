@@ -41,6 +41,9 @@ interface SecureStorage {
 
         /** Opaque server cursor used by bidirectional change reconciliation. */
         const val SYNC_CURSOR = "sync_cursor"
+
+        /** Opaque cursor used by foreground activity polling. */
+        const val ACTIVITY_CURSOR = "activity_cursor"
     }
 }
 

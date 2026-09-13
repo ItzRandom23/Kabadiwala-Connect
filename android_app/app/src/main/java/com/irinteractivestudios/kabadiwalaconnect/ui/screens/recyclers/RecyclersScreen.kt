@@ -76,7 +76,7 @@ import kotlinx.coroutines.launch
 import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 
 @Composable
-fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOpen: (String) -> Unit, demoMode: Boolean = false, modifier: Modifier = Modifier) {
+fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOpen: (String) -> Unit, demoMode: Boolean = false, lotId: String? = null, modifier: Modifier = Modifier) {
     val filters by vm.filters.collectAsStateWithLifecycle()
     val displayedState = if (demoMode && state is UiState.Empty) UiState.Success(MockRecyclerData.all) else state
     val context = LocalContext.current
@@ -109,6 +109,9 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
         if (granted) refreshLocation()
         else locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
+    LaunchedEffect(lotId) {
+        if (lotId.isNullOrBlank()) vm.clearMatches() else vm.loadMatches(lotId)
+    }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -116,7 +119,8 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
-        item { Text(stringResource(R.string.recyclers_title), style = MaterialTheme.typography.headlineLarge) }
+        item { Text(stringResource(if (lotId.isNullOrBlank()) R.string.recyclers_title else R.string.recyclers_match_title), style = MaterialTheme.typography.headlineLarge) }
+        if (!lotId.isNullOrBlank()) item { Text(stringResource(R.string.recyclers_match_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (demoMode) item { DemoDataBanner() }
         item { Text(stringResource(R.string.recyclers_authorized), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item {

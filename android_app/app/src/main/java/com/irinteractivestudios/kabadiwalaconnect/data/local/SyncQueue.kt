@@ -56,6 +56,10 @@ interface SyncQueueDao {
     @Query("DELETE FROM sync_queue WHERE uid = :uid")
     suspend fun remove(uid: Long)
 
+    /** Explicit user retry: clear the permanent-error gate for one item. */
+    @Query("UPDATE sync_queue SET attempts = 0, lastErrorCode = NULL, nextAttemptAtEpochMs = 0 WHERE uid = :uid")
+    suspend fun resetForRetry(uid: Long)
+
     @Query("UPDATE sync_queue SET attempts = attempts + 1, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid")
     suspend fun incrementAttempts(uid: Long, nextAttemptAtEpochMs: Long)
 

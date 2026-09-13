@@ -1,8 +1,8 @@
 {
-  "versionCode": 21,
-  "versionName": "0.0.20-beta",
-  "apkUrl": "kabadiwala-connect-0.0.20-beta-debug.apk",
-  "sha256": "fafe40c55d19965d41b6446d948d24ad2902c12e52fe938313309bd49ca17142",
-  "sizeBytes": 24884715,
-  "releaseNotes": "Testing build configured for the live backend at 140.245.232.208:4000 over HTTP. Includes the latest transaction, household, marketplace, offline-sync, and provenance improvements."
+  "versionCode": 22,
+  "versionName": "0.0.21-beta",
+  "apkUrl": "kabadiwala-connect-0.0.21-beta-debug.apk",
+  "sha256": "bb64d19cbd871275765ac4eb680688e98911f15e84faa204eaa6f80dcb0e5862",
+  "sizeBytes": 24913966,
+  "releaseNotes": "Testing build with lifecycle next actions, lot-specific recycler matching, role-scoped activity polling, notification badges, targeted offline retry, and fair settlement calculation."
 }

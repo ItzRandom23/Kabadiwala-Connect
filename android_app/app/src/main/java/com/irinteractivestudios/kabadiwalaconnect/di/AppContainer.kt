@@ -43,6 +43,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toSyncEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentRecordState
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentSyncState
@@ -65,6 +66,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Manual service locator for the app's local and remote repositories.
@@ -276,6 +278,26 @@ class AppContainer(context: Context) {
         return true
     }
 
+    /** Pulls durable cross-role events without requiring push infrastructure. */
+    suspend fun refreshActivity(): Boolean {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
+        val response = apiService.getActivityChanges(secureStorage.get(SecureStorage.ACTIVITY_CURSOR)).requireData()
+        val accountId = currentAccount()?.profileId
+        if (response.notifications.isNotEmpty()) {
+            FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications)
+        }
+        response.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.ACTIVITY_CURSOR, it) }
+        // Collector catalogue reconciliation already protects unsynced local
+        // rows. Refreshing it here means a remote quote/handover notification
+        // is reflected the next time the affected screen is opened.
+        if (accountId != null && currentAccount()?.role != AccountRole.RECYCLER) {
+            runCatching { reconcileChanges() }
+        }
+        return true
+    }
+
+    fun unreadNotificationCount(accountId: String): Flow<Int> = database.futureCacheDao().unreadNotificationCount(accountId)
+
     /**
      * Pulls server-authoritative changes after queued mutations have been
      * uploaded. The cursor is deliberately opaque: only the server decides
@@ -391,6 +413,7 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.ACCOUNT_LONGITUDE)
         secureStorage.remove(SecureStorage.COLLECTOR_ID)
         secureStorage.remove(SecureStorage.SYNC_CURSOR)
+        secureStorage.remove(SecureStorage.ACTIVITY_CURSOR)
     }
 
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }

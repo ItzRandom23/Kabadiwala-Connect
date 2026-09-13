@@ -20,6 +20,7 @@ import { futureRoutes } from './routes/futureRoutes.js';
 import { datasetRoutes } from './routes/datasetRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
 import { transactionRoutes } from './routes/transactionRoutes.js';
+import { activityRoutes } from './routes/activityRoutes.js';
 import type { JwtService } from './services/jwt.js';
 import type { CollectorService } from './services/collectorService.js';
 import type { AuthService } from './services/authService.js';
@@ -87,6 +88,7 @@ export function createApp(
   if (collectorRepository) api.use(transactionRoutes(jwt, collectorRepository, db));
   api.use('/future', futureRoutes(jwt, db));
   api.use('/notifications', notificationRoutes(jwt, db));
+  api.use('/activity', activityRoutes(jwt, db));
   api.use(datasetRoutes(jwt, db));
   app.use('/api/v1', api);
   app.use(notFound);

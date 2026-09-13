@@ -300,6 +300,14 @@ fun RecyclerScanScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
                     OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
                     Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && !state.confirming && !state.confirmed, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(if (state.confirmed) R.string.recycler_scan_confirmed else R.string.recycler_scan_confirm)) }
+                    if (state.confirmed) {
+                        val settlement = state.confirmation?.getAsJsonObject("settlement")
+                        settlement?.let {
+                            Text(stringResource(R.string.recycler_settlement_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            it.get("finalAmount")?.asDouble?.let { amount -> Text(stringResource(R.string.recycler_settlement_amount, amount), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }
+                            it.get("variancePercent")?.asDouble?.let { variance -> Text(stringResource(R.string.recycler_settlement_variance, variance), style = MaterialTheme.typography.bodyMedium) }
+                        }
+                    }
                 }
             }
         }

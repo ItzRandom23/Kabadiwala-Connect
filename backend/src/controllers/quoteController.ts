@@ -28,7 +28,11 @@ export const quoteController = (s: QuoteService, db?: PrismaClient) => ({
   detail: async (q: Request, r: Response) => r.json({ success: true, data: await s.detail(String(q.params.quoteId), q.identity!.collectorId, 'COLLECTOR'), message: 'Quote retrieved' }),
   accept: async (q: Request, r: Response) => {
     const data = await s.action(String(q.params.quoteId), q.identity!.collectorId, true);
-    if (db) await emitNotification(db, { accountId: data.recyclerId, type: 'QUOTE_ACCEPTED', title: 'Quote accepted', body: 'Your quote was accepted. Continue to the handover details.', route: `handovers/create/${data.lotId}/${data.id}` });
+    // The accepted quote notification is delivered to the recycler. The
+    // collector owns handover creation, so routing this event to a collector
+    // handover screen leaves the recycler at a dead/unauthorized destination.
+    // Keep the event actionable for the recipient's marketplace/order graph.
+    if (db) await emitNotification(db, { accountId: data.recyclerId, type: 'QUOTE_ACCEPTED', title: 'Quote accepted', body: 'Your quote was accepted. Review the order and prepare the handover.', route: 'recycler/orders' });
     return r.json({ success: true, data, message: 'Quote accepted' });
   },
   reject: async (q: Request, r: Response) => {

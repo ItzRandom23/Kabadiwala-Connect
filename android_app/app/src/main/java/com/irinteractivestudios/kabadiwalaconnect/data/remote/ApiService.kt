@@ -166,6 +166,12 @@ interface ApiService {
     @GET("payments/{paymentId}")
     suspend fun getPayment(@Path("paymentId") paymentId: String): Response<ApiEnvelope<PaymentDto>>
 
+    @PATCH("payments/{paymentId}")
+    suspend fun editPayment(@Path("paymentId") paymentId: String, @Body body: PaymentEditRequestDto): Response<ApiEnvelope<PaymentDto>>
+
+    @POST("payments/{paymentId}/dispute")
+    suspend fun disputePayment(@Path("paymentId") paymentId: String, @Body body: PaymentDisputeRequestDto): Response<ApiEnvelope<JsonObject>>
+
     @GET("earnings/ledger")
     suspend fun getEarnings(): Response<ApiEnvelope<EarningsLedgerDto>>
 
@@ -180,6 +186,9 @@ interface ApiService {
 
     @POST("notifications/read-all")
     suspend fun markAllNotificationsRead(): Response<ApiEnvelope<NotificationReadDto>>
+
+    @GET("activity/changes")
+    suspend fun getActivityChanges(@Query("since") since: String? = null): Response<ApiEnvelope<ActivityChangesDto>>
 
     @POST("sync")
     suspend fun sync(@Body body: SyncBatchRequestDto): Response<ApiEnvelope<SyncBatchResponseDto>>

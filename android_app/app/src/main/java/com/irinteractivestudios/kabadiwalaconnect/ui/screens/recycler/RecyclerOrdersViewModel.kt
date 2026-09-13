@@ -8,6 +8,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifyHandoverRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifiedHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerHandoverConfirmRequestDto
+import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,7 @@ data class RecyclerScanState(
     val confirming: Boolean = false,
     val verified: VerifiedHandoverDto? = null,
     val confirmed: Boolean = false,
+    val confirmation: JsonObject? = null,
     val error: Boolean = false
 )
 
@@ -67,8 +69,8 @@ class RecyclerScanViewModel(private val api: ApiService) : ViewModel() {
                     handover.handoverId,
                     RecyclerHandoverConfirmRequestDto(actualWeight, materialMatch, notes = notes?.trim()?.takeIf(String::isNotEmpty))
                 ).requireData()
-            }.onSuccess {
-                _state.value = _state.value.copy(confirming = false, confirmed = true)
+            }.onSuccess { result ->
+                _state.value = _state.value.copy(confirming = false, confirmed = true, confirmation = result)
             }.onFailure {
                 _state.value = _state.value.copy(confirming = false, error = true)
             }

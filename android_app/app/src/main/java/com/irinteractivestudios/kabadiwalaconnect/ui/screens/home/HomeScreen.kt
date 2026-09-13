@@ -53,6 +53,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.OfflineContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoDataProvider
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeNextAction
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 
 /** Collector command centre: one dominant field action, then a lean work queue. */
@@ -69,6 +70,7 @@ fun HomeScreen(
     onOpenActivities: () -> Unit = {},
     onOpenChat: () -> Unit = {},
     onOpenDisputes: () -> Unit = {},
+    onNextAction: (HomeNextAction, String?) -> Unit = { _, _ -> },
     onRetry: (() -> Unit)? = null,
     demoMode: Boolean = false,
     household: Boolean = false
@@ -119,6 +121,15 @@ fun HomeScreen(
             lotCount = lotCount,
             currentPrice = if (demoMode) scenario.copper.ratePerKg.formatted() else "—"
         )
+        val homeData = when (state) {
+            is UiState.Success -> state.data
+            is UiState.Offline -> state.cached
+            is UiState.Syncing -> state.cached
+            else -> null
+        }
+        homeData?.let { data ->
+            NextActionCard(data, onNextAction)
+        }
         SectionLabel(stringResource(R.string.home_work_queue))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             CompactAction(stringResource(R.string.home_my_lots), Icons.Filled.Inventory2, onMyLots, Modifier.weight(1f), "home_my_lots")
@@ -159,6 +170,43 @@ fun HomeScreen(
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun NextActionCard(data: HomeData, onNextAction: (HomeNextAction, String?) -> Unit) {
+    val (title, detail, actionLabel) = when (data.nextAction) {
+        HomeNextAction.CREATE_LOT -> Triple(R.string.home_next_create_title, R.string.home_next_create_detail, R.string.home_next_create_button)
+        HomeNextAction.FIND_RECYCLERS -> Triple(R.string.home_next_match_title, R.string.home_next_match_detail, R.string.home_next_match_button)
+        HomeNextAction.REVIEW_QUOTES -> Triple(R.string.home_next_quotes_title, R.string.home_next_quotes_detail, R.string.home_next_quotes_button)
+        HomeNextAction.PREPARE_HANDOVER -> Triple(R.string.home_next_handover_title, R.string.home_next_handover_detail, R.string.home_next_handover_button)
+        HomeNextAction.RECORD_PAYMENT -> Triple(R.string.home_next_payment_title, R.string.home_next_payment_detail, R.string.home_next_payment_button)
+        HomeNextAction.REVIEW_DISPUTE -> Triple(R.string.home_next_dispute_title, R.string.home_next_dispute_detail, R.string.home_next_dispute_button)
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = .35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.home_next_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                if (data.pendingSyncCount > 0) {
+                    Spacer(Modifier.weight(1f))
+                    Text(stringResource(R.string.home_sync_pending, data.pendingSyncCount), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+            Text(stringResource(title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Button(onClick = { onNextAction(data.nextAction, data.nextLotId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Text(stringResource(actionLabel))
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+            }
+        }
     }
 }
 

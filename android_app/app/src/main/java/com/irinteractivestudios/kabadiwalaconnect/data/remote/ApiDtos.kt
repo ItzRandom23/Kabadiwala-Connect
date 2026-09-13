@@ -99,7 +99,10 @@ data class HandoverDto(
     val materialConfirmedAt: String? = null,
     val collectorConfirmedAt: String? = null,
     val recyclerConfirmedAt: String? = null,
-    val paymentStatus: String? = null
+    val paymentStatus: String? = null,
+    val acceptedRatePerKg: Double? = null,
+    val finalAmount: Double? = null,
+    val variancePercent: Double? = null
 )
 data class HandoverEvidenceRequestDto(val actualWeight: Double, val materialMatch: Boolean, val scalePhotoReference: String? = null, val collectorConfirmed: Boolean = true)
 data class RecyclerHandoverConfirmRequestDto(val actualWeight: Double, val materialMatch: Boolean, val scalePhotoReference: String? = null, val notes: String? = null, val reason: String? = null)
@@ -119,11 +122,24 @@ data class RecyclerVerificationDto(val name: String = "", val authorizationStatu
 data class DisputeDto(val id: String, val status: String? = null)
 
 data class RecordPaymentRequestDto(val lotId: String, val amount: Double, val method: String, val date: String, val time: String? = null, val notes: String? = null)
+data class PaymentEditRequestDto(val amount: Double, val method: String, val notes: String? = null)
+data class PaymentDisputeRequestDto(val reason: String, val description: String)
 data class PaymentDto(val id: String, val lotId: String, val handoverId: String? = null, val amount: Double, @SerializedName(value = "method", alternate = ["paymentMethod"]) val method: String, @SerializedName(value = "date", alternate = ["recordedAt"]) val date: String? = null, val status: String? = null)
 data class EarningsLedgerDto(val total: Double = 0.0, val pending: Double = 0.0, val currentMonth: Double = 0.0, val averagePerLot: Double = 0.0, @SerializedName(value = "payments", alternate = ["transactions"]) val payments: List<PaymentDto> = emptyList())
 data class NotificationDto(val id: String = "", val accountId: String = "", val type: String = "", val title: String = "", val body: String = "", val route: String? = null, val readAt: String? = null, val createdAt: String? = null)
 data class UnreadCountDto(val count: Int = 0)
 data class NotificationReadDto(val marked: Boolean = false, val count: Int? = null)
+data class ActivityChangeSetDto(
+    val lotIds: List<String> = emptyList(),
+    val quoteIds: List<String> = emptyList(),
+    val handoverIds: List<String> = emptyList(),
+    val paymentIds: List<String> = emptyList()
+)
+data class ActivityChangesDto(
+    val serverTime: String? = null,
+    val notifications: List<NotificationDto> = emptyList(),
+    val changed: ActivityChangeSetDto = ActivityChangeSetDto()
+)
 
 data class SyncOperationDto(val operationId: String, val operationType: String, val entityType: String, val entityId: String, val payload: JsonObject, val clientCreatedAt: String? = null)
 data class SyncBatchRequestDto(val operations: List<SyncOperationDto>)

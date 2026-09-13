@@ -132,6 +132,8 @@ class MainActivity : ComponentActivity() {
 
                 val connection by app.container.connectivityObserver.state
                     .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
+                val unreadNotifications by app.container.unreadNotificationCount(app.container.currentAccount()?.profileId.orEmpty())
+                    .collectAsStateWithLifecycle(initialValue = 0)
                 LaunchedEffect(connection) {
                     if (connection == ConnectionState.ONLINE && app.container.hasRestorableSession()) {
                         app.container.refreshAccount()
@@ -221,7 +223,7 @@ class MainActivity : ComponentActivity() {
                         },
                         bottomBar = {
                             if (isTopLevel) {
-                                KcBottomBar(currentRoute = route, role = activeRole, onNavigate = { target ->
+                                KcBottomBar(currentRoute = route, role = activeRole, unreadNotifications = unreadNotifications, onNavigate = { target ->
                                     navController.navigate(target) {
                                         popUpTo(Destinations.START) { saveState = true }
                                         launchSingleTop = true

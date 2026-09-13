@@ -141,11 +141,32 @@ export class HandoverService {
         if (!claimed.count) throw new AppError('CONFLICT', 'Handover is no longer actionable', 409, { code: 'HANDOVER_ALREADY_REVIEWED' });
         const dispute = await tx.dispute.create({ data: { handoverId: h.id, lotId: h.lotId, collectorId: h.collectorId, recyclerId: h.recyclerId, type: !p.materialMatch ? 'MATERIAL_MISMATCH' : 'WEIGHT_DISCREPANCY', reportedBy: rid, description: p.reason || p.notes || 'Handover discrepancy', claimedValue: h.weight, actualValue: actual } });
         const handover = await tx.handover.findUniqueOrThrow({ where: { id } });
-        return { handover, dispute };
+        return {
+          handover,
+          dispute,
+          settlement: {
+            acceptedRatePerKg: h.quote.pricePerKg,
+            finalWeight: actual,
+            finalAmount: Number((actual * h.quote.pricePerKg).toFixed(2)),
+            variancePercent: Number((diff * 100).toFixed(2)),
+            status: 'DISPUTED'
+          }
+        };
       }
       const updated = await tx.handover.updateMany({ where: { id, status: 'GENERATED' }, data: { status: 'CONFIRMED_BY_RECYCLER', actualWeight: actual, actualWeightPhotoReference: p.scalePhotoReference?.trim() || null, materialConfirmedAt: p.materialMatch ? new Date() : null, recyclerNotes: p.notes, recyclerConfirmedAt: new Date() } });
       if (!updated.count) throw new AppError('CONFLICT', 'Handover is no longer actionable', 409, { code: 'HANDOVER_ALREADY_REVIEWED' });
-      return { handover: await tx.handover.findUniqueOrThrow({ where: { id } }) };
+      const finalAmount = Number((actual * h.quote.pricePerKg).toFixed(2));
+      await tx.lot.update({ where: { id: h.lotId }, data: { finalPrice: finalAmount } });
+      return {
+        handover: await tx.handover.findUniqueOrThrow({ where: { id } }),
+        settlement: {
+          acceptedRatePerKg: h.quote.pricePerKg,
+          finalWeight: actual,
+          finalAmount,
+          variancePercent: Number((diff * 100).toFixed(2)),
+          status: 'CONFIRMED'
+        }
+      };
     });
   }
   async reject(id: string, rid: string, reason: string) {

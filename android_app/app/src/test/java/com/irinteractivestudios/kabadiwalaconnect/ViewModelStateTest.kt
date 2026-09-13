@@ -10,6 +10,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Recycler
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeData
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeNextAction
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices.PricesViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers.RecyclersViewModel
@@ -131,6 +132,7 @@ class ViewModelStateTest {
         val state = vm.uiState.value
         assertTrue(state is UiState.Success)
         assertEquals(1, (state as UiState.Success<HomeData>).data.lotCount)
+        assertEquals(HomeNextAction.FIND_RECYCLERS, (state as UiState.Success<HomeData>).data.nextAction)
     }
 
     @Test

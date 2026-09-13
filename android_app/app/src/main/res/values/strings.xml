@@ -160,6 +160,8 @@
 
     <!-- Recyclers -->
     <string name="recyclers_title">Recyclers</string>
+    <string name="recyclers_match_title">Best matches for this lot</string>
+    <string name="recyclers_match_detail">Ranked by verified material fit, rate, distance and pickup readiness. Cached facilities remain available offline.</string>
     <string name="recyclers_authorized">Authorized</string>
     <string name="recyclers_distance_km">%1$s km away</string>
     <string name="recycler_search">Search name or area</string><string name="recycler_radius">Radius</string><string name="recycler_km">%1$d km</string><string name="recycler_material">Material</string><string name="recycler_pickup_only">Pickup available only</string><string name="recycler_sort">Sort:</string><string name="recycler_nearby">Nearby</string><string name="recycler_rate">Rate</string><string name="recycler_cached">Cached recyclers — offline</string><string name="recycler_rate_value">₹%1$.0f / kg</string><string name="recycler_pickup_yes">Pickup available</string><string name="recycler_pickup_no">Drop-off only</string><string name="recycler_match">Match %1$d%%</string><string name="recycler_detail_authorization">Authorization and rates</string><string name="recycler_not_verified">Authorization not verified</string><string name="recycler_materials">Materials: %1$s</string><string name="recycler_hours">Hours: %1$s</string><string name="recycler_handover">Typical handover: %1$d hours</string><string name="recycler_map_placeholder">Map location: %1$.3f, %2$.3f</string><string name="recycler_call">Call</string><string name="recycler_map">Map</string><string name="recycler_contact_note">Contact: %1$s</string>
@@ -450,6 +452,28 @@
     <string name="home_start_next_collection">Start your next collection</string>
     <string name="home_field_ready">FIELD READY</string>
     <string name="home_collection_brief">Capture material, weight, and location while the details are fresh.</string>
+    <string name="home_next_label">NEXT ACTION</string>
+    <string name="home_sync_pending">%1$d waiting to sync</string>
+    <string name="home_next_create_title">Capture a material lot</string>
+    <string name="home_next_create_detail">Record the material, weight and area so the marketplace can work from verified evidence.</string>
+    <string name="home_next_create_button">Create lot</string>
+    <string name="home_next_match_title">Find verified recyclers</string>
+    <string name="home_next_match_detail">This saved lot is ready for recycler matching and quote requests.</string>
+    <string name="home_next_match_button">Find matches</string>
+    <string name="home_next_quotes_title">Compare recycler quotes</string>
+    <string name="home_next_quotes_detail">Review the latest offers and choose the clearest next deal.</string>
+    <string name="home_next_quotes_button">Review quotes</string>
+    <string name="home_next_handover_title">Prepare the handover</string>
+    <string name="home_next_handover_detail">Your accepted deal is ready for evidence, QR verification and receipt.</string>
+    <string name="home_next_handover_button">Open lot</string>
+    <string name="home_next_payment_title">Record the settlement</string>
+    <string name="home_next_payment_detail">Confirm the final payment so earnings, rewards and the transaction passport stay complete.</string>
+    <string name="home_next_payment_button">Record payment</string>
+    <string name="home_next_dispute_title">Review a discrepancy</string>
+    <string name="home_next_dispute_detail">A handover needs attention before this transaction can be completed.</string>
+    <string name="home_next_dispute_button">Review issue</string>
+    <string name="settings_sync_retry_action">Retry</string>
+    <string name="payment_calculated_amount">Calculated settlement</string>
     <string name="prices_rate_label">Today’s rate</string>
     <string name="prices_trend_up">Going up</string>
     <string name="prices_trend_down">Going down</string>
@@ -528,6 +552,9 @@
     <string name="recycler_scan_confirm">Confirm receipt</string>
     <string name="recycler_scan_confirmed">Receipt confirmed</string>
     <string name="recycler_scan_clear">Clear and scan another</string>
+    <string name="recycler_settlement_title">Fair settlement calculated</string>
+    <string name="recycler_settlement_amount">Expected payment: ₹%1$.2f</string>
+    <string name="recycler_settlement_variance">Weight variance: %1$.2f%%</string>
     <string name="handover_collector_confirmed">Awaiting recycler confirmation</string>
     <string name="household_demo_banner_title">Preview mode · sample data</string>
     <string name="household_demo_banner_detail">Nearby businesses and chat are demonstrations. No live request is sent from this preview.</string>

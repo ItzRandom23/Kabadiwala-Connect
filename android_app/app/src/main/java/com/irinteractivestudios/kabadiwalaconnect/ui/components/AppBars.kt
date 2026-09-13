@@ -23,6 +23,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -77,7 +79,7 @@ fun KcTopBar(
 
 /** Bottom navigation: the 5 primary tabs with icon + label. */
 @Composable
-fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: AccountRole = AccountRole.COLLECTOR) {
+fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: AccountRole = AccountRole.COLLECTOR, unreadNotifications: Int = 0) {
     val tabs = when (role) {
         AccountRole.RECYCLER -> RECYCLER_BOTTOM_TABS
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS
@@ -132,15 +134,13 @@ fun KcBottomBar(currentRoute: String?, onNavigate: (String) -> Unit, role: Accou
                         )
                 )
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 6.dp))
-                Icon(
-                    tab.icon,
-                    contentDescription = null,
-                    tint = itemColor,
-                    modifier = Modifier.size(23.dp).graphicsLayer {
-                        scaleX = iconScale
-                        scaleY = iconScale
+                if (tab.route == com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations.SETTINGS && unreadNotifications > 0) {
+                    BadgedBox(badge = { Badge { Text(unreadNotifications.coerceAtMost(99).toString()) } }) {
+                        Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                     }
-                )
+                } else {
+                    Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                }
                 Text(
                     stringResource(tab.labelRes),
                     style = MaterialTheme.typography.labelSmall,
