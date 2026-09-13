@@ -69,7 +69,9 @@ data class Lot(
     val imageProvenance: String? = null,
     val imageQualityStatus: String = "UNVERIFIED",
     val locationPrecision: String? = null,
-    val serverUpdatedAtEpochMs: Long? = null
+    val serverUpdatedAtEpochMs: Long? = null,
+    /** Backend version used for safe edits while a lot is still CREATED. */
+    val version: Int = 1
 )
 
 /** Market price for a material, shown per kg. */

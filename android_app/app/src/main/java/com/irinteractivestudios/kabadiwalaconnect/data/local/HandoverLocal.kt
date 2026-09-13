@@ -5,6 +5,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateHandoverRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
@@ -139,7 +140,7 @@ class RemoteHandoverRepository(
             if (file.exists()) {
                 dto = api.uploadHandoverEvidencePhoto(
                     id,
-                    MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody("image/*".toMediaTypeOrNull()))
+                    MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody(file.imageMimeType().toMediaTypeOrNull()))
                 ).requireData()
             }
         }

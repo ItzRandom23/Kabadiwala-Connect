@@ -54,6 +54,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 
 // Keep this list identical to the backend MaterialCategory enum. Paper/newspaper
 // is not currently a first-class backend category, so it is represented by
@@ -161,7 +163,7 @@ private fun HouseholdListingDialog(onDismiss: () -> Unit, onSubmit: (HouseholdLi
 }
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList()) {
     var showBulk by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Today's collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Collect from households · aggregate · sell to verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
@@ -186,6 +188,18 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots will appear here.") }
                 items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer) }
+                val visibleCapturedLots = capturedLots.filter { it.status != LotStatus.CANCELLED }
+                if (visibleCapturedLots.isNotEmpty()) {
+                    item { Text("Captured lot records", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                    item {
+                        Text(
+                            "These records are visible for continuity. Complete a household pickup and create a recycler bulk lot from inventory to publish material to recyclers.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    items(visibleCapturedLots, key = { "captured-${it.id}" }) { lot -> CapturedLotCard(lot) }
+                }
             }
         }
     }
@@ -224,6 +238,24 @@ private fun CompletionDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, on
 private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${"%.1f".format(item.availableKg)} kg available", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("Grade: ${item.grade}"); Text("Reserved ${"%.1f".format(item.reservedKg)} kg · Sold ${"%.1f".format(item.soldKg)} kg · Purchase cost ${money(item.purchaseCost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun InventoryTotals(items: List<InventoryBalanceDto>) { val available = items.sumOf { it.availableKg }; val reserved = items.sumOf { it.reservedKg }; Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) { Metric("Available", "%.1f kg".format(available)); Metric("Reserved", "%.1f kg".format(reserved)); Metric("Materials", items.size.toString()) } } }
 @Composable private fun Metric(label: String, value: String) { Column { Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall) } }
+@Composable private fun CapturedLotCard(lot: Lot) {
+    val syncLabel = if (lot.synced) "Saved on server" else "Waiting to sync"
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .2f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(lot.materialLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                StatusChip(if (lot.synced) "Saved" else "Pending")
+            }
+            Text("${"%.1f".format(lot.weightKg)} kg · ${statusName(lot.status.name)}")
+            Text("$syncLabel · This is a captured record, not a recycler bulk lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
 @Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") } } } }
 @Composable private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}"); if (offer.status == "PENDING") Button(onClick = { onAccept(offer.id) }, modifier = Modifier.fillMaxWidth()) { Text("Accept offer") } } } }
 @Composable private fun BulkLotDialog(inventory: List<InventoryBalanceDto>, onDismiss: () -> Unit, onSubmit: (BulkLotCreateDto) -> Unit) {

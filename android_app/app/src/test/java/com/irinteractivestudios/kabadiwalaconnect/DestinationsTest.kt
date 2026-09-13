@@ -55,4 +55,9 @@ class DestinationsTest {
         assertEquals(KABADIWALA_BOTTOM_TABS.map { it.route }, Destinations.topLevelFor(AccountRole.COLLECTOR, newNavigation = true))
         assertTrue(Destinations.KABADIWALA_TOP_LEVEL.contains(Destinations.KABADIWALA_INVENTORY))
     }
+
+    @Test
+    fun lotEdit_routeKeepsLotId() {
+        assertEquals("lots/edit/LOT-123", Destinations.lotEdit("LOT-123"))
+    }
 }

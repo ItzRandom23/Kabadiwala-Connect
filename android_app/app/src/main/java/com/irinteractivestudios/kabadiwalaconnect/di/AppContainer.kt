@@ -231,7 +231,8 @@ class AppContainer(context: Context) {
                     imageProvenance = lot.imageProvenance,
                     imageQualityStatus = lot.imageQualityStatus ?: "UNVERIFIED",
                     locationPrecision = lot.collectionLocation?.precision,
-                    serverUpdatedAtEpochMs = lot.updatedAt?.let(::parseRemoteTimestamp)
+                    serverUpdatedAtEpochMs = lot.updatedAt?.let(::parseRemoteTimestamp),
+                    version = lot.version
                 )
             })
         }
@@ -341,7 +342,8 @@ class AppContainer(context: Context) {
                             imageProvenance = remote.imageProvenance,
                             imageQualityStatus = remote.imageQualityStatus ?: "UNVERIFIED",
                             locationPrecision = remote.collectionLocation?.precision,
-                            serverUpdatedAtEpochMs = remote.updatedAt?.let(::parseRemoteTimestamp)
+                            serverUpdatedAtEpochMs = remote.updatedAt?.let(::parseRemoteTimestamp),
+                            version = remote.version
                         )
                     )
                 }

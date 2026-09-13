@@ -175,12 +175,21 @@ fun SettingsScreen(
             )
         }
         SectionCard(title = stringResource(R.string.settings_sync_center)) {
-            SettingsRow(
-                icon = Icons.Filled.CloudOff,
-                label = if (syncPendingCount > 0) stringResource(R.string.settings_sync_pending, syncPendingCount) else stringResource(R.string.settings_sync_synced),
-                onClick = onRetrySync,
-                testTag = "settings_sync_status"
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {
+                    SettingsRow(
+                        icon = Icons.Filled.CloudOff,
+                        label = if (syncPendingCount > 0) stringResource(R.string.settings_sync_pending, syncPendingCount) else stringResource(R.string.settings_sync_synced),
+                        onClick = onRetrySync,
+                        testTag = "settings_sync_status"
+                    )
+                }
+                if (syncPendingCount > 0) {
+                    TextButton(onClick = onRetrySync, modifier = Modifier.heightIn(min = 48.dp).testTag("settings_sync_now")) {
+                        Text(stringResource(R.string.settings_sync_now))
+                    }
+                }
+            }
             if (syncItems.isNotEmpty()) {
                 Text(stringResource(R.string.settings_sync_details), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 40.dp, top = 4.dp))
                 syncItems.take(6).forEach { item ->

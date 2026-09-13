@@ -15,6 +15,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DescriptionSuggestionRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.MaterialSuggestionDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -125,10 +126,21 @@ class LotManagementViewModel(
         _state.value = current.copy(materialSuggestionLoading = true, materialSuggestionError = false)
         viewModelScope.launch {
             val suggestion = runCatching {
-                val body = File(path).asRequestBody("image/*".toMediaTypeOrNull())
-                service.suggestLotMaterial(okhttp3.MultipartBody.Part.createFormData("photo", File(path).name, body)).requireData()
+                val file = File(path)
+                val body = file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())
+                service.suggestLotMaterial(okhttp3.MultipartBody.Part.createFormData("photo", file.name, body)).requireData()
             }.getOrNull()
-            _state.value = _state.value.copy(materialSuggestion = suggestion, materialSuggestionLoading = false, materialSuggestionError = suggestion == null)
+            // Material identification is an assistive hint, never a gate for
+            // creating a lot. If the API/Gemini provider is unavailable, keep
+            // the manual picker usable and explain the fallback without
+            // presenting a red blocking error.
+            val resolved = suggestion ?: MaterialSuggestionDto(
+                materialCategory = "OTHER",
+                confidence = 0.0,
+                rationale = "Automatic identification is unavailable right now. Choose the material manually below.",
+                source = "TEMPLATE"
+            )
+            _state.value = _state.value.copy(materialSuggestion = resolved, materialSuggestionLoading = false, materialSuggestionError = false)
         }
     }
     fun chooseCondition(condition: LotCondition) { _state.value = recalc(_state.value.copy(condition = condition, step = LotStep.WEIGHT)) }

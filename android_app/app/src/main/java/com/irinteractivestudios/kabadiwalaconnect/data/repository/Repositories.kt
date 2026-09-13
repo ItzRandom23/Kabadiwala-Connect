@@ -23,6 +23,8 @@ interface LotRepository {
 interface LotWriter {
     fun observeLot(id: String): Flow<Lot?>
     suspend fun save(lot: Lot)
+    /** Edits only backend-supported fields while a lot is still actionable. */
+    suspend fun update(lot: Lot): Boolean = false
     suspend fun cancel(id: String, updatedAt: Long): Boolean
     suspend fun lock(id: String, updatedAt: Long): Boolean = false
     /** Keeps the lot eligible for another quote after the last offer is rejected. */

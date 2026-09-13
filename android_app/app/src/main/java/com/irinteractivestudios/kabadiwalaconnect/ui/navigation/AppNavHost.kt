@@ -6,12 +6,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -47,6 +52,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementV
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotRoute
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotDetailScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotEditScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.compose.runtime.rememberCoroutineScope
@@ -165,6 +171,7 @@ fun AppNavHost(
             LotRoute(
                 vm,
                 onSafety = { navController.navigate(Destinations.SAFETY) },
+                onViewSaved = { navController.navigate(Destinations.MY_LOTS) },
                 onHome = {
                     if (!navController.popBackStack(Destinations.HOME, false)) {
                         navController.navigate(Destinations.HOME) {
@@ -186,7 +193,7 @@ fun AppNavHost(
             val scope = rememberCoroutineScope()
             var repeating by remember(id) { mutableStateOf(false) }
             var repeatError by remember(id) { mutableStateOf(false) }
-            lot?.let { item -> LotDetailScreen(item, onCancel = { scope.launch { factory.lotWriter.cancel(id, System.currentTimeMillis()) } }, repeating = repeating, repeatError = repeatError, onTimeline = { navController.navigate(Destinations.transactionTimeline(id)) }, onRepeat = {
+            lot?.let { item -> LotDetailScreen(item, onCancel = { scope.launch { factory.lotWriter.cancel(id, System.currentTimeMillis()) } }, onEdit = { navController.navigate(Destinations.lotEdit(id)) }, repeating = repeating, repeatError = repeatError, onTimeline = { navController.navigate(Destinations.transactionTimeline(id)) }, onRepeat = {
                 if (!repeating) {
                     repeating = true
                     repeatError = false
@@ -198,6 +205,43 @@ fun AppNavHost(
                     }
                 }
             }) }
+        }
+        composable(Destinations.LOT_EDIT, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
+            val id = entry.arguments?.getString("lotId").orEmpty()
+            val lot by factory.lotWriter.observeLot(id).collectAsStateWithLifecycle(initialValue = null)
+            val scope = rememberCoroutineScope()
+            var saving by remember(id) { mutableStateOf(false) }
+            var errorMessage by remember(id) { mutableStateOf<String?>(null) }
+            val lockedMessage = stringResource(R.string.lot_edit_locked_error)
+            lot?.let { item ->
+                if (item.status == LotStatus.SAVED) {
+                    LotEditScreen(
+                        lot = item,
+                        saving = saving,
+                        errorMessage = errorMessage,
+                        onCancel = { navController.popBackStack() },
+                        onSave = { weightKg, condition, notes ->
+                            if (!saving) {
+                                saving = true
+                                errorMessage = null
+                                scope.launch {
+                                    val updated = runCatching {
+                                        factory.lotWriter.update(item.copy(weightKg = weightKg, condition = condition, notes = notes))
+                                    }.getOrDefault(false)
+                                    saving = false
+                                    if (updated) navController.popBackStack()
+                                    else errorMessage = lockedMessage
+                                }
+                            }
+                        }
+                    )
+                } else {
+                    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        androidx.compose.material3.Text(stringResource(R.string.lot_edit_locked), style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+                        androidx.compose.material3.Text(stringResource(R.string.lot_edit_locked_detail), style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
         }
         composable(Destinations.TRANSACTION_TIMELINE, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("lotId").orEmpty()
@@ -262,8 +306,9 @@ fun AppNavHost(
         }
         composable(Destinations.KABADIWALA_LOTS) {
             val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+            val capturedLots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
             LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-            KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer)
+            KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, capturedLots)
         }
         composable(Destinations.PRICES) {
             val vm: PricesViewModel = viewModel(factory = factory)

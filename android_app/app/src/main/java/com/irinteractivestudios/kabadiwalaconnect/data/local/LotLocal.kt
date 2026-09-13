@@ -39,7 +39,9 @@ data class LotEntity(
     val imageProvenance: String? = null,
     val imageQualityStatus: String = "UNVERIFIED",
     val locationPrecision: String? = null,
-    val serverUpdatedAtEpochMs: Long? = null
+    val serverUpdatedAtEpochMs: Long? = null,
+    /** Optimistic-concurrency version mirrored from the backend lot. */
+    val version: Int = 1
 )
 
 @Dao
@@ -70,6 +72,8 @@ interface LotDao {
     suspend fun markPaid(id: String, amount: Double, updatedAt: Long): Int
     @Query("UPDATE lots SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: String): Int
+    @Query("UPDATE lots SET synced = 1, version = :version WHERE id = :id")
+    suspend fun markSyncedWithVersion(id: String, version: Int): Int
     @Query("DELETE FROM lots")
     suspend fun clearAll()
 }
@@ -100,6 +104,32 @@ class RoomLotRepository(
             // Local creation remains successful if queue persistence is unavailable.
         }
     }
+
+    override suspend fun update(lot: Lot): Boolean {
+        val account = accountId() ?: return false
+        val current = dao.findByIdForCollector(lot.id, account) ?: return false
+        // The backend only permits edits while a legacy lot is still CREATED
+        // (represented locally as SAVED). Never let an edit reopen a quote,
+        // pickup, handover, payment, or cancelled record.
+        if (current.status != LotStatus.SAVED.name) return false
+        val updated = lot.copy(
+            collectorId = current.collectorId,
+            updatedAtEpochMs = System.currentTimeMillis(),
+            synced = false,
+            version = current.version
+        )
+        dao.save(updated.toEntity())
+        syncQueue?.enqueue(
+            SyncQueueItemEntity(
+                operation = "UPDATE_LOT",
+                payloadJson = Gson().toJson(updated.toUpdateSyncPayload(current.version)),
+                createdAtEpochMs = updated.updatedAtEpochMs,
+                accountId = current.collectorId
+            )
+        )
+        requestSync?.invoke()
+        return true
+    }
     override suspend fun cancel(id: String, updatedAt: Long): Boolean {
         if (dao.cancel(id, updatedAt) == 0) return false
         val local = accountId()?.let { dao.findByIdForCollector(id, it) } ?: dao.findById(id) ?: return true
@@ -126,8 +156,8 @@ class RoomLotRepository(
     override suspend fun markPaid(id: String, amount: Double, updatedAt: Long): Boolean = dao.markPaid(id, amount, updatedAt) > 0
 }
 
-private fun LotEntity.toDomain() = Lot(id, collectorId, materialLabel, condition, weightKg, localPhotoPath, serverPhotoUrl, estimatedValueRupees, quoteRupees, finalValueRupees, location, createdAtEpochMs, updatedAtEpochMs, runCatching { LotStatus.valueOf(status) }.getOrDefault(LotStatus.SAVED), notes, synced, materialSubcategory, sourceType, wasteRegime, originalWeight, originalWeightUnit, imageProvenance, imageQualityStatus, locationPrecision, serverUpdatedAtEpochMs)
-private fun Lot.toEntity() = LotEntity(id, collectorId, materialLabel, condition, weightKg, localPhotoPath, serverPhotoUrl, estimatedValueRupees, quoteRupees, finalValueRupees, location, createdAtEpochMs, updatedAtEpochMs, status.name, notes, synced, materialSubcategory, sourceType, wasteRegime, originalWeight, originalWeightUnit, imageProvenance, imageQualityStatus, locationPrecision, serverUpdatedAtEpochMs)
+private fun LotEntity.toDomain() = Lot(id, collectorId, materialLabel, condition, weightKg, localPhotoPath, serverPhotoUrl, estimatedValueRupees, quoteRupees, finalValueRupees, location, createdAtEpochMs, updatedAtEpochMs, runCatching { LotStatus.valueOf(status) }.getOrDefault(LotStatus.SAVED), notes, synced, materialSubcategory, sourceType, wasteRegime, originalWeight, originalWeightUnit, imageProvenance, imageQualityStatus, locationPrecision, serverUpdatedAtEpochMs, version)
+private fun Lot.toEntity() = LotEntity(id, collectorId, materialLabel, condition, weightKg, localPhotoPath, serverPhotoUrl, estimatedValueRupees, quoteRupees, finalValueRupees, location, createdAtEpochMs, updatedAtEpochMs, status.name, notes, synced, materialSubcategory, sourceType, wasteRegime, originalWeight, originalWeightUnit, imageProvenance, imageQualityStatus, locationPrecision, serverUpdatedAtEpochMs, version)
 
 private fun Lot.toSyncPayload() = mapOf(
     "id" to id,
@@ -147,6 +177,16 @@ private fun Lot.toSyncPayload() = mapOf(
     // Keep the original photo path in the queue so the sync worker can upload
     // it after the lot itself is created.
     "photoPath" to localPhotoPath
+)
+
+private fun Lot.toUpdateSyncPayload(clientVersion: Int) = mapOf(
+    "id" to id,
+    "weight" to weightKg,
+    "condition" to condition,
+    // Keep an explicit empty string so clearing notes is also synced (Gson
+    // omits null map values from the JSON payload).
+    "notes" to notes,
+    "clientVersion" to clientVersion
 )
 
 private fun String.toBackendMaterial() = when (this) {

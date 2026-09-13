@@ -30,6 +30,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.QuoteStatus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,12 +45,35 @@ class SyncWorker(
 
     override suspend fun doWork(): Result {
         val app = applicationContext.applicationContext as? KabadiwalaApp ?: return Result.failure()
-        val token = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.AUTH_TOKEN)
-        if (token.isNullOrBlank()) return Result.success()
-
         val queue = app.container.database.syncQueueDao()
         val accountId = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.ACCOUNT_PROFILE_ID)
         if (accountId.isNullOrBlank()) return Result.success()
+
+        // A worker can wake after the short-lived access token has expired.
+        // Previously we returned success when the token was missing, leaving
+        // every queued action stuck at "waiting" forever even though a valid
+        // refresh token was still available. Refresh before deciding that
+        // there is nothing to upload; the Retrofit authenticator then reuses
+        // the refreshed token for the batch request.
+        val hadRefreshToken = !app.container.secureStorage
+            .get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.REFRESH_TOKEN)
+            .isNullOrBlank()
+        val token = if (app.container.hasValidSession()) {
+            app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.AUTH_TOKEN)
+        } else {
+            app.container.authenticationRepository.refreshAccessToken()
+        }
+        if (token.isNullOrBlank()) {
+            if (!hadRefreshToken) {
+                // Keep the row visible with a useful explanation. The user
+                // can sign in again and tap Retry to clear this gate.
+                queue.observePendingForAccount(accountId).first().forEach { item ->
+                    queue.markFailed(item.uid, "AUTH_REQUIRED", Long.MAX_VALUE)
+                }
+                return Result.failure()
+            }
+            return Result.retry()
+        }
         // A worker can outlive the account that scheduled it. Only replay
         // rows owned by the currently authenticated account; legacy rows with
         // no owner remain visible as unresolved instead of crossing accounts.
@@ -94,19 +118,35 @@ class SyncWorker(
             }
         }
 
-        val batchPending = pending.filter { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }
-        val operations = batchPending.mapNotNull { item -> item.toOperationOrNull() }
+        val batchPending = pending.filter {
+            it.operation == "CREATE_LOT" || it.operation == "UPDATE_LOT" || it.operation == "RECORD_PAYMENT"
+        }
+        val operationPairs = batchPending.mapNotNull { item -> item.toOperationOrNull()?.let { item to it } }
+        val invalidItems = batchPending.filter { item -> operationPairs.none { (queued, _) -> queued.uid == item.uid } }
+        invalidItems.forEach { item -> queue.markFailed(item.uid, "INVALID_SYNC_OPERATION", Long.MAX_VALUE) }
+        val operations = operationPairs.map { it.second }
         if (operations.isEmpty()) return if (deferredOperation) Result.retry() else pullChanges(app)
 
         return try {
             val response = app.container.apiService.sync(SyncBatchRequestDto(operations))
             if (!response.isSuccessful) {
-                return if (response.code() == 408 || response.code() == 429 || response.code() >= 500) Result.retry() else Result.failure()
+                if (response.code() == 408 || response.code() == 429 || response.code() >= 500) {
+                    return Result.retry()
+                }
+                // A non-transient response must not be left as an
+                // unexplained "waiting" row. Preserve the queue item so the
+                // user can inspect it and explicitly retry after fixing the
+                // account/validation problem.
+                val errorCode = response.errorBody()?.string()?.let(::syncErrorCode)
+                    ?: "SYNC_HTTP_${response.code()}"
+                batchPending.forEach { item ->
+                    queue.markFailed(item.uid, errorCode, Long.MAX_VALUE)
+                }
+                return Result.failure()
             }
             val results = response.body()?.data?.results ?: return Result.retry()
             val resultByOperation = results.associateBy { it.operationId }
-            batchPending.forEach { item ->
-                val operation = item.toOperationOrNull() ?: return@forEach
+            operationPairs.forEach { (item, operation) ->
                 val result = resultByOperation[operation.operationId] ?: return@forEach
                 if (result.status in TERMINAL_STATUSES) {
                     if (result.status == "APPLIED" || result.status == "ALREADY_APPLIED") {
@@ -118,8 +158,27 @@ class SyncWorker(
                                 // attached photo is accepted. Keeping the queue item on a
                                 // permanent upload failure is safer than showing a false
                                 // "synced" state or silently dropping the evidence.
-                                if (photoResult == PhotoUploadResult.PERMANENT_FAILURE) return Result.failure()
-                                app.container.database.lotDao().markSynced(operation.entityId)
+                                if (photoResult == PhotoUploadResult.PERMANENT_FAILURE) {
+                                    // The lot mutation itself was accepted. Keep
+                                    // that server record visible and retain a
+                                    // retryable, clearly labelled queue item for
+                                    // the photo instead of leaving the whole lot
+                                    // stuck forever as "waiting".
+                                    if (operation.operationType == "UPDATE") {
+                                        val clientVersion = operation.payload.get("clientVersion")?.asInt ?: 1
+                                        app.container.database.lotDao().markSyncedWithVersion(operation.entityId, clientVersion + 1)
+                                    } else {
+                                        app.container.database.lotDao().markSynced(operation.entityId)
+                                    }
+                                    queue.markFailed(item.uid, "LOT_PHOTO_UPLOAD_REJECTED", Long.MAX_VALUE)
+                                    return Result.failure()
+                                }
+                                if (operation.operationType == "UPDATE") {
+                                    val clientVersion = operation.payload.get("clientVersion")?.asInt ?: 1
+                                    app.container.database.lotDao().markSyncedWithVersion(operation.entityId, clientVersion + 1)
+                                } else {
+                                    app.container.database.lotDao().markSynced(operation.entityId)
+                                }
                             }
                             "PAYMENT" -> app.container.database.paymentDao().markSynced(operation.entityId)
                         }
@@ -196,7 +255,7 @@ class SyncWorker(
                     payload.get("scalePhotoPath")?.takeUnless { it.isJsonNull }?.asString?.let { path ->
                         val file = File(path)
                         if (!file.exists()) return QueueResult.REJECTED
-                        val response = app.container.apiService.uploadHandoverEvidencePhoto(id, MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody("image/*".toMediaTypeOrNull())))
+                        val response = app.container.apiService.uploadHandoverEvidencePhoto(id, MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())))
                         dto = response.requireData()
                     }
                     app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
@@ -253,7 +312,7 @@ class SyncWorker(
         val file = File(path)
         if (!file.exists()) return PhotoUploadResult.PERMANENT_FAILURE
         return try {
-            val body = file.asRequestBody("image/*".toMediaTypeOrNull())
+            val body = file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())
             val response = app.container.apiService.uploadLotPhoto(operation.entityId, MultipartBody.Part.createFormData("photo", file.name, body))
             when {
                 response.isSuccessful -> PhotoUploadResult.UPLOADED
@@ -270,6 +329,7 @@ class SyncWorker(
     private fun SyncQueueItemEntity.toOperationOrNull(): SyncOperationDto? {
         val (operationType, entityType) = when (operation) {
             "CREATE_LOT" -> "CREATE" to "LOT"
+            "UPDATE_LOT" -> "UPDATE" to "LOT"
             "RECORD_PAYMENT" -> "CREATE" to "PAYMENT"
             else -> return null
         }
@@ -283,6 +343,12 @@ class SyncWorker(
         private val TERMINAL_STATUSES = setOf("APPLIED", "ALREADY_APPLIED", "CONFLICT", "REJECTED", "INVALID")
     }
 }
+
+private fun syncErrorCode(raw: String): String? = runCatching {
+    JsonParser.parseString(raw).asJsonObject
+        .getAsJsonObject("error")?.get("code")?.asString
+        ?.takeIf { it.isNotBlank() }
+}.getOrNull()
 
 private fun JsonObject.string(name: String): String = get(name)?.asString ?: error("Missing $name")
 private fun JsonObject.long(name: String): Long = get(name)?.asLong ?: error("Missing $name")
@@ -298,7 +364,10 @@ class SyncScheduler(private val context: Context) {
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .addTag(WORK_TAG)
             .build()
-        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(WORK_TAG, ExistingWorkPolicy.KEEP, request)
+        // REPLACE is intentional for a user-triggered retry. KEEP can leave
+        // a stale/enqueued worker blocking every subsequent retry forever
+        // (especially after a process death or expired token).
+        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(WORK_TAG, ExistingWorkPolicy.REPLACE, request)
     }
 
     companion object {

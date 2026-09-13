@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
                 val title = when (route) {
                     Destinations.MY_LOTS -> stringResource(R.string.home_my_lots)
                     Destinations.LOT_DETAIL -> stringResource(R.string.lot_review_title)
+                    Destinations.LOT_EDIT -> stringResource(R.string.lot_edit_title)
                     Destinations.PRICES -> stringResource(R.string.prices_title)
                     Destinations.RECYCLERS -> stringResource(R.string.recyclers_title)
                     Destinations.RECYCLER_DETAIL -> stringResource(R.string.recyclers_title)

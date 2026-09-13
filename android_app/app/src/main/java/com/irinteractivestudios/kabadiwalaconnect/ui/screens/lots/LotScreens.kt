@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.EditLocation
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Motorcycle
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -95,7 +96,13 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
-fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, demoMode: Boolean = false) {
+fun LotRoute(
+    vm: LotManagementViewModel,
+    onSafety: () -> Unit = {},
+    onHome: () -> Unit = {},
+    onViewSaved: () -> Unit = {},
+    demoMode: Boolean = false
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val gpsSaved = stringResource(R.string.lot_gps_saved)
@@ -120,7 +127,14 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -
         if (uri == null) return@rememberLauncherForActivityResult
         ioScope.launch(Dispatchers.IO) {
             val dir = File(context.filesDir, "lot_photos").apply { mkdirs() }
-            val path = File(dir, "gallery_${System.currentTimeMillis()}.image").absolutePath
+            // Keep the real image extension so the multipart request can send
+            // a MIME type accepted by the backend's upload filter.
+            val extension = when (context.contentResolver.getType(uri)?.lowercase(Locale.US)) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                else -> "jpg"
+            }
+            val path = File(dir, "gallery_${System.currentTimeMillis()}.$extension").absolutePath
             val copied = runCatching {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     File(path).outputStream().use { output -> input.copyTo(output) }
@@ -139,7 +153,7 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -
             vm.demoPhotoCaptured(file.absolutePath)
         }
     } else null
-    LotScreen(state, vm, onTakePhoto = requestCamera, onSelectPhoto = { gallery.launch("image/*") }, onRequestLocation = { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onSafety = onSafety, onHome = onHome, onUseDemoPhoto = useDemoPhoto)
+    LotScreen(state, vm, onTakePhoto = requestCamera, onSelectPhoto = { gallery.launch("image/*") }, onRequestLocation = { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onSafety = onSafety, onHome = onHome, onViewSaved = onViewSaved, onUseDemoPhoto = useDemoPhoto)
     if (showCameraRationale) {
         PermissionRationaleDialog(
             permission = FeaturePermission.CAMERA,
@@ -150,7 +164,7 @@ fun LotRoute(vm: LotManagementViewModel, onSafety: () -> Unit = {}, onHome: () -
 }
 
 @Composable
-fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () -> Unit, onRequestLocation: () -> Unit, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, onUseDemoPhoto: (() -> Unit)? = null, onSelectPhoto: () -> Unit = {}) {
+fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () -> Unit, onRequestLocation: () -> Unit, onSafety: () -> Unit = {}, onHome: () -> Unit = {}, onViewSaved: () -> Unit = {}, onUseDemoPhoto: (() -> Unit)? = null, onSelectPhoto: () -> Unit = {}) {
     val scrollState = rememberScrollState()
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeBottom, state.step) {
@@ -195,7 +209,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             LotStep.WEIGHT -> WeightStep(state, vm)
             LotStep.LOCATION -> LocationStep(state, vm, onRequestLocation)
             LotStep.REVIEW -> ReviewStep(state, vm)
-            LotStep.SAVED -> SavedStep(state, onHome)
+            LotStep.SAVED -> SavedStep(state, onHome, onViewSaved)
         }
     }
 }
@@ -250,6 +264,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             }
             s.materialSuggestion?.let { suggestion ->
                 val confidence = (suggestion.confidence.coerceIn(0.0, 1.0) * 100).toInt()
+                val isFallback = suggestion.source.equals("TEMPLATE", ignoreCase = true) && suggestion.confidence <= 0.0
                 val suggestedLabel = when (suggestion.materialCategory.uppercase()) {
                     "CRT" -> stringResource(R.string.lot_material_crt)
                     "LCD_PANEL", "LCD" -> stringResource(R.string.lot_material_lcd)
@@ -262,11 +277,17 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                     "PLASTIC" -> stringResource(R.string.lot_material_plastic)
                     else -> stringResource(R.string.lot_material_other)
                 }
-                Text(stringResource(R.string.lot_material_suggested, suggestedLabel, confidence), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                if (suggestion.rationale.isNotBlank()) Text(suggestion.rationale, style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = vm::applyMaterialSuggestion, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.lot_material_use_suggestion)) }
+                if (isFallback) {
+                    Text(stringResource(R.string.lot_material_suggest_unavailable), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text(stringResource(R.string.lot_material_suggested, suggestedLabel, confidence), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    if (suggestion.rationale.isNotBlank()) Text(suggestion.rationale, style = MaterialTheme.typography.bodySmall)
+                    if (suggestion.confidence > 0.0 || !suggestion.materialCategory.equals("OTHER", ignoreCase = true)) {
+                        OutlinedButton(onClick = vm::applyMaterialSuggestion, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.lot_material_use_suggestion)) }
+                    }
+                }
             }
-            if (s.materialSuggestionError) Text(stringResource(R.string.lot_material_suggest_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            if (s.materialSuggestionError) Text(stringResource(R.string.lot_material_suggest_unavailable), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
         }
     }
     s.photoWarning?.let { warning ->
@@ -418,12 +439,15 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     )
 }
 @Composable private fun ReviewRow(label: String, value: String) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, style = MaterialTheme.typography.labelLarge); Text(value, style = MaterialTheme.typography.titleMedium) } }
-@Composable private fun SavedStep(s: LotDraftState, onHome: () -> Unit) {
+@Composable private fun SavedStep(s: LotDraftState, onHome: () -> Unit, onViewSaved: () -> Unit) {
     EvidenceSection(title = stringResource(R.string.lot_saved_title), status = stringResource(R.string.quote_saved)) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
-            KcPrimaryButton(stringResource(R.string.lot_back_home), onHome, icon = Icons.Filled.CheckCircle, testTag = "lot_back_home")
+            KcPrimaryButton(stringResource(R.string.lot_view_saved), onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
+            OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("lot_back_home")) {
+                Text(stringResource(R.string.lot_back_home))
+            }
         }
     }
 }
@@ -441,7 +465,84 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     } }
 }
 
-@Composable fun LotDetailScreen(lot: Lot, onCancel: () -> Unit, onRepeat: () -> Unit = {}, repeating: Boolean = false, repeatError: Boolean = false, onTimeline: () -> Unit = {}) { Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }; Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium); ReviewRow(stringResource(R.string.lot_condition_label), lot.condition); ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString())); ReviewRow(stringResource(R.string.lot_area_label), lot.location); lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }; lot.quoteRupees?.let { ReviewRow(stringResource(R.string.lot_user_price_label), "₹%.0f".format(it)) }; Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge); if (repeatError) Text(stringResource(R.string.lot_repeat_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium); if (lot.status in setOf(LotStatus.COLLECTOR_CONFIRMED, LotStatus.HANDED_OVER, LotStatus.PAID, LotStatus.DISPUTED)) OutlinedButton(onClick = onTimeline, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_timeline")) { Text(stringResource(R.string.transaction_passport_title)) }; if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, enabled = !repeating, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(if (repeating) R.string.lot_repeat_sending else R.string.lot_repeat)) }; if (lot.status == LotStatus.SAVED) OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) } } }
+@Composable fun LotDetailScreen(lot: Lot, onCancel: () -> Unit, onEdit: () -> Unit = {}, onRepeat: () -> Unit = {}, repeating: Boolean = false, repeatError: Boolean = false, onTimeline: () -> Unit = {}) { Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }; Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium); ReviewRow(stringResource(R.string.lot_condition_label), lot.condition); ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString())); ReviewRow(stringResource(R.string.lot_area_label), lot.location); lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }; lot.quoteRupees?.let { ReviewRow(stringResource(R.string.lot_user_price_label), "₹%.0f".format(it)) }; Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge); if (repeatError) Text(stringResource(R.string.lot_repeat_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium); if (lot.status in setOf(LotStatus.COLLECTOR_CONFIRMED, LotStatus.HANDED_OVER, LotStatus.PAID, LotStatus.DISPUTED)) OutlinedButton(onClick = onTimeline, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_timeline")) { Text(stringResource(R.string.transaction_passport_title)) }; if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, enabled = !repeating, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(if (repeating) R.string.lot_repeat_sending else R.string.lot_repeat)) }; if (lot.status == LotStatus.SAVED) { OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_edit")) { Text(stringResource(R.string.lot_edit)) }; OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) } } } }
+
+/**
+ * Edits the fields supported by the backend while a lot is still CREATED.
+ * Material, location and photos remain immutable after capture so the edit
+ * action cannot silently change the identity of a tracked lot.
+ */
+@Composable
+fun LotEditScreen(
+    lot: Lot,
+    saving: Boolean = false,
+    errorMessage: String? = null,
+    onSave: (weightKg: Double, condition: String, notes: String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var weightText by remember(lot.id) { mutableStateOf(lot.weightKg.toString()) }
+    var condition by remember(lot.id) {
+        mutableStateOf(runCatching { LotCondition.valueOf(lot.condition) }.getOrDefault(LotCondition.INTACT))
+    }
+    var notes by remember(lot.id) { mutableStateOf(lot.notes) }
+    var validationError by remember(lot.id) { mutableStateOf(false) }
+    val weight = weightText.toDoubleOrNull()
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(stringResource(R.string.lot_edit_title), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.lot_edit_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            value = weightText,
+            onValueChange = { value ->
+                weightText = value.filter { it.isDigit() || it == '.' }.take(7)
+                validationError = false
+            },
+            label = { Text(stringResource(R.string.lot_edit_weight)) },
+            suffix = { Text("kg") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            isError = validationError,
+            modifier = Modifier.fillMaxWidth().testTag("lot_edit_weight")
+        )
+        Text(stringResource(R.string.lot_edit_condition), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        LotCondition.entries.forEach { option ->
+            FilterChip(
+                selected = condition == option,
+                onClick = { condition = option },
+                label = { Text(stringResource(conditionLabelRes(option))) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("lot_edit_condition_${option.name}")
+            )
+        }
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it.take(1000) },
+            label = { Text(stringResource(R.string.lot_edit_notes)) },
+            minLines = 3,
+            maxLines = 6,
+            modifier = Modifier.fillMaxWidth().testTag("lot_edit_notes")
+        )
+        if (validationError) Text(stringResource(R.string.lot_edit_validation_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onCancel, enabled = !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.lot_edit_cancel)) }
+            KcPrimaryButton(
+                text = stringResource(if (saving) R.string.lot_edit_saving else R.string.lot_edit_save),
+                onClick = {
+                    if (weight == null || weight <= 0 || weight >= 500) {
+                        validationError = true
+                    } else {
+                        onSave(weight, condition.name, notes)
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.weight(1f),
+                testTag = "lot_edit_save"
+            )
+        }
+    }
+}
 
 private fun decodeSampledBitmap(path: String, maxDimension: Int = 1200): ImageBitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -75,7 +75,16 @@ class SupplyChainViewModel(private val api: ApiService) : ViewModel() {
     fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireData(); refreshKabadiwala(); "Pickup scheduled." })
     fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", { api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireData(); refreshKabadiwala(); "Pickup updated." })
     fun completePickup(pickupId: String, input: PickupCompletionDto) = action("complete-$pickupId", { api.completePickup(pickupId, input).requireData(); refreshKabadiwala(); "Purchase completed and inventory updated." })
-    fun createBulkLot(input: BulkLotCreateDto) = action("create-bulk", { api.createBulkLot(input).requireData(); refreshKabadiwala(); "Bulk lot listed for verified recyclers." })
+    fun createBulkLot(input: BulkLotCreateDto) = action("create-bulk") {
+        // Keep the returned server record visible immediately. The follow-up
+        // refresh reconciles it with the authoritative list, but a slow or
+        // partially unavailable catalogue must not make a successful lot look
+        // as if it disappeared.
+        val created = api.createBulkLot(input).requireData()
+        _state.value = _state.value.copy(bulkLots = listOf(created) + _state.value.bulkLots.filterNot { it.id == created.id })
+        refreshKabadiwala()
+        "Bulk lot listed for verified recyclers."
+    }
     fun cancelBulkLot(lotId: String) = action("cancel-bulk-$lotId", { api.cancelBulkLot(lotId).requireData(); refreshKabadiwala(); "Bulk lot cancelled and stock released." })
     fun acceptOffer(offerId: String) = action("offer-$offerId", { api.acceptBulkOffer(offerId).requireData(); refreshKabadiwala(); "Recycler offer accepted; stock remains reserved." })
     fun makeOffer(lotId: String, rate: Double) = action("offer-$lotId", { api.makeBulkLotOffer(lotId, BulkOfferCreateDto(rate)).requireData(); refreshRecycler(); "Offer sent to the Kabadiwala." })

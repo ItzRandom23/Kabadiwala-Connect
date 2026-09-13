@@ -1,8 +1,8 @@
 {
-  "versionCode": 26,
-  "versionName": "0.0.25-beta",
-  "apkUrl": "kabadiwala-connect-0.0.25-beta-debug.apk",
-  "sha256": "2210733be5335194d7143d85cff806f0561caaa9e9b0af89cec2f0305b79c3f6",
-  "sizeBytes": 24913964,
-  "releaseNotes": "Testing build with improved dark-mode logo contrast and the Room schema-normalization migration for existing sync, notification, dispute, and payment databases."
+  "versionCode": 27,
+  "versionName": "0.0.26-beta",
+  "apkUrl": "kabadiwala-connect-0.0.26-beta-debug.apk",
+  "sha256": "bc169b4d0bf66df008f158fc888e8e592becc7a449ebe36ca75c8ad84778445f",
+  "sizeBytes": 25135475,
+  "releaseNotes": "Testing build: created lots remain visible, bulk lots appear immediately after creation, sync errors are actionable, and photo uploads use backend-compatible MIME types."
 }
