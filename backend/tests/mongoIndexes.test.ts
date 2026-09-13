@@ -66,4 +66,19 @@ describe('Mongo optional unique indexes', () => {
     expect(commands.filter(command => command.dropIndexes)).toHaveLength(0);
     expect(commands.filter(command => command.createIndexes)).toHaveLength(8);
   });
+
+  it('skips maintenance when Prisma cannot decode the MongoDB index cursor', async () => {
+    const commands: any[] = [];
+    const db = {
+      $runCommandRaw: async (command: any) => {
+        commands.push(command);
+        if (command.listIndexes) throw new Error('Unknown tagged value');
+        return { ok: 1 };
+      }
+    } as any;
+
+    await expect(ensureOptionalUniqueIndexes(db)).resolves.toBe(false);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toEqual({ listIndexes: 'AiInference', cursor: {} });
+  });
 });
