@@ -1,8 +1,8 @@
 {
-  "versionCode": 28,
-  "versionName": "0.0.27-beta",
-  "apkUrl": "kabadiwala-connect-0.0.27-beta-debug.apk",
-  "sha256": "D4D0406464E82288B783C9AFFEB069F8C83B4E40EE64FB3F9025E7AA8CAE0AE8",
-  "sizeBytes": 25205483,
-  "releaseNotes": "Household seller phase: polished scrap listing form, responsive material and condition chips, pickup cancellation, and session recovery improvements."
+  "versionCode": 29,
+  "versionName": "0.0.28-beta",
+  "apkUrl": "kabadiwala-connect-0.0.28-beta-debug.apk",
+  "sha256": "1F33F4E2AF7FED203B14A73AE08E11D2A28E6FD4A695CADD4861666E89385A9A",
+  "sizeBytes": 25205489,
+  "releaseNotes": "Household seller phase: polished scrap listing form, responsive material and condition chips, pickup cancellation, session recovery improvements, and version 0.0.28 packaging."
 }
