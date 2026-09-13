@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "0.0.19-beta",
-  "apkUrl": "kabadiwala-connect-0.0.19-beta.apk",
-  "sha256": "736c844e1bf0275fbe128236e7956be54384efc0fc58bd7063029cdf435495c6",
-  "sizeBytes": 17671299,
-  "releaseNotes": "Adds the transaction passport and payment ledger, completes household and multi-recycler flows, improves offline sync visibility, preserves lot provenance, and surfaces fresher price metadata."
+  "versionCode": 21,
+  "versionName": "0.0.20-beta",
+  "apkUrl": "kabadiwala-connect-0.0.20-beta-debug.apk",
+  "sha256": "fafe40c55d19965d41b6446d948d24ad2902c12e52fe938313309bd49ca17142",
+  "sizeBytes": 24884715,
+  "releaseNotes": "Testing build configured for the live backend at 140.245.232.208:4000 over HTTP. Includes the latest transaction, household, marketplace, offline-sync, and provenance improvements."
 }
