@@ -63,7 +63,7 @@ data class LotDto(val id: String, val collectorId: String? = null, val materialC
 data class PageDto(val page: Int = 1, val limit: Int = 100, val total: Int = 0, val totalPages: Int = 0)
 data class LotPageDto(val items: List<LotDto> = emptyList(), val pagination: PageDto = PageDto())
 
-data class PriceBoardDto(val materialCategory: String, val location: String? = null, val priceMin: Double, val priceMax: Double, val marketPrice: Double, val historicalAverage: Double? = null, val unit: String = "KILOGRAM", val source: PriceSourceDto? = null, val qualityStatus: String = "UNVERIFIED", val ingestedAt: String? = null, val complianceRegime: String? = null, val trend: TrendDto? = null, val lastUpdated: String? = null, val disclaimer: String? = null)
+data class PriceBoardDto(val materialCategory: String, val location: String? = null, val priceMin: Double? = null, val priceMax: Double? = null, val marketPrice: Double? = null, val historicalAverage: Double? = null, val unit: String = "KILOGRAM", val source: PriceSourceDto? = null, val qualityStatus: String = "UNVERIFIED", val ingestedAt: String? = null, val complianceRegime: String? = null, val trend: TrendDto? = null, val lastUpdated: String? = null, val disclaimer: String? = null, val available: Boolean = true)
 data class PriceSourceDto(val type: String? = null, val organization: String? = null, val reference: String? = null)
 data class TrendDto(val direction: String = "STABLE", val percentage: Double = 0.0)
 data class PriceHistoryDto(val materialCategory: String, val location: String? = null, val days: Int = 30, val history: List<PricePointDto> = emptyList())

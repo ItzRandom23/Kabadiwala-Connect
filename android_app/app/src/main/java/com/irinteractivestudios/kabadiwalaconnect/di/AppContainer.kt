@@ -192,7 +192,11 @@ class AppContainer(context: Context) {
         val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "COPPER", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
         val prices = coroutineScope {
             categories.map { category -> async {
-                runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }.getOrNull()?.let { board ->
+                runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }
+                    .getOrNull()
+                    ?.takeIf { it.available && it.marketPrice != null }
+                    ?.let { board ->
+                val marketPrice = board.marketPrice ?: return@let null
                 // Keep the trend chart backed by the same server snapshot as
                 // the headline rate. History is optional so a partial outage
                 // never removes an otherwise valid price board.
@@ -205,9 +209,9 @@ class AppContainer(context: Context) {
                     id = "${resolvedLocation}_$category",
                     location = board.location ?: resolvedLocation,
                     materialLabel = category.toDisplayMaterial(),
-                    ratePerKg = board.marketPrice,
-                    minRatePerKg = board.priceMin,
-                    maxRatePerKg = board.priceMax,
+                    ratePerKg = marketPrice,
+                    minRatePerKg = board.priceMin ?: marketPrice,
+                    maxRatePerKg = board.priceMax ?: marketPrice,
                     updatedAtEpochMs = board.lastUpdated?.let(::parseRemoteTimestamp) ?: System.currentTimeMillis(),
                     trend = board.trend?.direction?.lowercase() ?: "stable",
                     historyCsv = history,

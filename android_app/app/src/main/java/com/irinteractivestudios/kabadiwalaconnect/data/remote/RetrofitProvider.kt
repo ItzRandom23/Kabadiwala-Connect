@@ -21,7 +21,12 @@ object RetrofitProvider {
         val authInterceptor = Interceptor { chain ->
             val original = chain.request()
             val token = tokenProvider()
-            val request: Request = if (token.isNullOrBlank() || original.url.encodedPath.contains("/auth/")) {
+            // Only the credential/session endpoints are public.  `/auth/profile`
+            // is protected and must carry the bearer token; treating every
+            // `/auth/*` path as public caused the startup profile request to
+            // return `Bearer token required` immediately after sign-in.
+            val isPublicAuthEndpoint = original.url.encodedPath.isPublicAuthEndpoint()
+            val request: Request = if (token.isNullOrBlank() || isPublicAuthEndpoint) {
                 original
             } else {
                 original.newBuilder().header("Authorization", "Bearer $token").build()
@@ -31,7 +36,7 @@ object RetrofitProvider {
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .authenticator { _, response ->
-                if (tokenRefresher == null || response.request.url.encodedPath.contains("/auth/") || response.retryCount() >= 2) {
+                if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint() || response.retryCount() >= 2) {
                     null
                 } else {
                     // Multiple requests may fail together when a token expires.
@@ -66,4 +71,13 @@ object RetrofitProvider {
         }
         return count
     }
+
+    private fun String.isPublicAuthEndpoint(): Boolean =
+            endsWith("/auth/request-otp") ||
+            endsWith("/auth/verify-otp") ||
+            endsWith("/auth/refresh") ||
+            endsWith("/auth/logout") ||
+            endsWith("/auth/signup") ||
+            endsWith("/auth/login") ||
+            endsWith("/auth/admin-login")
 }

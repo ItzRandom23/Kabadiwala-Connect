@@ -22,6 +22,8 @@ import java.io.IOException
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Real collector authentication against the versioned backend API. */
 class RemoteAuthenticationRepository(
@@ -29,6 +31,12 @@ class RemoteAuthenticationRepository(
     private val session: SessionRepository,
     private val storage: SecureStorage? = null
 ) : AuthenticationRepository {
+
+    // Access-token expiry can make several in-flight requests enter OkHttp's
+    // authenticator at once. Refresh tokens are single-use, so serialize the
+    // rotation and let waiters reuse the newly saved access token instead of
+    // sending the same refresh token a second time.
+    private val refreshMutex = Mutex()
 
     override suspend fun requestOtp(phoneNumber: String): OtpChallenge {
         api.requestOtp(OtpRequestDto(phoneNumber)).requireData()
@@ -147,17 +155,27 @@ class RemoteAuthenticationRepository(
         }
     }
 
-    override suspend fun refreshAccessToken(): String? = runCatching {
-        val refreshToken = storage?.get(SecureStorage.REFRESH_TOKEN) ?: return@runCatching null
-        val refreshed = api.refreshSession(RefreshTokenRequestDto(refreshToken)).requireData()
-        val expiry = jwtExpiry(refreshed.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-        session.save(refreshed.token, expiry, refreshed.refreshToken)
-        refreshed.token
-    }.getOrElse {
-        // A rejected rotating token is not recoverable. Clear it so repeated
-        // requests cannot create a refresh loop with stale credentials.
-        if (it is RemoteApiException && it.httpCode == 401) session.clear()
-        null
+    override suspend fun refreshAccessToken(): String? = refreshMutex.withLock {
+        val current = storage?.get(SecureStorage.AUTH_TOKEN)
+        // A concurrent caller may already have completed the rotation while
+        // this caller was waiting for the mutex. Reuse that token; rotating
+        // the refresh credential again would correctly be rejected by the
+        // backend as token reuse.
+        if (session.isSessionValid() && !current.isNullOrBlank()) return@withLock current
+
+        runCatching {
+            val refreshToken = storage?.get(SecureStorage.REFRESH_TOKEN) ?: return@runCatching null
+            val refreshed = api.refreshSession(RefreshTokenRequestDto(refreshToken)).requireData()
+            val expiry = jwtExpiry(refreshed.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
+            session.save(refreshed.token, expiry, refreshed.refreshToken)
+            refreshed.token
+        }.getOrElse {
+            // A rejected rotating token is not recoverable. Clear it so
+            // repeated requests cannot create a refresh loop with stale
+            // credentials.
+            if (it is RemoteApiException && it.httpCode == 401) session.clear()
+            null
+        }
     }
 
     override suspend fun refreshAccount(): AccountProfile? = runCatching {

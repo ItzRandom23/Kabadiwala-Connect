@@ -1,8 +1,8 @@
 {
-  "versionCode": 32,
-  "versionName": "0.0.31-beta",
-  "apkUrl": "kabadiwala-connect-0.0.31-beta-debug.apk",
-  "sha256": "0440D97412888706D723DFBD6C9EE5C07C1ABF203844385F3739BD3194A97A24",
-  "sizeBytes": 25237395,
-  "releaseNotes": "Adds household photo-backed scrap listings with a clearly labelled prototype price range, expands the closed-loop pickup, inventory, bulk-lot, offer, and receipt demo disclosures, and documents simulated AI, matching, demand, notification, analytics, and offline capabilities. Includes the previous startup and sync performance improvements."
+  "versionCode": 33,
+  "versionName": "0.0.32-beta",
+  "apkUrl": "kabadiwala-connect-0.0.32-beta-debug.apk",
+  "sha256": "92E9B9702A4EF06BBF6F3937BC7347CF47B60AF8B80CD059D35572CAEAB0522A",
+  "sizeBytes": 8705577,
+  "releaseNotes": "Fixes missing profile authorization headers, prevents rotating refresh-token races, blocks role-mismatched Kabadiwala requests, and handles unavailable price data without repeated 404 errors. Expected client authentication errors now use concise warning logs."
 }

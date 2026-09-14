@@ -100,7 +100,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService)
+            SupplyChainViewModel(container.apiService) { container.currentAccount()?.role }
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")
     } as T
 
