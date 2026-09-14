@@ -22,6 +22,7 @@ import { notificationRoutes } from './routes/notificationRoutes.js';
 import { transactionRoutes } from './routes/transactionRoutes.js';
 import { activityRoutes } from './routes/activityRoutes.js';
 import { supplyChainRoutes } from './routes/supplyChainRoutes.js';
+import { formalisationRoutes } from './routes/formalisationRoutes.js';
 import type { JwtService } from './services/jwt.js';
 import type { CollectorService } from './services/collectorService.js';
 import type { AuthService } from './services/authService.js';
@@ -80,6 +81,7 @@ export function createApp(
   if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db));
   if (collectorRepository) api.use('/collectors', collectorRoutes(jwt, collectorRepository, collectorService));
   if (collectorRepository) api.use(supplyChainRoutes(jwt, collectorRepository, db));
+  if (collectorRepository) api.use(formalisationRoutes(jwt, collectorRepository, db, config.TRACEABILITY_SIGNING_SECRET));
   if (lotService && collectorRepository) api.use('/lots', lotRoutes(jwt, collectorRepository, lotService));
   if (priceService && collectorRepository) api.use(priceRoutes(jwt, collectorRepository, priceService, db));
   if (recyclerService && collectorRepository) api.use(recyclerRoutes(jwt, collectorRepository, recyclerService, db));

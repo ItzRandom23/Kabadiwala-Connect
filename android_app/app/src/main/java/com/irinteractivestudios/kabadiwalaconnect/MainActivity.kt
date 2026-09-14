@@ -194,7 +194,12 @@ class MainActivity : ComponentActivity() {
                                 runCatching { app.container.reconcileChanges() }
                                 app.container.refreshCatalogs()
                             } else if (!wasValid && refreshed == null) {
-                                app.container.clearAccount()
+                                // A revoked/expired session must not erase a
+                                // lot or receipt captured offline. Preserve
+                                // Room/outbox data until the user explicitly
+                                // logs out; only remove the invalid session
+                                // and account snapshot before re-authentication.
+                                app.container.expireAccountSession()
                             }
                             Triple(wasValid, refreshed, isValid)
                         }

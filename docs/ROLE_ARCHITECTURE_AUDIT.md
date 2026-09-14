@@ -1,4 +1,4 @@
-# Role architecture audit — 2026-09-13
+# Role architecture audit — 2026-09-14
 
 ## Decision
 
@@ -20,6 +20,13 @@ boundaries.
 | Mark reserved lot received | No | No | Accepted recycler only | `reservedForId` predicate |
 | Create procurement demand | No | No | Yes | recycler ownership key |
 | Browse open procurement demand | No | Yes | Own demand only | role-scoped endpoints |
+| Compare formal route advantage | No | Yes | No | current verified Recycler and explicit estimate fields |
+| Opt into/lock a cooperative pool | No | Yes, own inventory contribution | No | atomic reservation; unique demand pool |
+| View supply handover/passport | Own completed listing result | Own handover/contribution evidence | Assigned formal handovers only | source/reference/party predicates |
+| Confirm formal supply receipt | No | No | Yes, assigned current Recycler | signed QR + Collector confirmation + conditional transition |
+| Accept/raise a formal settlement issue | No | Own contribution/handover | No | breakdown status and anomaly event |
+| View collector growth passport | No | Own platform-generated passport | No | authenticated owner scope |
+| View reverse-demand opportunities | No | Aggregate demand/gap only | Own demand management | no cross-collector identity disclosure |
 | Legacy collector→recycler lots/quotes/handovers/payments | No | Yes | Role-specific recycler actions | household removed from collector middleware |
 | Shared preferences, education, safety | Yes | Yes | Yes | authenticated account only |
 
@@ -61,11 +68,17 @@ stock movements.
 `/kabadiwala/procurement-requirements` power the Kabadiwala collection,
 inventory, aggregation, offer, and market-demand views. `GET/POST
 /recycler/bulk-lots`, `/recycler/offers`, and
-`/recycler/procurement-requirements` power Recycler procurement. All Android
+`/recycler/procurement-requirements` power Recycler procurement. Formalisation
+adds `/kabadiwala/route-advantage`, `/kabadiwala/pool-opportunities`,
+`/kabadiwala/pools/*`, `/kabadiwala/passport`, `/kabadiwala/safety/*`,
+`/kabadiwala/*/prepare-handover`, `/kabadiwala/handovers/*`,
+`/recycler/pools`, `/recycler/supply-handovers` and
+`/recycler/handovers/confirm`. All Android
 DTOs mirror these request and response shapes; loading, empty, retry, conflict,
 forbidden, and expired-session states are mapped to user-facing copy.
 
-The old collector-to-recycler screens remain only behind the explicit offline
-demo entry point for regression coverage. A persisted live account cannot reach
-those legacy tabs, and the backend denies household or cross-role requests even
-when a route or resource id is constructed manually.
+The old lot/quote/handover screens remain available only for legacy/offline
+regression coverage. The live supply-chain workspace uses the formal handover
+path for new pool and bulk receipt. A persisted live account cannot cross role
+boundaries, and the backend denies household or cross-role requests even when a
+route or resource id is constructed manually.

@@ -28,6 +28,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRe
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverConfirmRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
@@ -49,9 +50,11 @@ class SyncWorker(
         val queue = app.container.database.syncQueueDao()
         val accountId = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.ACCOUNT_PROFILE_ID)
         if (accountId.isNullOrBlank()) return Result.success()
-        // Household listings use dedicated online endpoints. Do not replay
-        // collector lot/payment operations with a household token.
-        if (app.container.currentAccount()?.role != AccountRole.COLLECTOR) return Result.success()
+        // Household listings use dedicated online endpoints. Recycler receipt
+        // confirmations are also queued, but a recycler must never replay
+        // collector lot/payment operations with its token.
+        val currentRole = app.container.currentAccount()?.role
+        if (currentRole != AccountRole.COLLECTOR && currentRole != AccountRole.RECYCLER) return Result.success()
 
         // A worker can wake after the short-lived access token has expired.
         // Previously we returned success when the token was missing, leaving
@@ -68,9 +71,13 @@ class SyncWorker(
             app.container.authenticationRepository.refreshAccessToken()
         }
         if (token.isNullOrBlank()) {
-            if (!hadRefreshToken) {
-                // Keep the row visible with a useful explanation. The user
-                // can sign in again and tap Retry to clear this gate.
+            val refreshTokenStillPresent = !app.container.secureStorage
+                .get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.REFRESH_TOKEN)
+                .isNullOrBlank()
+            if (!hadRefreshToken || !refreshTokenStillPresent) {
+                // A missing or server-rejected refresh credential is a
+                // permanent auth gate for this run. Keep the local payload,
+                // surface it in Sync Center, and avoid an endless retry loop.
                 queue.observePendingForAccount(accountId).first().forEach { item ->
                     queue.markFailed(item.uid, "AUTH_REQUIRED", Long.MAX_VALUE)
                 }
@@ -81,7 +88,9 @@ class SyncWorker(
         // A worker can outlive the account that scheduled it. Only replay
         // rows owned by the currently authenticated account; legacy rows with
         // no owner remain visible as unresolved instead of crossing accounts.
-        val pending = queue.observePendingForAccount(accountId).first().take(BATCH_SIZE)
+        val pending = queue.observePendingForAccount(accountId).first()
+            .filter { currentRole == AccountRole.COLLECTOR || it.operation == "CONFIRM_SUPPLY_HANDOVER" }
+            .take(BATCH_SIZE)
         if (pending.isEmpty()) return pullChanges(app)
         val pendingCreateLotIds = pending
             .filter { it.operation == "CREATE_LOT" }
@@ -278,6 +287,15 @@ class SyncWorker(
                     val dispute = app.container.apiService.disputeHandover(handoverId, body).requireData()
                     app.container.database.disputeDao().markSynced(localId, dispute.id)
                 }
+                "CONFIRM_SUPPLY_HANDOVER" -> {
+                    app.container.apiService.confirmSupplyHandover(SupplyHandoverConfirmRequestDto(
+                        qrCodeData = payload.string("qrCodeData"),
+                        actualWeightKg = payload.get("actualWeightKg")?.asDouble,
+                        acceptedWeightKg = payload.get("acceptedWeightKg")?.asDouble,
+                        materialMatch = payload.get("materialMatch")?.asBoolean ?: true,
+                        reasonCode = payload.get("reasonCode")?.asString
+                    )).requireData()
+                }
                 else -> return QueueResult.REJECTED
             }
             QueueResult.APPLIED
@@ -298,6 +316,7 @@ class SyncWorker(
             "MARK_HANDOVER" -> app.container.apiService.getHandover(payload.string("id")).requireData().collectorConfirmedAt != null
             "UPDATE_HANDOVER_EVIDENCE" -> app.container.apiService.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
             "CANCEL_LOT" -> app.container.apiService.getLot(payload.string("id")).requireData().status == "CANCELLED"
+            "CONFIRM_SUPPLY_HANDOVER" -> app.container.apiService.getSupplyHandovers().requireData().firstOrNull { it.id == payload.string("handoverId") }?.status in setOf("COMPLETED", "REVIEW_REQUIRED")
             else -> false
         }
     }.getOrDefault(false)

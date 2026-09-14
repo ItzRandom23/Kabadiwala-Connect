@@ -77,6 +77,46 @@ interface ApiService {
     suspend fun createProcurementRequirement(@Body body: ProcurementRequirementCreateDto): Response<ApiEnvelope<ProcurementRequirementDto>>
     @GET("recycler/procurement-requirements")
     suspend fun getRecyclerProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
+    @GET("kabadiwala/route-advantage")
+    suspend fun getRouteAdvantage(@Query("materialCategory") materialCategory: String, @Query("quantityKg") quantityKg: Double, @Query("grade") grade: String = "UNSPECIFIED", @Query("areaName") areaName: String? = null): Response<ApiEnvelope<RouteAdvantageResponseDto>>
+    @GET("kabadiwala/pool-opportunities")
+    suspend fun getPoolOpportunities(): Response<ApiEnvelope<List<PoolOpportunityDto>>>
+    @POST("kabadiwala/pools")
+    suspend fun createPool(@Body body: PoolCreateRequestDto): Response<ApiEnvelope<PooledConsignmentDto>>
+    @GET("kabadiwala/pools")
+    suspend fun getKabadiwalaPools(): Response<ApiEnvelope<List<PooledConsignmentDto>>>
+    @POST("kabadiwala/pools/{poolId}/join")
+    suspend fun joinPool(@Path("poolId") poolId: String, @Body body: PoolJoinRequestDto): Response<ApiEnvelope<PoolContributionDto>>
+    @POST("kabadiwala/pools/{poolId}/leave")
+    suspend fun leavePool(@Path("poolId") poolId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pools/{poolId}/lock")
+    suspend fun lockPool(@Path("poolId") poolId: String): Response<ApiEnvelope<PooledConsignmentDto>>
+    @GET("recycler/pools")
+    suspend fun getRecyclerPools(): Response<ApiEnvelope<List<PooledConsignmentDto>>>
+    @GET("kabadiwala/demand-intelligence")
+    suspend fun getDemandIntelligence(): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("kabadiwala/passport")
+    suspend fun getCollectorPassport(): Response<ApiEnvelope<CollectorPassportDto>>
+    @GET("kabadiwala/safety")
+    suspend fun getSafety(): Response<ApiEnvelope<SafetyResponseDto>>
+    @POST("kabadiwala/safety/{moduleKey}/acknowledge")
+    suspend fun acknowledgeSafety(@Path("moduleKey") moduleKey: String): Response<ApiEnvelope<SafetyProgressDto>>
+    @POST("kabadiwala/pools/{poolId}/prepare-handover")
+    suspend fun preparePoolHandover(@Path("poolId") poolId: String, @Body body: JsonObject = JsonObject()): Response<ApiEnvelope<SupplyHandoverDto>>
+    @POST("kabadiwala/bulk-lots/{lotId}/prepare-handover")
+    suspend fun prepareBulkHandover(@Path("lotId") lotId: String, @Body body: JsonObject = JsonObject()): Response<ApiEnvelope<SupplyHandoverDto>>
+    @POST("kabadiwala/handovers/{handoverId}/collector-confirm")
+    suspend fun confirmCollectorHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<SupplyHandoverDto>>
+    @GET("kabadiwala/handovers")
+    suspend fun getKabadiwalaHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
+    @GET("recycler/supply-handovers")
+    suspend fun getSupplyHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
+    @POST("recycler/handovers/confirm")
+    suspend fun confirmSupplyHandover(@Body body: SupplyHandoverConfirmRequestDto): Response<ApiEnvelope<SupplyHandoverDto>>
+    @POST("kabadiwala/handovers/{handoverId}/settlement")
+    suspend fun decideSupplySettlement(@Path("handoverId") handoverId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<SupplyHandoverDto>>
+    @GET("kabadiwala/handovers/{handoverId}/passport")
+    suspend fun getMaterialPassport(@Path("handoverId") handoverId: String): Response<ApiEnvelope<MaterialPassportResponseDto>>
     @POST("auth/request-otp")
     suspend fun requestOtp(@Body body: OtpRequestDto): Response<ApiEnvelope<OtpRequestedDto>>
 
@@ -223,7 +263,7 @@ interface ApiService {
     @GET("payments/{paymentId}")
     suspend fun getPayment(@Path("paymentId") paymentId: String): Response<ApiEnvelope<PaymentDto>>
 
-    @PATCH("payments/{paymentId}")
+    @PUT("payments/{paymentId}")
     suspend fun editPayment(@Path("paymentId") paymentId: String, @Body body: PaymentEditRequestDto): Response<ApiEnvelope<PaymentDto>>
 
     @POST("payments/{paymentId}/dispute")

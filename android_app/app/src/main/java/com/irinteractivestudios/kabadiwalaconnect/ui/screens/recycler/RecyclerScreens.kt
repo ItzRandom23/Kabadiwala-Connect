@@ -50,7 +50,7 @@ import androidx.compose.ui.res.stringResource
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
@@ -450,7 +450,7 @@ private fun OperationsPulse(openLots: Int, needsResponse: Int) {
 @Composable
 fun RecyclerOrdersScreen(
     demoMode: Boolean = false,
-    liveHandovers: List<HandoverDto> = emptyList(),
+    liveHandovers: List<SupplyHandoverDto> = emptyList(),
     liveLoading: Boolean = false,
     liveError: Boolean = false,
     onRefresh: () -> Unit = {},
@@ -483,17 +483,18 @@ fun RecyclerOrdersScreen(
 }
 
 @Composable
-private fun LiveOrderCard(handover: HandoverDto, onScan: () -> Unit) {
+private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
     val status = handover.status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
     OperationalSurface {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (handover.status == "CONFIRMED_BY_RECYCLER") Icons.Filled.Verified else Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.recycler_order_reference, handover.referenceId ?: handover.id.takeLast(8)), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Icon(if (handover.status == "COMPLETED") Icons.Filled.Verified else Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.recycler_order_reference, handover.referenceId.ifBlank { handover.id.takeLast(8) }), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
-            Text(stringResource(R.string.recycler_order_weight, handover.actualWeight ?: handover.weight ?: 0.0), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.recycler_order_weight, handover.finalAcceptedKg ?: handover.quotedWeightKg), style = MaterialTheme.typography.bodyLarge)
+            Text("${handover.materialCategory.replace('_', ' ')} · ₹${"%.0f".format(handover.finalRatePerKg ?: handover.quotedRatePerKg)}/kg", style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.recycler_order_status, status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            if (handover.status == "GENERATED") Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
+            if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
         }
     }
 }
@@ -506,7 +507,14 @@ fun RecyclerScanScreen(
     onReset: () -> Unit
 ) {
     var reference by remember { mutableStateOf("") }
-    var actualWeight by remember(state.verified?.handoverId) { mutableStateOf(state.verified?.actualWeight?.toString() ?: state.verified?.declaredWeight?.toString().orEmpty()) }
+    var actualWeight by remember(state.supplyVerified?.id ?: state.verified?.handoverId) {
+        mutableStateOf(
+            state.supplyVerified?.quotedWeightKg?.toString()
+                ?: state.verified?.actualWeight?.toString()
+                ?: state.verified?.declaredWeight?.toString()
+                ?: ""
+        )
+    }
     var materialMatch by remember(state.verified?.handoverId) { mutableStateOf(true) }
     var notes by remember(state.verified?.handoverId) { mutableStateOf("") }
     val scannerPrompt = stringResource(R.string.recycler_scan_title)
@@ -516,7 +524,7 @@ fun RecyclerScanScreen(
             onVerify(value)
         }
     }
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(Icons.Filled.QrCodeScanner, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
         Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.recycler_scan_explanation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -530,6 +538,25 @@ fun RecyclerScanScreen(
             Text(stringResource(R.string.recycler_scan_validate))
         }
         if (state.error) Text(stringResource(R.string.recycler_scan_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+        state.supplyVerified?.let { handover ->
+            OperationalSurface {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text("Material passport matched", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
+                    Text("${handover.referenceId} · ${handover.materialCategory.replace('_', ' ')}", fontWeight = FontWeight.SemiBold)
+                    Text("Declared ${"%.1f".format(handover.quotedWeightKg)} kg · quoted ₹${"%.0f".format(handover.quotedRatePerKg)}/kg")
+                    Text(if (state.supplyFromCache) "Matched from this device's saved passport. Server confirmation will happen when connected." else "Signed QR matched to the recycler's current server record.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(actualWeight, { actualWeight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.handover_final_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
+                    OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 && it <= 100000 } == true && !state.confirming && !state.supplyQueued && state.supplyConfirmed == null, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                        if (state.confirming) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+                        Text(if (state.supplyQueued) "Saved on device — waiting to sync" else if (state.supplyConfirmed != null) "Receipt recorded" else "Confirm received material")
+                    }
+                    state.supplyQueued.takeIf { it }?.let { Text("Receipt saved locally with its QR evidence. Keep this screen; it will retry automatically when the network returns.", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge) }
+                    state.supplyConfirmed?.let { confirmed -> Text("Server receipt: ${statusNameForSupply(confirmed.status)} · final ${"%.1f".format(confirmed.finalAcceptedKg ?: 0.0)} kg", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge) }
+                }
+            }
+        }
         state.verified?.let { verified ->
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -555,6 +582,8 @@ fun RecyclerScanScreen(
         TextButton(onClick = { reference = ""; onReset() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_scan_clear)) }
     }
 }
+
+private fun statusNameForSupply(value: String) = value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
 @Composable
 fun RecyclerPickupsScreen(

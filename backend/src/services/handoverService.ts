@@ -28,7 +28,7 @@ export class HandoverService {
     const q = await this.db.quote.findFirst({ where: { id: p.quoteId, lotId: lot.id, status: 'ACCEPTED' }, include: { recycler: true } });
     if (!q) throw new AppError('CONFLICT', 'Accepted quote required', 409, { code: 'QUOTE_NOT_ACCEPTED' });
     if (q.validUntil <= new Date()) throw new AppError('CONFLICT', 'Quote has expired', 409, { code: 'QUOTE_EXPIRED' });
-    if (q.recycler.authorizationStatus !== 'VERIFIED') throw new AppError('CONFLICT', 'Recycler is not verified', 409, { code: 'RECYCLER_NOT_VERIFIED' });
+    if (q.recycler.authorizationStatus !== 'VERIFIED' || (q.recycler.authorizationValidUntil && q.recycler.authorizationValidUntil <= new Date())) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
     assertLotTransition(lot.status, 'HANDED_OVER');
     // Handover creation is idempotent for a lot. Returning any existing
     // record also makes retries safe after the database write succeeds but
@@ -71,8 +71,6 @@ export class HandoverService {
       recycler: {
         name: h.recycler.name,
         authorizationStatus: h.recycler.authorizationStatus,
-        authorizationAuthority: h.recycler.authorizationAuthority,
-        licenseNumber: h.recycler.licenseNumber,
         authorizationValidUntil: h.recycler.authorizationValidUntil
       }
     };
@@ -96,7 +94,7 @@ export class HandoverService {
   }
   async updateEvidence(id: string, cid: string, p: { actualWeight: number; materialMatch: boolean; scalePhotoReference?: string; collectorConfirmed?: boolean }) {
     const h = await this.view(id, cid, 'COLLECTOR');
-    if (!['GENERATED', 'CONFIRMED_BY_RECYCLER'].includes(h.status)) throw new AppError('CONFLICT', 'Handover evidence is locked', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
+    if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover evidence is locked after recycler confirmation', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
     if (!Number.isFinite(p.actualWeight) || p.actualWeight <= 0 || p.actualWeight > 500) throw new AppError('VALIDATION_ERROR', 'Invalid actual weight', 422, { code: 'INVALID_ACTUAL_WEIGHT' });
     const updated = await this.db.handover.updateMany({
       where: { id, collectorId: cid, status: { in: ['GENERATED', 'CONFIRMED_BY_RECYCLER'] } },
@@ -115,7 +113,7 @@ export class HandoverService {
     if (!this.storage) throw new AppError('INTERNAL_SERVER_ERROR', 'Photo storage is not configured', 503, { code: 'PHOTO_STORAGE_UNAVAILABLE' });
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 422, { code: 'INVALID_PHOTO' });
     const handover = await this.view(id, cid, 'COLLECTOR');
-    if (!['GENERATED', 'CONFIRMED_BY_RECYCLER'].includes(handover.status)) throw new AppError('CONFLICT', 'Handover evidence is locked', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
+    if (handover.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover evidence is locked after recycler confirmation', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
     const key = `handovers/${cid}/${id}-${Date.now()}.jpg`;
     const stored = await this.storage.putImage(file.buffer, key);
     const updated = await this.db.handover.updateMany({ where: { id, collectorId: cid, status: { in: ['GENERATED', 'CONFIRMED_BY_RECYCLER'] } }, data: { actualWeightPhotoReference: stored.key } });
@@ -127,7 +125,7 @@ export class HandoverService {
   }
   async confirm(id: string, rid: string, p: any) {
     const h = await this.view(id, rid, 'RECYCLER');
-    if (h.recycler.authorizationStatus !== 'VERIFIED') throw new AppError('CONFLICT', 'Recycler is not verified', 409, { code: 'RECYCLER_NOT_VERIFIED' });
+    if (h.recycler.authorizationStatus !== 'VERIFIED' || (h.recycler.authorizationValidUntil && h.recycler.authorizationValidUntil <= new Date())) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
     if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover is not actionable', 409, { code: 'HANDOVER_NOT_ACTIONABLE' });
     const actual = Number(p.actualWeight);
     if (!Number.isFinite(actual) || actual <= 0) throw new AppError('VALIDATION_ERROR', 'Invalid actual weight', 422, { code: 'INVALID_ACTUAL_WEIGHT' });
@@ -171,7 +169,7 @@ export class HandoverService {
   }
   async reject(id: string, rid: string, reason: string) {
     const h = await this.view(id, rid, 'RECYCLER');
-    if (h.recycler.authorizationStatus !== 'VERIFIED') throw new AppError('CONFLICT', 'Recycler is not verified', 409, { code: 'RECYCLER_NOT_VERIFIED' });
+    if (h.recycler.authorizationStatus !== 'VERIFIED' || (h.recycler.authorizationValidUntil && h.recycler.authorizationValidUntil <= new Date())) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
     if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover is not actionable', 409, { code: 'HANDOVER_NOT_ACTIONABLE' });
     return this.db.$transaction(async tx => {
       const updated = await tx.handover.updateMany({ where: { id, status: 'GENERATED' }, data: { status: 'DISPUTED', recyclerNotes: reason } });
@@ -185,5 +183,5 @@ export class HandoverService {
   async dispute(cid: string, id: string, p: any) { const h = await this.view(id, cid, 'COLLECTOR'); if (p.clientDisputeId) { const prior = await this.db.dispute.findFirst({ where: { id: p.clientDisputeId, collectorId: cid, handoverId: h.id } }); if (prior) return prior; } return this.db.dispute.create({ data: { ...(p.clientDisputeId ? { id: p.clientDisputeId } : {}), handoverId: h.id, lotId: h.lotId, collectorId: cid, recyclerId: h.recyclerId, type: p.type, reportedBy: cid, description: p.description, claimedValue: p.claimedWeight, evidence: p.evidence } }); }
   async adminDisputes() { return this.db.dispute.findMany({ orderBy: { createdAt: 'desc' } }); }
   async adminDispute(id: string) { const d = await this.db.dispute.findUnique({ where: { id }, include: { handover: true } }); if (!d) throw new AppError('NOT_FOUND', 'Dispute not found', 404, { code: 'DISPUTE_NOT_FOUND' }); return d; }
-  async resolve(id: string, admin: string, p: any) { const d = await this.db.dispute.findUnique({ where: { id } }); if (!d) throw new AppError('NOT_FOUND', 'Dispute not found', 404, { code: 'DISPUTE_NOT_FOUND' }); if (d.status === 'RESOLVED') throw new AppError('CONFLICT', 'Dispute already resolved', 409, { code: 'DISPUTE_ALREADY_RESOLVED' }); return this.db.$transaction(async tx => { const out = await tx.dispute.update({ where: { id }, data: { status: 'RESOLVED', resolution: p.resolution, resolutionNotes: p.notes, resolvedBy: admin, resolvedAt: new Date() } }); await tx.handover.update({ where: { id: d.handoverId }, data: { status: 'COMPLETED' } }); const payment = await tx.payment.findUnique({ where: { lotId: d.lotId }, select: { status: true } }); await tx.lot.update({ where: { id: d.lotId }, data: { status: payment && payment.status !== 'DISPUTED' ? 'PAID' : 'HANDED_OVER' } }); return out; }); }
+  async resolve(id: string, admin: string, p: any) { const d = await this.db.dispute.findUnique({ where: { id } }); if (!d) throw new AppError('NOT_FOUND', 'Dispute not found', 404, { code: 'DISPUTE_NOT_FOUND' }); if (d.status === 'RESOLVED') throw new AppError('CONFLICT', 'Dispute already resolved', 409, { code: 'DISPUTE_ALREADY_RESOLVED' }); if (!['ACCEPT_COLLECTOR', 'ACCEPT_RECYCLER', 'SPLIT_DIFFERENCE', 'OTHER'].includes(p.resolution)) throw new AppError('VALIDATION_ERROR', 'A supported dispute resolution is required', 422, { code: 'DISPUTE_RESOLUTION_INVALID' }); if (p.resolution === 'OTHER' && !String(p.notes ?? '').trim()) throw new AppError('VALIDATION_ERROR', 'Explain the custom dispute resolution', 422, { code: 'DISPUTE_RESOLUTION_NOTES_REQUIRED' }); return this.db.$transaction(async tx => { const out = await tx.dispute.update({ where: { id }, data: { status: 'RESOLVED', resolution: p.resolution, resolutionNotes: p.notes, resolvedBy: admin, resolvedAt: new Date() } }); await tx.handover.update({ where: { id: d.handoverId }, data: { status: 'COMPLETED' } }); const payment = await tx.payment.findUnique({ where: { lotId: d.lotId }, select: { id: true, status: true } }); if (payment?.status === 'DISPUTED' && p.resolution === 'ACCEPT_COLLECTOR') await tx.payment.update({ where: { id: payment.id }, data: { status: 'RECORDED' } }); const paymentAfterResolution = payment?.status === 'DISPUTED' && p.resolution !== 'ACCEPT_COLLECTOR' ? payment : payment ? { ...payment, status: 'RECORDED' } : null; await tx.lot.update({ where: { id: d.lotId }, data: { status: paymentAfterResolution ? 'PAID' : 'HANDED_OVER' } }); return out; }); }
 }

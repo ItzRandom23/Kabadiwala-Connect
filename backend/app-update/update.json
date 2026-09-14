@@ -1,8 +1,8 @@
 {
-  "versionCode": 33,
-  "versionName": "0.0.32-beta",
-  "apkUrl": "kabadiwala-connect-0.0.32-beta-debug.apk",
-  "sha256": "92E9B9702A4EF06BBF6F3937BC7347CF47B60AF8B80CD059D35572CAEAB0522A",
-  "sizeBytes": 8705577,
-  "releaseNotes": "Fixes missing profile authorization headers, prevents rotating refresh-token races, blocks role-mismatched Kabadiwala requests, and handles unavailable price data without repeated 404 errors. Expected client authentication errors now use concise warning logs."
+  "versionCode": 34,
+  "versionName": "0.0.33-beta",
+  "apkUrl": "kabadiwala-connect-0.0.33-beta-debug.apk",
+  "sha256": "A85A829F520ECA850227BD3E1E276EA8DD67008A0BC1FD5E562CF28A3274988A",
+  "sizeBytes": 8820192,
+  "releaseNotes": "Adds the formal route, cooperative pooling, signed material-passport handover, fairness and dispute guards, recycler demand signals, and resilient offline lot and receipt sync for the testing/SIH prototype."
 }

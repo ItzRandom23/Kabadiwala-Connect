@@ -384,7 +384,7 @@
     <string name="household_chat_open">चॅट उघडली · पिकअप सुमारे 5:30 वाजता</string>
     <string name="household_estimated_range">अंदाजित किंमत-श्रेणी</string>
     <string name="household_final_after_inspection">तपासणी आणि मान्यतेनंतर अंतिम किंमत</string>
-    <string name="testing_mode_banner">चाचणी मोड · चाचणी सर्व्हरशी जोडलेले</string>
+    <string name="testing_mode_banner">चाचणी मोड · विकास बिल्ड</string>
     <string name="recycler_scan_title">हँडओव्हर QR स्कॅन करा</string>
     <string name="recycler_scan_explanation">संपूर्ण स्वाक्षरी केलेला कोड स्कॅन करा. साहित्य स्वीकारण्यापूर्वी तो सर्व्हरवर तपासला जाईल.</string>
     <string name="recycler_scan_camera">कॅमेरा स्कॅनर उघडा</string>

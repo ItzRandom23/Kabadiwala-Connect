@@ -67,7 +67,10 @@ const app = createApp(
   new EmailAuthService(prisma, jwt, sessionService, authenticationRateLimiter)
 );
 
-const server = app.listen(config.PORT, () => console.log(`Kabadiwala backend listening on port ${config.PORT}`));
+// Bind explicitly to IPv4 so Android emulators can reach the local development
+// server through 10.0.2.2. This remains a local/SIH prototype server; deployment
+// exposure is controlled separately by the hosting environment.
+const server = app.listen(config.PORT, '0.0.0.0', () => console.log(`Kabadiwala backend listening on port ${config.PORT}`));
 const shutdown = async () => {
   server.close(async () => {
     await prisma.$disconnect();

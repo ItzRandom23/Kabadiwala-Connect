@@ -251,7 +251,10 @@ class AppContainer(context: Context) {
                 lastUpdatedEpochMs = recycler.lastUpdated?.let(::parseRemoteTimestamp)
             )
         }
-        if (recyclers.isNotEmpty()) database.recyclerDao().replaceAll(recyclers)
+        // A successful empty response is authoritative too. Keeping the old
+        // rows here made a real “no verified recyclers in this area” result
+        // look like cached availability.
+        database.recyclerDao().replaceAll(recyclers)
 
         lastCatalogRefreshKey = refreshKey
         lastCatalogRefreshElapsedMs = android.os.SystemClock.elapsedRealtime()
@@ -459,6 +462,33 @@ class AppContainer(context: Context) {
             File(appContext.filesDir, "lot_photos").deleteRecursively()
             File(appContext.filesDir, "handover_photos").deleteRecursively()
         }
+        secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)
+        secureStorage.remove(SecureStorage.ACCOUNT_ROLE)
+        secureStorage.remove(SecureStorage.ACCOUNT_VERIFICATION_STATUS)
+        secureStorage.remove(SecureStorage.ACCOUNT_PHONE)
+        secureStorage.remove(SecureStorage.ACCOUNT_DISPLAY_NAME)
+        secureStorage.remove(SecureStorage.ACCOUNT_AREA_NAME)
+        secureStorage.remove(SecureStorage.ACCOUNT_LANGUAGE)
+        secureStorage.remove(SecureStorage.ACCOUNT_PROFILE_ID)
+        secureStorage.remove(SecureStorage.ACCOUNT_LATITUDE)
+        secureStorage.remove(SecureStorage.ACCOUNT_LONGITUDE)
+        secureStorage.remove(SecureStorage.COLLECTOR_ID)
+        secureStorage.remove(SecureStorage.SYNC_CURSOR)
+        secureStorage.remove(SecureStorage.ACTIVITY_CURSOR)
+    }
+
+    /**
+     * Ends an invalid session without deleting durable local work.
+     *
+     * Token expiry/revocation is recoverable by signing in again. Clearing
+     * Room here would destroy an offline lot or formal receipt captured just
+     * before the network recovered. Explicit logout still uses clearAccount()
+     * as the shared-device privacy boundary.
+     */
+    fun expireAccountSession() {
+        secureStorage.remove(SecureStorage.AUTH_TOKEN)
+        secureStorage.remove(SecureStorage.REFRESH_TOKEN)
+        secureStorage.remove(SecureStorage.SESSION_EXPIRY)
         secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)
         secureStorage.remove(SecureStorage.ACCOUNT_ROLE)
         secureStorage.remove(SecureStorage.ACCOUNT_VERIFICATION_STATUS)

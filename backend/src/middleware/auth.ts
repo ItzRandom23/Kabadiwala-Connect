@@ -3,6 +3,9 @@ import { AppError } from '../utils/errors.js';
 import type { JwtService } from '../services/jwt.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import type { PrismaClient } from '@prisma/client';
+
+const isCurrentRecyclerAuthorization = (authorizationStatus: string, authorizationValidUntil: Date | null | undefined) =>
+  authorizationStatus === 'VERIFIED' && (!authorizationValidUntil || authorizationValidUntil > new Date());
 /**
  * Legacy collector resources are kabadiwala-owned resources.  A household has
  * a Collector profile for storage compatibility, but that must never turn a
@@ -21,12 +24,12 @@ export const requireRecycler = (jwtService: JwtService, db?: PrismaClient, requi
     if (db) {
       const [user, recycler] = await Promise.all([
         db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { accountStatus: true } }),
-        db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true } })
+        db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true, authorizationValidUntil: true } })
       ]);
       if (!user || !recycler) return next(new AppError('RECYCLER_NOT_FOUND', 'Recycler not found', 404));
       if (user.accountStatus === 'SUSPENDED') return next(new AppError('ACCOUNT_SUSPENDED', 'Account is suspended', 403));
       if (user.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
-      if (requireVerified && recycler.authorizationStatus !== 'VERIFIED') return next(new AppError('RECYCLER_NOT_VERIFIED', 'Verified recycler access required', 403));
+      if (requireVerified && !isCurrentRecyclerAuthorization(recycler.authorizationStatus, recycler.authorizationValidUntil)) return next(new AppError('RECYCLER_NOT_VERIFIED', 'Verified recycler access required', 403));
     }
     req.identity = identity;
     next();
@@ -48,11 +51,11 @@ export const requireAccount = (jwtService: JwtService, db?: PrismaClient, requir
         if (collector.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
       } else {
         const user = await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { accountStatus: true } });
-        const recycler = await db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true } });
+        const recycler = await db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true, authorizationValidUntil: true } });
         if (!user || !recycler) return next(new AppError('RECYCLER_NOT_FOUND', 'Recycler not found', 404));
         if (user.accountStatus === 'SUSPENDED') return next(new AppError('ACCOUNT_SUSPENDED', 'Account is suspended', 403));
         if (user.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
-        if (requireVerifiedRecycler && recycler.authorizationStatus !== 'VERIFIED') return next(new AppError('RECYCLER_NOT_VERIFIED', 'Verified recycler access required', 403));
+        if (requireVerifiedRecycler && !isCurrentRecyclerAuthorization(recycler.authorizationStatus, recycler.authorizationValidUntil)) return next(new AppError('RECYCLER_NOT_VERIFIED', 'Verified recycler access required', 403));
       }
     }
     req.identity = identity;

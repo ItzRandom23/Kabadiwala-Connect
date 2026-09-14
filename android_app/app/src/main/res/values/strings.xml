@@ -597,7 +597,7 @@
     <string name="household_chat_open">Chat is now open · pickup around 5:30 PM</string>
     <string name="household_estimated_range">ESTIMATED RANGE</string>
     <string name="household_final_after_inspection">Final price after inspection and agreement</string>
-    <string name="testing_mode_banner">TEST · Server connected</string>
+    <string name="testing_mode_banner">TEST · Development build</string>
     <string name="recycler_scan_title">Scan handover QR</string>
     <string name="recycler_scan_explanation">Scan the complete signed code. It is checked against the server before the material can be accepted.</string>
     <string name="recycler_scan_camera">Open camera scanner</string>

@@ -117,9 +117,10 @@ fun KabadiwalaConnectTheme(
     role: AccountRole = AccountRole.COLLECTOR,
     content: @Composable () -> Unit
 ) {
-    // Recycler work is intentionally rendered as a darker operations surface.
-    // Collector light/dark remains user controlled for outdoor readability.
-    val effectiveDark = darkTheme || role == AccountRole.RECYCLER
+    // Role changes the operational accent, not the user's light/dark choice.
+    // A forced dark palette made the Recycler screen inconsistent with the
+    // accessibility setting and with the rest of the application.
+    val effectiveDark = darkTheme
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
         value = if (effectiveDark) KcAmberSecondaryContainer else KcAmberSecondary,

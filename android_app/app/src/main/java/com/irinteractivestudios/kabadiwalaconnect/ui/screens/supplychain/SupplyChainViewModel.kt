@@ -2,6 +2,9 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.JsonObject
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,13 +22,23 @@ data class SupplyChainState(
     val bulkLots: List<BulkLotDto> = emptyList(),
     val offers: List<BulkOfferDto> = emptyList(),
     val requirements: List<ProcurementRequirementDto> = emptyList(),
+    val routeAdvantage: RouteAdvantageResponseDto? = null,
+    val poolOpportunities: List<PoolOpportunityDto> = emptyList(),
+    val pools: List<PooledConsignmentDto> = emptyList(),
+    val handovers: List<SupplyHandoverDto> = emptyList(),
+    val passport: CollectorPassportDto? = null,
+    val safety: SafetyResponseDto? = null,
+    val showingCachedEvidence: Boolean = false,
+    val cachedAtEpochMs: Long = 0L,
     val busy: Set<String> = emptySet(),
     val notice: String? = null
 )
 
 class SupplyChainViewModel(
     private val api: ApiService,
-    private val roleProvider: () -> AccountRole? = { null }
+    private val roleProvider: () -> AccountRole? = { null },
+    private val cache: FormalisationCacheStore? = null,
+    private val accountIdProvider: () -> String? = { null }
 ) : ViewModel() {
     private val _state = MutableStateFlow(SupplyChainState())
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
@@ -40,6 +53,36 @@ class SupplyChainViewModel(
 
     private fun allowed(role: AccountRole): Boolean = roleProvider()?.let { it == role } ?: true
 
+    private fun accountId() = accountIdProvider()
+
+    private fun applyCached(snapshot: FormalisationSnapshot) {
+        _state.value = _state.value.copy(
+            routeAdvantage = snapshot.routeAdvantage,
+            poolOpportunities = snapshot.poolOpportunities,
+            pools = snapshot.pools,
+            bulkLots = if (_state.value.bulkLots.isEmpty()) snapshot.bulkLots else _state.value.bulkLots,
+            offers = if (_state.value.offers.isEmpty()) snapshot.offers else _state.value.offers,
+            handovers = snapshot.handovers,
+            passport = snapshot.passport,
+            safety = snapshot.safety,
+            showingCachedEvidence = true,
+            cachedAtEpochMs = snapshot.cachedAtEpochMs
+        )
+    }
+
+    private fun saveCache() {
+        cache?.save(accountId(), FormalisationSnapshot(
+            routeAdvantage = _state.value.routeAdvantage,
+            poolOpportunities = _state.value.poolOpportunities,
+            pools = _state.value.pools,
+            bulkLots = _state.value.bulkLots,
+            offers = _state.value.offers,
+            handovers = _state.value.handovers,
+            passport = _state.value.passport,
+            safety = _state.value.safety
+        ))
+    }
+
     fun refreshHousehold() {
         if (!allowed(AccountRole.HOUSEHOLD)) return
         load {
@@ -51,23 +94,40 @@ class SupplyChainViewModel(
     }
     fun refreshKabadiwala() {
         if (!allowed(AccountRole.COLLECTOR)) return
+        cache?.load(accountId())?.let(::applyCached)
         load {
-        val listings = api.getKabadiwalaListings().requireData()
-        val pickups = api.getKabadiwalaPickups().requireData()
-        val inventory = api.getKabadiwalaInventory().requireData()
-        val requirements = api.getProcurementRequirements().requireData()
-        val offers = api.getKabadiwalaBulkOffers().requireData()
-        val bulkLots = api.getKabadiwalaBulkLots().requireData()
-        _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, inventory = inventory, bulkLots = bulkLots, offers = offers, requirements = requirements, error = null)
+        var partialFailure = false
+        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (_: Exception) { partialFailure = true; fallback }
+        val previous = _state.value
+        val listings = optional(previous.listings) { api.getKabadiwalaListings().requireData() }
+        val pickups = optional(previous.pickups) { api.getKabadiwalaPickups().requireData() }
+        val inventory = optional(previous.inventory) { api.getKabadiwalaInventory().requireData() }
+        val requirements = optional(previous.requirements) { api.getProcurementRequirements().requireData() }
+        val offers = optional(previous.offers) { api.getKabadiwalaBulkOffers().requireData() }
+        val bulkLots = optional(previous.bulkLots) { api.getKabadiwalaBulkLots().requireData() }
+        val opportunities = optional(previous.poolOpportunities) { api.getPoolOpportunities().requireData() }
+        val pools = optional(previous.pools) { api.getKabadiwalaPools().requireData() }
+        val handovers = optional(previous.handovers) { api.getKabadiwalaHandovers().requireData() }
+        val passport = optional(previous.passport) { api.getCollectorPassport().requireData() }
+        val safety = optional(previous.safety) { api.getSafety().requireData() }
+        _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, inventory = inventory, bulkLots = bulkLots, offers = offers, requirements = requirements, poolOpportunities = opportunities, pools = pools, handovers = handovers, passport = passport, safety = safety, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Some saved evidence is shown because the network is unavailable." else null)
+        saveCache()
         }
     }
     fun refreshRecycler() {
         if (!allowed(AccountRole.RECYCLER)) return
+        cache?.load(accountId())?.let(::applyCached)
         load {
-        val lots = api.getRecyclerBulkLots().requireData()
-        val offers = api.getRecyclerBulkOffers().requireData()
-        val requirements = api.getRecyclerProcurementRequirements().requireData()
-        _state.value = _state.value.copy(loading = false, bulkLots = lots, offers = offers, requirements = requirements, error = null)
+        var partialFailure = false
+        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (_: Exception) { partialFailure = true; fallback }
+        val previous = _state.value
+        val lots = optional(previous.bulkLots) { api.getRecyclerBulkLots().requireData() }
+        val offers = optional(previous.offers) { api.getRecyclerBulkOffers().requireData() }
+        val requirements = optional(previous.requirements) { api.getRecyclerProcurementRequirements().requireData() }
+        val pools = optional(previous.pools) { api.getRecyclerPools().requireData() }
+        val handovers = optional(previous.handovers) { api.getSupplyHandovers().requireData() }
+        _state.value = _state.value.copy(loading = false, bulkLots = lots, offers = offers, requirements = requirements, pools = pools, handovers = handovers, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Some saved evidence is shown because the network is unavailable." else null)
+        saveCache()
         }
     }
     private fun load(block: suspend () -> Unit) {
@@ -108,4 +168,18 @@ class SupplyChainViewModel(
     fun makeOffer(lotId: String, rate: Double) = action("offer-$lotId", AccountRole.RECYCLER, { api.makeBulkLotOffer(lotId, BulkOfferCreateDto(rate)).requireData(); refreshRecycler(); "Offer sent to the Kabadiwala." })
     fun receiveLot(lotId: String) = action("receive-$lotId", AccountRole.RECYCLER, { api.receiveBulkLot(lotId).requireData(); refreshRecycler(); "Receipt confirmed." })
     fun createRequirement(input: ProcurementRequirementCreateDto) = action("create-demand", AccountRole.RECYCLER, { api.createProcurementRequirement(input).requireData(); refreshRecycler(); "Requirement published to Kabadiwalas." })
+    fun loadRouteAdvantage(materialCategory: String, quantityKg: Double, grade: String = "UNSPECIFIED") = action("route-advantage", AccountRole.COLLECTOR) {
+        val result = api.getRouteAdvantage(materialCategory, quantityKg, grade).requireData()
+        _state.value = _state.value.copy(routeAdvantage = result, showingCachedEvidence = false, cachedAtEpochMs = System.currentTimeMillis())
+        saveCache()
+        if (result.baseline == null) "Verified routes found, but there is not enough baseline data to claim savings." else "Route estimate ready. Confirm logistics and rate at handover."
+    }
+    fun createPool(requirementId: String, areaName: String) = action("pool-create-$requirementId", AccountRole.COLLECTOR) { val pool = api.createPool(PoolCreateRequestDto(requirementId, areaName)).requireData(); _state.value = _state.value.copy(pools = listOf(pool) + _state.value.pools.filterNot { it.id == pool.id }); saveCache(); refreshKabadiwala(); "Cooperative pool opened. Other Kabadiwalas can contribute reserved stock." }
+    fun joinPool(poolId: String, quantityKg: Double, grade: String, expectedRatePerKg: Double?) = action("pool-join-$poolId", AccountRole.COLLECTOR) { api.joinPool(poolId, PoolJoinRequestDto(quantityKg, grade, expectedRatePerKg)).requireData(); refreshKabadiwala(); "Stock reserved in the cooperative pool." }
+    fun leavePool(poolId: String) = action("pool-leave-$poolId", AccountRole.COLLECTOR) { api.leavePool(poolId).requireData(); refreshKabadiwala(); "Contribution released back to available stock." }
+    fun lockPool(poolId: String) = action("pool-lock-$poolId", AccountRole.COLLECTOR) { val pool = api.lockPool(poolId).requireData(); _state.value = _state.value.copy(pools = listOf(pool) + _state.value.pools.filterNot { it.id == pool.id }); saveCache(); "Pool locked at threshold. Prepare the one-time handover QR." }
+    fun preparePoolHandover(poolId: String) = action("handover-pool-$poolId", AccountRole.COLLECTOR) { val handover = api.preparePoolHandover(poolId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
+    fun prepareBulkHandover(lotId: String) = action("handover-bulk-$lotId", AccountRole.COLLECTOR) { val handover = api.prepareBulkHandover(lotId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
+    fun confirmCollectorHandover(handoverId: String) = action("collector-confirm-$handoverId", AccountRole.COLLECTOR) { val handover = api.confirmCollectorHandover(handoverId).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id }); saveCache(); "Collector confirmation recorded. Recycler must scan this QR." }
+    fun acknowledgeSafety(moduleKey: String) = action("safety-$moduleKey", AccountRole.COLLECTOR) { api.acknowledgeSafety(moduleKey).requireData(); val safety = api.getSafety().requireData(); _state.value = _state.value.copy(safety = safety); saveCache(); "Safety acknowledgement saved to your growth passport." }
 }

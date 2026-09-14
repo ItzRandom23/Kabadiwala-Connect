@@ -26,12 +26,19 @@ npm run dev
 The Android debug build uses `http://140.245.232.208:4000/api/v1/` by default;
 the emulator/device must be able to reach that host over the testing network.
 
-The manual happy path is Household listing → selected Kabadiwala pickup →
-arrival and final weighing → inventory increment → inventory-backed bulk lot →
-Recycler offer → Kabadiwala acceptance → Recycler receipt. Verify that the
-pickup is `COMPLETED`, the offer is `COMPLETED`, the lot is `SOLD`, and the
-Kabadiwala inventory has moved from `availableKg` to `soldKg` with no residual
-reservation.
+The baseline manual path is Household listing → selected Kabadiwala pickup →
+arrival and final weighing → inventory increment. The formal path then continues
+Kabadiwala route comparison → Recycler demand → independent pool contributions
+→ threshold lock → one-time QR → Collector confirmation → Recycler QC/receipt
+→ settlement/passport. For the legacy regression path, continue with an
+inventory-backed bulk lot → Recycler offer → Kabadiwala acceptance, but the
+Recycler must now use the formal QR handover to receive it.
+
+Verify the pickup is `COMPLETED`, the formal handover is `COMPLETED` or
+`REVIEW_REQUIRED`, and inventory conservation holds: reserved decreases by the
+quoted contribution/lot quantity, accepted quantity moves to `soldKg`, and
+rejected quantity returns to `availableKg` after the Collector accepts the
+settlement.
 
 The conflict pass should repeat completion and receipt, submit a lot larger
 than available stock, act on a cancelled/completed record, and call each role's

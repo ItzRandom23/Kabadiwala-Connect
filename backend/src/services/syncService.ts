@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { PaymentService } from './paymentService.js';
 import { canonicalWeight } from './lotService.js';
+import { AppError } from '../utils/errors.js';
 
 type SyncResult = { operationId: string; status: string; entityType?: string; entityId?: string; errorCode?: string };
 
@@ -32,13 +33,18 @@ export class SyncService {
             continue;
           }
           const weight = canonicalWeight(p.weight, p.weightUnit ?? 'KILOGRAM');
+          if (!['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'].includes(p.materialCategory)) throw new AppError('VALIDATION_ERROR', 'Invalid material category', 422, { code: 'INVALID_MATERIAL_CATEGORY' });
+          if (!['INTACT', 'DAMAGED', 'PARTIAL'].includes(p.condition)) throw new AppError('VALIDATION_ERROR', 'Invalid lot condition', 422, { code: 'INVALID_LOT_CONDITION' });
+          if (p.collectionLocation && (p.collectionLocation.latitude != null && (p.collectionLocation.latitude < -90 || p.collectionLocation.latitude > 90) || p.collectionLocation.longitude != null && (p.collectionLocation.longitude < -180 || p.collectionLocation.longitude > 180))) throw new AppError('VALIDATION_ERROR', 'Invalid lot location', 422, { code: 'INVALID_LOCATION' });
           const wasteRegime = ['E_WASTE', 'BATTERY_WASTE', 'OTHER'].includes(p.wasteRegime) ? p.wasteRegime : (p.materialCategory === 'BATTERY' ? 'BATTERY_WASTE' : 'E_WASTE');
           const lot = await this.db.lot.create({ data: { id: op.entityId, collectorId: cid, materialCategory: p.materialCategory, materialSubcategory: p.materialSubcategory, sourceType: p.sourceType, wasteRegime, condition: p.condition, weight, weightUnit: 'KILOGRAM', originalWeight: p.originalWeight ?? p.weight, originalWeightUnit: p.originalWeightUnit ?? p.weightUnit ?? 'KILOGRAM', imageProvenance: p.imageProvenance, collectionLatitude: p.collectionLocation?.latitude, collectionLongitude: p.collectionLocation?.longitude, collectionAreaName: p.collectionLocation?.areaName, collectionLocationPrecision: p.collectionLocation?.precision, notes: p.notes, quotedPrice: p.quotedPrice, status: 'CREATED' } });
           await this.save(cid, op, hash, 'APPLIED');
           results.push({ operationId: op.operationId, status: 'APPLIED', entityType: 'LOT', entityId: lot.id });
         } else if (op.operationType === 'UPDATE' && op.entityType === 'LOT') {
           const p = op.payload;
-          const out = await this.db.lot.updateMany({ where: { id: op.entityId, collectorId: cid, status: 'CREATED', version: p.clientVersion }, data: { weight: p.weight, condition: p.condition, notes: p.notes, version: { increment: 1 } } });
+          const weight = canonicalWeight(p.weight, p.weightUnit ?? 'KILOGRAM');
+          if (!['INTACT', 'DAMAGED', 'PARTIAL'].includes(p.condition)) throw new AppError('VALIDATION_ERROR', 'Invalid lot condition', 422, { code: 'INVALID_LOT_CONDITION' });
+          const out = await this.db.lot.updateMany({ where: { id: op.entityId, collectorId: cid, status: 'CREATED', version: p.clientVersion }, data: { weight, condition: p.condition, notes: p.notes, version: { increment: 1 } } });
           if (!out.count) {
             await this.save(cid, op, hash, 'CONFLICT', 'LOT_UPDATE_CONFLICT');
             results.push({ operationId: op.operationId, status: 'CONFLICT', entityType: 'LOT', entityId: op.entityId, errorCode: 'LOT_UPDATE_CONFLICT' });

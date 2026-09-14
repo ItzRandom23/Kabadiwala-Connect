@@ -48,9 +48,12 @@ export class PaymentService {
   async edit(id: string, cid: string, p: any) {
     const old = await this.owned(id, cid);
     if (old.status === 'VERIFIED' || old.status === 'DISPUTED' || Date.now() - old.createdAt.getTime() > 86400000) throw new AppError('CONFLICT', 'Payment correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
+    if (old.lot.handovers.some(h => ['DISPUTED', 'PENDING_MANUAL_REVIEW'].includes(h.status))) throw new AppError('CONFLICT', 'Payment is locked while the handover is under review', 409, { code: 'PAYMENT_HANDOVER_UNDER_REVIEW' });
     if (!Number.isFinite(p.amount) || p.amount <= 0 || p.amount >= 1000000) throw new AppError('VALIDATION_ERROR', 'Invalid payment amount', 422, { code: 'PAYMENT_AMOUNT_INVALID' });
     if (!['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET'].includes(p.method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method', 422, { code: 'PAYMENT_METHOD_INVALID' });
-    return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, notes: p.notes } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_EDITED', oldValues: { amount: old.amount, paymentMethod: old.paymentMethod }, newValues: { amount: x.amount, paymentMethod: x.paymentMethod } } }); return x; });
+    const acceptedQuote = old.lot.quotes.find(q => q.status === 'ACCEPTED');
+    if (acceptedQuote && (p.amount > acceptedQuote.totalQuotedPrice * 1.5 || p.amount < acceptedQuote.totalQuotedPrice * 0.5)) throw new AppError('CONFLICT', 'This correction is outside the accepted quote range; raise a dispute for review', 409, { code: 'PAYMENT_AMOUNT_OUTSIDE_QUOTE' });
+    return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, notes: p.notes, anomaly: false, anomalyReason: null } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_EDITED', oldValues: { amount: old.amount, paymentMethod: old.paymentMethod }, newValues: { amount: x.amount, paymentMethod: x.paymentMethod } } }); return x; });
   }
   async dispute(id: string, cid: string, p: any) {
     const pay = await this.owned(id, cid);
@@ -92,5 +95,5 @@ export class PaymentService {
     };
   }
   async adminList() { return this.db.payment.findMany({ orderBy: { createdAt: 'desc' } }); }
-  async verify(id: string, admin: string) { const p = await this.db.payment.findUnique({ where: { id } }); if (!p) throw new AppError('NOT_FOUND', 'Payment not found', 404, { code: 'PAYMENT_NOT_FOUND' }); if (p.status === 'VERIFIED') throw new AppError('CONFLICT', 'Payment already verified', 409, { code: 'PAYMENT_ALREADY_VERIFIED' }); return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { status: 'VERIFIED', confirmedAt: new Date() } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: admin, actorRole: 'ADMIN', event: 'PAYMENT_VERIFIED' } }); return x; }); }
+  async verify(id: string, admin: string) { const p = await this.db.payment.findUnique({ where: { id } }); if (!p) throw new AppError('NOT_FOUND', 'Payment not found', 404, { code: 'PAYMENT_NOT_FOUND' }); if (p.status !== 'RECORDED') throw new AppError('CONFLICT', 'Only an undisputed recorded payment can be verified', 409, { code: 'PAYMENT_NOT_VERIFIABLE' }); return this.db.$transaction(async tx => { const claimed = await tx.payment.updateMany({ where: { id, status: 'RECORDED' }, data: { status: 'VERIFIED', confirmedAt: new Date() } }); if (!claimed.count) throw new AppError('CONFLICT', 'Payment changed while being verified', 409, { code: 'PAYMENT_NOT_VERIFIABLE' }); const x = await tx.payment.findUniqueOrThrow({ where: { id } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: admin, actorRole: 'ADMIN', event: 'PAYMENT_VERIFIED' } }); return x; }); }
 }
