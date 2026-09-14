@@ -975,6 +975,8 @@ model HouseholdListing {
   areaName        String
   latitude        Float?
   longitude       Float?
+  estimatedPriceMin Float?
+  estimatedPriceMax Float?
   status          HouseholdListingStatus @default(DRAFT)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt

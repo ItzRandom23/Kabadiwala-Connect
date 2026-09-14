@@ -10,7 +10,7 @@ const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY'
 const condition = z.enum(['INTACT', 'DAMAGED', 'PARTIAL']);
 const positive = z.number().finite().positive();
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/);
-const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional() });
+const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), estimatedPriceMin: positive.max(100000000).optional(), estimatedPriceMax: positive.max(100000000).optional() }).refine(value => value.estimatedPriceMin == null || value.estimatedPriceMax == null || value.estimatedPriceMin <= value.estimatedPriceMax, { message: 'Estimated minimum cannot exceed estimated maximum', path: ['estimatedPriceMax'] });
 const pickupRequest = z.object({ kabadiwalaId: id, requestedSlot: z.string().datetime().optional() });
 const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
 const activePickupStatuses = ['REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;

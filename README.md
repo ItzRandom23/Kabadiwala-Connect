@@ -6,7 +6,7 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 The Android APK contains three role-routed experiences:
 
-- Household seller: post recyclable material with an approximate weight and area, choose an active Kabadiwala, request pickup, and view weighing, rate, status, and final settlement.
+- Household seller: post recyclable material with a photo, approximate weight and area, review a clearly labelled prototype price range, choose an active Kabadiwala, request pickup, and view weighing, rate, status, and final settlement.
 - Kabadiwala: discover household pickup requests, schedule and weigh collections, manage owned inventory, create recycler-facing bulk lots, review offers, and respond to procurement demand.
 - Recycler: submit facility details and authorization evidence for verification, browse Kabadiwala bulk lots, make and track procurement offers, confirm receipt, and publish material requirements.
 
@@ -75,7 +75,7 @@ host. Release builds remain HTTPS-only and use a separate
 
 ## Offline and AI integration boundaries
 
-Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence uploads independently to private storage. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
+Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence uploads independently to private storage. Household listing photos are kept as local prototype references until a production upload endpoint is configured. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
 
 ## Testing
 

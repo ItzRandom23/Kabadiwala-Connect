@@ -9,8 +9,8 @@ data class ApiEnvelope<T>(val success: Boolean = false, val data: T? = null, val
 
 // Dedicated role-correct supply-chain DTOs. Dates are ISO-8601 strings at the
 // transport boundary; the UI formats them locally and never renders nulls.
-data class HouseholdListingCreateDto(val materialCategory: String, val estimatedWeight: Double, val condition: String, val notes: String? = null, val photoReference: String? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null)
-data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
+data class HouseholdListingCreateDto(val materialCategory: String, val estimatedWeight: Double, val condition: String, val notes: String? = null, val photoReference: String? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null)
+data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
 data class KabadiwalaProfileDto(val id: String = "", val displayName: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null)
 data class PickupRequestCreateDto(val kabadiwalaId: String, val requestedSlot: String? = null)
 data class CancellationRequestDto(val reason: String? = null)

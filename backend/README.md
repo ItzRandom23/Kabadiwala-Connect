@@ -48,7 +48,7 @@ The phone/OTP contract below remains for older collector clients during migratio
 
 ## Household seller API
 
-Household accounts use `POST /api/v1/household/listings` to post a material listing, `GET /api/v1/household/listings` to view owned listings, `GET /api/v1/household/kabadiwalas` to discover active collection partners, and `POST /api/v1/household/listings/{listingId}/pickups` to request a pickup. A household can cancel an open listing with `POST /api/v1/household/listings/{listingId}/cancel` or cancel a requested/accepted/scheduled pickup with `POST /api/v1/household/pickups/{pickupId}/cancel`. All routes are ownership- and role-gated; final weight, rate, settlement, and inventory are written by the Kabadiwala workflow.
+Household accounts use `POST /api/v1/household/listings` to post a material listing (including an optional prototype photo reference and demo estimate range), `GET /api/v1/household/listings` to view owned listings, `GET /api/v1/household/kabadiwalas` to discover active collection partners, and `POST /api/v1/household/listings/{listingId}/pickups` to request a pickup. A household can cancel an open listing with `POST /api/v1/household/listings/{listingId}/cancel` or cancel a requested/accepted/scheduled pickup with `POST /api/v1/household/pickups/{pickupId}/cancel`. All routes are ownership- and role-gated; final weight, rate, settlement, and inventory are written by the Kabadiwala workflow.
 
 ## Android test updates
 
