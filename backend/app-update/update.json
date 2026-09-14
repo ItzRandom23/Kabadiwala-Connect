@@ -1,8 +1,8 @@
 {
-  "versionCode": 34,
-  "versionName": "0.0.33-beta",
-  "apkUrl": "kabadiwala-connect-0.0.33-beta-debug.apk",
-  "sha256": "A85A829F520ECA850227BD3E1E276EA8DD67008A0BC1FD5E562CF28A3274988A",
-  "sizeBytes": 8820192,
-  "releaseNotes": "Adds the formal route, cooperative pooling, signed material-passport handover, fairness and dispute guards, recycler demand signals, and resilient offline lot and receipt sync for the testing/SIH prototype."
+  "versionCode": 36,
+  "versionName": "0.0.35-beta",
+  "apkUrl": "kabadiwala-connect-0.0.35-beta-debug.apk",
+  "sha256": "933D13281225ED95D46A6802626E8E7A89538ADBEFB617E71AC8BED81A710A20",
+  "sizeBytes": 8820198,
+  "releaseNotes": "Fixes minified update-manifest parsing, improves update discovery before authentication, adds clear update-check diagnostics, and points the testing build at the shared backend host."
 }

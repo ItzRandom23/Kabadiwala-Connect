@@ -7,8 +7,8 @@ are directional only and are not representative of entry-level field hardware.
 
 - Device: connected Android emulator `emulator-5554`, Android 17, 1080×2400.
 - Build: debug/testing variant, minification enabled, development API.
-- Final APK: `app-debug.apk`, 14 September 2026 build, 8,820,192 bytes,
-  SHA-256 `A85A829F520ECA850227BD3E1E276EA8DD67008A0BC1FD5E562CF28A3274988A`.
+- Final APK: `app-debug.apk`, 14 September 2026 build, 8,820,198 bytes,
+  SHA-256 `933D13281225ED95D46A6802626E8E7A89538ADBEFB617E71AC8BED81A710A20`.
 - Scenarios: cold launch, authenticated dashboard, inventory/pool list, QR
   rendering, Room cache read, network-off cache read and queued confirmation.
 

@@ -115,6 +115,19 @@ class MainActivity : ComponentActivity() {
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
+                val connection by app.container.connectivityObserver.state
+                    .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
+
+                // Check before authentication/onboarding state can block the
+                // rest of the screen. The update manifest is public and must
+                // remain discoverable even when a saved API session is stale.
+                LaunchedEffect(connection, householdPreviewMode) {
+                    if (!householdPreviewMode && connection == ConnectionState.ONLINE) {
+                        AppUpdateManager.check(this@MainActivity)?.let { update ->
+                            availableUpdate = update
+                        }
+                    }
+                }
                 var sessionBootstrap by remember {
                     mutableStateOf<SessionBootstrap?>(
                         if (householdPreviewMode || !languageWasSelected) SessionBootstrap(false, null) else null
@@ -177,8 +190,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val connection by app.container.connectivityObserver.state
-                    .collectAsStateWithLifecycle(initialValue = ConnectionState.ONLINE)
                 val unreadNotifications by app.container.unreadNotificationCount(cachedAccount?.profileId.orEmpty())
                     .collectAsStateWithLifecycle(initialValue = 0)
                 LaunchedEffect(connection, bootstrap.restorable) {
@@ -225,16 +236,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                LaunchedEffect(languageSelected, connection) {
-                    // Retry after connectivity comes online. The first check can
-                    // otherwise race the network observer during cold start.
-                    if (languageSelected && connection == ConnectionState.ONLINE) {
-                        AppUpdateManager.check(this@MainActivity)?.let { update ->
-                            availableUpdate = update
-                        }
-                    }
-                }
-
                 val title = when (route) {
                     Destinations.MY_LOTS -> stringResource(R.string.home_my_lots)
                     Destinations.LOT_DETAIL -> stringResource(R.string.lot_review_title)

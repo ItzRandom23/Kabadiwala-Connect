@@ -29,8 +29,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 34
-        versionName = "0.0.33-beta"
+        versionCode = 36
+        versionName = "0.0.35-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

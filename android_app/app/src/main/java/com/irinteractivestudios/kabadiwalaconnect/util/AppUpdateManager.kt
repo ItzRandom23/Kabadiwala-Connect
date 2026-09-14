@@ -6,8 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
-import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,8 +32,8 @@ enum class InstallUpdateResult {
 
 /** Checks and installs APK updates described by the server's update manifest. */
 object AppUpdateManager {
+    private const val TAG = "AppUpdateManager"
     private val httpClient = OkHttpClient()
-    private val gson = Gson()
 
     suspend fun check(context: Context): AvailableAppUpdate? = withContext(Dispatchers.IO) {
         val manifestUrl = BuildConfig.APP_UPDATE_MANIFEST_URL.trim()
@@ -49,18 +50,42 @@ object AppUpdateManager {
                 .get()
                 .build()
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Update manifest returned HTTP ${response.code}")
+                    return@use null
+                }
                 val body = response.body?.string().orEmpty()
-                val manifest = gson.fromJson(body, UpdateManifest::class.java) ?: return@use null
+                // Parse fields explicitly instead of reflecting into a private
+                // Kotlin data class. R8 can rewrite that class in a minified
+                // build so Gson cannot instantiate it, which silently disables
+                // updates for the currently installed client.
+                val manifest = JsonParser.parseString(body).asJsonObject
+                val versionCode = manifest.get("versionCode")
+                    ?.takeIf { it.isJsonPrimitive }
+                    ?.asLong
+                    ?: return@use null
+                val versionName = manifest.get("versionName")
+                    ?.takeIf { it.isJsonPrimitive }
+                    ?.asString
+                    .orEmpty()
+                val apkUrl = manifest.get("apkUrl")
+                    ?.takeIf { it.isJsonPrimitive }
+                    ?.asString
+                    .orEmpty()
+                val releaseNotes = manifest.get("releaseNotes")
+                    ?.takeIf { it.isJsonPrimitive && !it.isJsonNull }
+                    ?.asString
                 val currentVersion = currentVersionCode(context)
-                if (manifest.versionCode <= currentVersion || manifest.apkUrl.isBlank()) return@use null
+                if (versionCode <= currentVersion || apkUrl.isBlank()) return@use null
                 AvailableAppUpdate(
-                    versionCode = manifest.versionCode,
-                    versionName = manifest.versionName.ifBlank { manifest.versionCode.toString() },
-                    apkUrl = URI(manifestUrl).resolve(manifest.apkUrl).toString(),
-                    releaseNotes = manifest.releaseNotes?.trim()?.takeIf { it.isNotEmpty() }
+                    versionCode = versionCode,
+                    versionName = versionName.ifBlank { versionCode.toString() },
+                    apkUrl = URI(manifestUrl).resolve(apkUrl).toString(),
+                    releaseNotes = releaseNotes?.trim()?.takeIf { it.isNotEmpty() }
                 )
             }
+        }.onFailure { error ->
+            Log.w(TAG, "Update manifest check failed", error)
         }.getOrNull()
     }
 
@@ -126,10 +151,4 @@ object AppUpdateManager {
         }
     }
 
-    private data class UpdateManifest(
-        val versionCode: Long = 0L,
-        val versionName: String = "",
-        val apkUrl: String = "",
-        val releaseNotes: String? = null
-    )
 }
