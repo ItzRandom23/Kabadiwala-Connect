@@ -22,7 +22,7 @@ has no similar feature.
 | Formal Route Advantage | `GET /kabadiwala/route-advantage`, net estimate and “why” fields | Estimate only; baseline may be seeded and logistics assumptions are explicit |
 | Cooperative Pooling | Pool threshold, independent contributions, lock, proportional settlement | No proof of real-world adoption or guaranteed savings |
 | Material Passport | Signed QR, hashes, audit/event timeline, review state | Platform evidence, not official certification |
-| Fairness & Dispute Guard | Quote/final breakdown, anomaly, Collector accept/issue | Human/admin resolution is still limited |
+| Fairness & Dispute Guard | Quote/final breakdown, anomaly, Collector accept/issue and audited admin formal-anomaly actions | External payment reversal remains outside the backend |
 | Collector Growth Passport | Platform-generated kg, handovers, safety labels | Not an official credential or income guarantee |
 | Reverse Demand Network | Recycler demand, gaps and privacy-safe pool opportunities | Current dataset is development/seeded; no market-demand accuracy claim |
 

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +41,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcError
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcInfo
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSuccess
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcWarning
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcViolet
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcVioletStrong
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 
 /** Minimum touch-target height for primary actions (low-literacy friendly). */
@@ -61,17 +64,17 @@ fun OfflineBanner(state: ConnectionState, modifier: Modifier = Modifier) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
         ) {
             Icon(
                 imageVector = Icons.Filled.CloudOff,
                 contentDescription = null,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(22.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = stringResource(R.string.offline_banner),
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
@@ -127,6 +130,12 @@ fun KcPrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = KcVioletStrong,
+            contentColor = androidx.compose.ui.graphics.Color.White,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = KcMinTouchHeight)
@@ -154,25 +163,25 @@ private fun StateColumn(
         verticalArrangement = Arrangement.Center,
         modifier = modifier
             .fillMaxWidth()
-            .padding(24.dp)
+            .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(64.dp))
-        Spacer(Modifier.height(16.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(52.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center
         )
         if (detail != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = detail,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
         }
         if (action != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             action()
         }
     }
@@ -186,11 +195,11 @@ fun LoadingContent(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
         modifier = modifier
             .fillMaxWidth()
-            .padding(24.dp)
+            .padding(20.dp)
             .testTag("state_loading")
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(56.dp))
-        Spacer(Modifier.height(16.dp))
+        CircularProgressIndicator(modifier = Modifier.size(48.dp), color = KcViolet)
+        Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.titleMedium)
     }
 }
@@ -260,7 +269,7 @@ fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(20.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
@@ -285,15 +294,15 @@ fun KcMetric(
     emphasis: Boolean = false
 ) {
     Surface(
-        color = if (emphasis) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (emphasis) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        color = if (emphasis) KcViolet.copy(alpha = .16f) else MaterialTheme.colorScheme.surface,
+        contentColor = if (emphasis) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
         modifier = modifier
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(value, style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"))
         }
     }
@@ -306,8 +315,8 @@ fun KcStatusPill(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .78f),
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shape = MaterialTheme.shapes.small,
         modifier = modifier
     ) {
@@ -325,8 +334,8 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, content: @Composab
         modifier = modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(6.dp))
             content()
         }
     }

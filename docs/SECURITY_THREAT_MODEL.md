@@ -11,9 +11,9 @@ inventory mutations, formal supply handover and locally cached evidence.
 | Oversell or double reservation | Conditional `updateMany` on available/reserved quantities inside transactions | Mongo transaction availability/configuration must be maintained |
 | Replay/tampering of handover QR | HMAC signature, random nonce hash, server-bound reference/source, expiry and conditional status | HMAC secret rotation/operational secret management is not production-hardened |
 | Recycler bypasses two-party confirmation | Receipt requires `COLLECTOR_CONFIRMED` | Legacy receipt endpoint intentionally returns a formal-handover conflict |
-| Hidden deductions or material mismatch | Quote/final breakdown, accepted/rejected kg, reason/evidence, anomaly and Collector decision | Human review/admin resolution UI is incomplete |
+| Hidden deductions or material mismatch | Quote/final breakdown, accepted/rejected kg, reason/evidence, anomaly, Collector decision and audited admin accept/revert/release actions | External payment reversal and live transaction proof remain outside this revision |
 | Collector identity/location leaks across roles | Recycler pool view aggregates contributions; collector listing/bulk views omit private IDs/coordinates | Some legacy/public endpoints need continued privacy review |
-| Offline forged settlement | Only a queued Recycler confirmation is supported; server rechecks QR and state | Cached UI is evidence, not authority, until server confirmation |
+| Offline forged settlement | Role-aware `/sync` supports formal pool, settlement, handover, disposal-evidence and payment operations; server rechecks ownership, state, QR/nonce and current authorization | Cached UI is evidence, not authority, until server confirmation |
 | Stale/duplicate client mutation | Operation IDs, conditional transitions and terminal-state replay handling | Not every legacy mutation has the same idempotency quality |
 
 ## Sensitive data rules

@@ -86,8 +86,8 @@ fun EarningsScreen(
 @Composable
 private fun EarningsEmptyState() {
     EvidenceSection(title = stringResource(R.string.earnings_empty_title)) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.earnings_empty_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.earnings_empty_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -114,15 +114,13 @@ private fun PaymentLedger(payments: List<Payment>) {
 private fun EarningsCards(summary: EarningsSummary) {
     EvidenceSection(title = stringResource(R.string.earnings_total)) {
         Text(rupees(summary.totalRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
-        ProofRow(stringResource(R.string.earnings_this_month), rupees(summary.thisMonthRupees))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
         KcMetric(label = stringResource(R.string.earnings_pending), value = rupees(summary.pendingRupees), modifier = Modifier.weight(1f), emphasis = summary.pendingRupees > 0)
         KcMetric(label = stringResource(R.string.earnings_this_month), value = rupees(summary.thisMonthRupees), modifier = Modifier.weight(1f))
     }
-    EvidenceSection(title = stringResource(R.string.earnings_chart)) {
-        ProofRow(stringResource(R.string.earnings_chart_month, ""), rupees(summary.thisMonthRupees))
-        ProofRow(stringResource(R.string.earnings_average), rupees(summary.averageLotValueRupees))
+    EvidenceSection(title = stringResource(R.string.earnings_average)) {
+        Text(rupees(summary.averageLotValueRupees), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
     }
 }
 

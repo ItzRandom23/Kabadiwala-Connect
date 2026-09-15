@@ -44,19 +44,32 @@ export class PriceService {
     }
 
     const history = await this.repo.history(material, location, new Date(Date.now() - 30 * 86400000));
+    const requestedLocation = location?.trim() || null;
+    const requestedCity = requestedLocation?.split(',').map(part => part.trim()).filter(Boolean).at(-1) ?? null;
+    const locationMatched = !requestedLocation || [price.areaName, price.city].includes(requestedLocation) || (requestedCity != null && [price.areaName, price.city].includes(requestedCity));
     const stale = Date.now() - price.effectiveAt.getTime() > 7 * 86400000;
+    const observationCount = history.length;
+    const confidence = stale ? 'LOW' : observationCount >= 20 && price.qualityStatus === 'VALIDATED' ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : observationCount > 0 ? 'LOW' : 'INSUFFICIENT';
     return {
       available: true,
       materialCategory: material,
       location: price.areaName ?? price.city,
+      requestedLocation,
+      locationMatched,
+      sourceContext: locationMatched ? 'LOCATION_MATCH' : 'MATERIAL_FALLBACK',
       priceMin: price.priceMin,
       priceMax: price.priceMax,
       marketPrice: price.marketPrice,
       historicalAverage: price.historicalAverage,
       unit: price.unit,
       source: { type: price.source, organization: price.sourceOrganization, reference: price.sourceReference },
+      sourceClassification: price.source,
       qualityStatus: stale ? 'STALE' : price.qualityStatus,
       ingestedAt: price.ingestedAt.toISOString(),
+      observationCount,
+      dataAgeDays: Math.max(0, Math.floor((Date.now() - price.effectiveAt.getTime()) / 86400000)),
+      confidence,
+      isDemoData: price.source === 'SYSTEM',
       trend: this.trend(price.marketPrice, history),
       lastUpdated: price.effectiveAt.toISOString(),
       complianceRegime: material === 'BATTERY' ? 'BATTERY_WASTE_RULES' : 'E_WASTE_RULES',
@@ -65,16 +78,34 @@ export class PriceService {
   }
 
   async history(material: MaterialCategory, location: string | undefined, days: number) {
+    const points = await this.repo.history(material, location, new Date(Date.now() - days * 86400000));
+    const latest = points.length ? points[points.length - 1] : null;
+    const requestedLocation = location?.trim() || null;
+    const requestedCity = requestedLocation?.split(',').map(part => part.trim()).filter(Boolean).at(-1) ?? null;
+    const locationMatched = !requestedLocation || Boolean(latest && [latest.areaName, latest.city].includes(requestedLocation)) || Boolean(latest && requestedCity != null && [latest.areaName, latest.city].includes(requestedCity));
+    const latestAgeDays = latest ? Math.max(0, Math.floor((Date.now() - latest.effectiveAt.getTime()) / 86400000)) : null;
+    const observationCount = points.length;
+    const confidence = !latest ? 'INSUFFICIENT' : latestAgeDays != null && latestAgeDays > 7 ? 'LOW' : observationCount >= 20 && latest.qualityStatus === 'VALIDATED' ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : 'LOW';
     return {
       materialCategory: material,
       location: location ?? null,
       days,
-      history: (await this.repo.history(material, location, new Date(Date.now() - days * 86400000))).map(point => ({
+      requestedLocation: requestedLocation,
+      locationMatched,
+      sourceContext: locationMatched ? 'LOCATION_MATCH' : 'MATERIAL_FALLBACK',
+      observationCount,
+      confidence,
+      freshness: { latestDate: latest?.effectiveAt.toISOString() ?? null, latestAgeDays },
+      isDemoData: points.length > 0 && points.every(point => point.source === 'SYSTEM'),
+      history: points.map(point => ({
         date: point.effectiveAt.toISOString(),
         marketPrice: point.marketPrice,
         unit: point.unit,
         source: point.source,
-        qualityStatus: point.qualityStatus
+        sourceClassification: point.source,
+        qualityStatus: point.qualityStatus,
+        dataAgeDays: Math.max(0, Math.floor((Date.now() - point.effectiveAt.getTime()) / 86400000)),
+        isDemoData: point.source === 'SYSTEM'
       }))
     };
   }

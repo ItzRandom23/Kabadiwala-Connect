@@ -10,6 +10,49 @@ import { AppError } from '../utils/errors.js';
 const EARTH_RADIUS_KM = 6371;
 const DISTANCE_FALLBACK_KM = Number.POSITIVE_INFINITY;
 
+/**
+ * Expire time-bounded Recycler authorizations without waiting for a request
+ * from that Recycler. The conditional update makes this safe to run more
+ * than once and preserves an operator-visible lifecycle audit.
+ */
+export async function expireStaleRecyclerAuthorizations(db: PrismaClient, now = new Date()) {
+  const candidates = await db.recycler.findMany({
+    where: { authorizationStatus: 'VERIFIED', authorizationValidUntil: { not: null, lte: now } },
+    select: { id: true, authorizationValidUntil: true }
+  });
+  let expired = 0;
+  for (const candidate of candidates) {
+    const changed = await db.$transaction(async tx => {
+      const updated = await tx.recycler.updateMany({
+        where: { id: candidate.id, authorizationStatus: 'VERIFIED', authorizationValidUntil: candidate.authorizationValidUntil },
+        data: { authorizationStatus: 'EXPIRED' }
+      });
+      if (!updated.count) return false;
+      await tx.recyclerAuthorizationAudit.create({
+        data: {
+          recyclerId: candidate.id,
+          actorId: 'SYSTEM_FRESHNESS_SWEEP',
+          previousStatus: 'VERIFIED',
+          newStatus: 'EXPIRED',
+          reason: 'Authorization validity period elapsed'
+        }
+      });
+      await tx.notificationEvent.create({
+        data: {
+          accountId: candidate.id,
+          type: 'RECYCLER_AUTHORIZATION_EXPIRED',
+          title: 'Authorization review required',
+          body: 'Your Recycler authorization has expired. Submit current evidence before using formal procurement actions.',
+          route: 'recycler/profile'
+        }
+      });
+      return true;
+    });
+    if (changed) expired += 1;
+  }
+  return expired;
+}
+
 const haversineDistanceKm = (
   fromLatitude: number,
   fromLongitude: number,
@@ -86,6 +129,7 @@ export class RecyclerService {
       materialsAccepted: recycler.materials.map((material: any) => ({
         category: material.category,
         subcategories: material.subcategories,
+        acceptedGrades: material.acceptedGrades ?? [],
         minAcceptableWeight: material.minAcceptableWeight,
         maxAcceptableWeight: material.maxAcceptableWeight
       })),
@@ -99,7 +143,9 @@ export class RecyclerService {
         updatedAt: rate.updatedAt
       })),
       pickupAvailability: recycler.pickupAvailability ?? 'FLEXIBLE',
-      serviceArea: { maxPickupDistanceKm: recycler.maxPickupDistanceKm },
+      serviceArea: { maxPickupDistanceKm: recycler.maxPickupDistanceKm, logisticsCostPerKm: recycler.logisticsCostPerKm ?? null },
+      pickupIncluded: recycler.pickupIncluded ?? false,
+      pickupFee: recycler.pickupFee ?? null,
       operatingHours: recycler.operatingHours,
       averageHandoverTime: recycler.averageHandoverTime,
       rating: recycler.rating,
@@ -189,9 +235,8 @@ export class RecyclerService {
           : undefined;
         return { recycler, distanceKm };
       })
-      .filter(({ recycler, distanceKm }) => opts.radius === undefined
-        || distanceKm === undefined
-        || distanceKm <= Math.min(opts.radius, recycler.maxPickupDistanceKm));
+      .filter(({ recycler, distanceKm }) => (!hasCoordinates || distanceKm !== undefined)
+        && (opts.radius === undefined || distanceKm === undefined || distanceKm <= Math.min(opts.radius, recycler.maxPickupDistanceKm)));
 
     candidates.sort((left, right) => {
       if (opts.sort === 'rate') {
@@ -293,7 +338,7 @@ export class RecyclerService {
     });
   }
 
-  async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; operatingHours?: Prisma.InputJsonValue }) {
+  async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; logisticsCostPerKm?: number; pickupFee?: number; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {
     const recycler = await this.db.recycler.update({ where: { id }, data: input, include: this.include }).catch(error => {
       if (error?.code === 'P2025') throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
       throw error;
@@ -357,10 +402,21 @@ export class RecyclerService {
         const distancePoints = distanceKm === undefined ? 0 : distanceKm < 10 ? 20 : distanceKm <= 25 ? 10 : 0;
         const ratingPoints = recycler.rating && recycler.rating > 4 ? 5 : 0;
         const matchScore = 50 + distancePoints + (rate ? 20 : 0) + ratingPoints;
+        const reasons = [
+          'Current platform authorization is verified.',
+          `Accepts ${lot.materialCategory}.`,
+          ...(rate ? [`Current indicative rate is ₹${rate.pricePerKg}/kg.`] : ['No current recycler rate was supplied.']),
+          ...(distanceKm === undefined ? ['Distance is unavailable from the saved coordinates.'] : [`${distanceKm.toFixed(1)} km from the collector profile.`]),
+          ...(recycler.pickupAvailability === 'TODAY' || recycler.pickupAvailability === 'THIS_WEEK' ? ['Pickup availability is listed.'] : ['Pickup timing is flexible and must be confirmed.']),
+          ...(recycler.rating ? [`${recycler.rating.toFixed(1)}/5 from ${recycler.reviewCount} verified reviews.`] : ['No verified recycler rating is available.'])
+        ];
         return {
           recycler: this.publicView(recycler, distanceKm),
           offeredRatePerKg: rate?.pricePerKg ?? null,
           matchScore,
+          score: matchScore,
+          reasons,
+          whyThisMatch: reasons,
           explanation: {
             materialMatch: true,
             distancePoints,
@@ -398,6 +454,13 @@ export class RecyclerService {
     reason?: string,
     details?: { authority?: string; registrationNumber?: string; authorizationType?: string; evidenceReference?: string; verificationSource?: string; validUntil?: Date }
   ) {
+    if (status === 'VERIFIED') {
+      const complete = details?.authority && details.registrationNumber && details.authorizationType
+        && details.evidenceReference && details.verificationSource && details.validUntil;
+      if (!complete || details.validUntil! <= new Date()) {
+        throw new AppError('VALIDATION_ERROR', 'Verified recyclers require complete, current authorization evidence', 422, { code: 'VERIFICATION_EVIDENCE_REQUIRED' });
+      }
+    }
     return this.db.$transaction(async transaction => {
       const previous = await transaction.recycler.findUnique({ where: { id } });
       if (!previous) {

@@ -8,7 +8,7 @@ const avail = z.enum(['TODAY', 'THIS_WEEK', 'FLEXIBLE']);
 const page = z.coerce.number().int().min(1).default(1);
 const limit = z.coerce.number().int().min(1).max(100).default(20);
 const rateRows = z.array(z.object({ materialCategory: mat, pricePerKg: z.number().finite().positive().lt(1_000_000) }).strict()).max(20);
-const profileUpdate = z.object({ pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict();
+const profileUpdate = z.object({ pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), logisticsCostPerKm: z.number().finite().nonnegative().max(100000).optional(), pickupFee: z.number().finite().nonnegative().max(100000).optional(), pickupIncluded: z.boolean().optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict();
 const parseDateOnly = (value: string): Date | null => {
   const [year, month, day] = value.split('-').map(Number);
   if (![year, month, day].every(Number.isInteger)) return null;
@@ -24,6 +24,7 @@ const verificationRequest = z.object({
   validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 }).superRefine((value, ctx) => {
   if (!parseDateOnly(value.validUntil)) ctx.addIssue({ code: 'custom', path: ['validUntil'], message: 'Enter a valid date' });
+  else if (parseDateOnly(value.validUntil)!.getTime() <= Date.now()) ctx.addIssue({ code: 'custom', path: ['validUntil'], message: 'Authorization must expire in the future' });
 });
 
 export const recyclerController = (s: RecyclerService) => ({
@@ -55,7 +56,7 @@ export const recyclerController = (s: RecyclerService) => ({
   adminList: async (_req: Request, res: Response) => res.json({ success: true, data: await s.adminList(), message: 'Admin recycler list retrieved' }),
   adminDetail: async (req: Request, res: Response) => res.json({ success: true, data: await s.adminDetail(String(req.params.recyclerId)), message: 'Admin recycler retrieved' }),
   authorize: async (req: Request, res: Response) => {
-    const p = z.object({ status: z.enum(['VERIFIED', 'PENDING', 'REJECTED', 'SUSPENDED']), reason: z.string().max(500).optional(), authority: z.string().trim().max(160).optional(), registrationNumber: z.string().trim().max(160).optional(), authorizationType: z.string().trim().max(160).optional(), evidenceReference: z.string().trim().max(500).optional(), verificationSource: z.string().trim().max(500).optional(), validUntil: z.string().datetime().optional() }).superRefine((value, ctx) => { if (value.status === 'VERIFIED' && (!value.authority || !value.registrationNumber || !value.authorizationType || !value.evidenceReference || !value.verificationSource || !value.validUntil)) ctx.addIssue({ code: 'custom', path: ['status'], message: 'Verified recyclers require complete registration evidence and validity' }); }).safeParse(req.body);
+    const p = z.object({ status: z.enum(['VERIFIED', 'PENDING', 'UNDER_REVIEW', 'REJECTED', 'REVIEW_REQUIRED', 'EXPIRED', 'REVOKED', 'SUSPENDED']), reason: z.string().max(500).optional(), authority: z.string().trim().max(160).optional(), registrationNumber: z.string().trim().max(160).optional(), authorizationType: z.string().trim().max(160).optional(), evidenceReference: z.string().trim().max(500).optional(), verificationSource: z.string().trim().max(500).optional(), validUntil: z.string().datetime().optional() }).superRefine((value, ctx) => { if (value.status === 'VERIFIED' && (!value.authority || !value.registrationNumber || !value.authorizationType || !value.evidenceReference || !value.verificationSource || !value.validUntil)) ctx.addIssue({ code: 'custom', path: ['status'], message: 'Verified recyclers require complete registration evidence and validity' }); if (value.status === 'VERIFIED' && value.validUntil && new Date(value.validUntil).getTime() <= Date.now()) ctx.addIssue({ code: 'custom', path: ['validUntil'], message: 'Authorization must expire in the future' }); }).safeParse(req.body);
     if (!p.success) throw new AppError('VALIDATION_ERROR', 'Invalid authorization status', 422, { code: 'INVALID_AUTHORIZATION_STATUS' });
     const { status, reason, validUntil, ...details } = p.data;
     return res.json({ success: true, data: await s.authorize(String(req.params.recyclerId), req.identity!.collectorId, status, reason, { ...details, validUntil: validUntil ? new Date(validUntil) : undefined }), message: 'Recycler authorization updated' });

@@ -23,18 +23,35 @@ import retrofit2.http.Query
  * isolated to this package and its mappers.
  */
 interface ApiService {
+    @GET("health")
+    suspend fun getHealth(): Response<ApiEnvelope<JsonObject>>
+
     // Explicit supply-chain contract. These endpoints are separate from the
     // legacy collector-to-recycler lot/quote APIs below.
     @POST("household/listings")
-    suspend fun createHouseholdListing(@Body body: HouseholdListingCreateDto): Response<ApiEnvelope<HouseholdListingDto>>
+    suspend fun createHouseholdListing(@Body body: HouseholdListingCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<HouseholdListingDto>>
     @GET("household/listings")
     suspend fun getHouseholdListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    @GET("household/listings/{listingId}")
+    suspend fun getHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<JsonObject>>
+    @PATCH("household/listings/{listingId}")
+    suspend fun updateHouseholdListing(@Path("listingId") listingId: String, @Body body: HouseholdListingUpdateDto): Response<ApiEnvelope<HouseholdListingDto>>
+    @GET("household/listings/{listingId}/passport")
+    suspend fun getHouseholdListingPassport(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdPassportResponseDto>>
     @GET("household/kabadiwalas")
     suspend fun getHouseholdKabadiwalas(): Response<ApiEnvelope<List<KabadiwalaProfileDto>>>
     @POST("household/listings/{listingId}/pickups")
-    suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto): Response<ApiEnvelope<PickupRequestDto>>
+    suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<PickupRequestDto>>
     @GET("household/pickups")
     suspend fun getHouseholdPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    @GET("household/pickups/{pickupId}")
+    suspend fun getHouseholdPickup(@Path("pickupId") pickupId: String): Response<ApiEnvelope<JsonObject>>
+    @GET("household/pickups/{pickupId}/passport")
+    suspend fun getHouseholdPickupPassport(@Path("pickupId") pickupId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("household/pickups/{pickupId}/reschedule")
+    suspend fun rescheduleHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: PickupRescheduleDto): Response<ApiEnvelope<PickupRequestDto>>
+    @POST("household/pickups/{pickupId}/settlement")
+    suspend fun decideHouseholdSettlement(@Path("pickupId") pickupId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<PickupRequestDto>>
     @POST("household/listings/{listingId}/cancel")
     suspend fun cancelHouseholdListing(@Path("listingId") listingId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @POST("household/pickups/{pickupId}/cancel")
@@ -45,14 +62,24 @@ interface ApiService {
     suspend fun getKabadiwalaPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
     @POST("kabadiwala/listings/{listingId}/accept")
     suspend fun acceptHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/reject")
+    suspend fun rejectKabadiwalaPickup(@Path("pickupId") pickupId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/confirm-availability")
+    suspend fun confirmPickupAvailability(@Path("pickupId") pickupId: String, @Body body: PickupAvailabilityDto = PickupAvailabilityDto()): Response<ApiEnvelope<PickupRequestDto>>
     @POST("kabadiwala/pickups/{pickupId}/schedule")
     suspend fun schedulePickup(@Path("pickupId") pickupId: String, @Body body: PickupScheduleDto): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/status")
     suspend fun updatePickupStatus(@Path("pickupId") pickupId: String, @Body body: PickupStatusDto): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/cancel")
+    suspend fun cancelKabadiwalaPickup(@Path("pickupId") pickupId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/reassign")
+    suspend fun reassignPickup(@Path("pickupId") pickupId: String, @Body body: PickupReassignDto): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/complete")
     suspend fun completePickup(@Path("pickupId") pickupId: String, @Body body: PickupCompletionDto): Response<ApiEnvelope<PickupRequestDto>>
     @GET("kabadiwala/inventory")
     suspend fun getKabadiwalaInventory(): Response<ApiEnvelope<List<InventoryBalanceDto>>>
+    @GET("kabadiwala/inventory/movements")
+    suspend fun getInventoryMovements(@Query("materialCategory") materialCategory: String? = null, @Query("limit") limit: Int = 100): Response<ApiEnvelope<List<InventoryMovementDto>>>
     @POST("kabadiwala/bulk-lots")
     suspend fun createBulkLot(@Body body: BulkLotCreateDto): Response<ApiEnvelope<BulkLotDto>>
     @GET("kabadiwala/bulk-lots")
@@ -63,24 +90,36 @@ interface ApiService {
     suspend fun getKabadiwalaBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
     @GET("recycler/bulk-lots")
     suspend fun getRecyclerBulkLots(): Response<ApiEnvelope<List<BulkLotDto>>>
+    @GET("recycler/bulk-lots/{lotId}")
+    suspend fun getRecyclerBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<BulkLotDto>>
     @POST("recycler/bulk-lots/{lotId}/offers")
     suspend fun makeBulkLotOffer(@Path("lotId") lotId: String, @Body body: BulkOfferCreateDto): Response<ApiEnvelope<BulkOfferDto>>
     @GET("recycler/offers")
     suspend fun getRecyclerBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
+    @POST("recycler/offers/{offerId}/withdraw")
+    suspend fun withdrawRecyclerOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/procurement-requirements")
     suspend fun getProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
     @POST("kabadiwala/bulk-offers/{offerId}/accept")
     suspend fun acceptBulkOffer(@Path("offerId") offerId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/bulk-offers/{offerId}/reject")
+    suspend fun rejectBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/bulk-offers/{offerId}/counter")
+    suspend fun counterBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferCounterDto): Response<ApiEnvelope<JsonObject>>
     @POST("recycler/bulk-lots/{lotId}/receive")
     suspend fun receiveBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
     @POST("recycler/procurement-requirements")
     suspend fun createProcurementRequirement(@Body body: ProcurementRequirementCreateDto): Response<ApiEnvelope<ProcurementRequirementDto>>
+    @PATCH("recycler/procurement-requirements/{requirementId}")
+    suspend fun updateProcurementRequirement(@Path("requirementId") requirementId: String, @Body body: ProcurementRequirementUpdateDto): Response<ApiEnvelope<ProcurementRequirementDto>>
     @GET("recycler/procurement-requirements")
     suspend fun getRecyclerProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
     @GET("kabadiwala/route-advantage")
     suspend fun getRouteAdvantage(@Query("materialCategory") materialCategory: String, @Query("quantityKg") quantityKg: Double, @Query("grade") grade: String = "UNSPECIFIED", @Query("areaName") areaName: String? = null): Response<ApiEnvelope<RouteAdvantageResponseDto>>
     @GET("kabadiwala/pool-opportunities")
     suspend fun getPoolOpportunities(): Response<ApiEnvelope<List<PoolOpportunityDto>>>
+    @GET("kabadiwala/pools/suggestions")
+    suspend fun getPoolSuggestions(): Response<ApiEnvelope<List<PoolSuggestionDto>>>
     @POST("kabadiwala/pools")
     suspend fun createPool(@Body body: PoolCreateRequestDto): Response<ApiEnvelope<PooledConsignmentDto>>
     @GET("kabadiwala/pools")
@@ -99,6 +138,8 @@ interface ApiService {
     suspend fun getCollectorPassport(): Response<ApiEnvelope<CollectorPassportDto>>
     @GET("kabadiwala/safety")
     suspend fun getSafety(): Response<ApiEnvelope<SafetyResponseDto>>
+    @GET("safety-routing")
+    suspend fun getSafetyRouting(@Query("materialCategory") materialCategory: String?, @Query("condition") condition: String?): Response<ApiEnvelope<SafetyRoutingResponseDto>>
     @POST("kabadiwala/safety/{moduleKey}/acknowledge")
     suspend fun acknowledgeSafety(@Path("moduleKey") moduleKey: String): Response<ApiEnvelope<SafetyProgressDto>>
     @POST("kabadiwala/pools/{poolId}/prepare-handover")
@@ -106,17 +147,19 @@ interface ApiService {
     @POST("kabadiwala/bulk-lots/{lotId}/prepare-handover")
     suspend fun prepareBulkHandover(@Path("lotId") lotId: String, @Body body: JsonObject = JsonObject()): Response<ApiEnvelope<SupplyHandoverDto>>
     @POST("kabadiwala/handovers/{handoverId}/collector-confirm")
-    suspend fun confirmCollectorHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<SupplyHandoverDto>>
+    suspend fun confirmCollectorHandover(@Path("handoverId") handoverId: String, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<SupplyHandoverDto>>
     @GET("kabadiwala/handovers")
     suspend fun getKabadiwalaHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
     @GET("recycler/supply-handovers")
     suspend fun getSupplyHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
     @POST("recycler/handovers/confirm")
-    suspend fun confirmSupplyHandover(@Body body: SupplyHandoverConfirmRequestDto): Response<ApiEnvelope<SupplyHandoverDto>>
+    suspend fun confirmSupplyHandover(@Body body: SupplyHandoverConfirmRequestDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<SupplyHandoverDto>>
     @POST("kabadiwala/handovers/{handoverId}/settlement")
     suspend fun decideSupplySettlement(@Path("handoverId") handoverId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<SupplyHandoverDto>>
     @GET("kabadiwala/handovers/{handoverId}/passport")
     suspend fun getMaterialPassport(@Path("handoverId") handoverId: String): Response<ApiEnvelope<MaterialPassportResponseDto>>
+    @GET("kabadiwala/handovers/{handoverId}/anomalies")
+    suspend fun getHandoverAnomalies(@Path("handoverId") handoverId: String): Response<ApiEnvelope<AnomalyResponseDto>>
     @POST("auth/request-otp")
     suspend fun requestOtp(@Body body: OtpRequestDto): Response<ApiEnvelope<OtpRequestedDto>>
 
@@ -155,6 +198,8 @@ interface ApiService {
 
     @GET("lots/{lotId}")
     suspend fun getLot(@Path("lotId") lotId: String): Response<ApiEnvelope<LotDto>>
+    @GET("lots/{lotId}/photo")
+    suspend fun getLotPhoto(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
 
     @PUT("lots/{lotId}")
     suspend fun updateLot(@Path("lotId") lotId: String, @Body body: UpdateLotRequestDto): Response<ApiEnvelope<LotDto>>
@@ -216,6 +261,8 @@ interface ApiService {
 
     @GET("recycler/quote-requests")
     suspend fun getRecyclerQuoteRequests(): Response<ApiEnvelope<List<RecyclerQuoteRequestDto>>>
+    @GET("recycler/quote-requests/{requestId}")
+    suspend fun getRecyclerQuoteRequest(@Path("requestId") requestId: String): Response<ApiEnvelope<RecyclerQuoteRequestDto>>
 
     @POST("recycler/quotes")
     suspend fun submitRecyclerQuote(@Body body: SubmitRecyclerQuoteRequestDto): Response<ApiEnvelope<QuoteDto>>
@@ -228,6 +275,8 @@ interface ApiService {
 
     @GET("handovers/{handoverId}")
     suspend fun getHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<HandoverDto>>
+    @GET("handovers/reference/{referenceId}")
+    suspend fun getHandoverByReference(@Path("referenceId") referenceId: String): Response<ApiEnvelope<HandoverDto>>
 
     @POST("handovers/{handoverId}/mark-handed-over")
     suspend fun markHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<HandoverDto>>
@@ -247,6 +296,8 @@ interface ApiService {
 
     @GET("recycler/handovers")
     suspend fun getRecyclerHandovers(): Response<ApiEnvelope<List<HandoverDto>>>
+    @GET("recycler/handovers/{handoverId}")
+    suspend fun getRecyclerHandover(@Path("handoverId") handoverId: String): Response<ApiEnvelope<HandoverDto>>
 
     @POST("recycler/handovers/{handoverId}/confirm")
     suspend fun confirmRecyclerHandover(@Path("handoverId") handoverId: String, @Body body: RecyclerHandoverConfirmRequestDto): Response<ApiEnvelope<JsonObject>>
@@ -347,6 +398,40 @@ interface ApiService {
 
     @GET("future/disputes/analytics")
     suspend fun getDisputeAnalytics(@Query("months") months: Int = 6): Response<ApiEnvelope<DisputeAnalyticsDto>>
+
+    // Capability-gated admin tools. They are deliberately not reachable from
+    // household/collector/recycler navigation; the backend remains the final
+    // authority for the permission claims on these requests.
+    @PUT("admin/prices/{priceId}")
+    suspend fun adminUpdatePrice(@Path("priceId") priceId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("admin/recyclers")
+    suspend fun adminRecyclerQueue(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("admin/recyclers/{recyclerId}")
+    suspend fun adminRecyclerDetail(@Path("recyclerId") recyclerId: String): Response<ApiEnvelope<JsonObject>>
+    @PUT("admin/recyclers/{recyclerId}/authorization")
+    suspend fun adminAuthorizeRecycler(@Path("recyclerId") recyclerId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("admin/disputes")
+    suspend fun adminDisputes(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("admin/disputes/{disputeId}")
+    suspend fun adminDispute(@Path("disputeId") disputeId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("admin/disputes/{disputeId}/resolve")
+    suspend fun adminResolveDispute(@Path("disputeId") disputeId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("admin/payments")
+    suspend fun adminPayments(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("admin/payments/{paymentId}")
+    suspend fun adminPayment(@Path("paymentId") paymentId: String): Response<ApiEnvelope<JsonObject>>
+    @POST("admin/payments/{paymentId}/verify")
+    suspend fun adminVerifyPayment(@Path("paymentId") paymentId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @POST("admin/formal-payments/{paymentId}/reverse")
+    suspend fun adminReversePayment(@Path("paymentId") paymentId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("admin/formal-anomalies")
+    suspend fun adminFormalAnomalies(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
+    @POST("admin/formal-anomalies/{flagId}/resolve")
+    suspend fun adminResolveFormalAnomaly(@Path("flagId") flagId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @POST("admin/datasets/prices/import")
+    suspend fun adminImportPrices(@Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("admin/datasets/export")
+    suspend fun adminExportDataset(@Query("from") from: String? = null): Response<ApiEnvelope<JsonObject>>
 }
 
 class RemoteApiException(val code: String, override val message: String, val httpCode: Int? = null) : Exception(message)

@@ -65,8 +65,11 @@ export class PaymentService {
   }
   async ledger(cid: string) {
     const payments = await this.list(cid);
+    const supplyPaymentStore = (this.db as any).supplyPayment;
+    const supplyPayments = supplyPaymentStore ? await supplyPaymentStore.findMany({ where: { collectorId: cid }, orderBy: { recordedAt: 'desc' } }) : [];
     const settled = payments.filter(p => p.status !== 'DISPUTED');
-    const total = settled.reduce((s, p) => s + p.amount, 0);
+    const formalSettled = supplyPayments.filter((p: any) => p.status !== 'DISPUTED');
+    const total = settled.reduce((s, p) => s + p.amount, 0) + formalSettled.reduce((s: number, p: any) => s + p.amount, 0);
     // Ledger months are business months in India, independent of the host
     // machine's timezone (which is commonly UTC in production).
     const indiaParts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric' }).formatToParts(new Date());
@@ -75,23 +78,25 @@ export class PaymentService {
     const offsetMs = 5.5 * 60 * 60 * 1000;
     const monthStart = new Date(Date.UTC(year, month, 1) - offsetMs);
     const nextMonthStart = new Date(Date.UTC(year, month + 1, 1) - offsetMs);
-    const thisMonth = settled.filter(p => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s, p) => s + p.amount, 0);
+    const thisMonth = settled.filter(p => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s, p) => s + p.amount, 0) + formalSettled.filter((p: any) => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s: number, p: any) => s + p.amount, 0);
+    const allSettledCount = settled.length + formalSettled.length;
     const summary = {
       totalEarnings: Number(total.toFixed(2)),
       pendingAmount: 0,
       thisMonthEarnings: Number(thisMonth.toFixed(2)),
-      averageLotValue: settled.length ? Number((total / settled.length).toFixed(2)) : 0
+      averageLotValue: allSettledCount ? Number((total / allSettledCount).toFixed(2)) : 0
     };
     // Keep the historical summary/transactions shape for existing clients,
     // while exposing the flat contract consumed by the Android ledger cache.
     return {
       total: summary.totalEarnings,
-      pending: summary.pendingAmount,
+      pending: Number(supplyPayments.filter((p: any) => p.status === 'RECORDED').reduce((s: number, p: any) => s + p.amount, 0).toFixed(2)),
       currentMonth: summary.thisMonthEarnings,
       averagePerLot: summary.averageLotValue,
       payments,
+      formalPayments: supplyPayments,
       summary,
-      transactions: payments
+      transactions: [...payments.map((payment: any) => ({ ...payment, sourceType: 'LEGACY_LOT' })), ...supplyPayments.map((payment: any) => ({ ...payment, sourceType: 'FORMAL_HANDOVER' }))]
     };
   }
   async adminList() { return this.db.payment.findMany({ orderBy: { createdAt: 'desc' } }); }

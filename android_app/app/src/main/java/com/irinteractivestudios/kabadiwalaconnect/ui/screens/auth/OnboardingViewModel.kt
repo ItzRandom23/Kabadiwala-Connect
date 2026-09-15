@@ -85,6 +85,15 @@ class OnboardingViewModel(
             phoneError = false
         )
     }
+    fun useAdminSignIn() {
+        _state.value = _state.value.copy(
+            returningUser = true,
+            role = AccountRole.ADMIN,
+            step = OnboardingStep.EMAIL,
+            authError = false,
+            phoneError = false
+        )
+    }
     fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = false) }
     fun goBack() {
         val current = _state.value
@@ -128,7 +137,7 @@ class OnboardingViewModel(
         if (!EmailValidator.isValid(current.email) || current.password.length < 8) { continueEmail(); return }
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true, authError = false)
-            when (val result = auth.authenticateEmail(EmailAccountRequest(current.email, current.password, AccountRole.COLLECTOR, LocaleManager.ENGLISH, isReturning = true))) {
+            when (val result = if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password) else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, AccountRole.COLLECTOR, LocaleManager.ENGLISH, isReturning = true))) {
                 is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false) }
                 else -> _state.value = current.copy(isBusy = false, authError = true)
             }

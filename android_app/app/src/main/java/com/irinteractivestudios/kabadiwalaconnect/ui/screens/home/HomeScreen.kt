@@ -83,7 +83,7 @@ fun HomeScreen(
     }
     val scenario = DemoDataProvider.scenario
     Column(
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -158,15 +158,15 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                ToolShortcut(stringResource(R.string.settings_rewards), Icons.Filled.AutoAwesome, "See value and recognition for verified work.", onOpenRewards, "home_rewards")
+                ToolShortcut(stringResource(R.string.settings_rewards), Icons.Filled.AutoAwesome, stringResource(R.string.home_tool_rewards_detail), onOpenRewards, "home_rewards")
                 ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_schemes), Icons.Filled.School, "Find support schemes that apply to your work.", onOpenSchemes, "home_schemes")
+                ToolShortcut(stringResource(R.string.settings_schemes), Icons.Filled.School, stringResource(R.string.home_tool_schemes_detail), onOpenSchemes, "home_schemes")
                 ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_diy), Icons.Filled.Recycling, "Learn safe reuse and sorting practices.", onOpenActivities, "home_activities")
+                ToolShortcut(stringResource(R.string.settings_diy), Icons.Filled.Recycling, stringResource(R.string.home_tool_activities_detail), onOpenActivities, "home_activities")
                 ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_messages), Icons.AutoMirrored.Filled.Chat, "Keep recycler and collection conversations together.", onOpenChat, "home_messages")
+                ToolShortcut(stringResource(R.string.settings_messages), Icons.AutoMirrored.Filled.Chat, stringResource(R.string.home_tool_messages_detail), onOpenChat, "home_messages")
                 ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_disputes), Icons.Filled.Gavel, "Track and resolve handover concerns clearly.", onOpenDisputes, "home_disputes")
+                ToolShortcut(stringResource(R.string.settings_disputes), Icons.Filled.Gavel, stringResource(R.string.home_tool_disputes_detail), onOpenDisputes, "home_disputes")
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -220,7 +220,7 @@ private fun NextCollectionPanel(demoMode: Boolean, household: Boolean, onCreateL
         shadowElevation = 3.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             Modifier
                 .heightIn(min = 190.dp)
                 .background(
@@ -232,14 +232,8 @@ private fun NextCollectionPanel(demoMode: Boolean, household: Boolean, onCreateL
                     )
                 )
         ) {
-            Spacer(
-                Modifier
-                    .fillMaxHeight()
-                    .width(7.dp)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
             Column(
-                Modifier.padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp),
+                Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 KcStatusPill(if (demoMode) stringResource(R.string.home_demo_badge) else stringResource(R.string.home_field_ready))

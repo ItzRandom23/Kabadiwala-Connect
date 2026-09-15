@@ -115,7 +115,7 @@ private fun MarketPriceEmpty(location: String, refreshing: Boolean, onRefresh: (
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(36.dp))
             Text(stringResource(R.string.prices_empty_title, location), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.prices_empty_detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -148,7 +148,7 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 stringResource(R.string.prices_rate_label),
                 style = MaterialTheme.typography.labelLarge,
@@ -204,7 +204,7 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(stringResource(R.string.prices_recycler_placeholder), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(16.dp))
+        Text(stringResource(R.string.prices_recycler_placeholder), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
     }
 }
 

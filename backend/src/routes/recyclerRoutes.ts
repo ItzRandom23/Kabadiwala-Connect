@@ -16,7 +16,7 @@ export const recyclerRoutes = (jwt: JwtService, c: CollectorRepository, s: Recyc
     .patch('/recycler/profile', requireRecycler(jwt, db), x.updateProfile)
     .put('/recycler/rates', requireRecycler(jwt, db), x.updateRates)
     .get('/recyclers', requireAccount(jwt, db, false), x.list)
-    .get('/recyclers/match', requireAuth(jwt, c), x.match)
+    .get('/recyclers/match', requireAuth(jwt, c, db), x.match)
     .get('/recyclers/:recyclerId', requireAccount(jwt, db, false), x.detail)
     .get('/admin/recyclers', requireAdmin(jwt, db, 'RECYCLER_REVIEW'), x.adminList)
     .get('/admin/recyclers/:recyclerId', requireAdmin(jwt, db, 'RECYCLER_REVIEW'), x.adminDetail)

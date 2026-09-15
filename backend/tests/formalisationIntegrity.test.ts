@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSupplyHandoverQr, verifySupplyHandoverQr } from '../src/routes/formalisationRoutes.js';
+import { assertSettlementQuantity, createSupplyHandoverQr, verifySupplyHandoverQr } from '../src/routes/formalisationRoutes.js';
 
 const secret = 'formalisation-integrity-test-secret-32-chars';
 
@@ -17,5 +17,11 @@ describe('formalisation handover QR integrity', () => {
     const changed = Buffer.from(JSON.stringify({ version: 1, referenceId: 'KC-HO-2', recyclerId: 'recycler-1', nonce: 'tampered', materialCategory: 'BATTERY', weightKg: 3 }), 'utf8').toString('base64url');
     expect(() => verifySupplyHandoverQr(`kc-supply-handover-v1.${changed}.${parts[2]}`, secret)).toThrow(/altered|Invalid/);
     expect(() => verifySupplyHandoverQr(`${qr.data.slice(0, -1)}x`, secret)).toThrow(/altered/);
+  });
+
+  it('rejects a received quantity larger than the reserved handover source', () => {
+    expect(() => assertSettlementQuantity(100, 100.01, 100)).toThrow(/reserved handover quantity/);
+    expect(() => assertSettlementQuantity(100, 100, 100.01)).toThrow(/actual received weight/);
+    expect(() => assertSettlementQuantity(100, 99, 99)).not.toThrow();
   });
 });

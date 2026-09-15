@@ -21,10 +21,16 @@ chain-of-custody certificate or environmental-impact claim.
 6. The platform creates a settlement breakdown and either completes the
    handover or marks it `REVIEW_REQUIRED`. The Collector can accept or raise an
    issue; the event and anomaly are retained.
+7. Offline retries use the role-aware `/api/v1/sync` operation vocabulary for
+   pool contribution/release, settlement decision, handover confirmation,
+   disposal evidence and formal payment. Each accepted operation is recorded
+   under the authenticated account's replay ledger.
 
 `AuditEvent` and `MaterialPassportEvent` are written together for important
 mutations. Evidence hashes cover event metadata; the prototype does not store
-raw identity documents or claim immutable external notarisation.
+raw identity documents or claim immutable external notarisation. Formal
+payment is recorded against the handover/contributor source key, but external
+bank or cash reversal is outside this backend.
 
 ## Pool allocation
 

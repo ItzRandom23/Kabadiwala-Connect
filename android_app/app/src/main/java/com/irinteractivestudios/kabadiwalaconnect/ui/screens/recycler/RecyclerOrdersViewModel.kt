@@ -11,6 +11,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerHandoverCo
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverConfirmRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
@@ -72,7 +73,8 @@ class RecyclerScanViewModel(
     private val queue: SyncQueueDao? = null,
     private val cache: FormalisationCacheStore? = null,
     private val accountIdProvider: () -> String? = { null },
-    private val requestSync: (() -> Unit)? = null
+    private val requestSync: (() -> Unit)? = null,
+    private val idempotencyKeys: IdempotencyKeyStore? = null
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerScanState())
     val state: StateFlow<RecyclerScanState> = _state.asStateFlow()
@@ -103,12 +105,14 @@ class RecyclerScanViewModel(
             viewModelScope.launch {
                 _state.value = _state.value.copy(confirming = true, error = false)
                 val request = SupplyHandoverConfirmRequestDto(supply.qrCodeData.orEmpty(), actualWeightKg = actualWeight, acceptedWeightKg = actualWeight, materialMatch = materialMatch, reasonCode = notes?.trim()?.takeIf(String::isNotEmpty))
-                runCatching { api.confirmSupplyHandover(request).requireData() }
-                    .onSuccess { result -> _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false) }
+                val operation = "recycler-handover-${supply.id}"
+                val key = idempotencyKeys?.getOrCreate(operation) ?: operation
+                runCatching { api.confirmSupplyHandover(request, key).requireData() }
+                    .onSuccess { result -> idempotencyKeys?.clear(operation); _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false) }
                     .onFailure { error ->
                         val transient = error is java.io.IOException || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode ?: 0) >= 500
                         if (transient && queue != null) {
-                            val payload = JsonObject().apply { addProperty("handoverId", supply.id); addProperty("qrCodeData", supply.qrCodeData.orEmpty()); addProperty("actualWeightKg", actualWeight); addProperty("acceptedWeightKg", actualWeight); addProperty("materialMatch", materialMatch); notes?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("reasonCode", it) } }
+                            val payload = JsonObject().apply { addProperty("handoverId", supply.id); addProperty("qrCodeData", supply.qrCodeData.orEmpty()); addProperty("actualWeightKg", actualWeight); addProperty("acceptedWeightKg", actualWeight); addProperty("materialMatch", materialMatch); addProperty("idempotencyKey", key); notes?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("reasonCode", it) } }
                             queue.enqueue(SyncQueueItemEntity(operation = "CONFIRM_SUPPLY_HANDOVER", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountIdProvider()))
                             requestSync?.invoke()
                             _state.value = _state.value.copy(confirming = false, supplyQueued = true, supplyVerified = supply.copy(status = "SYNC_PENDING", finalAcceptedKg = actualWeight, finalValue = actualWeight * supply.quotedRatePerKg))

@@ -326,25 +326,25 @@ fun NotificationsScreen(
 @Composable
 private fun FeatureHeader(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onRefresh: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
-        Spacer(Modifier.size(12.dp))
-        Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.headlineLarge); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.size(10.dp))
+        Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.headlineLarge, maxLines = 1); Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
         onRefresh?.let { IconButton(onClick = it) { Icon(Icons.Filled.Refresh, stringResource(R.string.future_refresh)) } }
     }
 }
 
 @Composable
 private fun StatCard(label: String, value: String, detail: String) {
-    FeatureSurface { Column(Modifier.padding(18.dp)) { Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodySmall) } }
+    FeatureSurface { Column(Modifier.padding(16.dp)) { Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 2) } }
 }
 
 @Composable
 private fun BreakdownCard(title: String, values: Map<String, Int>) {
-    FeatureSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); if (values.isEmpty()) Text(stringResource(R.string.future_no_data)) else values.toList().sortedByDescending { it.second }.forEach { (label, count) -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }); Text(count.toString(), fontWeight = FontWeight.Bold) } } } }
+    FeatureSurface { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); if (values.isEmpty()) Text(stringResource(R.string.future_no_data)) else values.toList().sortedByDescending { it.second }.forEach { (label, count) -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }); Text(count.toString(), fontWeight = FontWeight.Bold) } } } }
 }
 
 @Composable
-private fun EmptyFeatureCard(title: String, detail: String) { FeatureSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+private fun EmptyFeatureCard(title: String, detail: String) { FeatureSurface { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) } } }
 
 @Composable
 private fun ErrorFeatureCard(message: String, onRetry: () -> Unit) { FeatureSurface(containerColor = MaterialTheme.colorScheme.errorContainer, border = null) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f)); Button(onClick = onRetry) { Text(stringResource(R.string.future_retry)) } } } }

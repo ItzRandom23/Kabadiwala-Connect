@@ -1,8 +1,8 @@
 import express from 'express';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JwtService } from '../src/services/jwt.js';
-import { requireAuth, requireHousehold } from '../src/middleware/auth.js';
+import { requireAccount, requireAuth, requireHousehold } from '../src/middleware/auth.js';
 
 const config = { JWT_SECRET: 'role-boundary-test-secret', JWT_EXPIRES_IN: '1h' } as any;
 const jwt = new JwtService(config);
@@ -12,6 +12,16 @@ function protectedApp() {
   const app = express();
   app.get('/kabadiwala', requireAuth(jwt, profiles), (_req, res) => res.json({ ok: true }));
   app.get('/household', requireHousehold(jwt, profiles), (_req, res) => res.json({ ok: true }));
+  app.use((error: any, _req: any, res: any, _next: any) => res.status(error.status ?? 500).json({ code: error.code }));
+  return app;
+}
+
+function linkedAccountApp(role: 'COLLECTOR' | 'HOUSEHOLD') {
+  const app = express();
+  const db = { user: { findFirst: vi.fn().mockResolvedValue({ role, accountStatus: 'ACTIVE' }) }, collector: { findUnique: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } } as any;
+  app.get('/kabadiwala', requireAuth(jwt, profiles, db), (_req, res) => res.json({ ok: true }));
+  app.get('/household', requireHousehold(jwt, profiles, db), (_req, res) => res.json({ ok: true }));
+  app.get('/account', requireAccount(jwt, db, false), (_req, res) => res.json({ ok: true }));
   app.use((error: any, _req: any, res: any, _next: any) => res.status(error.status ?? 500).json({ code: error.code }));
   return app;
 }
@@ -31,5 +41,11 @@ describe('role boundaries', () => {
   it('accepts the correct token for each role', async () => {
     await request(protectedApp()).get('/kabadiwala').set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`).expect(200);
     await request(protectedApp()).get('/household').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-a')}`).expect(200);
+  });
+
+  it('rechecks the linked account role when the database is available', async () => {
+    await request(linkedAccountApp('HOUSEHOLD')).get('/kabadiwala').set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`).expect(403);
+    await request(linkedAccountApp('COLLECTOR')).get('/household').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-a')}`).expect(403);
+    await request(linkedAccountApp('HOUSEHOLD')).get('/account').set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`).expect(403);
   });
 });

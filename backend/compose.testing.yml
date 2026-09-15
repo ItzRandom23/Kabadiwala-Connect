@@ -1,10 +1,28 @@
 services:
+  database:
+    image: mongo:8.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: testing-user
+      MONGO_INITDB_ROOT_PASSWORD: testing-password
+      MONGO_INITDB_DATABASE: kabadiwala_testing
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --username testing-user --password testing-password --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - testing_database:/data/db
+
   api:
     build:
       context: .
     restart: unless-stopped
     env_file:
-      - .env.testing
+      - .env.testing.example
+    depends_on:
+      database:
+        condition: service_healthy
     ports:
       - "4000:4000"
     volumes:
@@ -18,4 +36,5 @@ services:
       - ALL
 
 volumes:
+  testing_database:
   testing_uploads:

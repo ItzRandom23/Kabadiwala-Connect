@@ -12,7 +12,7 @@ import { LotService } from './services/lotService.js';
 import { LocalStorageService, S3StorageService, type StorageService } from './services/storage.js';
 import { PriceRepository } from './repositories/priceRepository.js';
 import { PriceService } from './services/priceService.js';
-import { RecyclerService } from './services/recyclerService.js';
+import { RecyclerService, expireStaleRecyclerAuthorizations } from './services/recyclerService.js';
 import { QuoteService } from './services/quoteService.js';
 import { HandoverService } from './services/handoverService.js';
 import { PaymentService } from './services/paymentService.js';
@@ -63,15 +63,23 @@ const app = createApp(
   new QuoteService(prisma),
   new HandoverService(prisma, config.TRACEABILITY_SIGNING_SECRET, authenticationRateLimiter, storage),
   paymentService,
-  new SyncService(prisma, paymentService),
+  new SyncService(prisma, paymentService, config.TRACEABILITY_SIGNING_SECRET),
   new EmailAuthService(prisma, jwt, sessionService, authenticationRateLimiter)
 );
+
+const runRecyclerFreshnessSweep = () => expireStaleRecyclerAuthorizations(prisma)
+  .then(expired => { if (expired) console.log(`Expired ${expired} stale Recycler authorization(s)`); })
+  .catch(error => console.warn('Recycler authorization freshness sweep skipped:', error));
+void runRecyclerFreshnessSweep();
+const recyclerFreshnessTimer = setInterval(runRecyclerFreshnessSweep, 60 * 60 * 1000);
+recyclerFreshnessTimer.unref();
 
 // Bind explicitly to IPv4 so Android emulators can reach the local development
 // server through 10.0.2.2. This remains a local/SIH prototype server; deployment
 // exposure is controlled separately by the hosting environment.
 const server = app.listen(config.PORT, '0.0.0.0', () => console.log(`Kabadiwala backend listening on port ${config.PORT}`));
 const shutdown = async () => {
+  clearInterval(recyclerFreshnessTimer);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

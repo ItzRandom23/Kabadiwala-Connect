@@ -39,6 +39,7 @@ interface SecureStorage {
         const val ACCOUNT_PROFILE_ID = "account_profile_id"
         const val ACCOUNT_LATITUDE = "account_latitude"
         const val ACCOUNT_LONGITUDE = "account_longitude"
+        const val ACCOUNT_PERMISSIONS = "account_permissions"
 
         /** Opaque server cursor used by bidirectional change reconciliation. */
         const val SYNC_CURSOR = "sync_cursor"

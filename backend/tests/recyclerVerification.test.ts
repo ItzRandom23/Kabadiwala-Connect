@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { recyclerController } from '../src/controllers/recyclerController.js';
 import { requireRecycler } from '../src/middleware/auth.js';
 import { JwtService } from '../src/services/jwt.js';
+import { expireStaleRecyclerAuthorizations } from '../src/services/recyclerService.js';
 
 const jwt = new JwtService({ JWT_SECRET: 'recycler-verification-test-secret', JWT_EXPIRES_IN: '1h' } as any);
 
@@ -47,5 +48,18 @@ describe('recycler verification submission', () => {
 
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('expires stale verified authorizations with a lifecycle audit', async () => {
+    const validUntil = new Date('2026-01-01T00:00:00.000Z');
+    const updateMany = async () => ({ count: 1 });
+    const create = async ({ data }: any) => data;
+    const tx = { recycler: { updateMany }, recyclerAuthorizationAudit: { create }, notificationEvent: { create } } as any;
+    const db = {
+      recycler: { findMany: async () => [{ id: 'recycler-1', authorizationValidUntil: validUntil }] },
+      $transaction: async (work: any) => work(tx)
+    } as any;
+
+    await expect(expireStaleRecyclerAuthorizations(db, new Date('2026-02-01T00:00:00.000Z'))).resolves.toBe(1);
   });
 });

@@ -16,6 +16,17 @@
     <string name="nav_kabadiwala_pickups">Pickups</string>
     <string name="nav_kabadiwala_lots">Buyers</string>
     <string name="recycler_marketplace_title">Nearby lots</string>
+    <string name="recycler_marketplace_detail">Verified lots matched to your materials and area.</string>
+    <string name="recycler_marketplace_refresh_error">Couldn’t refresh. Saved work is safe.</string>
+    <string name="recycler_offer_saved">Offer saved · syncs when online.</string>
+    <string name="recycler_offer_sent">Offer sent · collector will see it after sync.</string>
+    <string name="recycler_passport_matched">Material passport matched</string>
+    <string name="recycler_receipt_saved">Receipt saved locally · it will retry online.</string>
+    <string name="recycler_pickup_ready">Pickup ready · collector will see it after sync.</string>
+    <string name="recycler_pickups_detail">Set when your facility can receive a handover.</string>
+    <string name="recycler_availability_visible">Collectors see this before requesting a quote.</string>
+    <string name="recycler_rates_detail">Saved rates are shared with matched collectors.</string>
+    <string name="recycler_rates_load_error">Couldn’t load current rates. Try again.</string>
     <string name="recycler_orders_title">Active orders</string>
     <string name="recycler_orders_subtitle">Accepted lots and handover confirmation.</string>
     <string name="recycler_order_reference">Handover %1$s</string>
@@ -31,7 +42,7 @@
     <string name="recycler_verification_not_approved_title">Your facility is not yet approved</string>
 
     <!-- Connectivity -->
-    <string name="offline_banner">Saved on this phone · will sync when you’re back online.</string>
+    <string name="offline_banner">Offline · changes sync later.</string>
 
     <!-- Shared UI states -->
     <string name="common_loading">Please wait…</string>
@@ -39,20 +50,20 @@
     <string name="common_ok">OK</string>
     <string name="common_back">Back</string>
     <string name="common_no_data">Nothing saved yet</string>
-    <string name="common_no_data_detail">New items will appear here when available.</string>
+    <string name="common_no_data_detail">New items will appear here.</string>
     <string name="common_coming_soon">Coming soon</string>
     <string name="common_syncing">Syncing…</string>
     <string name="common_error_title">Something went wrong</string>
     <string name="common_offline_title">No internet</string>
-    <string name="common_offline_detail">You can still see your saved data.</string>
+    <string name="common_offline_detail">Saved data is still available.</string>
 
     <!-- Home -->
     <string name="home_title">Namaste!</string>
-    <string name="home_subtitle">Your collection work starts here.</string>
+    <string name="home_subtitle">Your next collection, at a glance.</string>
     <string name="home_household_title">Your scrap dashboard</string>
-    <string name="home_household_subtitle">Sell household scrap to trusted kabadiwalas near you.</string>
+    <string name="home_household_subtitle">Sell household scrap to a nearby kabadiwala.</string>
     <string name="home_household_action_title">Sell scrap from home</string>
-    <string name="home_household_action_detail">Add what you want to sell, check the current price, and connect with a verified recycler.</string>
+    <string name="home_household_action_detail">Add the material, weight and area to get started.</string>
     <string name="home_household_create_lot">Start a sale</string>
     <string name="home_cached_lots">Saved lots</string>
     <string name="home_today_rate">Today\'s top rate</string>
@@ -60,29 +71,34 @@
     <string name="home_quick_recyclers">Find recyclers</string>
     <string name="home_create_lot">Create a lot</string>
     <string name="home_my_lots">My lots</string>
+    <string name="home_tool_rewards_detail">Track bonuses from verified work.</string>
+    <string name="home_tool_schemes_detail">Check schemes from official sources.</string>
+    <string name="home_tool_activities_detail">Learn safe sorting and reuse.</string>
+    <string name="home_tool_messages_detail">Keep transaction messages together.</string>
+    <string name="home_tool_disputes_detail">Review handover concerns.</string>
     <string name="auth_demo_entry">Preview the Pune demo</string>
     <string name="home_demo_badge">DEMO DATA</string>
     <string name="demo_preview_banner">Demo preview · values are not live</string>
     <string name="earnings_empty_title">No completed sales yet</string>
-    <string name="earnings_empty_detail">Your earnings will appear here after a recycler confirms payment.</string>
+    <string name="earnings_empty_detail">Earnings appear after payment is confirmed.</string>
     <string name="recycler_live_data_unavailable">Live marketplace data is not available yet.</string>
     <string name="recycler_no_orders">No accepted orders yet.</string>
     <string name="recycler_no_pickups">No pickups are scheduled.</string>
-    <string name="recycler_rate_draft_saved">Rate draft saved on this phone. It is not published until the rates service is connected.</string>
-    <string name="recycler_reference_captured">Reference captured on this phone. Server validation is still required before a handover can be completed.</string>
-    <string name="recycler_verification_pending_detail">Your details are waiting for review. Marketplace access will open after approval.</string>
-    <string name="recycler_verification_rejected_detail">Your verification was not approved. Update your business details or contact support.</string>
-    <string name="recycler_verification_suspended_detail">Marketplace access is paused. Contact support before accepting new work.</string>
-    <string name="recycler_verification_verified_detail">Your facility is verified. Live marketplace access will appear when lots are available.</string>
-    <string name="recycler_verification_status_detail">Status is controlled by the Kabadiwala Connect review team.</string>
+    <string name="recycler_rate_draft_saved">Saved on this phone · not published yet.</string>
+    <string name="recycler_reference_captured">Saved on this phone · server validation is still required.</string>
+    <string name="recycler_verification_pending_detail">Waiting for review. Marketplace access opens after approval.</string>
+    <string name="recycler_verification_rejected_detail">Not approved. Update your details or contact support.</string>
+    <string name="recycler_verification_suspended_detail">Marketplace access is paused. Contact support.</string>
+    <string name="recycler_verification_verified_detail">Verified facility. Marketplace access is ready.</string>
+    <string name="recycler_verification_status_detail">Status is set by the review team.</string>
     <string name="recycler_verification_status_pending">Pending review</string>
     <string name="recycler_verification_status_verified">Verified</string>
     <string name="recycler_verification_status_rejected">Needs updates</string>
     <string name="recycler_verification_status_suspended">Suspended</string>
-    <string name="recycler_verification_controlled_note">Submit official authorization details below. A reviewer checks the record with the issuing authority before access opens.</string>
-    <string name="recycler_verification_suspended_action">Contact support to resolve this account before sending another request.</string>
+    <string name="recycler_verification_controlled_note">Submit official details. A reviewer checks them before access opens.</string>
+    <string name="recycler_verification_suspended_action">Contact support to reopen access.</string>
     <string name="recycler_verification_submit_title">Submit authorization evidence</string>
-    <string name="recycler_verification_submit_detail">Use the details shown on your current authorization or registration record. A public portal link or document reference is enough; do not paste passwords or private identity numbers.</string>
+    <string name="recycler_verification_submit_detail">Use your current authorization record. Add a public link or document reference—never passwords or private ID numbers.</string>
     <string name="recycler_verification_review_feedback">Review note: %1$s</string>
     <string name="recycler_verification_authority">Issuing authority</string>
     <string name="recycler_verification_type">Authorization type</string>
@@ -105,7 +121,7 @@
     <string name="recycler_verification_type_value">Type: %1$s</string>
     <string name="recycler_verification_registration_value">Registration: %1$s</string>
     <string name="recycler_verification_valid_until_value">Valid until: %1$s</string>
-    <string name="recycler_verification_evidence_private">Detailed proof is kept for review. Public profiles show only the authority and validity needed for trust.</string>
+    <string name="recycler_verification_evidence_private">Proof stays private. Profiles show only authority and validity.</string>
     <string name="recycler_verification_error_authority">Enter the issuing authority.</string>
     <string name="recycler_verification_error_type">Enter the authorization type.</string>
     <string name="recycler_verification_error_registration">Enter the registration number.</string>
@@ -134,21 +150,21 @@
     <string name="lot_take_photo">Take photo</string>
     <string name="lot_retake">Retake photo</string>
     <string name="lot_confirm_photo">Use this photo</string>
-    <string name="lot_photo_error">Photo is missing, too small, or too large. Retake it.</string>
-    <string name="lot_photo_too_dark">This photo is very dark. Retake it in brighter light if possible.</string>
-    <string name="lot_photo_too_bright">This photo is overexposed. Move away from direct glare and retake it.</string>
-    <string name="lot_photo_low_detail">Keep the material close enough that its details are easy to see.</string>
+    <string name="lot_photo_error">Photo missing or unclear. Retake it.</string>
+    <string name="lot_photo_too_dark">Too dark. Retake in brighter light.</string>
+    <string name="lot_photo_too_bright">Too bright. Move away from glare and retake.</string>
+    <string name="lot_photo_low_detail">Move closer so the material is clear.</string>
     <string name="lot_material_title">What did you collect?</string>
     <string name="lot_material_detail">Choose one material.</string>
     <string name="lot_hazard">Handle with care</string>
     <string name="lot_non_hazard">General material</string><string name="lot_safety_open">Read safety guidance before continuing</string>
     <string name="lot_condition_title">What is its condition?</string>
     <string name="lot_weight_title">How much does it weigh?</string>
-    <string name="lot_weight_detail">Choose kilograms or grams. Enter an exact value or use the slider.</string>
+    <string name="lot_weight_detail">Enter an exact weight or use the slider.</string>
     <string name="lot_weight_label">Weight</string>
     <string name="lot_weight_unit_kg">Kilograms (kg)</string>
     <string name="lot_weight_unit_grams">Grams (g)</string>
-    <string name="lot_weight_slider_hint">The slider uses practical steps; use the field for exact values.</string>
+    <string name="lot_weight_slider_hint">Use the field for an exact value.</string>
     <string name="lot_weight_value">%1$s kg</string>
     <string name="lot_weight_error">Enter more than 0 and less than 500 kg.</string>
     <string name="lot_next">Next</string>
@@ -159,17 +175,18 @@
     <string name="lot_gps_saved">Approximate GPS location saved</string>
     <string name="lot_confirm_location">Confirm location</string>
     <string name="lot_review_title">Check your lot</string>
+    <string name="lot_details">Lot details</string>
     <string name="lot_material_label">Material</string>
     <string name="lot_condition_label">Condition</string>
     <string name="lot_notes_label">Notes (optional)</string>
     <string name="lot_value_placeholder">Estimated value will appear later.</string>
     <string name="lot_estimated_value">Market midpoint: ₹%1$.0f</string>
     <string name="lot_price_range">Expected price range: ₹%1$.0f–₹%2$.0f</string>
-    <string name="lot_estimate_basis">Based on local price × weight × condition. Quality adjustment: 1.0.</string>
-    <string name="lot_estimate_disclaimer">Estimate only. Your final price is confirmed after a kabadiwala accepts and inspects the scrap.</string>
-    <string name="lot_estimate_warning">This is a market estimate, not a promise. You can agree the final price in chat after a kabadiwala accepts.</string>
+    <string name="lot_estimate_basis">Local price × weight × condition.</string>
+    <string name="lot_estimate_disclaimer">Estimate only. Final price follows inspection.</string>
+    <string name="lot_estimate_warning">Market reference, not a promise. Agree the final price after inspection.</string>
     <string name="lot_user_price_label">Quote your own price (optional)</string>
-    <string name="lot_user_price_detail">Tell recyclers the price you expect for this lot.</string>
+    <string name="lot_user_price_detail">Share the price you expect.</string>
     <string name="lot_user_price_error">Enter a valid amount greater than ₹0.</string>
     <string name="lot_save">Save lot</string>
     <string name="lot_saving">Saving…</string>
@@ -200,9 +217,9 @@
     <string name="prices_title">Market prices</string>
     <string name="prices_subtitle">A local reference before you agree a sale.</string>
     <string name="prices_location_context">Showing prices around %1$s</string>
-    <string name="prices_location_help">Choose another area to compare availability.</string>
+    <string name="prices_location_help">Change area to compare rates.</string>
     <string name="prices_empty_title">No prices for %1$s yet</string>
-    <string name="prices_empty_detail">The test server has not published verified rates for this area. Try another location or check again later.</string>
+    <string name="prices_empty_detail">No verified rates here yet. Try another area.</string>
     <string name="prices_refresh">Refresh prices</string>
     <string name="prices_refreshing">Checking for updates…</string>
     <string name="prices_per_kg">per kg</string>
@@ -212,14 +229,14 @@
     <!-- Recyclers -->
     <string name="recyclers_title">Recyclers</string>
     <string name="recyclers_match_title">Best matches for this lot</string>
-    <string name="recyclers_match_detail">Ranked by verified material fit, rate, distance and pickup readiness. Cached facilities remain available offline.</string>
+    <string name="recyclers_match_detail">Matches use material fit, rate, distance and pickup readiness.</string>
     <string name="recyclers_authorized">Authorized</string>
     <string name="recyclers_distance_km">%1$s km away</string>
     <string name="recycler_search">Search name or area</string><string name="recycler_radius">Radius</string><string name="recycler_km">%1$d km</string><string name="recycler_material">Material</string><string name="recycler_pickup_only">Pickup available only</string><string name="recycler_sort">Sort:</string><string name="recycler_nearby">Nearby</string><string name="recycler_rate">Rate</string><string name="recycler_cached">Cached recyclers — offline</string><string name="recycler_rate_value">₹%1$.0f / kg</string><string name="recycler_pickup_yes">Pickup available</string><string name="recycler_pickup_no">Drop-off only</string><string name="recycler_match">Match %1$d%%</string><string name="recycler_detail_authorization">Authorization and rates</string><string name="recycler_not_verified">Authorization not verified</string><string name="recycler_materials">Materials: %1$s</string><string name="recycler_hours">Hours: %1$s</string><string name="recycler_handover">Typical handover: %1$d hours</string><string name="recycler_map_placeholder">Map location: %1$.3f, %2$.3f</string><string name="recycler_call">Call</string><string name="recycler_map">Map</string><string name="recycler_contact_note">Contact: %1$s</string>
-    <string name="recycler_trust_passport">Trust passport</string><string name="recycler_verified_by">Verified by %1$s</string><string name="recycler_valid_until">Authorization valid until %1$s</string><string name="recycler_rating">Rating %1$.1f · %2$d reviews</string><string name="recycler_completed_handovers">%1$d completed verified handovers</string><string name="recycler_trust_explainer">These signals come from the recycler profile and completed records. They are not an opaque score.</string>
+    <string name="recycler_trust_passport">Trust passport</string><string name="recycler_verified_by">Verified by %1$s</string><string name="recycler_valid_until">Authorization valid until %1$s</string><string name="recycler_rating">Rating %1$.1f · %2$d reviews</string><string name="recycler_completed_handovers">%1$d completed verified handovers</string><string name="recycler_trust_explainer">Built from profile data and completed records.</string>
 
-    <string name="quote_request_button">Request quote</string><string name="quote_request_title">Request a quote</string><string name="quote_request_detail">Choose your lot and recycler. Your request is saved locally and synced when connected.</string><string name="quote_choose_lot">Choose lot</string><string name="quote_choose_recycler">Choose recycler</string><string name="quote_summary">Request summary</string><string name="quote_lot_summary">%1$s • %2$.1f kg</string><string name="quote_recycler_summary">Recycler: %1$s</string><string name="quote_estimated">Estimated value: ₹%1$.0f</string><string name="quote_user_price">Your requested price: ₹%1$.0f</string><string name="quote_confirmation">Submit this quote request?</string><string name="quote_submit">Submit request</string><string name="quote_saved">Saved locally</string><string name="quote_compare_title">Compare quotes</string><string name="quote_delivery_state">Request state: %1$s</string><string name="quote_best">Best offer</string><string name="quote_price">₹%1$.0f / kg</string><string name="quote_total">Total: ₹%1$.0f</string><string name="quote_market_compare">Market basis: ₹%1$.0f / kg</string><string name="quote_distance">Distance: %1$.1f km</string><string name="quote_validity">Valid for 24 hours</string><string name="quote_status">Status: %1$s</string><string name="quote_accept">Accept</string><string name="quote_reject">Reject</string>
-    <string name="deal_sheet_title">No-surprise deal sheet</string><string name="deal_market_reference">Market reference</string><string name="deal_offered_rate">Recycler offer</string><string name="deal_weight">Expected weight</string><string name="deal_expected_total">Expected total</string><string name="deal_transport">Transport impact</string><string name="deal_not_included">Not included</string><string name="deal_not_available">Not available</string><string name="deal_final_values">Final recorded values</string><string name="deal_final_weight">Final weight</string><string name="deal_final_amount">Final amount</string><string name="deal_explainer">Reference prices are guidance. The recycler offer and final measured values decide the payment.</string>
+    <string name="quote_request_button">Request quote</string><string name="quote_request_title">Request a quote</string><string name="quote_request_detail">Choose a lot and recycler. It syncs when connected.</string><string name="quote_choose_lot">Choose lot</string><string name="quote_choose_recycler">Choose recycler</string><string name="quote_summary">Request summary</string><string name="quote_lot_summary">%1$s • %2$.1f kg</string><string name="quote_recycler_summary">Recycler: %1$s</string><string name="quote_estimated">Estimated value: ₹%1$.0f</string><string name="quote_user_price">Your requested price: ₹%1$.0f</string><string name="quote_confirmation">Submit this quote request?</string><string name="quote_submit">Submit request</string><string name="quote_saved">Saved locally</string><string name="quote_compare_title">Compare quotes</string><string name="quote_delivery_state">Request state: %1$s</string><string name="quote_best">Best offer</string><string name="quote_price">₹%1$.0f / kg</string><string name="quote_total">Total: ₹%1$.0f</string><string name="quote_market_compare">Market basis: ₹%1$.0f / kg</string><string name="quote_distance">Distance: %1$.1f km</string><string name="quote_validity">Valid for 24 hours</string><string name="quote_status">Status: %1$s</string><string name="quote_accept">Accept</string><string name="quote_reject">Reject</string>
+    <string name="deal_sheet_title">No-surprise deal sheet</string><string name="deal_market_reference">Market reference</string><string name="deal_offered_rate">Recycler offer</string><string name="deal_weight">Expected weight</string><string name="deal_expected_total">Expected total</string><string name="deal_transport">Transport impact</string><string name="deal_not_included">Not included</string><string name="deal_not_available">Not available</string><string name="deal_final_values">Final recorded values</string><string name="deal_final_weight">Final weight</string><string name="deal_final_amount">Final amount</string><string name="deal_explainer">Reference prices guide; final measured values decide payment.</string>
 
     <!-- Handover -->
     <string name="handover_create_title">Create handover record</string><string name="handover_lot_summary">%1$s • %2$.1f kg • %3$s</string><string name="handover_choose_location">Where will you hand it over?</string><string name="handover_collector">Collector location</string><string name="handover_recycler">Recycler facility</string><string name="handover_third_party">Third-party location</string><string name="handover_location_label">Location: %1$s</string><string name="handover_time_review">Handover time: %1$s</string><string name="handover_offline_note">Saved on this phone. It can sync later.</string><string name="handover_save">Save handover</string><string name="handover_document_title">Handover document</string><string name="handover_photo">Material photo</string><string name="handover_status_saved">Saved locally — waiting to sync</string><string name="handover_status_done">Marked as handed over</string><string name="handover_material">Material</string><string name="handover_weight">Weight</string><string name="handover_value">Quoted value</string><string name="handover_collection">Collection location</string><string name="handover_handover_location">Handover location</string><string name="handover_date">Date and time</string><string name="handover_collector_id">Collector ID</string><string name="handover_qr">QR code for reference</string><string name="handover_expiry">Keep this record for your reference.</string><string name="handover_share">Share</string><string name="handover_sms">SMS</string><string name="handover_mark_done">Mark as handed over</string><string name="handover_rate_recycler">Rate this verified recycler</string><string name="handover_share_text">Handover %1$s — %2$s — ₹%3$.0f</string>
@@ -242,9 +259,14 @@
     <string name="notifications_mark_all_read">Mark all as read</string>
     <string name="notifications_new">New</string>
     <string name="notifications_empty_title">No updates yet</string>
-    <string name="notifications_empty_detail">Quote, handover, payment and verification updates will appear here.</string>
+    <string name="notifications_empty_detail">Quote, handover, payment and verification updates appear here.</string>
     <string name="settings_language">Language / भाषा</string>
-    <string name="settings_change_language">Choose from all supported Indian languages</string>
+    <string name="settings_profile_section">Account</string>
+    <string name="settings_language_section">Language</string>
+    <string name="settings_appearance_section">Display</string>
+    <string name="settings_safety_section">Safety &amp; help</string>
+    <string name="settings_about_section">App</string>
+    <string name="settings_change_language">Choose your language</string>
     <string name="cancel">Cancel</string>
     <string name="language_english">English</string>
     <string name="language_hindi">हिन्दी</string>
@@ -256,7 +278,7 @@
     <string name="settings_check_for_updates">Check for updates</string>
     <string name="settings_offline_note">All settings work without internet.</string>
     <string name="settings_logout">Log out</string>
-    <string name="settings_logout_warning">Offline drafts, queued messages, and private cached data on this phone will be removed when you sign out. Server records are not deleted.</string>
+    <string name="settings_logout_warning">Offline drafts and cached private data will be removed. Server records stay safe.</string>
     <string name="settings_trust_tools">Trust &amp; useful tools</string>
     <string name="settings_rewards">Bonuses</string>
     <string name="settings_schemes">Government schemes</string>
@@ -546,7 +568,7 @@
     <string name="payment_method_digital_wallet">Digital wallet</string>
     <string name="lot_material_suggest">Identify from photo</string>
     <string name="lot_material_suggest_loading">Reading photo…</string>
-    <string name="lot_material_suggest_detail">Optional: identify the material from the photo. Always confirm the result or choose manually below.</string>
+    <string name="lot_material_suggest_detail">Optional: confirm the suggestion or choose manually.</string>
     <string name="lot_material_suggested">Suggested: %1$s · %2$d%% confidence</string>
     <string name="lot_material_use_suggestion">Use this material</string>
     <string name="lot_material_suggest_unavailable">Automatic identification is unavailable right now. Choose a material manually below.</string>
@@ -555,10 +577,10 @@
     <string name="future_chat_draft_note">Review the draft before sending.</string>
     <string name="future_confirm_handover">Price agreed — continue to handover</string>
     <string name="household_home_title">Turn clutter into value.</string>
-    <string name="household_home_subtitle">A local kabadiwala collects from your doorstep. You stay in control of the final price.</string>
+    <string name="household_home_subtitle">A local kabadiwala collects at your doorstep.</string>
     <string name="household_new_pickup">NEW PICKUP</string>
     <string name="household_sell_title">Show us what you want to sell</string>
-    <string name="household_sell_detail">Add a photo, weight and area. We’ll show an estimated range before you contact anyone.</string>
+    <string name="household_sell_detail">Add a photo, weight and area to see an estimate.</string>
     <string name="household_create_lot">Create scrap lot</string>
     <string name="household_how_sale_works">How a sale works</string>
     <string name="household_clear_steps">Clear at every step</string>
@@ -567,7 +589,7 @@
     <string name="household_preview_pickup">Preview an accepted pickup</string>
     <string name="household_preview_detail">See how price confirmation and private chat work.</string>
     <string name="household_nearby_title">Kabadiwalas near you</string>
-    <string name="household_nearby_detail">Ranked by distance. Compare trust and pickup time before sharing your lot.</string>
+    <string name="household_nearby_detail">Compare distance, trust and pickup time.</string>
     <string name="household_closest_filter">Closest first · within 5 km</string>
     <string name="household_pickup_request">Pickup request</string>
     <string name="household_private_chat">Private deal chat</string>
@@ -575,7 +597,7 @@
     <string name="household_chat_placeholder">Agree price or pickup time…</string>
     <string name="household_send_message">Send message</string>
     <string name="household_find_new_title">Find a new kabadiwala?</string>
-    <string name="household_find_new_detail">This chat will close. Your lot stays available and you can choose someone else nearby.</string>
+    <string name="household_find_new_detail">This chat will close. Your lot stays available.</string>
     <string name="household_keep_chat">Keep this chat</string>
     <string name="household_step_create">Create lot</string>
     <string name="household_step_range">Get a market range</string>
@@ -599,11 +621,11 @@
     <string name="household_final_after_inspection">Final price after inspection and agreement</string>
     <string name="testing_mode_banner">TEST · Development build</string>
     <string name="recycler_scan_title">Scan handover QR</string>
-    <string name="recycler_scan_explanation">Scan the complete signed code. It is checked against the server before the material can be accepted.</string>
+    <string name="recycler_scan_explanation">Scan the signed code. The server checks it before receipt.</string>
     <string name="recycler_scan_camera">Open camera scanner</string>
     <string name="recycler_scan_reference">Signed handover code</string>
     <string name="recycler_scan_validate">Verify handover</string>
-    <string name="recycler_scan_error">The handover could not be verified or confirmed. Check the code, authorization, and connection.</string>
+    <string name="recycler_scan_error">Couldn’t verify receipt. Check code, authorization or connection.</string>
     <string name="recycler_scan_verified">Verified traceability record</string>
     <string name="recycler_scan_material">Material: %1$s</string>
     <string name="recycler_scan_notes">Inspection notes (optional)</string>
@@ -619,7 +641,7 @@
     <string name="handover_saving">Saving…</string>
     <string name="handover_save_failed">Handover could not be saved. Try again.</string>
     <string name="handover_mark_failed">Could not update this handover. Check your connection and try again.</string>
-    <string name="earnings_refresh_failed">Earnings could not be refreshed. Your last saved totals are still shown.</string>
+    <string name="earnings_refresh_failed">Couldn’t refresh. Showing saved totals.</string>
     <string name="earnings_ledger_title">Recent transactions</string>
     <string name="earnings_lot_reference">Lot …%1$s</string>
     <string name="earnings_payment_status">%1$s · %2$s</string>
@@ -633,7 +655,7 @@
     <string name="settings_sync_failed">failed: %1$s</string>
     <string name="lot_edit">Edit lot</string>
     <string name="lot_edit_title">Edit lot details</string>
-    <string name="lot_edit_detail">You can change the weight, condition, and notes while this lot is still open. Material and pickup details stay fixed for traceability.</string>
+    <string name="lot_edit_detail">Change weight, condition and notes while open. Material and pickup stay fixed.</string>
     <string name="lot_edit_weight">Actual weight</string>
     <string name="lot_edit_condition">Condition</string>
     <string name="lot_edit_notes">Notes</string>

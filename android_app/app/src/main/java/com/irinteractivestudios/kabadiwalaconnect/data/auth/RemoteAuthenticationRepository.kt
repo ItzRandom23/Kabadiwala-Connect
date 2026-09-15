@@ -155,6 +155,34 @@ class RemoteAuthenticationRepository(
         }
     }
 
+    override suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication {
+        if (!EmailValidator.isValid(email) || password.length < 8) return EmailAuthentication.InvalidInput
+        return try {
+            val result = api.adminLogin(EmailAuthRequestDto(email = email.trim(), password = password)).requireData()
+            val expiry = jwtExpiry(result.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
+            session.save(result.token, expiry, result.refreshToken)
+            val profile = AccountProfile(
+                id = result.user.id,
+                email = result.user.email,
+                role = AccountRole.ADMIN,
+                preferredLanguage = "en",
+                accountStatus = "ACTIVE",
+                verificationStatus = RecyclerVerificationStatus.VERIFIED,
+                profileId = result.user.id,
+                displayName = result.user.displayName,
+                permissions = result.user.permissions.toSet()
+            )
+            storage?.saveAccount(profile)
+            EmailAuthentication.Success(result.token, expiry, profile)
+        } catch (error: Exception) {
+            when {
+                error is IOException -> EmailAuthentication.NetworkError
+                errorCode(error) == "INVALID_CREDENTIALS" || error is RemoteApiException && error.httpCode == 401 -> EmailAuthentication.InvalidCredentials
+                else -> EmailAuthentication.NetworkError
+            }
+        }
+    }
+
     override suspend fun refreshAccessToken(): String? = refreshMutex.withLock {
         val current = storage?.get(SecureStorage.AUTH_TOKEN)
         // A concurrent caller may already have completed the rotation while
@@ -180,6 +208,11 @@ class RemoteAuthenticationRepository(
 
     override suspend fun refreshAccount(): AccountProfile? = runCatching {
         if (!session.isSessionValid() && refreshAccessToken() == null) return@runCatching null
+        // Admin tokens are issued by /auth/admin-login and intentionally do
+        // not use the role-profile endpoint, which is reserved for the three
+        // marketplace account roles. Keep the server-issued operator profile
+        // from encrypted storage while the rotating session is refreshed.
+        storage?.readAccount()?.takeIf { it.role == AccountRole.ADMIN }?.let { return@runCatching it }
         val remote = api.getAccountProfile().requireData().toDomain()
         // The backend deliberately treats household sellers as collector
         // accounts for permissions and data ownership. Preserve the local
@@ -235,7 +268,7 @@ class RemoteAuthenticationRepository(
 private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfileDto.toDomain() = AccountProfile(
     id = id,
     email = email.orEmpty(),
-    role = when (role) { "RECYCLER" -> AccountRole.RECYCLER; "HOUSEHOLD" -> AccountRole.HOUSEHOLD; else -> AccountRole.COLLECTOR },
+    role = when (role) { "RECYCLER" -> AccountRole.RECYCLER; "HOUSEHOLD" -> AccountRole.HOUSEHOLD; "ADMIN" -> AccountRole.ADMIN; else -> AccountRole.COLLECTOR },
     preferredLanguage = LocaleManager.fromBackendName(preferredLanguage),
     accountStatus = accountStatus,
     verificationStatus = runCatching { RecyclerVerificationStatus.valueOf(verificationStatus) }.getOrDefault(RecyclerVerificationStatus.VERIFIED),
@@ -248,4 +281,4 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     longitude = longitude
 )
 
-private fun AccountRole.wireName(): String = when (this) { AccountRole.RECYCLER -> "RECYCLER"; AccountRole.HOUSEHOLD -> "HOUSEHOLD"; AccountRole.COLLECTOR -> "COLLECTOR" }
+private fun AccountRole.wireName(): String = when (this) { AccountRole.RECYCLER -> "RECYCLER"; AccountRole.HOUSEHOLD -> "HOUSEHOLD"; AccountRole.COLLECTOR -> "COLLECTOR"; AccountRole.ADMIN -> "ADMIN" }

@@ -99,7 +99,7 @@ fun HouseholdHomeScreen(
             Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))
         ),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -116,7 +116,7 @@ fun HouseholdHomeScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .12f), shape = CircleShape) {
                         Text(stringResource(R.string.household_new_pickup), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
                     }
@@ -203,7 +203,7 @@ fun HouseholdDealScreen(kabadiwalaId: String, onFindAnother: () -> Unit, modifie
     LaunchedEffect(kabadiwala.id) {
         delay(900)
         dealState = DealState.ACCEPTED
-        if (messages.isEmpty()) messages += LocalMessage("Namaste! I’m interested in your mixed metal lot. I can collect today around 5:30 PM.", false, "Now")
+        if (messages.isEmpty()) messages += LocalMessage("Namaste! I can collect your mixed metal lot today at 5:30 PM.", false, "Now")
     }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {

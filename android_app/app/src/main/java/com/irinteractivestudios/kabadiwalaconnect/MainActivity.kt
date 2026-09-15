@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode)
@@ -261,6 +261,7 @@ class MainActivity : ComponentActivity() {
                     Destinations.RECYCLER_RATES -> stringResource(R.string.recycler_rates_title)
                     Destinations.RECYCLER_PROFILE -> stringResource(R.string.recycler_profile_title)
                     Destinations.RECYCLER_VERIFY -> stringResource(R.string.recycler_verification_title)
+                    Destinations.ADMIN_DASHBOARD -> "Operator console"
                     Destinations.KABADIWALA_INVENTORY -> stringResource(R.string.nav_kabadiwala_inventory)
                     Destinations.KABADIWALA_PICKUPS -> stringResource(R.string.nav_kabadiwala_pickups)
                     Destinations.KABADIWALA_LOTS -> stringResource(R.string.nav_kabadiwala_lots)
@@ -366,7 +367,7 @@ class MainActivity : ComponentActivity() {
                                     val account = app.container.currentAccount()
                                     sessionBootstrap = SessionBootstrap(account != null, account)
                                     activeRole = account?.role ?: AccountRole.COLLECTOR
-                                    val target = if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                                    val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                                     navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }
                                 },
                                 modifier = Modifier.fillMaxSize()

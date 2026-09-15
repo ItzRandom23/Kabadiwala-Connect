@@ -205,6 +205,7 @@ interface AuthenticationRepository {
     /** Persists language/location remotely when a real backend is configured. */
     suspend fun updateProfile(profile: com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile) = Unit
     suspend fun authenticateEmail(request: EmailAccountRequest): EmailAuthentication = EmailAuthentication.NetworkError
+    suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun refreshAccount(): AccountProfile? = null
     /** Refreshes credentials without loading profile data; used by the HTTP 401 authenticator. */
     suspend fun refreshAccessToken(): String? = null
@@ -275,6 +276,7 @@ fun SecureStorage.saveAccount(profile: AccountProfile) {
     put(SecureStorage.ACCOUNT_VERIFICATION_STATUS, profile.verificationStatus.name)
     put(SecureStorage.ACCOUNT_LANGUAGE, profile.preferredLanguage)
     put(SecureStorage.ACCOUNT_PROFILE_ID, profile.profileId)
+    put(SecureStorage.ACCOUNT_PERMISSIONS, profile.permissions.joinToString(","))
     profile.latitude?.let { put(SecureStorage.ACCOUNT_LATITUDE, it.toString()) } ?: remove(SecureStorage.ACCOUNT_LATITUDE)
     profile.longitude?.let { put(SecureStorage.ACCOUNT_LONGITUDE, it.toString()) } ?: remove(SecureStorage.ACCOUNT_LONGITUDE)
 }
@@ -294,6 +296,7 @@ fun SecureStorage.readAccount(): AccountProfile? {
         displayName = get(SecureStorage.ACCOUNT_DISPLAY_NAME)?.takeIf { it.isNotBlank() },
         areaName = get(SecureStorage.ACCOUNT_AREA_NAME)?.takeIf { it.isNotBlank() },
         latitude = get(SecureStorage.ACCOUNT_LATITUDE)?.toDoubleOrNull(),
-        longitude = get(SecureStorage.ACCOUNT_LONGITUDE)?.toDoubleOrNull()
+        longitude = get(SecureStorage.ACCOUNT_LONGITUDE)?.toDoubleOrNull(),
+        permissions = get(SecureStorage.ACCOUNT_PERMISSIONS).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     )
 }

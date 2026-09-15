@@ -18,9 +18,11 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerSc
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerProfileViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.FutureFeatureViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin.AdminConsoleViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.SupplyChainViewModel
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.RecyclerRepository
@@ -93,7 +95,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->
             RecyclerOrdersViewModel(container.apiService, FormalisationCacheStore(app), { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
-            RecyclerScanViewModel(container.apiService, container.database.syncQueueDao(), FormalisationCacheStore(app), { container.currentAccount()?.profileId }) { container.syncScheduler.requestSync() }
+            RecyclerScanViewModel(container.apiService, container.database.syncQueueDao(), FormalisationCacheStore(app), { container.currentAccount()?.profileId }, { container.syncScheduler.requestSync() }, IdempotencyKeyStore(app))
         modelClass.isAssignableFrom(RecyclerProfileViewModel::class.java) ->
             RecyclerProfileViewModel(container.apiService)
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
@@ -101,7 +103,9 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId })
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app), container.database.syncQueueDao()) { container.syncScheduler.requestSync() }
+        modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
+            AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")
     } as T
 

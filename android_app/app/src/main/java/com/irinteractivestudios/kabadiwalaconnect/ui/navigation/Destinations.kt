@@ -58,6 +58,7 @@ object Destinations {
     const val RECYCLER_PROFILE = "recycler/profile"
     const val RECYCLER_VERIFY = "recycler/verification"
     const val RECYCLER_SCAN = "recycler/scan"
+    const val ADMIN_DASHBOARD = "admin/dashboard"
     const val KABADIWALA_INVENTORY = "kabadiwala/inventory"
     const val KABADIWALA_PICKUPS = "kabadiwala/pickups"
     const val KABADIWALA_LOTS = "kabadiwala/lots"
@@ -87,6 +88,7 @@ object Destinations {
         AccountRole.RECYCLER -> RECYCLER_TOP_LEVEL
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS.map { it.route }
         AccountRole.COLLECTOR -> if (newNavigation) KABADIWALA_TOP_LEVEL else TOP_LEVEL
+        AccountRole.ADMIN -> emptyList()
     }
 }
 

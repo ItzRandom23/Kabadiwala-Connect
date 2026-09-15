@@ -74,6 +74,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,6 +98,8 @@ fun HouseholdSupplyScreen(
     onRequestPickup: (String, String) -> Unit,
     onCancelListing: (String) -> Unit = {},
     onCancelPickup: (String) -> Unit = {},
+    onReschedulePickup: (String, String) -> Unit = { _, _ -> },
+    onDecideSettlement: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
@@ -124,12 +127,12 @@ fun HouseholdSupplyScreen(
         }
     }
     LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { RoleHeader("Sell your scrap", "A nearby Kabadiwala weighs it and confirms the final amount.", Icons.Filled.Sell, onRefresh, state.loading) }
+        item { RoleHeader("Sell your scrap", "A nearby Kabadiwala weighs it and confirms payment.", Icons.Filled.Sell, onRefresh, state.loading) }
         item {
             Surface(shape = RoundedCornerShape(26.dp, 26.dp, 8.dp, 26.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Have recyclable material?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Post an approximate listing. Your estimate is a range, never a guaranteed price.", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("Ready to sell?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Share an estimate; your partner confirms weight and price.", color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Button(onClick = { selectedPhoto = null; showCreate = true }, enabled = "create-listing" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text(if ("create-listing" in busy) "Posting…" else "Sell scrap") }
                 }
             }
@@ -137,9 +140,9 @@ fun HouseholdSupplyScreen(
         item { SupplyChainDemoPanel() }
         item { SummaryStrip("${state.listings.count { it.status == "POSTED" }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
-        item { Text("Your listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text("My listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.loading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
-        if (!state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Your first listing will appear here after you post it.") }
+        if (!state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
         items(state.listings, key = { it.id }) { listing ->
             HouseholdListingCard(
                 listing = listing,
@@ -148,7 +151,9 @@ fun HouseholdSupplyScreen(
                 busy = busy,
                 onRequestPickup = onRequestPickup,
                 onCancelListing = onCancelListing,
-                onCancelPickup = onCancelPickup
+                onCancelPickup = onCancelPickup,
+                onReschedulePickup = onReschedulePickup,
+                onDecideSettlement = onDecideSettlement
             )
         }
     }
@@ -164,15 +169,15 @@ fun HouseholdKabadiwalasScreen(state: SupplyChainState, onRefresh: () -> Unit) {
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { RoleHeader("Nearby Kabadiwalas", "Active collection partners who can receive your scrap pickup request.", Icons.Filled.LocalShipping, onRefresh, state.loading) }
+        item { RoleHeader("Nearby Kabadiwalas", "Choose a nearby collection partner.", Icons.Filled.LocalShipping, onRefresh, state.loading) }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
-        if (!state.loading && state.kabadiwalas.isEmpty()) item { EmptyPanel("No Kabadiwalas nearby", "Try again later or update your pickup area on a listing.") }
+        if (!state.loading && state.kabadiwalas.isEmpty()) item { EmptyPanel("No partners nearby", "Try another area or refresh later.") }
         items(state.kabadiwalas, key = { it.id }) { kabadiwala ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(kabadiwala.displayName ?: "Kabadiwala", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                     Text(kabadiwala.areaName.ifBlank { "Area not provided" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Create a Sell Scrap listing to request pickup from this partner.", style = MaterialTheme.typography.bodySmall)
+                    Text("Create a listing to request pickup.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -187,43 +192,56 @@ private fun HouseholdListingCard(
     busy: Set<String>,
     onRequestPickup: (String, String) -> Unit,
     onCancelListing: (String) -> Unit,
-    onCancelPickup: (String) -> Unit
+    onCancelPickup: (String) -> Unit,
+    onReschedulePickup: (String, String) -> Unit,
+    onDecideSettlement: (String, String, String?, String?) -> Unit
 ) {
     val activePickupStatuses = setOf("REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
     val pickup = pickups.firstOrNull { it.status in activePickupStatuses }
     var showCancelListing by remember(listing.id) { mutableStateOf(false) }
     var showCancelPickup by remember(pickup?.id) { mutableStateOf(false) }
+    var showReschedule by remember(pickup?.id) { mutableStateOf(false) }
+    var showSettlement by remember(pickup?.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(listing.areaName, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (!listing.photoReference.isNullOrBlank()) Text("Photo attached · available to the pickup partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            if (!listing.photoReference.isNullOrBlank()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             val minEstimate = listing.estimatedPriceMin
             val maxEstimate = listing.estimatedPriceMax
-            if (minEstimate != null && maxEstimate != null) Text("Simulated AI estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            Text("Estimate uses demo market data; final value depends on inspection and local rate.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (minEstimate != null && maxEstimate != null) Text("Estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text("Demo range; final value follows inspection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (pickup == null && listing.status == "POSTED") {
                 if (kabadiwalas.isNotEmpty()) {
-                    Text("Choose a collection partner", style = MaterialTheme.typography.labelLarge)
+                    Text("Choose a partner", style = MaterialTheme.typography.labelLarge)
                     kabadiwalas.take(4).forEach { kabadiwala ->
                         val requestBusy = "pickup-${listing.id}" in busy
                         OutlinedButton(onClick = { onRequestPickup(listing.id, kabadiwala.id) }, enabled = !requestBusy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                            Icon(Icons.Filled.LocalShipping, null); Spacer(Modifier.width(8.dp)); Text("Request pickup · ${kabadiwala.displayName ?: "Kabadiwala"} (${kabadiwala.areaName})")
+                            Icon(Icons.Filled.LocalShipping, null); Spacer(Modifier.width(8.dp)); Text("Request pickup · ${kabadiwala.displayName ?: "Kabadiwala"}")
                         }
                     }
-                } else Text("No active Kabadiwala is available in your area yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else Text("No active partner in this area yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel listing") }
             } else if (pickup == null && pickups.any { it.status == "CANCELLED" }) {
                 Text("A previous pickup request was cancelled. You can choose another partner.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             pickup?.let { item ->
                 Text("Pickup: ${statusName(item.status)}", fontWeight = FontWeight.SemiBold)
-                Text("Progress: request → accepted → scheduled → on the way → arrived → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 item.scheduledSlot?.let { Text("Scheduled: ${it.take(16).replace('T', ' ')}") }
                 if (item.finalAmount != null) Text("Final settlement: ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 if (item.status in setOf("REQUESTED", "ACCEPTED", "SCHEDULED")) {
                     OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
+                }
+                if (item.status in setOf("ACCEPTED", "SCHEDULED")) {
+                    OutlinedButton(onClick = { showReschedule = true }, enabled = "reschedule-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Choose another time") }
+                }
+                if (item.settlementStatus == "PENDING_HOUSEHOLD_CONFIRMATION") {
+                    Text("Settlement review: final value ${money(item.finalAmount)} for ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = { showSettlement = true }, enabled = "settlement-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review settlement") }
+                } else if (item.settlementStatus == "DISPUTED") {
+                    Text("Settlement is under review${item.settlementReasonCode?.let { " · $it" } ?: ""}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -243,13 +261,23 @@ private fun HouseholdListingCard(
             confirmButton = { TextButton(onClick = { showCancelPickup = false; onCancelPickup(item.id) }) { Text("Cancel pickup") } },
             dismissButton = { TextButton(onClick = { showCancelPickup = false }) { Text("Keep pickup") } }
         )
+        if (showReschedule) ReschedulePickupDialog(
+            onDismiss = { showReschedule = false },
+            onSubmit = { slot -> showReschedule = false; onReschedulePickup(item.id, slot) }
+        )
+        if (showSettlement) SettlementDecisionDialog(
+            title = "Review pickup settlement",
+            acceptLabel = "Accept amount",
+            onDismiss = { showSettlement = false },
+            onSubmit = { decision, reason, notes -> showSettlement = false; onDecideSettlement(item.id, decision, reason, notes) }
+        )
     }
 }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun HouseholdListingDialog(initialArea: String, photoReference: String?, onSelectPhoto: () -> Unit, onClearPhoto: () -> Unit, onDismiss: () -> Unit, onSubmit: (HouseholdListingCreateDto) -> Unit) {
-    var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf(initialArea) }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }; var safetyAcknowledged by remember { mutableStateOf(false) }
+    var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf(initialArea) }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }; var safetyAcknowledged by remember { mutableStateOf(false) }; var dataBearingDevice by remember { mutableStateOf(false) }; var ownerPreparationCompleted by remember { mutableStateOf(false) }; var dataDestructionRequested by remember { mutableStateOf(false) }
     val isHazardous = material in setOf("BATTERY", "CRT", "LCD_PANEL", "PCB")
     val parsedWeight = weight.toDoubleOrNull()
     val estimate = parsedWeight?.let { demoEstimate(material, it, condition) }
@@ -258,17 +286,17 @@ private fun HouseholdListingDialog(initialArea: String, photoReference: String?,
     val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged)
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Sell scrap") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Tell us what you want collected. The partner confirms the final weight and price at pickup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Add material details. Your partner confirms weight and price at pickup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Material", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { materials.forEach { FilterChip(selected = material == it, onClick = { material = it; safetyAcknowledged = false }, label = { Text(materialName(it), maxLines = 1) }) } }
             if (isHazardous) {
                 Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Handle with care", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text("Do not dismantle, burn, puncture, or mix this material. Keep batteries and screens away from children, heat, and water; the collector must confirm safe handling.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Do not dismantle, burn, puncture or mix it. Keep it away from children, heat and water.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = safetyAcknowledged, onCheckedChange = { safetyAcknowledged = it })
-                            Text("I understand the handling warning", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text("I understand the warning", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                     }
                 }
@@ -277,26 +305,37 @@ private fun HouseholdListingDialog(initialArea: String, photoReference: String?,
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase(), maxLines = 1) }) } }
             OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
             OutlinedTextField(area, { area = it.take(160) }, modifier = Modifier.fillMaxWidth(), label = { Text("Pickup area") }, supportingText = { if (areaError) Text("Add a little more detail, for example an area or landmark") }, isError = areaError, singleLine = true)
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Data-bearing device", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    Text("For phones, laptops, drives or other personal-data devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
+                    if (dataBearingDevice) {
+                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
+                    }
+                }
+            }
             if (photoReference == null) OutlinedButton(onClick = onSelectPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Icon(Icons.Filled.AddPhotoAlternate, null); Spacer(Modifier.width(8.dp)); Text("Attach scrap photo") }
             else {
                 PhotoAttachmentPreview(photoReference)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Photo attached for this prototype listing", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text("Photo attached", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     TextButton(onClick = onClearPhoto) { Text("Remove") }
                 }
             }
             estimate?.let { (min, max) ->
                 Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)); Text("Simulated AI price estimate", Modifier.padding(start = 7.dp), fontWeight = FontWeight.Bold) }
-                        Text("₹${"%.0f".format(min)}–₹${"%.0f".format(max)} · demo market data", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        Text("This is a prototype range, not a guaranteed offer.", style = MaterialTheme.typography.bodySmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)); Text("Price range", Modifier.padding(start = 7.dp), fontWeight = FontWeight.Bold) }
+                        Text("₹${"%.0f".format(min)}–₹${"%.0f".format(max)} · demo", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("Reference only; final offer follows inspection.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
             OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4)
         }
-    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { value -> onSubmit(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, photoReference = photoReference, areaName = area.trim(), estimatedPriceMin = estimate?.first, estimatedPriceMax = estimate?.second)) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { value -> onSubmit(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, photoReference = photoReference, areaName = area.trim(), estimatedPriceMin = estimate?.first, estimatedPriceMax = estimate?.second, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested)) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 private data class DemoRateRange(val minPerKg: Double, val maxPerKg: Double)
@@ -327,24 +366,22 @@ private fun SupplyChainDemoPanel() {
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(19.dp)); Text("Prototype demo data", Modifier.padding(start = 7.dp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-            Text("Seeded/demo values are labelled. Recycler authorization, rates and demand are platform records; they are not government verification or live market research.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text("Offline coverage: captured lots, past payments, and cached formalisation evidence are viewable without a network. A cached signed recycler receipt can queue for retry; new marketplace mutations require connectivity.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text("Safety acknowledgements and the material passport are recorded as platform evidence. Confirm weight, grade and payment at the physical handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text("Prototype data is labelled. Final weight, grade and payment are confirmed at handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
         }
     }
 }
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }) {
     var showBulk by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Today's collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Collect from households · aggregate · sell to verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
+        item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Households → inventory → verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
         item { SupplyChainDemoPanel() }
         if (section == KabadiwalaSection.HOME) item {
             OutlinedButton(onClick = onCreateCapturedLot, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 Icon(Icons.Filled.Inventory2, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Record a lot offline")
+                Text("Record lot")
             }
             FormalisationDashboard(
                 state = state,
@@ -358,7 +395,11 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 onPreparePoolHandover = onPreparePoolHandover,
                 onPrepareBulkHandover = onPrepareBulkHandover,
                 onConfirmCollectorHandover = onConfirmCollectorHandover,
-                onAcknowledgeSafety = onAcknowledgeSafety
+                onAcknowledgeSafety = onAcknowledgeSafety,
+                onLoadSafetyRouting = onLoadSafetyRouting,
+                onLoadMaterialPassport = onLoadMaterialPassport,
+                onLoadAnomalies = onLoadAnomalies,
+                onDecideSupplySettlement = onDecideSupplySettlement
             )
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
@@ -366,28 +407,28 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
             KabadiwalaSection.HOME, KabadiwalaSection.PICKUPS -> {
                 item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" }} requests", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled") }
                 item { Text("Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests from households will appear here.") }
-                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, onAccept, onSchedule, onStatus, onComplete) }
+                if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
+                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup) }
             }
             KabadiwalaSection.INVENTORY -> {
                 item { InventoryTotals(state.inventory) }
-                if (!state.loading && state.inventory.isEmpty()) item { EmptyPanel("Inventory is empty", "Complete a household pickup to add weighed material.") }
+                if (!state.loading && state.inventory.isEmpty()) item { EmptyPanel("Inventory is empty", "Complete a pickup to add weighed material.") }
                 items(state.inventory, key = { it.id }) { InventoryCard(it) }
-                item { Button(onClick = { showBulk = true }, enabled = state.inventory.any { it.availableKg > 0 }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Storefront, null); Spacer(Modifier.width(8.dp)); Text("Create bulk lot for recyclers") } }
+                item { Button(onClick = { showBulk = true }, enabled = state.inventory.any { it.availableKg > 0 }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Storefront, null); Spacer(Modifier.width(8.dp)); Text("Create recycler lot") } }
             }
             KabadiwalaSection.LOTS -> {
                 item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when you have enough material.") }
+                if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.") }
                 items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk) }
                 item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots will appear here.") }
-                items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer) }
+                if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on listed lots appear here.") }
+                items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer) }
                 val visibleCapturedLots = capturedLots.filter { it.status != LotStatus.CANCELLED }
                 if (visibleCapturedLots.isNotEmpty()) {
                     item { Text("Captured lot records", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                     item {
                         Text(
-                            "These records are visible for continuity. Complete a household pickup and create a recycler bulk lot from inventory to publish material to recyclers.",
+                            "Saved records stay visible. Use weighed inventory to publish a recycler lot.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -403,26 +444,38 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
+    var showAvailability by remember { mutableStateOf(false) }
+    var showReject by remember { mutableStateOf(false) }
+    var showCancel by remember { mutableStateOf(false) }
+    var showReassign by remember { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing?.materialCategory ?: "OTHER"), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup.status)) }
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · ${listing?.areaName ?: "Area unavailable"}")
             when (pickup.status) {
-                "REQUESTED" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Accept pickup") }
+                "REQUESTED" -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Accept pickup") }
+                        OutlinedButton(onClick = { showReject = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Decline") }
+                    }
+                }
                 "ACCEPTED" -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { showAvailability = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Confirm ready") }
                         OutlinedButton(onClick = { showSchedule = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Schedule") }
-                        Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Start now") }
                     }
+                    Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
                 }
                 "SCHEDULED" -> Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
                 "IN_TRANSIT" -> Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
-                "ARRIVED" -> Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record weight and complete") }
+                "ARRIVED" -> Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record weight") }
                 "COMPLETED" -> Text("Added to inventory · ${money(pickup.finalAmount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
+            if (pickup.status in setOf("ACCEPTED", "SCHEDULED")) OutlinedButton(onClick = { showCancel = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
+            if (pickup.status in setOf("IN_TRANSIT", "ARRIVED")) OutlinedButton(onClick = { showReassign = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Report issue / reassign") }
         }
     }
     if (showSchedule) SchedulePickupDialog(
@@ -430,6 +483,10 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
         onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
     )
     if (showComplete) CompletionDialog(pickup, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
+    if (showAvailability) SchedulePickupDialog(onDismiss = { showAvailability = false }, onSubmit = { onConfirmAvailability(pickup.id, it); showAvailability = false })
+    if (showReject) ReasonDialog(title = "Decline pickup", confirmLabel = "Decline", onDismiss = { showReject = false }, onSubmit = { onReject(pickup.id, it); showReject = false })
+    if (showCancel) ReasonDialog(title = "Cancel pickup", confirmLabel = "Cancel", onDismiss = { showCancel = false }, onSubmit = { onCancel(pickup.id, it); showCancel = false })
+    if (showReassign) ReassignDialog(onDismiss = { showReassign = false }, onSubmit = { reason, noShow -> onReassign(pickup.id, reason, noShow); showReassign = false })
 }
 
 @Composable
@@ -459,7 +516,7 @@ private fun SchedulePickupDialog(
         title = { Text("Schedule collection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Choose a time window for this household pickup.", style = MaterialTheme.typography.bodyMedium)
+                Text("Choose a time for this pickup.", style = MaterialTheme.typography.bodyMedium)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         androidx.compose.material3.RadioButton(selected = selected == slot.first, onClick = { selected = slot.first })
@@ -470,6 +527,82 @@ private fun SchedulePickupDialog(
         },
         confirmButton = { TextButton(onClick = { onSubmit(selected.toString()) }) { Text("Confirm time") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun ReschedulePickupDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    SchedulePickupDialog(onDismiss = onDismiss, onSubmit = onSubmit)
+}
+
+@Composable
+private fun ReasonDialog(title: String, confirmLabel: String, onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    var reason by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(reason, { reason = it.take(500) }, label = { Text("Reason (optional)") }, minLines = 2) },
+        confirmButton = { TextButton(onClick = { onSubmit(reason.trim()) }) { Text(confirmLabel) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Keep pickup") } }
+    )
+}
+
+@Composable
+private fun ReassignDialog(onDismiss: () -> Unit, onSubmit: (String, Boolean) -> Unit) {
+    var reason by remember { mutableStateOf("") }
+    var noShow by remember { mutableStateOf(true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Return for reassignment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(reason, { reason = it.take(500) }, label = { Text("Why reassign?") }, minLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(noShow, { noShow = it }); Text("No-show") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (reason.isNotBlank()) onSubmit(reason.trim(), noShow) }) { Text("Reassign") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
+    )
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun SettlementDecisionDialog(
+    title: String,
+    acceptLabel: String,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String?, String?) -> Unit
+) {
+    var raiseIssue by remember { mutableStateOf(false) }
+    var reason by remember { mutableStateOf("WEIGHT_DIFFERENCE") }
+    var notes by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Check weight and value before accepting.", style = MaterialTheme.typography.bodyMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Checkbox(checked = raiseIssue, onCheckedChange = { raiseIssue = it })
+                    Text("Raise an issue instead")
+                }
+                if (raiseIssue) {
+                    Text("Reason", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("WEIGHT_DIFFERENCE", "PRICE_DIFFERENCE", "MATERIAL_MISMATCH", "OTHER").forEach { option ->
+                            FilterChip(selected = reason == option, onClick = { reason = option }, label = { Text(option.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) })
+                        }
+                    }
+                    OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("What should be reviewed?") }, minLines = 2)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSubmit(if (raiseIssue) "RAISE_ISSUE" else "ACCEPT", if (raiseIssue) reason else null, notes.ifBlank { null }) }) {
+                Text(if (raiseIssue) "Submit issue" else acceptLabel)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
     )
 }
 
@@ -486,7 +619,7 @@ private fun CompletionDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, on
         title = { Text("Final weighing") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("The household sees this calculation immediately.", style = MaterialTheme.typography.bodyMedium)
+                Text("The household sees this amount immediately.", style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 Text("Final material", style = MaterialTheme.typography.labelLarge)
@@ -503,14 +636,14 @@ private fun CompletionDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, on
             TextButton(
                 onClick = { val w = weight.toDoubleOrNull(); val r = rate.toDoubleOrNull(); if (w != null && r != null && w > 0 && w <= 500 && r > 0) onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r)) },
                 enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true
-            ) { Text("Complete purchase") }
+            ) { Text("Complete pickup") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
 @Composable
-private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${"%.1f".format(item.availableKg)} kg available", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("Grade: ${item.grade}"); Text("Reserved ${"%.1f".format(item.reservedKg)} kg · Sold ${"%.1f".format(item.soldKg)} kg · Purchase cost ${money(item.purchaseCost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${"%.1f".format(item.availableKg)} kg free", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("Grade: ${item.grade}"); Text("Reserved ${"%.1f".format(item.reservedKg)} · sold ${"%.1f".format(item.soldKg)} kg · cost ${money(item.purchaseCost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun InventoryTotals(items: List<InventoryBalanceDto>) { val available = items.sumOf { it.availableKg }; val reserved = items.sumOf { it.reservedKg }; Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) { Metric("Available", "%.1f kg".format(available)); Metric("Reserved", "%.1f kg".format(reserved)); Metric("Materials", items.size.toString()) } } }
 @Composable private fun Metric(label: String, value: String) { Column { Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall) } }
 @Composable private fun CapturedLotCard(lot: Lot) {
@@ -527,12 +660,50 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
                 StatusChip(if (lot.synced) "Saved" else "Pending")
             }
             Text("${"%.1f".format(lot.weightKg)} kg · ${statusName(lot.status.name)}")
-            Text("$syncLabel · This is a captured record, not a recycler bulk lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$syncLabel · captured record, not a recycler lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 @Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") } } } }
-@Composable private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}"); if (offer.status == "PENDING") Button(onClick = { onAccept(offer.id) }, modifier = Modifier.fillMaxWidth()) { Text("Accept offer") } } } }
+@Composable
+private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject: (String, String) -> Unit = { _, _ -> }, onCounter: (String, Double, String?) -> Unit = { _, _, _ -> }) {
+    var showReject by remember(offer.id) { mutableStateOf(false) }
+    var showCounter by remember(offer.id) { mutableStateOf(false) }
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
+            if (offer.status == "PENDING") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { onAccept(offer.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Accept") }
+                    OutlinedButton(onClick = { showCounter = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Counter") }
+                }
+                OutlinedButton(onClick = { showReject = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reject offer") }
+            }
+        }
+    }
+    if (showReject) ReasonDialog(title = "Reject recycler offer", confirmLabel = "Reject", onDismiss = { showReject = false }, onSubmit = { onReject(offer.id, it); showReject = false })
+    if (showCounter) CounterOfferDialog(initialRate = offer.offeredRatePerKg, onDismiss = { showCounter = false }, onSubmit = { rate, notes -> onCounter(offer.id, rate, notes); showCounter = false })
+}
+
+@Composable
+private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSubmit: (Double, String?) -> Unit) {
+    var rate by remember { mutableStateOf(initialRate.toString()) }
+    var notes by remember { mutableStateOf("") }
+    val parsed = rate.toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Counter-offer") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(notes, { notes = it.take(500) }, label = { Text("Note (optional)") }, minLines = 2)
+            }
+        },
+        confirmButton = { TextButton(onClick = { parsed?.takeIf { it > 0 }?.let { onSubmit(it, notes.ifBlank { null }) } }, enabled = parsed?.let { it > 0 } == true) { Text("Send counter") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
 @Composable private fun BulkLotDialog(inventory: List<InventoryBalanceDto>, currentArea: String, onDismiss: () -> Unit, onSubmit: (BulkLotCreateDto) -> Unit) {
     val options = inventory.filter { it.availableKg > 0 }
     var selectedId by remember { mutableStateOf(options.firstOrNull()?.id) }
@@ -543,7 +714,7 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
     var notes by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Create recycler bulk lot") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Only available inventory can be reserved. Households and other Kabadiwalas cannot buy this lot.")
+            Text("Only available inventory can be reserved. This lot is for verified recyclers.")
             if (options.size > 1) {
                 Text("Material", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -562,39 +733,80 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
 }
 
 @Composable
-fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit) {
+fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}) {
     var showDemand by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { RoleHeader("Procure recyclable material", "Browse Kabadiwala bulk lots and publish what your facility needs.", Icons.Filled.Storefront, onRefresh, state.loading) }
+        item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
         item { SupplyChainDemoPanel() }
-        item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish procurement requirement") } }
+        item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
-        item { Text("Available Kabadiwala lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots available", "Kabadiwala lots that match your radius will appear here.") }
+        item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
         items(state.bulkLots, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive) }
-        item { Text("Your procurement offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on an available lot to start procurement.") }
-        items(state.offers, key = { it.id }) { OfferCard(it, {}) }
-        item { Text("Open market demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement) }
-        item { Text("Cooperative consignments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.pools.isEmpty()) item { EmptyPanel("No pooled consignments yet", "Kabadiwalas can combine reserved stock against your published demand.") }
+        item { Text("My offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
+        items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer) }
+        item { Text("My demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement, onUpdate = onUpdateRequirement) }
+        item { Text("Pools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (state.pools.isEmpty()) item { EmptyPanel("No pools yet", "Collectors can combine reserved stock for your demand.") }
         items(state.pools, key = { "pool-${it.id}" }) { pool ->
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("${materialName(pool.materialCategory)} · ${"%.1f".format(pool.totalReservedKg)} kg", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${statusName(pool.status)} · ${pool.contributions.size} collector contributions", style = MaterialTheme.typography.bodySmall); Text("The QR handover and per-contribution settlement remain visible to the participating parties.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) } }
         }
-        item { Text("Formal handovers awaiting receipt", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.handovers.isEmpty()) item { EmptyPanel("No formal handovers", "A Kabadiwala must meet the threshold and confirm the one-time QR before receipt.") }
+        item { Text("Awaiting receipts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (state.handovers.isEmpty()) item { EmptyPanel("No handovers yet", "Confirmed QR handovers will appear here.") }
         items(state.handovers, key = { "supply-${it.id}" }) { handover ->
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg · ${statusName(handover.status)}", style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Text("Open Orders → Scan handover QR to record weight, material match and settlement.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) } }
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg · ${statusName(handover.status)}", style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onOpenHandoverScanner, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Scan QR") } } }
         }
     }
     if (showDemand) DemandDialog(onDismiss = { showDemand = false }, onSubmit = { onCreateDemand(it); showDemand = false })
 }
 
-@Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · ${money(lot.askingRatePerKg)}/kg asking"); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("${lot.areaName} · Kabadiwala supplier", Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Make offer") }; if (offer != null) { Text("Your offer: ${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text("Offer accepted. Await the Kabadiwala's formal QR handover; receipt is blocked until both parties confirm.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
+@Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · ${money(lot.askingRatePerKg)}/kg asking"); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("${lot.areaName} · collector lot", Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Make offer") }; if (offer != null) { Text("Your offer: ${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text("Accepted · waiting for QR handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
+@Composable
+private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?) -> Unit) {
+    var showWithdraw by remember(offer.id) { mutableStateOf(false) }
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Your offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
+            if (offer.status == "PENDING") OutlinedButton(onClick = { showWithdraw = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Withdraw offer") }
+        }
+    }
+    if (showWithdraw) ReasonDialog(title = "Withdraw offer", confirmLabel = "Withdraw", onDismiss = { showWithdraw = false }, onSubmit = { onWithdraw(offer.id, it.ifBlank { null }); showWithdraw = false })
+}
 @Composable private fun OfferDialog(lot: BulkLotDto, onDismiss: () -> Unit, onSubmit: (Double) -> Unit) { var rate by remember { mutableStateOf(lot.askingRatePerKg.toString()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Offer on ${materialName(lot.materialCategory)}") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { rate.toDoubleOrNull()?.takeIf { it > 0 }?.let(onSubmit) }, enabled = rate.toDoubleOrNull()?.let { it > 0 } == true) { Text("Send offer") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
 @Composable private fun DemandDialog(onDismiss: () -> Unit, onSubmit: (ProcurementRequirementCreateDto) -> Unit) { var material by remember { mutableStateOf("PLASTIC") }; var quantity by remember { mutableStateOf("") }; var minimum by remember { mutableStateOf("") }; var radius by remember { mutableStateOf("50") }; var rate by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Publish procurement demand") }, text = { Column(verticalArrangement = Arrangement.spacedBy(9.dp)) { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { materials.take(4).forEach { FilterChip(selected = material == it, onClick = { material = it }, label = { Text(materialName(it)) }) } }; OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Needed quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(minimum, { minimum = it.filter(Char::isDigit).take(9) }, label = { Text("Minimum lot · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(radius, { radius = it.filter(Char::isDigit).take(4) }, label = { Text("Procurement radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val m = minimum.toDoubleOrNull(); val r = radius.toDoubleOrNull(); if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementCreateDto(material, m, q, maxRatePerKg = rate.toDoubleOrNull(), procurementRadiusKm = r)) }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true && minimum.toDoubleOrNull()?.let { it > 0 } == true) { Text("Publish demand") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
-@Composable private fun RequirementCard(item: ProcurementRequirementDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(item.status)) }; Text("Need ${"%.0f".format(item.requiredQuantityKg)} kg · min lot ${"%.0f".format(item.minimumLotKg)} kg"); Text("Within ${"%.0f".format(item.procurementRadiusKm)} km${item.maxRatePerKg?.let { " · up to ₹${"%.0f".format(it)}/kg" } ?: ""}", style = MaterialTheme.typography.bodySmall) } } }
+@Composable private fun RequirementCard(item: ProcurementRequirementDto, onUpdate: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }) {
+    var showEdit by remember(item.id) { mutableStateOf(false) }
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(item.status)) }
+            Text("Need ${"%.0f".format(item.requiredQuantityKg)} kg · min lot ${"%.0f".format(item.minimumLotKg)} kg")
+            Text("Within ${"%.0f".format(item.procurementRadiusKm)} km${item.maxRatePerKg?.let { " · up to ₹${"%.0f".format(it)}/kg" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+            if (item.status == "OPEN") OutlinedButton(onClick = { showEdit = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Update demand") }
+        }
+    }
+    if (showEdit) RequirementEditDialog(item, onDismiss = { showEdit = false }, onSubmit = { input -> onUpdate(item.id, input); showEdit = false })
+}
+
+@Composable
+private fun RequirementEditDialog(item: ProcurementRequirementDto, onDismiss: () -> Unit, onSubmit: (ProcurementRequirementUpdateDto) -> Unit) {
+    var quantity by remember { mutableStateOf(item.requiredQuantityKg.toString()) }
+    var minimum by remember { mutableStateOf(item.minimumLotKg.toString()) }
+    var radius by remember { mutableStateOf(item.procurementRadiusKm.toString()) }
+    var rate by remember { mutableStateOf(item.maxRatePerKg?.toString().orEmpty()) }
+    val q = quantity.toDoubleOrNull(); val m = minimum.toDoubleOrNull(); val r = radius.toDoubleOrNull(); val rateValue = rate.toDoubleOrNull()
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Update procurement demand") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(materialName(item.materialCategory), style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text("Required quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text("Minimum lot · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+        }
+    }, confirmButton = { TextButton(onClick = { if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementUpdateDto(minimumLotKg = m, requiredQuantityKg = q, maxRatePerKg = rateValue, procurementRadiusKm = r)) }, enabled = q?.let { it > 0 } == true && m?.let { it > 0 } == true && r?.let { it > 0 } == true) { Text("Save demand") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
 
 @Composable
 private fun FormalisationDashboard(
@@ -609,23 +821,28 @@ private fun FormalisationDashboard(
     onPreparePoolHandover: (String) -> Unit,
     onPrepareBulkHandover: (String) -> Unit,
     onConfirmCollectorHandover: (String) -> Unit,
-    onAcknowledgeSafety: (String) -> Unit
+    onAcknowledgeSafety: (String) -> Unit,
+    onLoadSafetyRouting: (String, String) -> Unit,
+    onLoadMaterialPassport: (String) -> Unit,
+    onLoadAnomalies: (String) -> Unit,
+    onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit
 ) {
     var routeMaterial by remember { mutableStateOf("CABLE") }
     var routeQuantity by remember { mutableStateOf("10") }
+    var routeCondition by remember { mutableStateOf("INTACT") }
     var showJoin by remember { mutableStateOf<PoolOpportunityDto?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(shape = RoundedCornerShape(28.dp, 8.dp, 28.dp, 28.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.onPrimaryContainer); Text("Formal route desk", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                Text("Turn a weighed pickup into a verified route, cooperative pool and material passport.", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text("This is platform evidence for the prototype — not a government certificate or guaranteed price.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .78f))
+                Text("Compare routes, pools and passport evidence.", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("Platform evidence—not a government certificate or guaranteed price.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .78f))
             }
         }
         Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary); Text("Formal Route Advantage", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                Text("Compare verified recycler routes using rate, pickup availability and an explicit logistics estimate.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Compare rate, pickup readiness and logistics cost.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(selected = routeMaterial == "CABLE", onClick = { routeMaterial = "CABLE" }, label = { Text("Cable") })
                     FilterChip(selected = routeMaterial == "PCB", onClick = { routeMaterial = "PCB" }, label = { Text("PCB") })
@@ -640,9 +857,24 @@ private fun FormalisationDashboard(
             }
         }
         Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Safety-aware routing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Check handling before moving hazardous or data-bearing material.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("INTACT", "DAMAGED", "PARTIAL").forEach { option -> FilterChip(selected = routeCondition == option, onClick = { routeCondition = option }, label = { Text(statusName(option)) }) }
+                }
+                OutlinedButton(onClick = { onLoadSafetyRouting(routeMaterial, routeCondition) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Check handling route") }
+                state.safetyRouting?.let { route ->
+                    StatusChip("${statusName(route.hazardLevel)} hazard")
+                    Text(route.recommendedRouting, style = MaterialTheme.typography.bodyMedium)
+                    Text("${route.handlingWarningCode} · ${route.requiredRecyclerCapability ?: "standard recycler capability"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text("Cooperative pooling", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                Text("Reserve only available stock. The threshold and each collector's contribution stay visible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Reserve available stock; thresholds and contributions stay visible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 state.poolOpportunities.take(3).forEach { opportunity ->
                     val pool = opportunity.existingPool
                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
@@ -660,12 +892,34 @@ private fun FormalisationDashboard(
                     }
                 }
                 state.pools.take(3).forEach { pool -> PoolActionCard(pool, currentCollectorId, onJoinPool, onLeavePool, onLockPool, onPreparePoolHandover) }
-                if (state.poolOpportunities.isEmpty() && state.pools.isEmpty()) Text("No current open demand is available. Seeded demand appears only when a Recycler publishes it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state.poolSuggestions.isNotEmpty()) {
+                    Text("Demand-triggered suggestions", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    state.poolSuggestions.take(3).forEach { suggestion ->
+                        Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("${materialName(suggestion.materialCategory)} · ${"%.0f".format(suggestion.requiredKg)} kg needed", fontWeight = FontWeight.SemiBold)
+                                Text("${"%.0f".format(suggestion.eligibleSupplyKg)} kg eligible supply · ${suggestion.contributorsNeeded} contributors suggested", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+                if (state.poolOpportunities.isEmpty() && state.pools.isEmpty()) Text("No open demand. New pools appear after a Recycler publishes demand.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (state.demandIntelligence.isNotEmpty()) {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Demand intelligence", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    state.demandIntelligence.take(3).forEach { item ->
+                        Text("${jsonText(item, "materialCategory") ?: "Material opportunity"} · ${jsonNumber(item, "eligibleSupplyKg") ?: jsonNumber(item, "requiredQuantityKg") ?: "updated"}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text("Platform signal, not a guaranteed sale.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = .78f))
+                }
             }
         }
         state.passport?.let { passport ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("Collector Growth Passport", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${passport.formalHandoverCount} formal handovers · ${"%.1f".format(passport.formalQuantityKg)} kg recorded · ${passport.safetyModulesCompleted} safety modules", style = MaterialTheme.typography.bodyLarge); Text(passport.platformLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall); Text(passport.disclaimer ?: "Platform-generated evidence profile; not an official certification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .78f)) }
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("Collector Growth Passport", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${passport.formalHandoverCount} handovers · ${"%.1f".format(passport.formalQuantityKg)} kg · ${passport.safetyModulesCompleted} safety modules", style = MaterialTheme.typography.bodyLarge); Text(passport.platformLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall); Text(passport.disclaimer ?: "Platform evidence profile; not official certification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .78f)) }
             }
         }
         state.safety?.let { safety ->
@@ -673,19 +927,48 @@ private fun FormalisationDashboard(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Safety gate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); safety.modules.forEach { module -> val acknowledged = safety.progress.any { it.moduleKey == module.key && it.acknowledged }; Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(module.title, fontWeight = FontWeight.SemiBold); Text(module.whatNotToDo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (acknowledged) StatusChip("Acknowledged") else TextButton(onClick = { onAcknowledgeSafety(module.key) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Acknowledge") } } } }
             }
         }
-        state.handovers.take(3).forEach { handover -> SupplyHandoverCard(handover, onPrepareBulkHandover, onConfirmCollectorHandover) }
-        if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text("Showing saved evidence from this device. Mutations stay disabled until the server is reachable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        state.handovers.take(3).forEach { handover -> SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement) }
+        if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text("Showing saved evidence. Changes wait for the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     showJoin?.let { opportunity -> JoinPoolDialog(opportunity, onDismiss = { showJoin = null }, onSubmit = { quantity, grade, rate -> opportunity.existingPool?.id?.let { onJoinPool(it, quantity, grade, rate) }; showJoin = null }) }
 }
 
-@Composable private fun RouteEstimateCard(item: RouteAdvantageDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(item.recyclerName, Modifier.weight(1f), fontWeight = FontWeight.SemiBold); Text("₹${"%.0f".format(item.estimatedNetValue)} net", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("₹${"%.0f".format(item.offeredRatePerKg)}/kg · logistics ₹${"%.0f".format(item.logisticsCost)} · ${item.confidence.lowercase()} confidence", style = MaterialTheme.typography.bodySmall); Text(if (item.advantageValue != null) "Estimated advantage ${"₹%.0f".format(item.advantageValue)}" else "No savings claim without a baseline", style = MaterialTheme.typography.bodySmall); Text(item.whyThisMatch.take(2).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (item.isDemo) Text("Seeded/demo reference", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+@Composable private fun RouteEstimateCard(item: RouteAdvantageDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(item.recyclerName, Modifier.weight(1f), fontWeight = FontWeight.SemiBold); Text("₹${"%.0f".format(item.estimatedNetValue)} net", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("₹${"%.0f".format(item.offeredRatePerKg)}/kg · logistics ₹${"%.0f".format(item.logisticsCost)} · ${item.confidence.lowercase()} confidence", style = MaterialTheme.typography.bodySmall); Text(if (item.advantageValue != null) "Advantage ${"₹%.0f".format(item.advantageValue)}" else "Baseline unavailable", style = MaterialTheme.typography.bodySmall); Text(item.whyThisMatch.take(2).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (item.isDemo) Text("Demo reference", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
-@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Pool · ${materialName(pool.materialCategory)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text("${"%.1f".format(pool.totalReservedKg)} / ${"%.1f".format(pool.minimumQuantityKg)} kg threshold · ${pool.contributions.size} contributors", style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Lock threshold") }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "THRESHOLD_MET")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Leave") } } } } }
+private fun jsonText(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.asString
+private fun jsonNumber(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.let { element -> runCatching { "${"%.1f".format(element.asDouble)} kg" }.getOrNull() }
 
-@Composable private fun JoinPoolDialog(opportunity: PoolOpportunityDto, onDismiss: () -> Unit, onSubmit: (Double, String, Double?) -> Unit) { var quantity by remember { mutableStateOf("") }; var rate by remember { mutableStateOf(opportunity.requirement.maxRatePerKg?.toString().orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Join ${materialName(opportunity.requirement.materialCategory)} pool") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your stock is reserved until the pooled handover is settled.", style = MaterialTheme.typography.bodySmall); OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Expected rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { quantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(it, opportunity.requirement.preferredGrade ?: "UNSPECIFIED", rate.toDoubleOrNull()) } }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true) { Text("Reserve stock") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
+@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Pool · ${materialName(pool.materialCategory)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text("${"%.1f".format(pool.totalReservedKg)} / ${"%.1f".format(pool.minimumQuantityKg)} kg · ${pool.contributions.size} contributors", style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Lock pool") }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "THRESHOLD_MET")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Leave") } } } } }
 
-@Composable private fun SupplyHandoverCard(handover: SupplyHandoverDto, onPrepareBulk: (String) -> Unit, onConfirmCollector: (String) -> Unit) { val qrBitmap = remember(handover.status, handover.qrCodeData) { if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .45f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { Text("Material passport handover", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${handover.referenceId} · ${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg", style = MaterialTheme.typography.bodyLarge); Text("Quoted value ₹${"%.0f".format(handover.quotedValue)} · ${statusName(handover.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); qrBitmap?.let { Image(it.asImageBitmap(), "One-time handover QR", Modifier.size(190.dp).align(Alignment.CenterHorizontally)) }; if (handover.status == "PREPARED") Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Confirm collector side") }; if (handover.status == "COLLECTOR_CONFIRMED") Text("Show this one-time QR to the verified Recycler for scan and receipt.", style = MaterialTheme.typography.bodySmall); if (handover.status == "COMPLETED") Text("Receipt completed. The one-time QR is no longer active; inspect the passport timeline for evidence.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (handover.status == "REVIEW_REQUIRED") Text("Settlement needs review: ${handover.reviewReason ?: "variance recorded"}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } } }
+@Composable private fun JoinPoolDialog(opportunity: PoolOpportunityDto, onDismiss: () -> Unit, onSubmit: (Double, String, Double?) -> Unit) { var quantity by remember { mutableStateOf("") }; var rate by remember { mutableStateOf(opportunity.requirement.maxRatePerKg?.toString().orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Join ${materialName(opportunity.requirement.materialCategory)} pool") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Reserved until the pooled handover is settled.", style = MaterialTheme.typography.bodySmall); OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Expected rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { quantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(it, opportunity.requirement.preferredGrade ?: "UNSPECIFIED", rate.toDoubleOrNull()) } }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true) { Text("Reserve stock") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
+
+@Composable
+private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPassportResponseDto?, anomaly: AnomalyResponseDto?, onPrepareBulk: (String) -> Unit, onConfirmCollector: (String) -> Unit, onLoadPassport: (String) -> Unit, onLoadAnomalies: (String) -> Unit, onDecideSettlement: (String, String, String?, String?, String?) -> Unit) {
+    var showSettlement by remember(handover.id) { mutableStateOf(false) }
+    val qrBitmap = remember(handover.status, handover.qrCodeData) { if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
+    Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .45f)), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Material passport handover", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${handover.referenceId} · ${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg", style = MaterialTheme.typography.bodyLarge)
+            Text("Quoted value ₹${"%.0f".format(handover.quotedValue)} · ${statusName(handover.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            qrBitmap?.let { Image(it.asImageBitmap(), "One-time handover QR", Modifier.size(190.dp).align(Alignment.CenterHorizontally)) }
+            if (handover.status == "PREPARED") Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Confirm collector side") }
+            if (handover.status == "COLLECTOR_CONFIRMED") Text("Show this one-time QR to the verified Recycler for scan and receipt.", style = MaterialTheme.typography.bodySmall)
+            if (handover.status == "REVIEW_REQUIRED") {
+                Text("Settlement needs review: ${handover.reviewReason ?: "variance recorded"}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { showSettlement = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review settlement") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { onLoadPassport(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Passport") }
+                OutlinedButton(onClick = { onLoadAnomalies(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Risk flags") }
+            }
+            passport?.let { Text("${it.events.size} passport events · ${it.contribution?.quantityKg?.let { kg -> "${"%.1f".format(kg)} kg contributed" } ?: "direct lot handover"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            anomaly?.let { Text("Risk: ${statusName(it.riskLevel)} · ${it.flags.size} deterministic flag(s)", style = MaterialTheme.typography.bodySmall, color = if (it.riskLevel == "HIGH") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (handover.status == "COMPLETED") Text("Receipt completed. The one-time QR is no longer active; inspect the passport timeline for evidence.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    if (showSettlement) SettlementDecisionDialog(title = "Review formal settlement", acceptLabel = "Accept settlement", onDismiss = { showSettlement = false }, onSubmit = { decision, reason, notes -> showSettlement = false; onDecideSettlement(handover.id, decision, reason, null, notes) })
+}
 
 private fun createSupplyQr(value: String): Bitmap? = runCatching { val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, 480, 480); Bitmap.createBitmap(480, 480, Bitmap.Config.RGB_565).also { bitmap -> for (x in 0 until 480) for (y in 0 until 480) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE) } }.getOrNull()
 

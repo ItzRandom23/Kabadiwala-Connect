@@ -387,7 +387,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 @Composable private fun ReviewStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_review_title), style = MaterialTheme.typography.headlineMedium)
     s.photoPath?.let { path -> decodeSampledBitmap(path)?.let { Image(it, null, Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Crop) } }
-    EvidenceSection(title = stringResource(R.string.lot_review_title)) {
+    EvidenceSection(title = stringResource(R.string.lot_details)) {
         ProofRow(stringResource(R.string.lot_material_label), s.material?.key.orEmpty())
         ProofRow(stringResource(R.string.lot_condition_label), s.condition?.name.orEmpty())
         ProofRow(stringResource(R.string.lot_weight_label), "${s.weightText} ${if (s.weightUnit == WeightUnit.GRAMS) "g" else "kg"}")

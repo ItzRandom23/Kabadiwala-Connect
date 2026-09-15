@@ -97,7 +97,7 @@ export class HandoverService {
     if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover evidence is locked after recycler confirmation', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
     if (!Number.isFinite(p.actualWeight) || p.actualWeight <= 0 || p.actualWeight > 500) throw new AppError('VALIDATION_ERROR', 'Invalid actual weight', 422, { code: 'INVALID_ACTUAL_WEIGHT' });
     const updated = await this.db.handover.updateMany({
-      where: { id, collectorId: cid, status: { in: ['GENERATED', 'CONFIRMED_BY_RECYCLER'] } },
+      where: { id, collectorId: cid, status: 'GENERATED' },
       data: {
         actualWeight: Number(p.actualWeight.toFixed(3)),
         materialConfirmedAt: p.materialMatch ? new Date() : null,
@@ -116,7 +116,7 @@ export class HandoverService {
     if (handover.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover evidence is locked after recycler confirmation', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
     const key = `handovers/${cid}/${id}-${Date.now()}.jpg`;
     const stored = await this.storage.putImage(file.buffer, key);
-    const updated = await this.db.handover.updateMany({ where: { id, collectorId: cid, status: { in: ['GENERATED', 'CONFIRMED_BY_RECYCLER'] } }, data: { actualWeightPhotoReference: stored.key } });
+    const updated = await this.db.handover.updateMany({ where: { id, collectorId: cid, status: 'GENERATED' }, data: { actualWeightPhotoReference: stored.key } });
     if (!updated.count) {
       await this.storage.delete(stored.key).catch(() => undefined);
       throw new AppError('CONFLICT', 'Handover changed while uploading photo', 409, { code: 'HANDOVER_EVIDENCE_LOCKED' });
@@ -127,6 +127,7 @@ export class HandoverService {
     const h = await this.view(id, rid, 'RECYCLER');
     if (h.recycler.authorizationStatus !== 'VERIFIED' || (h.recycler.authorizationValidUntil && h.recycler.authorizationValidUntil <= new Date())) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
     if (h.status !== 'GENERATED') throw new AppError('CONFLICT', 'Handover is not actionable', 409, { code: 'HANDOVER_NOT_ACTIONABLE' });
+    if (!h.collectorConfirmedAt) throw new AppError('CONFLICT', 'Collector confirmation is required before the Recycler can receive this handover', 409, { code: 'COLLECTOR_CONFIRMATION_REQUIRED' });
     const actual = Number(p.actualWeight);
     if (!Number.isFinite(actual) || actual <= 0) throw new AppError('VALIDATION_ERROR', 'Invalid actual weight', 422, { code: 'INVALID_ACTUAL_WEIGHT' });
     const diff = Math.abs(actual - h.weight) / h.weight;

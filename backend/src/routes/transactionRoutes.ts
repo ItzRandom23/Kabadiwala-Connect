@@ -7,7 +7,7 @@ import { AppError } from '../utils/errors.js';
 
 /** Participant-facing transaction passport assembled from existing lifecycle records. */
 export const transactionRoutes = (jwt: JwtService, collectors: CollectorRepository, db: PrismaClient) => Router()
-  .get('/transactions/:lotId/timeline', requireAuth(jwt, collectors), async (req: Request, res: Response) => {
+  .get('/transactions/:lotId/timeline', requireAuth(jwt, collectors, db), async (req: Request, res: Response) => {
     const lotId = String(req.params.lotId);
     const lot = await db.lot.findFirst({
       where: { id: lotId, collectorId: req.identity!.collectorId },

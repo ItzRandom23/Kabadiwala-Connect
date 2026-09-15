@@ -84,11 +84,11 @@ fun SettingsScreen(
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Text(
             text = stringResource(R.string.settings_title),
@@ -99,7 +99,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        SectionCard(title = stringResource(R.string.settings_profile)) {
+        SectionCard(title = stringResource(R.string.settings_profile_section)) {
             SettingsRow(
                 icon = Icons.Filled.Person,
                 label = stringResource(R.string.settings_profile),
@@ -108,7 +108,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_language)) {
+        SectionCard(title = stringResource(R.string.settings_language_section)) {
             SettingsRow(
                 icon = Icons.Filled.Language,
                 label = LocaleManager.LABELS[language] ?: language,
@@ -123,13 +123,13 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_appearance)) {
+        SectionCard(title = stringResource(R.string.settings_appearance_section)) {
             AppearanceRow("SYSTEM", stringResource(R.string.appearance_system), appearance, onAppearanceChange, "appearance_system")
             AppearanceRow("LIGHT", stringResource(R.string.appearance_light), appearance, onAppearanceChange, "appearance_light")
             AppearanceRow("DARK", stringResource(R.string.appearance_dark), appearance, onAppearanceChange, "appearance_dark")
         }
 
-        SectionCard(title = stringResource(R.string.settings_safety)) {
+        SectionCard(title = stringResource(R.string.settings_safety_section)) {
             SettingsRow(
                 icon = Icons.Filled.HealthAndSafety,
                 label = stringResource(R.string.settings_safety),
@@ -155,7 +155,7 @@ fun SettingsScreen(
             }
         }
 
-        SectionCard(title = stringResource(R.string.settings_about)) {
+        SectionCard(title = stringResource(R.string.settings_about_section)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("settings_about")) {
                 Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(28.dp))
                 Spacer(Modifier.width(12.dp))

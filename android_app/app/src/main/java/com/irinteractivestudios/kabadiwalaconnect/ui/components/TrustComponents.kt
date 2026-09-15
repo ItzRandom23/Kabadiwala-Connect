@@ -35,7 +35,7 @@ fun EvidenceSection(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .30f)),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 status?.let { KcStatusPill(it) }

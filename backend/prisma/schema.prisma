@@ -95,12 +95,26 @@ enum PickupStatus {
   REQUESTED
   ACCEPTED
   SCHEDULED
+  REASSIGNMENT_REQUIRED
   IN_TRANSIT
   ARRIVED
   WEIGHED
   COMPLETED
   CANCELLED
   REJECTED
+}
+enum PickupSettlementStatus {
+  PENDING_HOUSEHOLD_CONFIRMATION
+  ACCEPTED
+  DISPUTED
+  COMPLETED
+}
+
+enum PickupPaymentStatus {
+  RECORDED
+  VERIFIED
+  DISPUTED
+  REVERSED
 }
 enum BulkLotStatus {
   DRAFT
@@ -173,8 +187,21 @@ enum PriceAuditActorRole {
 enum RecyclerAuthorizationStatus {
   VERIFIED
   PENDING
+  UNDER_REVIEW
   REJECTED
+  REVIEW_REQUIRED
+  EXPIRED
+  REVOKED
   SUSPENDED
+}
+
+enum DataDestructionStatus {
+  NOT_APPLICABLE
+  OWNER_PREPARATION_PENDING
+  OWNER_PREPARATION_COMPLETED
+  DESTRUCTION_REQUESTED
+  RECYCLER_EVIDENCE_PENDING
+  EVIDENCE_RECEIVED
 }
 
 enum PickupAvailability {
@@ -243,6 +270,20 @@ enum PaymentStatus {
   RECORDED
   DISPUTED
   VERIFIED
+  REVERSED
+}
+
+enum SupplyReversalStatus {
+  REQUESTED
+  CONFIRMED
+  FAILED
+}
+
+enum QualityControlStatus {
+  PENDING
+  PASSED
+  FAILED
+  REVIEW_REQUIRED
 }
 
 enum PaymentDisputeType {
@@ -468,6 +509,9 @@ model Recycler {
   email                          String?
   alternatePhone                 String?
   maxPickupDistanceKm            Float
+  logisticsCostPerKm             Float?
+  pickupFee                      Float?
+  pickupIncluded                 Boolean                      @default(false)
   pickupAvailability             PickupAvailability
   operatingHours                 Json
   averageHandoverTime            String?
@@ -493,6 +537,7 @@ model RecyclerMaterial {
   recycler            Recycler         @relation(fields: [recyclerId], references: [id])
   category            MaterialCategory
   subcategories       String[]
+  acceptedGrades      String[]         @default([])
   minAcceptableWeight Float?
   maxAcceptableWeight Float?
 
@@ -994,6 +1039,7 @@ model IdempotencyRecord {
   operationId String
   action      String
   entityId    String?
+  requestHash String?
   response    Json
   createdAt   DateTime @default(now())
 
@@ -1014,6 +1060,11 @@ model HouseholdListing {
   longitude       Float?
   estimatedPriceMin Float?
   estimatedPriceMax Float?
+  dataBearingDevice         Boolean                @default(false)
+  ownerPreparationCompleted Boolean                @default(false)
+  dataDestructionRequested  Boolean                @default(false)
+  destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
+  recyclerEvidenceReference String?
   status          HouseholdListingStatus @default(DRAFT)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -1029,19 +1080,63 @@ model PickupRequest {
   status            PickupStatus @default(REQUESTED)
   requestedSlot     DateTime?
   scheduledSlot     DateTime?
+  acceptedAt        DateTime?
+  availabilityConfirmedAt DateTime?
+  inTransitAt       DateTime?
+  arrivedAt         DateTime?
+  weighedAt         DateTime?
+  cancelledAt       DateTime?
+  noShow            Boolean    @default(false)
+  lateCancellation  Boolean    @default(false)
+  reassignmentReason String?
   actualWeight      Float?
   finalCategory     MaterialCategory?
   grade             String?
   ratePerKg         Float?
   finalAmount       Float?
+  settlementStatus  PickupSettlementStatus?
+  settlementBeforeValue Float?
+  settlementAfterValue  Float?
+  settlementReasonCode String?
+  settlementEvidenceReference String?
+  householdDecision String?
+  settlementDecisionAt DateTime?
+  settlementDisputeNotes String?
   cancelledBy       String?
   cancellationReason String?
   completedAt       DateTime?
+  settlementPayment PickupSettlementPayment?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   @@unique([listingId, kabadiwalaId])
   @@index([householdId, status, createdAt])
   @@index([kabadiwalaId, status, scheduledSlot])
+  @@index([status, scheduledSlot])
+}
+
+model PickupSettlementPayment {
+  id             String             @id @default(cuid()) @map("_id")
+  sourceKey      String             @unique
+  pickupId       String             @unique
+  householdId    String
+  collectorId    String
+  amount         Float
+  paymentMethod  PaymentMethod
+  recordedAt     DateTime
+  confirmedAt    DateTime?
+  requestHash    String?
+  reference      String?
+  notes          String?
+  status         PickupPaymentStatus @default(RECORDED)
+  anomaly        Boolean            @default(false)
+  anomalyReason  String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  pickup         PickupRequest      @relation(fields: [pickupId], references: [id])
+
+  @@index([collectorId, status, recordedAt])
+  @@index([householdId, status, recordedAt])
 }
 
 model InventoryBalance {
@@ -1058,6 +1153,28 @@ model InventoryBalance {
   @@index([kabadiwalaId, materialCategory])
 }
 
+model InventoryMovement {
+  id                 String   @id @default(cuid()) @map("_id")
+  inventoryBalanceId String
+  kabadiwalaId       String
+  movementType       String
+  quantityKg         Float
+  availableBefore    Float
+  availableAfter     Float
+  reservedBefore     Float
+  reservedAfter      Float
+  soldBefore         Float
+  soldAfter          Float
+  sourceType         String
+  sourceId           String
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([kabadiwalaId, createdAt])
+  @@index([inventoryBalanceId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
 model BulkLot {
   id              String        @id @default(cuid()) @map("_id")
   kabadiwalaId    String
@@ -1070,6 +1187,7 @@ model BulkLot {
   latitude        Float?
   longitude       Float?
   notes           String?
+  sourceListingIds String[]      @default([])
   status          BulkLotStatus @default(DRAFT)
   reservedForId   String?
   createdAt       DateTime      @default(now())
@@ -1218,6 +1336,7 @@ model PoolContribution {
   materialCategory   MaterialCategory
   grade              String
   quantityKg         Float
+  sourceListingIds   String[]              @default([])
   expectedRatePerKg  Float
   expectedPayout     Float
   finalAcceptedKg    Float?
@@ -1266,6 +1385,13 @@ model SupplyHandover {
   qrNonceHash           String
   consignmentHash       String
   materialCategory      MaterialCategory
+  sourceListingIds      String[]              @default([])
+  dataBearingDevice     Boolean               @default(false)
+  dataDestructionRequested Boolean            @default(false)
+  destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
+  recyclerEvidenceReference String?
+  destructionEvidenceHash String?
+  destructionCompletedAt DateTime?
   quotedWeightKg        Float
   quotedRatePerKg       Float
   quotedValue           Float
@@ -1282,12 +1408,67 @@ model SupplyHandover {
   expiresAt             DateTime
   reviewReason          String?
   reviewEvidence        String?
+  qcStatus              QualityControlStatus @default(PENDING)
+  qcCompletedAt         DateTime?
+  qcCompletedBy         String?
+  qcNotes               String?
+  qcEvidenceReference   String?
+  payments              SupplyPayment[]
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
   @@index([collectorId, status, updatedAt])
   @@index([recyclerId, status, updatedAt])
   @@index([poolId, status])
+}
+
+model SupplyPayment {
+  id                String         @id @default(cuid()) @map("_id")
+  sourceKey         String         @unique
+  supplyHandoverId  String
+  supplyHandover    SupplyHandover @relation(fields: [supplyHandoverId], references: [id])
+  collectorId       String
+  recyclerId        String
+  contributionId    String?
+  amount            Float
+  paymentMethod     PaymentMethod
+  recordedAt        DateTime
+  confirmedAt       DateTime?
+  notes             String?
+  reference         String?
+  status            PaymentStatus  @default(RECORDED)
+  anomaly           Boolean        @default(false)
+  anomalyReason     String?
+  requestHash       String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  reversals         SupplyPaymentReversal[]
+
+  @@index([collectorId, status, recordedAt])
+  @@index([recyclerId, status, recordedAt])
+  @@index([supplyHandoverId, collectorId])
+}
+
+model SupplyPaymentReversal {
+  id                 String               @id @default(cuid()) @map("_id")
+  sourceKey          String               @unique
+  supplyPaymentId    String
+  supplyPayment      SupplyPayment        @relation(fields: [supplyPaymentId], references: [id])
+  supplyHandoverId   String
+  requestedBy        String
+  provider           String
+  externalReference  String
+  evidenceReference  String
+  reason             String
+  requestHash        String?
+  amount             Float
+  status             SupplyReversalStatus @default(REQUESTED)
+  processedAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([supplyPaymentId, createdAt])
+  @@index([supplyHandoverId, status, createdAt])
 }
 
 model MaterialPassportEvent {

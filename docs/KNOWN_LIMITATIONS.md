@@ -6,17 +6,18 @@ This remains a testing/SIH prototype. Material limitations are explicit:
   live-price or savings guarantee is made.
 - Recycler authorisation is a platform field verified by an operator/database,
   not an independently verified government result.
-- Pool mutations and settlement require connectivity. Offline support covers
-  cached formal evidence and a queued Recycler confirmation, not an offline
-  shared-market replica.
+- Shared pool discovery and multi-party coordination still require connectivity,
+  but the backend accepts queued, role-aware offline operations for pool
+  contribution/release, settlement decision, handover confirmation, disposal
+  evidence and formal payment. This is not an offline shared-market replica.
 - The QR is server-verified on confirmation; the prototype does not complete
   cryptographic verification fully offline.
-- Human/admin resolution for disputed formal settlements is incomplete; a
-  `REVIEW_REQUIRED` record is safer than silently forcing a payout, but still
-  needs an operator workflow.
-- Payment and earnings are not yet fully linked to every formal pool settlement;
-  cash remains supported in the legacy transaction flow and the formal ledger
-  has no complete admin resolution UI.
+- Internal admin resolution for formal anomalies supports accept-as-recorded,
+  revert-to-quote, reservation release and acknowledgement with audit records.
+  External bank/cash/provider reversal remains outside this repository.
+- Formal pool settlements now feed the formal payment and Collector earnings
+  projections; cash remains supported, but provider-level reversal and payout
+  reconciliation are not implemented.
 - Collector Growth Passport labels are platform-generated progress signals, not
   certification, credit scoring or income proof.
 - Reverse Demand Network uses development/seeded demand and has no validated
@@ -34,9 +35,10 @@ This remains a testing/SIH prototype. Material limitations are explicit:
   process for the local test harness. Restarting it invalidates previously
   issued test tokens/QRs; a real deployment must persist and rotate keys with
   explicit expiry and revocation policy.
-- Android critical supply-chain mutations remain online-only. The offline
-  queue covers captured lot persistence, formal Recycler receipt confirmation
-  and cached evidence; it is not a local shared-market replica.
+- Android wiring does not yet expose every backend sync operation in the field
+  UI. The backend queue supports captured lots, pool contribution/release,
+  settlement decisions, formal Recycler confirmation, disposal evidence and
+  formal payments; it is not a local shared-market replica.
 - Critical live copy still has hardcoded English in places, pictorial/TTS
   coverage is incomplete, and a full TalkBack/native-speaker review remains.
 - The emulator pass observed one cold-start Compose jank event; no battery,

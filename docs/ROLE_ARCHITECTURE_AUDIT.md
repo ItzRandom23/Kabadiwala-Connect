@@ -23,7 +23,7 @@ boundaries.
 | Compare formal route advantage | No | Yes | No | current verified Recycler and explicit estimate fields |
 | Opt into/lock a cooperative pool | No | Yes, own inventory contribution | No | atomic reservation; unique demand pool |
 | View supply handover/passport | Own completed listing result | Own handover/contribution evidence | Assigned formal handovers only | source/reference/party predicates |
-| Confirm formal supply receipt | No | No | Yes, assigned current Recycler | signed QR + Collector confirmation + conditional transition |
+| Confirm formal supply receipt | No | No | Yes, assigned current Recycler | signed QR + Collector confirmation + conditional transition; online and role-aware `/sync` paths |
 | Accept/raise a formal settlement issue | No | Own contribution/handover | No | breakdown status and anomaly event |
 | View collector growth passport | No | Own platform-generated passport | No | authenticated owner scope |
 | View reverse-demand opportunities | No | Aggregate demand/gap only | Own demand management | no cross-collector identity disclosure |

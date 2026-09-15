@@ -285,7 +285,7 @@ export class AuthService {
       const materials = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => acceptedMaterials.has(value)))];
       if (!materials.length) throw new AppError('VALIDATION_ERROR', 'At least one supported material is required for recycler registration', 422, { code: 'INVALID_RECYCLER_MATERIALS' });
       for (const category of materials) {
-        await tx.recyclerMaterial.create({ data: { recyclerId: profile.id, category: category as any, subcategories: [], minAcceptableWeight: 0.1, maxAcceptableWeight: 500 } });
+        await tx.recyclerMaterial.create({ data: { recyclerId: profile.id, category: category as any, subcategories: [], acceptedGrades: ['UNSPECIFIED'], minAcceptableWeight: 0.1, maxAcceptableWeight: 500 } });
       }
       user = await tx.user.create({
         data: {

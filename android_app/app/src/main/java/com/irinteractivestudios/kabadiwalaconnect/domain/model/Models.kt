@@ -1,6 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.domain.model
 
-enum class AccountRole { HOUSEHOLD, COLLECTOR, RECYCLER }
+enum class AccountRole { HOUSEHOLD, COLLECTOR, RECYCLER, ADMIN }
 
 enum class RecyclerVerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
 
@@ -17,7 +17,9 @@ data class AccountProfile(
     val displayName: String? = null,
     val areaName: String? = null,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    /** Operator capabilities returned by the server; empty for non-admin accounts. */
+    val permissions: Set<String> = emptySet()
 )
 
 /**

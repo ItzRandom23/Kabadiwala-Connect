@@ -145,6 +145,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     }
     KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
     OutlinedButton(onClick = { vm.toggleReturning(); vm.start() }, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text(stringResource(R.string.auth_existing_account)) }
+    TextButton(onClick = vm::useAdminSignIn, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text("Operator sign in") }
     // Demo is a development-only facility. It is absent from release builds;
     // the real-backend path still uses live authentication and catalogs.
     if (BuildConfig.DEBUG) {
@@ -254,11 +255,13 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         AccountRole.HOUSEHOLD -> R.string.auth_area_household_title
         AccountRole.RECYCLER -> R.string.auth_area_recycler_title
         AccountRole.COLLECTOR -> R.string.auth_area_title
+        AccountRole.ADMIN -> R.string.app_name
     }
     val detail = when (state.role) {
         AccountRole.HOUSEHOLD -> R.string.auth_area_household_detail
         AccountRole.RECYCLER -> R.string.auth_area_recycler_detail
         AccountRole.COLLECTOR -> R.string.auth_area_detail
+        AccountRole.ADMIN -> R.string.app_name
     }
     Text(stringResource(title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(detail), style = MaterialTheme.typography.bodyLarge)

@@ -64,6 +64,7 @@ private fun roleLabel(role: AccountRole): String = when (role) {
     AccountRole.HOUSEHOLD -> stringResource(R.string.profile_household)
     AccountRole.COLLECTOR -> stringResource(R.string.profile_collector)
     AccountRole.RECYCLER -> stringResource(R.string.profile_recycler)
+    AccountRole.ADMIN -> "Operator"
 }
 
 @Composable
