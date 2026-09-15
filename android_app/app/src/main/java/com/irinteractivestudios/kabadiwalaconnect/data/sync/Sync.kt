@@ -27,6 +27,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateHandoverRequ
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.PickupRequestCreateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverConfirmRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
@@ -294,7 +295,14 @@ class SyncWorker(
                         acceptedWeightKg = payload.get("acceptedWeightKg")?.asDouble,
                         materialMatch = payload.get("materialMatch")?.asBoolean ?: true,
                         reasonCode = payload.get("reasonCode")?.asString
-                    )).requireData()
+                    ), payload.get("idempotencyKey")?.asString).requireData()
+                }
+                "REQUEST_HOUSEHOLD_PICKUP" -> {
+                    app.container.apiService.requestHouseholdPickup(
+                        payload.string("listingId"),
+                        PickupRequestCreateDto(payload.string("kabadiwalaId")),
+                        payload.get("idempotencyKey")?.asString
+                    ).requireData()
                 }
                 else -> return QueueResult.REJECTED
             }
@@ -317,6 +325,7 @@ class SyncWorker(
             "UPDATE_HANDOVER_EVIDENCE" -> app.container.apiService.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
             "CANCEL_LOT" -> app.container.apiService.getLot(payload.string("id")).requireData().status == "CANCELLED"
             "CONFIRM_SUPPLY_HANDOVER" -> app.container.apiService.getSupplyHandovers().requireData().firstOrNull { it.id == payload.string("handoverId") }?.status in setOf("COMPLETED", "REVIEW_REQUIRED")
+            "REQUEST_HOUSEHOLD_PICKUP" -> app.container.apiService.getHouseholdPickups().requireData().any { it.listingId == payload.string("listingId") && it.kabadiwalaId == payload.string("kabadiwalaId") && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
             else -> false
         }
     }.getOrDefault(false)

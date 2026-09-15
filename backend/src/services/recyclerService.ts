@@ -357,10 +357,21 @@ export class RecyclerService {
         const distancePoints = distanceKm === undefined ? 0 : distanceKm < 10 ? 20 : distanceKm <= 25 ? 10 : 0;
         const ratingPoints = recycler.rating && recycler.rating > 4 ? 5 : 0;
         const matchScore = 50 + distancePoints + (rate ? 20 : 0) + ratingPoints;
+        const reasons = [
+          'Current platform authorization is verified.',
+          `Accepts ${lot.materialCategory}.`,
+          ...(rate ? [`Current indicative rate is ₹${rate.pricePerKg}/kg.`] : ['No current recycler rate was supplied.']),
+          ...(distanceKm === undefined ? ['Distance is unavailable from the saved coordinates.'] : [`${distanceKm.toFixed(1)} km from the collector profile.`]),
+          ...(recycler.pickupAvailability === 'TODAY' || recycler.pickupAvailability === 'THIS_WEEK' ? ['Pickup availability is listed.'] : ['Pickup timing is flexible and must be confirmed.']),
+          ...(recycler.rating ? [`${recycler.rating.toFixed(1)}/5 from ${recycler.reviewCount} verified reviews.`] : ['No verified recycler rating is available.'])
+        ];
         return {
           recycler: this.publicView(recycler, distanceKm),
           offeredRatePerKg: rate?.pricePerKg ?? null,
           matchScore,
+          score: matchScore,
+          reasons,
+          whyThisMatch: reasons,
           explanation: {
             materialMatch: true,
             distancePoints,

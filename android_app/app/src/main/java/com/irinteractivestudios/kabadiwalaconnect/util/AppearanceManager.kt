@@ -17,7 +17,8 @@ object AppearanceManager {
 
     fun normalize(mode: String?): String = mode?.uppercase()?.takeIf { it in SUPPORTED } ?: SYSTEM
 
-    fun load(context: Context): String = normalize(prefs(context).getString(KEY_MODE, SYSTEM))
+    /** Neon Purple is a dark-first experience; users can still select System or Light. */
+    fun load(context: Context): String = normalize(prefs(context).getString(KEY_MODE, DARK))
 
     fun save(context: Context, mode: String) {
         prefs(context).edit().putString(KEY_MODE, normalize(mode)).apply()

@@ -12,6 +12,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -19,27 +20,27 @@ import androidx.core.view.WindowCompat
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
 private val LightColorScheme = lightColorScheme(
-    primary = KcGreenPrimary,
-    onPrimary = KcGreenOnPrimary,
+    primary = KcVioletStrong,
+    onPrimary = Color.White,
     primaryContainer = KcGreenPrimaryContainer,
     onPrimaryContainer = KcGreenOnPrimaryContainer,
-    secondary = KcAmberSecondary,
-    onSecondary = KcAmberOnSecondary,
-    secondaryContainer = KcAmberSecondaryContainer,
-    onSecondaryContainer = KcAmberOnSecondaryContainer,
-    tertiary = KcTealSecondary,
-    onTertiary = KcGreenOnPrimary,
-    background = KcBackground,
-    onBackground = KcOnBackground,
-    surface = KcSurface,
-    onSurface = KcOnSurface,
-    surfaceVariant = KcSurfaceVariant,
-    surfaceContainerLowest = KcSurface,
-    surfaceContainerLow = KcSurfaceRaised,
+    secondary = KcMagenta,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFF3D7FF),
+    onSecondaryContainer = Color(0xFF3C064B),
+    tertiary = KcCyan,
+    onTertiary = Color(0xFF002F3A),
+    background = KcLightBackground,
+    onBackground = KcLightText,
+    surface = KcLightSurface,
+    onSurface = KcLightText,
+    surfaceVariant = KcLightRaised,
+    surfaceContainerLowest = KcLightSurface,
+    surfaceContainerLow = KcLightRaised,
     surfaceContainer = KcSurfaceSunken,
-    surfaceContainerHigh = KcSurfaceHigh,
-    onSurfaceVariant = KcOnSurfaceVariant,
-    outline = KcOutline,
+    surfaceContainerHigh = KcSurfaceHigh.copy(alpha = .18f),
+    onSurfaceVariant = KcLightMuted,
+    outline = KcLightOutline,
     error = KcError,
     onError = KcOnError,
     errorContainer = KcErrorContainer,
@@ -47,27 +48,31 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = KcGreenPrimaryContainer,
-    onPrimary = KcGreenOnPrimaryContainer,
-    primaryContainer = KcGreenPrimary,
-    onPrimaryContainer = KcGreenPrimaryContainer,
-    secondary = KcAmberSecondaryContainer,
-    onSecondary = KcAmberOnSecondaryContainer,
-    tertiary = KcTealSecondary,
-    onTertiary = KcGreenOnPrimary,
-    background = KcDarkBackground,
-    onBackground = KcDarkOnBackground,
-    surface = KcDarkSurface,
-    onSurface = KcDarkOnSurface,
-    surfaceVariant = KcDarkSurfaceRaised,
-    surfaceContainerLowest = KcDarkBackground,
-    surfaceContainerLow = KcDarkSurface,
-    surfaceContainer = KcDarkSurfaceRaised,
-    surfaceContainerHigh = KcDarkSurfaceHigh,
-    onSurfaceVariant = KcDarkMuted,
-    outline = KcDarkOutline,
-    error = KcErrorContainer,
-    onError = KcOnErrorContainer
+    primary = KcViolet,
+    onPrimary = Color(0xFF1E093E),
+    primaryContainer = KcVioletStrong,
+    onPrimaryContainer = Color(0xFFF3E9FF),
+    secondary = KcMagenta,
+    onSecondary = Color(0xFF30003D),
+    secondaryContainer = Color(0xFF4B165D),
+    onSecondaryContainer = Color(0xFFFFD7FF),
+    tertiary = KcCyan,
+    onTertiary = Color(0xFF00333D),
+    background = KcNight,
+    onBackground = KcText,
+    surface = KcSurface,
+    onSurface = KcText,
+    surfaceVariant = KcSurfaceRaised,
+    surfaceContainerLowest = KcNight,
+    surfaceContainerLow = KcSurface,
+    surfaceContainer = KcSurfaceRaised,
+    surfaceContainerHigh = KcSurfaceHigh,
+    onSurfaceVariant = KcMuted,
+    outline = KcOutline,
+    error = KcCoral,
+    onError = Color(0xFF3C0010),
+    errorContainer = Color(0xFF5F1730),
+    onErrorContainer = Color(0xFFFFD9E1)
 )
 
 @Immutable
@@ -82,11 +87,11 @@ data class KcExtendedColors(
 
 private val LocalKcExtendedColors = staticCompositionLocalOf {
     KcExtendedColors(
-        value = KcAmberSecondary,
-        success = KcSuccess,
-        warning = KcWarning,
-        logoPlate = KcGreenPrimaryContainer,
-        logoPlateBorder = KcGreenPrimary.copy(alpha = .14f),
+        value = KcVioletStrong,
+        success = KcMint,
+        warning = KcAmber,
+        logoPlate = KcSurfaceRaised,
+        logoPlateBorder = KcViolet.copy(alpha = .7f),
         isOperations = false
     )
 }
@@ -123,11 +128,11 @@ fun KabadiwalaConnectTheme(
     val effectiveDark = darkTheme
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
-        value = if (effectiveDark) KcAmberSecondaryContainer else KcAmberSecondary,
-        success = if (effectiveDark) KcSuccessContainer else KcSuccess,
-        warning = if (effectiveDark) KcWarningContainer else KcWarning,
+        value = if (effectiveDark) KcViolet else KcVioletStrong,
+        success = if (effectiveDark) KcMint else KcSuccess,
+        warning = if (effectiveDark) KcAmber else KcWarning,
         logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,
-        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcGreenPrimary.copy(alpha = .14f),
+        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcVioletStrong.copy(alpha = .22f),
         isOperations = role == AccountRole.RECYCLER
     )
     val view = LocalView.current

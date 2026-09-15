@@ -6,6 +6,8 @@ import type { JwtService } from '../services/jwt.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import { requireAuth, requireRecycler } from '../middleware/auth.js';
 import { AppError } from '../utils/errors.js';
+import { assertInventoryInvariant, recordInventoryMovement } from '../services/inventoryLedger.js';
+import { evaluateSettlementVariance, riskLevelForFlags } from '../services/settlementRules.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const positive = z.number().finite().positive();
@@ -25,6 +27,14 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 function jsonHash(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
+
+function operationKey(req: any) {
+  const value = req.header('idempotency-key')?.trim();
+  if (value && !/^[A-Za-z0-9._:-]{8,160}$/.test(value)) throw new AppError('VALIDATION_ERROR', 'Invalid idempotency key', 422, { code: 'INVALID_IDEMPOTENCY_KEY' });
+  return value || null;
+}
+
+const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
 
 function signQr(encoded: string, secret: string) {
   return createHmac('sha256', secret).update(`kc-supply-handover-v1.${encoded}`).digest('base64url');
@@ -67,11 +77,14 @@ async function ensurePassport(tx: Store, collectorId: string) {
 }
 
 async function refreshPassport(tx: Store, collectorId: string) {
-  const [profile, contributions, completedHandovers, safety] = await Promise.all([
-    tx.collector.findUnique({ where: { id: collectorId }, select: { areaName: true, preferredLanguage: true } }),
+  const [profile, contributions, completedHandovers, safety, pickups, disputes, reviews] = await Promise.all([
+    tx.collector.findUnique({ where: { id: collectorId }, select: { areaName: true, preferredLanguage: true, createdAt: true } }),
     tx.poolContribution.findMany({ where: { collectorId }, select: { materialCategory: true, quantityKg: true, finalAcceptedKg: true, status: true } }),
     tx.supplyHandover.findMany({ where: { collectorId, status: 'COMPLETED' }, select: { poolId: true, quotedWeightKg: true, finalAcceptedKg: true } }),
-    tx.safetyProgress.count({ where: { collectorId, acknowledged: true } })
+    tx.safetyProgress.count({ where: { collectorId, acknowledged: true } }),
+    tx.pickupRequest.findMany({ where: { kabadiwalaId: collectorId }, select: { status: true, noShow: true, lateCancellation: true } }),
+    tx.dispute.count({ where: { collectorId } }),
+    tx.recyclerReview.findMany({ where: { collectorId, verified: true }, select: { rating: true, pickupReliability: true, paymentClarity: true } })
   ]);
   if (!profile) return null;
   const settledRows = contributions.filter((row: any) => row.status === 'SETTLED');
@@ -82,11 +95,15 @@ async function refreshPassport(tx: Store, collectorId: string) {
   const completedDirectQuantity = completedHandovers.filter((row: any) => !row.poolId).reduce((sum: number, row: any) => sum + (row.finalAcceptedKg ?? row.quotedWeightKg), 0);
   const formalQuantityKg = Number((completedDirectQuantity + settledRows.reduce((sum: number, row: any) => sum + (row.finalAcceptedKg ?? row.quantityKg), 0)).toFixed(3));
   const completedTransactionCount = completedHandovers.length + settledRows.length;
-  return tx.collectorPassport.upsert({
+  const passport = await tx.collectorPassport.upsert({
     where: { collectorId },
     update: { operatingZone: profile.areaName, preferredLanguage: profile.preferredLanguage, materialCategories: categories, completedTransactions: completedTransactionCount, formalHandoverCount: completedTransactionCount, formalQuantityKg, safetyModulesCompleted: safety, platformLabels: labels, verificationState: 'PLATFORM GENERATED' },
     create: { collectorId, operatingZone: profile.areaName, preferredLanguage: profile.preferredLanguage, materialCategories: categories, completedTransactions: completedTransactionCount, formalHandoverCount: completedTransactionCount, formalQuantityKg, safetyModulesCompleted: safety, platformLabels: labels, verificationState: 'PLATFORM GENERATED' }
   });
+  const acceptedPickups = pickups.filter((row: any) => ['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED', 'COMPLETED', 'CANCELLED', 'REASSIGNMENT_REQUIRED'].includes(row.status)).length;
+  const completedPickups = pickups.filter((row: any) => row.status === 'COMPLETED').length;
+  const cancelledPickups = pickups.filter((row: any) => ['CANCELLED', 'REASSIGNMENT_REQUIRED', 'REJECTED'].includes(row.status)).length;
+  return { ...passport, activeSince: profile.createdAt, pickupMetrics: { accepted: acceptedPickups, completed: completedPickups, cancelled: cancelledPickups, noShow: pickups.filter((row: any) => row.noShow).length, lateCancellation: pickups.filter((row: any) => row.lateCancellation).length, completionRate: acceptedPickups ? Number((completedPickups / acceptedPickups).toFixed(3)) : null, cancellationRate: acceptedPickups ? Number((cancelledPickups / acceptedPickups).toFixed(3)) : null }, disputeRatio: completedTransactionCount ? Number((disputes / completedTransactionCount).toFixed(3)) : 0, feedback: { count: reviews.length, averageRating: reviews.length ? Number((reviews.reduce((sum: number, row: any) => sum + row.rating, 0) / reviews.length).toFixed(2)) : null, averagePickupReliability: reviews.filter((row: any) => row.pickupReliability != null).length ? Number((reviews.filter((row: any) => row.pickupReliability != null).reduce((sum: number, row: any) => sum + row.pickupReliability, 0) / reviews.filter((row: any) => row.pickupReliability != null).length).toFixed(2)) : null, averagePaymentClarity: reviews.filter((row: any) => row.paymentClarity != null).length ? Number((reviews.filter((row: any) => row.paymentClarity != null).reduce((sum: number, row: any) => sum + row.paymentClarity, 0) / reviews.filter((row: any) => row.paymentClarity != null).length).toFixed(2)) : null } };
 }
 
 function distanceKm(aLat?: number | null, aLng?: number | null, bLat?: number | null, bLng?: number | null) {
@@ -121,10 +138,13 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     // is not rejected before route estimation runs.
     const input = parse(z.object({ materialCategory: material, quantityKg: z.coerce.number().finite().positive().max(100000), grade: grade.optional(), areaName: z.string().trim().max(160).optional() }), req.query);
     const collector = await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { id: true, areaName: true, latitude: true, longitude: true } });
-    const price = await store.price.findFirst({ where: { materialCategory: input.materialCategory }, orderBy: { effectiveAt: 'desc' } });
+    const locationName = input.areaName ?? collector?.areaName;
+    const city = locationName?.split(',').map((part: string) => part.trim()).filter(Boolean).at(-1);
+    const price = await store.price.findFirst({ where: { materialCategory: input.materialCategory, ...(locationName ? { OR: [{ areaName: locationName }, ...(city ? [{ city }] : [])] } : {}) }, orderBy: { effectiveAt: 'desc' } }) ?? await store.price.findFirst({ where: { materialCategory: input.materialCategory }, orderBy: { effectiveAt: 'desc' } });
     const observations = price ? await store.priceHistory.count({ where: { priceId: price.id } }) : 0;
     const baseline = price ? Number((price.marketPrice * input.quantityKg).toFixed(2)) : null;
-    const confidence = observations >= 10 ? 'MEDIUM' : observations > 0 ? 'LOW' : 'INSUFFICIENT';
+    const confidence = observations >= 20 && price?.qualityStatus === 'VALIDATED' ? 'HIGH' : observations >= 10 ? 'MEDIUM' : observations > 0 ? 'LOW' : 'INSUFFICIENT';
+    const demand = await store.procurementRequirement.findMany({ where: { materialCategory: input.materialCategory, status: 'OPEN', OR: [{ deadline: null }, { deadline: { gt: new Date() } }] }, select: { recyclerId: true, minimumLotKg: true, maxRatePerKg: true, requiredQuantityKg: true } });
     const recyclers = await store.recycler.findMany({ where: { authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { gt: new Date() } }], materials: { some: { category: input.materialCategory } } }, include: { materials: true, rates: true }, orderBy: { updatedAt: 'desc' }, take: 25 });
     const rows = recyclers.map((recycler: any) => {
       const rate = recycler.rates.find((item: any) => item.materialCategory === input.materialCategory)?.pricePerKg;
@@ -132,16 +152,24 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       const distance = distanceKm(collector?.latitude, collector?.longitude, recycler.latitude, recycler.longitude);
       const pickup = recycler.pickupAvailability === 'TODAY' || recycler.pickupAvailability === 'THIS_WEEK';
       const logisticsCost = pickup ? 0 : Number(((distance ?? 8) * 12).toFixed(2));
+      const relevantDemand = demand.filter((row: any) => row.recyclerId === recycler.id);
+      const minimumLotKg = Math.max(...relevantDemand.map((row: any) => row.minimumLotKg), recycler.materials.find((row: any) => row.category === input.materialCategory)?.minAcceptableWeight ?? 0);
+      const demandRelevant = relevantDemand.length > 0;
+      const paymentReliability = recycler.rating == null ? null : Number(Math.min(1, Math.max(0, recycler.rating / 5)).toFixed(2));
+      const platformFee = 0;
       const gross = Number((rate * input.quantityKg).toFixed(2));
-      const net = Number((gross - logisticsCost).toFixed(2));
+      const net = Number((gross - logisticsCost - platformFee).toFixed(2));
       const advantage = baseline == null ? null : Number((net - baseline).toFixed(2));
       const advantagePercent = baseline && baseline > 0 && advantage != null ? Number((advantage / baseline * 100).toFixed(1)) : null;
       const reasons = routeReasons(recycler, distance, logisticsCost, confidence, baseline != null);
-      return { recyclerId: recycler.id, recyclerName: recycler.name, materialCategory: input.materialCategory, quantityKg: input.quantityKg, offeredRatePerKg: rate, grossValue: gross, logisticsCost, estimatedNetValue: net, localBaseline: baseline, advantageValue: advantage, advantagePercent, confidence, observationCount: observations, authorization: authoritySnapshot(recycler), pickupAvailability: recycler.pickupAvailability, distanceKm: distance == null ? null : Number(distance.toFixed(1)), whyThisMatch: reasons, isDemo: price?.source === 'SYSTEM' || price?.qualityStatus !== 'VALIDATED' };
+      if (minimumLotKg > 0) reasons.push(input.quantityKg >= minimumLotKg ? `The ${minimumLotKg} kg minimum is satisfied` : `The route minimum is ${minimumLotKg} kg`);
+      reasons.push(demandRelevant ? 'Recycler demand is active for this material' : 'No active recycler demand was found for this material');
+      if (paymentReliability != null) reasons.push(`Recent platform reliability signal: ${Math.round(paymentReliability * 100)}%`);
+      return { recyclerId: recycler.id, recyclerName: recycler.name, materialCategory: input.materialCategory, quantityKg: input.quantityKg, offeredRatePerKg: rate, estimatedGrossValue: gross, grossValue: gross, logisticsCost, platformFee, estimatedNetValue: net, localBaseline: baseline, baselineNetValue: baseline, advantageValue: advantage, advantage, advantagePercent, confidence, observationCount: observations, minimumLotKg, demandRelevant, paymentReliability, authorization: authoritySnapshot(recycler), pickupAvailability: recycler.pickupAvailability, distanceKm: distance == null ? null : Number(distance.toFixed(1)), whyThisMatch: reasons, reasons, isDemo: price?.source === 'SYSTEM' };
     }).filter(Boolean);
     const sorted = rows.sort((a: any, b: any) => (b.estimatedNetValue - a.estimatedNetValue) || a.recyclerName.localeCompare(b.recyclerName));
     await Promise.all(sorted.map((row: any) => store.routeAdvantageEstimate.create({ data: { collectorId: req.identity!.collectorId, targetType: 'MATERIAL_QUERY', recyclerId: row.recyclerId, materialCategory: row.materialCategory, quantityKg: row.quantityKg, offeredRatePerKg: row.offeredRatePerKg, grossValue: row.grossValue, logisticsCost: row.logisticsCost, estimatedNetValue: row.estimatedNetValue, localBaseline: row.localBaseline, advantageValue: row.advantageValue, advantagePercent: row.advantagePercent, confidence: row.confidence, observationCount: row.observationCount, authorizationSnapshot: row.authorization, reasons: row.whyThisMatch, isDemo: row.isDemo, expiresAt: new Date(Date.now() + 30 * 60 * 1000) } })));
-    res.json({ success: true, data: { items: sorted, baseline: price ? { marketPrice: price.marketPrice, unit: price.unit, source: price.source, qualityStatus: price.qualityStatus, lastUpdated: price.effectiveAt, observationCount: observations, isDemo: price.source === 'SYSTEM' } : null, disclaimer: baseline == null ? 'Insufficient data for formal-route advantage. Showing verified recyclers without a savings claim.' : 'Net outcome is an estimate. Logistics assumptions and seeded reference data must be confirmed in the field.' } });
+    res.json({ success: true, data: { items: sorted, baseline: price ? { minPrice: price.priceMin, maxPrice: price.priceMax, referencePrice: price.marketPrice, unit: price.unit, source: price.source, qualityStatus: price.qualityStatus, lastUpdated: price.effectiveAt, observationCount: observations, confidence, isDemo: price.source === 'SYSTEM' } : null, disclaimer: baseline == null ? 'Insufficient data for formal-route advantage. Showing verified recyclers without a savings claim.' : 'Net outcome is an estimate. Logistics assumptions and reference data must be confirmed in the field.' } });
   });
 
   router.get('/kabadiwala/pool-opportunities', requireAuth(jwt, collectors), async (req, res) => {
@@ -154,6 +182,19 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       return { requirement, eligibleCollectorCount: new Set(inventories.filter((row: any) => row.materialCategory === requirement.materialCategory).map((row: any) => row.kabadiwalaId)).size, clusterAvailableKg: Number((supply + existing).toFixed(2)), supplyGapKg: Number(Math.max(0, requirement.minimumLotKg - supply - existing).toFixed(2)), thresholdMet: supply + existing >= requirement.minimumLotKg, existingPool: pools.find((pool: any) => pool.requirementId === requirement.id) ?? null };
     });
     res.json({ success: true, data: rows });
+  });
+  router.get('/kabadiwala/pools/suggestions', requireAuth(jwt, collectors), async (_req, res) => {
+    const requirements = await store.procurementRequirement.findMany({ where: { status: 'OPEN', OR: [{ deadline: null }, { deadline: { gt: new Date() } }] }, select: { id: true, recyclerId: true, materialCategory: true, minimumLotKg: true, requiredQuantityKg: true, deadline: true }, take: 100 });
+    const inventories = await store.inventoryBalance.findMany({ where: { availableKg: { gt: 0 } }, select: { materialCategory: true, availableKg: true, kabadiwalaId: true } });
+    const activePools = await store.pooledConsignment.findMany({ where: { status: { in: ['FORMING', 'THRESHOLD_MET', 'LOCKED', 'PICKUP_SCHEDULED', 'IN_TRANSIT'] } }, select: { requirementId: true, totalReservedKg: true } });
+    const suggestions = requirements.map((requirement: any) => {
+      const rows = inventories.filter((row: any) => row.materialCategory === requirement.materialCategory);
+      const reserved = activePools.filter((pool: any) => pool.requirementId === requirement.id).reduce((sum: number, pool: any) => sum + pool.totalReservedKg, 0);
+      const eligibleSupplyKg = Number((rows.reduce((sum: number, row: any) => sum + row.availableKg, 0) + reserved).toFixed(2));
+      const contributorsNeeded = new Set(rows.map((row: any) => row.kabadiwalaId)).size;
+      return { recyclerDemandId: requirement.id, recyclerId: requirement.recyclerId, materialCategory: requirement.materialCategory, requiredKg: requirement.minimumLotKg, eligibleSupplyKg, contributorsNeeded, suggested: eligibleSupplyKg >= requirement.minimumLotKg, supplyGapKg: Number(Math.max(0, requirement.minimumLotKg - eligibleSupplyKg).toFixed(2)), deadline: requirement.deadline };
+    }).filter((row: any) => row.suggested);
+    res.json({ success: true, data: suggestions, disclaimer: 'Suggestions use aggregate eligible inventory. Other collectors remain private until they join a pool.' });
   });
 
   router.post('/kabadiwala/pools', requireAuth(jwt, collectors), async (req, res) => {
@@ -186,7 +227,11 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const ids = [...new Set(contributed.map((row: any) => row.poolId))];
     const pools = await store.pooledConsignment.findMany({ where: { OR: [{ createdByCollectorId: req.identity!.collectorId }, ...(ids.length ? [{ id: { in: ids } }] : [])], status: { not: 'CANCELLED' } }, orderBy: { updatedAt: 'desc' }, take: 100 });
     const contributions = await store.poolContribution.findMany({ where: { poolId: { in: pools.map((row: any) => row.id) } }, orderBy: { createdAt: 'asc' } });
-    res.json({ success: true, data: pools.map((pool: any) => ({ ...pool, contributions: contributions.filter((row: any) => row.poolId === pool.id).map((row: any) => ({ ...row, isMine: row.collectorId === req.identity!.collectorId })) })) });
+    res.json({ success: true, data: pools.map((pool: any) => {
+      const rows = contributions.filter((row: any) => row.poolId === pool.id);
+      const mine = rows.filter((row: any) => row.collectorId === req.identity!.collectorId);
+      return { ...pool, contributorCount: new Set(rows.map((row: any) => row.collectorId)).size, otherContributedKg: Number(rows.filter((row: any) => row.collectorId !== req.identity!.collectorId).reduce((sum: number, row: any) => sum + row.quantityKg, 0).toFixed(3)), contributions: mine.map((row: any) => ({ ...row, isMine: true })) };
+    }) });
   });
 
   router.post('/kabadiwala/pools/:poolId/join', requireAuth(jwt, collectors), async (req, res) => {
@@ -200,10 +245,14 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         if (Math.abs(existing.quantityKg - input.quantityKg) > 0.0001) throw new AppError('CONFLICT', 'This collector already has a reserved contribution in this pool', 409, { code: 'POOL_DUPLICATE_CONTRIBUTION' });
         return existing;
       }
+      if (existing && existing.status !== 'RELEASED') throw new AppError('CONFLICT', 'This collector already has a completed or review-locked contribution in this pool', 409, { code: 'POOL_DUPLICATE_CONTRIBUTION' });
       const balance = await tx.inventoryBalance.findFirst({ where: { kabadiwalaId: req.identity!.collectorId, materialCategory: pool.materialCategory, grade: input.grade } });
       if (!balance || balance.availableKg < input.quantityKg) throw new AppError('CONFLICT', 'Not enough available inventory for this contribution', 409, { code: 'POOL_INSUFFICIENT_INVENTORY' });
       const reserved = await tx.inventoryBalance.updateMany({ where: { id: balance.id, availableKg: { gte: input.quantityKg } }, data: { availableKg: { decrement: input.quantityKg }, reservedKg: { increment: input.quantityKg } } });
       if (!reserved.count) throw new AppError('CONFLICT', 'Inventory changed; refresh and try again', 409, { code: 'INVENTORY_RESERVATION_CONFLICT' });
+      const afterBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { id: balance.id } });
+      assertInventoryInvariant(afterBalance);
+      await recordInventoryMovement(tx, balance, afterBalance, 'RESERVATION', input.quantityKg, 'POOL_CONTRIBUTION', poolId, { poolId });
       const rate = input.expectedRatePerKg ?? 0;
       const contribution = existing
         ? await tx.poolContribution.update({ where: { id: existing.id }, data: { inventoryBalanceId: balance.id, quantityKg: input.quantityKg, expectedRatePerKg: rate, expectedPayout: Number((rate * input.quantityKg).toFixed(2)), status: 'RESERVED' } })
@@ -223,8 +272,12 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       const pool = await tx.pooledConsignment.findUnique({ where: { id: poolId } });
       const contribution = await tx.poolContribution.findUnique({ where: { poolId_collectorId: { poolId, collectorId: req.identity!.collectorId } } });
       if (!pool || !contribution || contribution.status !== 'RESERVED' || !['FORMING', 'THRESHOLD_MET'].includes(pool.status)) throw new AppError('CONFLICT', 'This contribution can no longer be released', 409, { code: 'POOL_CONTRIBUTION_NOT_RELEASABLE' });
+      const beforeBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { id: contribution.inventoryBalanceId } });
       const released = await tx.inventoryBalance.updateMany({ where: { id: contribution.inventoryBalanceId, reservedKg: { gte: contribution.quantityKg } }, data: { availableKg: { increment: contribution.quantityKg }, reservedKg: { decrement: contribution.quantityKg } } });
       if (!released.count) throw new AppError('CONFLICT', 'Inventory reservation could not be released', 409, { code: 'INVENTORY_RELEASE_CONFLICT' });
+      const afterBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { id: contribution.inventoryBalanceId } });
+      assertInventoryInvariant(afterBalance);
+      await recordInventoryMovement(tx, beforeBalance, afterBalance, 'RELEASE', contribution.quantityKg, 'POOL_CONTRIBUTION', contribution.id, { poolId });
       await tx.poolContribution.update({ where: { id: contribution.id }, data: { status: 'RELEASED' } });
       const total = Number(Math.max(0, pool.totalReservedKg - contribution.quantityKg).toFixed(2));
       await tx.pooledConsignment.update({ where: { id: poolId }, data: { totalReservedKg: total, status: total >= pool.minimumQuantityKg ? 'THRESHOLD_MET' : 'FORMING' } });
@@ -250,21 +303,47 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     res.json({ success: true, data: pools.map((pool: any) => ({ ...pool, contributions: contributions.filter((row: any) => row.poolId === pool.id).map((row: any) => ({ materialCategory: row.materialCategory, grade: row.grade, quantityKg: row.quantityKg, status: row.status, finalAcceptedKg: row.finalAcceptedKg })) })) });
   });
 
-  router.get('/kabadiwala/demand-intelligence', requireAuth(jwt, collectors), async (_req, res) => {
-    const requirements = await store.procurementRequirement.findMany({ where: { status: 'OPEN', OR: [{ deadline: null }, { deadline: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' }, take: 50 });
-    const inventories = await store.inventoryBalance.findMany({ where: { availableKg: { gt: 0 } }, select: { materialCategory: true, availableKg: true } });
-    const data = requirements.map((requirement: any) => {
-      const availableKg = inventories.filter((row: any) => row.materialCategory === requirement.materialCategory).reduce((sum: number, row: any) => sum + row.availableKg, 0);
-      const gapKg = Math.max(0, requirement.requiredQuantityKg - availableKg);
-      const level = availableKg >= requirement.requiredQuantityKg ? 'FULFILLING' : availableKg >= requirement.minimumLotKg ? 'ACTIVE' : 'HIGH';
-      return { materialCategory: requirement.materialCategory, activeDemands: 1, requiredQuantityKg: requirement.requiredQuantityKg, availableKg: Number(availableKg.toFixed(2)), supplyGapKg: Number(gapKg.toFixed(2)), demandLevel: level, minimumLotKg: requirement.minimumLotKg, recyclerId: requirement.recyclerId, deadline: requirement.deadline, isDemo: true };
+  router.get('/kabadiwala/demand-intelligence', requireAuth(jwt, collectors), async (req, res) => {
+    const requirements = await store.procurementRequirement.findMany({ where: { status: 'OPEN', OR: [{ deadline: null }, { deadline: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' }, take: 100 });
+    const inventories = await store.inventoryBalance.findMany({ where: { availableKg: { gt: 0 } }, select: { materialCategory: true, availableKg: true, kabadiwalaId: true } });
+    const materials: string[] = Array.from(new Set<string>(requirements.map((row: any) => String(row.materialCategory))));
+    const verifiedCounts = await Promise.all(materials.map(async (category) => [category, await store.recycler.count({ where: { authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { gt: new Date() } }], materials: { some: { category } } } })] as [string, number]));
+    const countByMaterial = new Map(verifiedCounts as [string, number][]);
+    const grouped = new Map<string, any>();
+    for (const requirement of requirements) {
+      const current = grouped.get(requirement.materialCategory) ?? { materialCategory: requirement.materialCategory, activeDemands: 0, requiredQuantityKg: 0, minimumLotKg: 0, deadlines: [], recyclerIds: new Set<string>() };
+      current.activeDemands += 1;
+      current.requiredQuantityKg += requirement.requiredQuantityKg;
+      current.minimumLotKg = Math.max(current.minimumLotKg, requirement.minimumLotKg);
+      if (requirement.deadline) current.deadlines.push(requirement.deadline);
+      current.recyclerIds.add(requirement.recyclerId);
+      grouped.set(requirement.materialCategory, current);
+    }
+    const data = [...grouped.values()].map((row: any) => {
+      const availableKg = inventories.filter((item: any) => item.materialCategory === row.materialCategory).reduce((sum: number, item: any) => sum + item.availableKg, 0);
+      const supplyGapKg = Math.max(0, row.requiredQuantityKg - availableKg);
+      const demandLevel = availableKg >= row.requiredQuantityKg ? 'FULFILLING' : availableKg >= row.minimumLotKg ? 'ACTIVE' : 'HIGH';
+      return { materialCategory: row.materialCategory, demandLevel, activeDemands: row.activeDemands, activeRecyclerCount: countByMaterial.get(row.materialCategory) ?? 0, requiredQuantityKg: Number(row.requiredQuantityKg.toFixed(2)), knownNearbySupplyKg: Number(availableKg.toFixed(2)), availableKg: Number(availableKg.toFixed(2)), supplyGapKg: Number(supplyGapKg.toFixed(2)), minimumLotKg: row.minimumLotKg, recyclerIds: [...row.recyclerIds], expiresAt: row.deadlines.sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] ?? null, poolOpportunity: availableKg >= row.minimumLotKg, isDemo: false };
     });
-    res.json({ success: true, data, disclaimer: 'Demand levels are derived from current platform records; seeded records are demo data.' });
+    res.json({ success: true, data, disclaimer: 'Demand levels are derived from active platform records. They are not a guarantee of purchase.' });
   });
 
   router.get('/kabadiwala/passport', requireAuth(jwt, collectors), async (req, res) => {
     const passport = await store.$transaction(async (tx: Store) => { await ensurePassport(tx, req.identity!.collectorId); return refreshPassport(tx, req.identity!.collectorId); });
     res.json({ success: true, data: { ...passport, officialCertification: false, disclaimer: 'Platform-generated evidence profile. Not a government, CPCB or official license.' } });
+  });
+
+  router.get('/safety-routing', requireAuth(jwt, collectors), async (req, res) => {
+    const input = parse(z.object({ materialCategory: material, condition: z.enum(['INTACT', 'DAMAGED', 'PARTIAL']).optional() }), req.query);
+    const damaged = input.condition === 'DAMAGED';
+    const routing: Record<string, { hazardLevel: string; handlingWarningCode: string; recommendedRouting: string; requiredRecyclerCapability: string; safetyGuidanceId: string }> = {
+      BATTERY: { hazardLevel: damaged ? 'HIGH' : 'MEDIUM', handlingWarningCode: 'BATTERY_NO_OPEN_BURN_PUNCTURE', recommendedRouting: 'AUTHORIZED_BATTERY_RECYCLER', requiredRecyclerCapability: 'BATTERY_WASTE_HANDLER', safetyGuidanceId: 'BATTERY_SAFE_HANDLING' },
+      PCB: { hazardLevel: damaged ? 'HIGH' : 'MEDIUM', handlingWarningCode: 'PCB_NO_UNCONTROLLED_DISMANTLING', recommendedRouting: 'AUTHORIZED_E_WASTE_RECYCLER', requiredRecyclerCapability: 'PCB_E_WASTE_HANDLER', safetyGuidanceId: 'CRT_PCB_SAFE_HANDLING' },
+      CRT: { hazardLevel: 'HIGH', handlingWarningCode: 'CRT_NO_BREAKING', recommendedRouting: 'AUTHORIZED_CRT_RECYCLER', requiredRecyclerCapability: 'CRT_E_WASTE_HANDLER', safetyGuidanceId: 'CRT_PCB_SAFE_HANDLING' },
+      OTHER: { hazardLevel: 'UNKNOWN', handlingWarningCode: 'UNKNOWN_ESCALATE', recommendedRouting: 'SAFE_REVIEW_REQUIRED', requiredRecyclerCapability: 'MATERIAL_REVIEW', safetyGuidanceId: 'MIXED_UNKNOWN_ESCALATION' }
+    };
+    const result = routing[input.materialCategory] ?? { hazardLevel: 'LOW', handlingWarningCode: 'STANDARD_FIELD_HANDLING', recommendedRouting: 'VERIFIED_RECYCLER', requiredRecyclerCapability: 'GENERAL_RECYCLER', safetyGuidanceId: 'GENERAL_FIELD_SAFETY' };
+    res.json({ success: true, data: { materialCategory: input.materialCategory, condition: input.condition ?? 'UNSPECIFIED', ...result, disclaimer: 'Safety metadata is guidance for routing. It is not hazardous dismantling instruction.' } });
   });
 
   router.get('/kabadiwala/safety', requireAuth(jwt, collectors), async (req, res) => {
@@ -278,6 +357,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
 
   router.post('/kabadiwala/safety/:moduleKey/acknowledge', requireAuth(jwt, collectors), async (req, res) => {
     const moduleKey = parse(z.string().regex(/^[A-Z0-9_]{3,80}$/), req.params.moduleKey);
+    if (!['BATTERY_SAFE_HANDLING', 'CRT_PCB_SAFE_HANDLING', 'MIXED_UNKNOWN_ESCALATION'].includes(moduleKey)) throw new AppError('NOT_FOUND', 'Safety module not found', 404, { code: 'SAFETY_MODULE_NOT_FOUND' });
     const result = await store.$transaction(async (tx: Store) => {
       const row = await tx.safetyProgress.upsert({ where: { collectorId_moduleKey: { collectorId: req.identity!.collectorId, moduleKey } }, update: { acknowledged: true, completedAt: new Date() }, create: { collectorId: req.identity!.collectorId, moduleKey, acknowledged: true, completedAt: new Date() } });
       await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'SAFETY_MODULE_ACKNOWLEDGED', 'SAFETY', row.id, { moduleKey });
@@ -312,7 +392,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       const sourceKey = `${target}:${targetId}`;
       const prior = await tx.supplyHandover.findUnique({ where: { sourceKey } });
       if (prior) {
-        if (prior.status !== 'EXPIRED' && prior.status !== 'CANCELLED') return { ...prior, payload: null };
+        if (prior.status !== 'EXPIRED' && prior.status !== 'CANCELLED') return { ...prior, payload: null, replayed: true };
         throw new AppError('CONFLICT', 'This source already has an expired handover record; operator re-preparation is required', 409, { code: 'HANDOVER_SOURCE_EXPIRED' });
       }
       const referenceId = `KC-HO-${Date.now()}-${randomBytes(4).toString('hex').toUpperCase()}`;
@@ -327,9 +407,9 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         await tx.pooledConsignment.update({ where: { id: poolId as string }, data: { status: 'PICKUP_SCHEDULED' } });
       }
       await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'HANDOVER_PREPARED', 'SUPPLY_HANDOVER', handover.id, { referenceId, poolId, bulkLotId, quotedWeightKg, sourceStatus });
-      return { ...handover, qrCodeData: qr.data, payload: { ...payload, nonce: undefined } };
+      return { ...handover, qrCodeData: qr.data, payload: { ...payload, nonce: undefined }, replayed: false };
     });
-    res.status(201).json({ success: true, data: result, message: 'One-time handover QR prepared. Keep it available for the Recycler scan.' });
+    res.status((result as any).replayed ? 200 : 201).json({ success: true, data: result, message: (result as any).replayed ? 'Existing handover QR returned' : 'One-time handover QR prepared. Keep it available for the Recycler scan.' });
   }
 
   router.post('/kabadiwala/pools/:poolId/prepare-handover', requireAuth(jwt, collectors), (req, res) => prepareHandover(req, res, 'POOL'));
@@ -337,10 +417,24 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
 
   router.post('/kabadiwala/handovers/:handoverId/collector-confirm', requireAuth(jwt, collectors), async (req, res) => {
     const handoverId = parse(id, req.params.handoverId);
-    const updated = await store.supplyHandover.updateMany({ where: { id: handoverId, collectorId: req.identity!.collectorId, status: 'PREPARED', expiresAt: { gt: new Date() } }, data: { status: 'COLLECTOR_CONFIRMED', collectorConfirmedAt: new Date() } });
-    if (!updated.count) throw new AppError('CONFLICT', 'Handover is not available for collector confirmation', 409, { code: 'HANDOVER_NOT_CONFIRMABLE' });
-    await store.$transaction(async (tx: Store) => audit(tx, req.identity!.collectorId, 'COLLECTOR', 'HANDOVER_COLLECTOR_CONFIRMED', 'SUPPLY_HANDOVER', handoverId, {}));
-    res.json({ success: true, data: await store.supplyHandover.findUnique({ where: { id: handoverId } }) });
+    const idempotency = operationKey(req);
+    const hash = jsonHash({ action: 'COLLECTOR_CONFIRM_HANDOVER', handoverId });
+    const result = await store.$transaction(async (tx: Store) => {
+      if (idempotency) {
+        const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId: idempotency } } });
+        if (replay) {
+          if (replay.requestHash && replay.requestHash !== hash) throw new AppError('CONFLICT', 'Idempotency key was already used for a different handover', 409, { code: 'IDEMPOTENCY_KEY_REUSED' });
+          return { handover: replay.response, replayed: true };
+        }
+      }
+      const updated = await tx.supplyHandover.updateMany({ where: { id: handoverId, collectorId: req.identity!.collectorId, status: 'PREPARED', expiresAt: { gt: new Date() } }, data: { status: 'COLLECTOR_CONFIRMED', collectorConfirmedAt: new Date() } });
+      if (!updated.count) throw new AppError('CONFLICT', 'Handover is not available for collector confirmation', 409, { code: 'HANDOVER_NOT_CONFIRMABLE' });
+      const handover = await tx.supplyHandover.findUniqueOrThrow({ where: { id: handoverId } });
+      await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'HANDOVER_COLLECTOR_CONFIRMED', 'SUPPLY_HANDOVER', handoverId, {});
+      if (idempotency) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId: idempotency, action: 'COLLECTOR_CONFIRM_HANDOVER', entityId: handoverId, requestHash: hash, response: jsonValue(handover) } });
+      return { handover, replayed: false };
+    });
+    res.json({ success: true, data: result.handover, ...(result.replayed ? { message: 'Handover confirmation already processed' } : {}) });
   });
 
   router.get('/kabadiwala/handovers', requireAuth(jwt, collectors), async (req, res) => {
@@ -360,11 +454,21 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
   });
 
   router.post('/recycler/handovers/confirm', requireRecycler(jwt, db), async (req, res) => {
-    const input = parse(z.object({ qrCodeData: z.string().trim().min(40).max(5000), actualWeightKg: positive.max(100000).optional(), acceptedWeightKg: positive.max(100000).optional(), finalRatePerKg: positive.max(1000000).optional(), materialMatch: z.boolean().default(true), reasonCode: z.string().trim().max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), handoverLocation: location.optional() }), req.body);
+    const input = parse(z.object({ qrCodeData: z.string().trim().min(40).max(5000), actualWeightKg: positive.max(100000).optional(), acceptedWeightKg: z.number().finite().min(0).max(100000).optional(), finalRatePerKg: positive.max(1000000).optional(), materialMatch: z.boolean().default(true), reasonCode: z.string().trim().min(2).max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), handoverLocation: location.optional() }), req.body);
+    const idempotency = operationKey(req);
+    const reconciliationHash = jsonHash(input);
     const payload = verifySupplyHandoverQr(input.qrCodeData, signingSecret);
     const handover = await store.supplyHandover.findUnique({ where: { referenceId: payload.referenceId } });
     if (!handover || handover.recyclerId !== req.identity!.collectorId) throw new AppError('NOT_FOUND', 'Handover is not available for this Recycler', 404, { code: 'HANDOVER_NOT_FOUND' });
     if (handover.qrCodeData !== input.qrCodeData) throw new AppError('CONFLICT', 'This handover QR is not the current server record', 409, { code: 'HANDOVER_QR_MISMATCH' });
+    if (createHash('sha256').update(String(payload.nonce)).digest('hex') !== handover.qrNonceHash) throw new AppError('CONFLICT', 'Handover nonce has already been replaced or is invalid', 409, { code: 'HANDOVER_NONCE_MISMATCH' });
+    if (idempotency) {
+      const replay = await store.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId: idempotency } } });
+      if (replay) {
+        if (replay.requestHash && replay.requestHash !== reconciliationHash) throw new AppError('CONFLICT', 'Idempotency key was already used for a different reconciliation', 409, { code: 'IDEMPOTENCY_KEY_REUSED' });
+        return res.json({ success: true, data: replay.response, message: 'Handover reconciliation already processed' });
+      }
+    }
     if (handover.expiresAt <= new Date()) {
       await store.$transaction(async (tx: Store) => {
         const expired = await tx.supplyHandover.updateMany({ where: { id: handover.id, status: { in: ['PREPARED', 'COLLECTOR_CONFIRMED'] } }, data: { status: 'EXPIRED', sourceKey: `${handover.sourceKey}:expired:${handover.id}` } });
@@ -379,18 +483,19 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     }
     if (handover.status !== 'COLLECTOR_CONFIRMED') throw new AppError('CONFLICT', 'Collector confirmation is required before the Recycler can receive this handover', 409, { code: 'COLLECTOR_CONFIRMATION_REQUIRED' });
     const actual = input.actualWeightKg ?? handover.quotedWeightKg;
-    const accepted = Math.min(input.acceptedWeightKg ?? actual, actual);
+    const accepted = input.acceptedWeightKg ?? actual;
+    if (accepted > actual) throw new AppError('VALIDATION_ERROR', 'Accepted weight cannot exceed actual received weight', 422, { code: 'ACCEPTED_WEIGHT_EXCEEDS_ACTUAL' });
     const rate = input.finalRatePerKg ?? handover.quotedRatePerKg;
-    const weightDelta = Math.abs(actual - handover.quotedWeightKg) / handover.quotedWeightKg;
-    const rateDelta = handover.quotedRatePerKg > 0 ? Math.abs(rate - handover.quotedRatePerKg) / handover.quotedRatePerKg : 0;
-    const requiresReview = !input.materialMatch || weightDelta > 0.05 || rateDelta > 0.10 || accepted < actual;
+    const variance = evaluateSettlementVariance({ quotedWeightKg: handover.quotedWeightKg, actualWeightKg: actual, quotedRatePerKg: handover.quotedRatePerKg, finalRatePerKg: rate, acceptedWeightKg: accepted, materialMatch: input.materialMatch });
+    const { weightDelta, rateDelta, requiresReview } = variance;
+    if (requiresReview && !input.reasonCode) throw new AppError('VALIDATION_ERROR', 'A reason code is required for a material or settlement change', 422, { code: 'SETTLEMENT_REASON_REQUIRED' });
     const status = requiresReview ? 'REVIEW_REQUIRED' : 'COMPLETED';
     const result = await store.$transaction(async (tx: Store) => {
       const claimed = await tx.supplyHandover.updateMany({ where: { id: handover.id, status: { in: ['PREPARED', 'COLLECTOR_CONFIRMED'] }, recyclerId: req.identity!.collectorId }, data: { status, recyclerConfirmedAt: new Date(), finalAcceptedKg: accepted, finalRejectedKg: Math.max(0, actual - accepted), finalRatePerKg: rate, finalValue: Number((accepted * rate).toFixed(2)), handoverLocation: input.handoverLocation ?? handover.handoverLocation, reviewReason: requiresReview ? (input.reasonCode ?? (!input.materialMatch ? 'MATERIAL_MISMATCH' : 'SETTLEMENT_VARIANCE')) : null, reviewEvidence: input.evidenceReference ?? null } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Handover was already confirmed', 409, { code: 'HANDOVER_REPLAYED' });
       const finalValue = Number((accepted * rate).toFixed(2));
       await tx.settlementBreakdown.create({ data: { handoverId: handover.id, quotedWeightKg: handover.quotedWeightKg, quotedRatePerKg: handover.quotedRatePerKg, quotedValue: handover.quotedValue, finalAcceptedKg: accepted, finalRejectedKg: Math.max(0, actual - accepted), finalRatePerKg: rate, finalValue, reasonCode: requiresReview ? (input.reasonCode ?? 'SETTLEMENT_VARIANCE') : null, evidenceReference: input.evidenceReference, changedBy: req.identity!.collectorId, status: requiresReview ? 'PENDING_COLLECTOR_CONFIRMATION' : 'COMPLETED' } });
-      if (requiresReview) await tx.anomalyFlag.create({ data: { entityType: 'SUPPLY_HANDOVER', entityId: handover.id, ruleCode: !input.materialMatch ? 'MATERIAL_MISMATCH' : weightDelta > 0.05 ? 'WEIGHT_OUTSIDE_TOLERANCE' : 'SETTLEMENT_CHANGED', severity: 'MEDIUM', details: { quotedWeightKg: handover.quotedWeightKg, actualWeightKg: actual, quotedRatePerKg: handover.quotedRatePerKg, finalRatePerKg: rate, acceptedWeightKg: accepted, reasonCode: input.reasonCode } } });
+      if (requiresReview) await tx.anomalyFlag.create({ data: { entityType: 'SUPPLY_HANDOVER', entityId: handover.id, ruleCode: variance.ruleCode!, severity: variance.ruleCode === 'MATERIAL_MISMATCH' ? 'HIGH' : 'MEDIUM', details: { quotedWeightKg: handover.quotedWeightKg, actualWeightKg: actual, quotedRatePerKg: handover.quotedRatePerKg, finalRatePerKg: rate, acceptedWeightKg: accepted, reasonCode: input.reasonCode } } });
       if (handover.poolId) {
         const contributions = await tx.poolContribution.findMany({ where: { poolId: handover.poolId, status: { in: ['RESERVED', 'RECEIVED', 'REVIEW_REQUIRED'] } } });
         const total = contributions.reduce((sum: number, row: any) => sum + row.quantityKg, 0) || 1;
@@ -398,19 +503,29 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
           const acceptedForContribution = Number((accepted * contribution.quantityKg / total).toFixed(3));
           await tx.poolContribution.update({ where: { id: contribution.id }, data: { finalAcceptedKg: acceptedForContribution, finalPayout: Number((acceptedForContribution * rate).toFixed(2)), status: requiresReview ? 'REVIEW_REQUIRED' : 'SETTLED' } });
           await tx.poolSettlement.upsert({ where: { contributionId: contribution.id }, update: { acceptedWeightKg: acceptedForContribution, finalRatePerKg: rate, finalValue: Number((acceptedForContribution * rate).toFixed(2)), reasonCode: requiresReview ? (input.reasonCode ?? 'SETTLEMENT_VARIANCE') : null, evidenceReference: input.evidenceReference, changedBy: req.identity!.collectorId, status: requiresReview ? 'PENDING_COLLECTOR_CONFIRMATION' : 'COMPLETED' }, create: { contributionId: contribution.id, poolId: handover.poolId, quotedWeightKg: contribution.quantityKg, quotedRatePerKg: contribution.expectedRatePerKg, quotedValue: contribution.expectedPayout, acceptedWeightKg: acceptedForContribution, finalRatePerKg: rate, finalValue: Number((acceptedForContribution * rate).toFixed(2)), reasonCode: requiresReview ? (input.reasonCode ?? 'SETTLEMENT_VARIANCE') : null, evidenceReference: input.evidenceReference, changedBy: req.identity!.collectorId, status: requiresReview ? 'PENDING_COLLECTOR_CONFIRMATION' : 'COMPLETED' } });
-          if (!requiresReview) await tx.inventoryBalance.update({ where: { id: contribution.inventoryBalanceId }, data: { reservedKg: { decrement: contribution.quantityKg }, availableKg: { increment: Math.max(0, contribution.quantityKg - acceptedForContribution) }, soldKg: { increment: acceptedForContribution } } });
+          if (!requiresReview) {
+            const beforeBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { id: contribution.inventoryBalanceId } });
+            const afterBalance = await tx.inventoryBalance.update({ where: { id: contribution.inventoryBalanceId }, data: { reservedKg: { decrement: contribution.quantityKg }, availableKg: { increment: Math.max(0, contribution.quantityKg - acceptedForContribution) }, soldKg: { increment: acceptedForContribution } } });
+            assertInventoryInvariant(afterBalance);
+            await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedForContribution, 'SUPPLY_HANDOVER', handover.id, { poolId: handover.poolId, contributionId: contribution.id });
+          }
         }
         await tx.pooledConsignment.update({ where: { id: handover.poolId }, data: { status: requiresReview ? 'REVIEW_REQUIRED' : 'SETTLED' } });
       } else if (handover.bulkLotId && !requiresReview) {
         const lot = await tx.bulkLot.findUnique({ where: { id: handover.bulkLotId } });
         if (lot) {
           const acceptedKg = accepted;
-          await tx.inventoryBalance.update({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: lot.kabadiwalaId, materialCategory: lot.materialCategory, grade: lot.grade } }, data: { reservedKg: { decrement: lot.quantityKg }, availableKg: { increment: Math.max(0, lot.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          const beforeBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: lot.kabadiwalaId, materialCategory: lot.materialCategory, grade: lot.grade } } });
+          const afterBalance = await tx.inventoryBalance.update({ where: { id: beforeBalance.id }, data: { reservedKg: { decrement: lot.quantityKg }, availableKg: { increment: Math.max(0, lot.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          assertInventoryInvariant(afterBalance);
+          await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedKg, 'SUPPLY_HANDOVER', handover.id, { bulkLotId: lot.id });
           await tx.bulkLot.update({ where: { id: lot.id }, data: { status: 'SOLD' } });
         }
       }
       await audit(tx, req.identity!.collectorId, 'RECYCLER', requiresReview ? 'HANDOVER_REVIEW_REQUIRED' : 'HANDOVER_COMPLETED', 'SUPPLY_HANDOVER', handover.id, { actualWeightKg: actual, acceptedWeightKg: accepted, finalRatePerKg: rate, reasonCode: input.reasonCode ?? null });
-      return tx.supplyHandover.findUniqueOrThrow({ where: { id: handover.id } });
+      const finalHandover = await tx.supplyHandover.findUniqueOrThrow({ where: { id: handover.id } });
+      if (idempotency) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId: idempotency, action: 'RECYCLER_CONFIRM_HANDOVER', entityId: handover.id, requestHash: reconciliationHash, response: jsonValue(finalHandover) } });
+      return finalHandover;
     });
     if (!requiresReview) await store.$transaction(async (tx: Store) => { const pool = handover.poolId ? await tx.poolContribution.findMany({ where: { poolId: handover.poolId }, select: { collectorId: true }, distinct: ['collectorId'] }) : []; for (const row of pool) await refreshPassport(tx, row.collectorId); await refreshPassport(tx, handover.collectorId); });
     res.json({ success: true, data: result, message: requiresReview ? 'Handover needs collector review because settlement changed.' : 'Handover completed and traceability updated.' });
@@ -429,7 +544,10 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         if (decision.decision === 'ACCEPT') {
           const row = await tx.poolContribution.update({ where: { id: contribution.id }, data: { status: 'SETTLED' } });
           const acceptedKg = contribution.finalAcceptedKg ?? contribution.quantityKg;
-          await tx.inventoryBalance.update({ where: { id: contribution.inventoryBalanceId }, data: { reservedKg: { decrement: contribution.quantityKg }, availableKg: { increment: Math.max(0, contribution.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          const beforeBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { id: contribution.inventoryBalanceId } });
+          const afterBalance = await tx.inventoryBalance.update({ where: { id: contribution.inventoryBalanceId }, data: { reservedKg: { decrement: contribution.quantityKg }, availableKg: { increment: Math.max(0, contribution.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          assertInventoryInvariant(afterBalance);
+          await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedKg, 'SUPPLY_HANDOVER', handoverId, { poolId: handover.poolId, contributionId: contribution.id });
           await refreshPassport(tx, req.identity!.collectorId);
           await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'POOL_SETTLEMENT_ACCEPTED', 'POOL_CONTRIBUTION', contribution.id, { handoverId, notes: decision.notes ?? null });
           return row;
@@ -445,7 +563,10 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         const lot = handover.bulkLotId ? await tx.bulkLot.findUnique({ where: { id: handover.bulkLotId } }) : null;
         if (lot) {
           const acceptedKg = handover.finalAcceptedKg ?? lot.quantityKg;
-          await tx.inventoryBalance.update({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: lot.kabadiwalaId, materialCategory: lot.materialCategory, grade: lot.grade } }, data: { reservedKg: { decrement: lot.quantityKg }, availableKg: { increment: Math.max(0, lot.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          const beforeBalance = await tx.inventoryBalance.findUniqueOrThrow({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: lot.kabadiwalaId, materialCategory: lot.materialCategory, grade: lot.grade } } });
+          const afterBalance = await tx.inventoryBalance.update({ where: { id: beforeBalance.id }, data: { reservedKg: { decrement: lot.quantityKg }, availableKg: { increment: Math.max(0, lot.quantityKg - acceptedKg) }, soldKg: { increment: acceptedKg } } });
+          assertInventoryInvariant(afterBalance);
+          await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedKg, 'SUPPLY_HANDOVER', handoverId, { bulkLotId: lot.id });
           await tx.bulkLot.update({ where: { id: lot.id }, data: { status: 'SOLD' } });
         }
         await tx.supplyHandover.update({ where: { id: handoverId }, data: { status: 'COMPLETED' } });
@@ -469,6 +590,15 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const settlement = await store.settlementBreakdown.findUnique({ where: { handoverId } });
     const poolSettlements = handover.poolId && contribution ? await store.poolSettlement.findUnique({ where: { contributionId: contribution.id } }) : null;
     res.json({ success: true, data: { handover, contribution, settlement: settlement ?? poolSettlements, events, disclaimer: 'Traceability is platform evidence for this prototype; it is not a government certificate.' } });
+  });
+  router.get('/kabadiwala/handovers/:handoverId/anomalies', requireAuth(jwt, collectors), async (req, res) => {
+    const handoverId = parse(id, req.params.handoverId);
+    const handover = await store.supplyHandover.findUnique({ where: { id: handoverId } });
+    const contribution = handover?.poolId ? await store.poolContribution.findFirst({ where: { poolId: handover.poolId, collectorId: req.identity!.collectorId, handoverId } }) : null;
+    if (!handover || (handover.collectorId !== req.identity!.collectorId && !contribution)) throw new AppError('NOT_FOUND', 'Handover anomalies not found', 404, { code: 'HANDOVER_NOT_FOUND' });
+    const flags = await store.anomalyFlag.findMany({ where: { entityType: { in: ['SUPPLY_HANDOVER', 'POOL_CONTRIBUTION'] }, entityId: { in: [handoverId, ...(contribution ? [contribution.id] : [])] } }, orderBy: { createdAt: 'asc' } });
+    const riskLevel = flags.length ? riskLevelForFlags(flags) : 'NONE';
+    res.json({ success: true, data: { handoverId, riskLevel, flags, deterministic: true, disclaimer: 'Flags are deterministic platform checks, not an AI decision.' } });
   });
 
   return router;

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcViolet
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcMagenta
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.HOUSEHOLD_BOTTOM_TABS
@@ -62,6 +65,11 @@ fun KcTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(MaterialTheme.colorScheme.background, KcViolet.copy(alpha = .08f), KcMagenta.copy(alpha = .04f))
+                    )
+                )
                 .padding(horizontal = 12.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
@@ -112,7 +120,7 @@ fun KcBottomBar(
             val isSelected = currentRoute == tab.route
             val selectedColor = MaterialTheme.colorScheme.primary
             val itemColor = animateColorAsState(
-                if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (isSelected) KcViolet else MaterialTheme.colorScheme.onSurfaceVariant,
                 label = "bottomNavColor"
             ).value
             val indicatorWidth = animateDpAsState(
@@ -130,6 +138,10 @@ fun KcBottomBar(
                     .testTag(tab.testTag)
                     .height(68.dp)
                     .clickable { onNavigate(tab.route) }
+                    .background(
+                        if (isSelected) selectedColor.copy(alpha = .10f) else androidx.compose.ui.graphics.Color.Transparent,
+                        RoundedCornerShape(18.dp)
+                    )
                     .semantics(mergeDescendants = true) { this.role = Role.Tab; selected = isSelected }
                     .padding(horizontal = 2.dp, vertical = 4.dp)
             )

@@ -95,12 +95,19 @@ enum PickupStatus {
   REQUESTED
   ACCEPTED
   SCHEDULED
+  REASSIGNMENT_REQUIRED
   IN_TRANSIT
   ARRIVED
   WEIGHED
   COMPLETED
   CANCELLED
   REJECTED
+}
+enum PickupSettlementStatus {
+  PENDING_HOUSEHOLD_CONFIRMATION
+  ACCEPTED
+  DISPUTED
+  COMPLETED
 }
 enum BulkLotStatus {
   DRAFT
@@ -173,8 +180,21 @@ enum PriceAuditActorRole {
 enum RecyclerAuthorizationStatus {
   VERIFIED
   PENDING
+  UNDER_REVIEW
   REJECTED
+  REVIEW_REQUIRED
+  EXPIRED
+  REVOKED
   SUSPENDED
+}
+
+enum DataDestructionStatus {
+  NOT_APPLICABLE
+  OWNER_PREPARATION_PENDING
+  OWNER_PREPARATION_COMPLETED
+  DESTRUCTION_REQUESTED
+  RECYCLER_EVIDENCE_PENDING
+  EVIDENCE_RECEIVED
 }
 
 enum PickupAvailability {
@@ -994,6 +1014,7 @@ model IdempotencyRecord {
   operationId String
   action      String
   entityId    String?
+  requestHash String?
   response    Json
   createdAt   DateTime @default(now())
 
@@ -1014,6 +1035,11 @@ model HouseholdListing {
   longitude       Float?
   estimatedPriceMin Float?
   estimatedPriceMax Float?
+  dataBearingDevice         Boolean                @default(false)
+  ownerPreparationCompleted Boolean                @default(false)
+  dataDestructionRequested  Boolean                @default(false)
+  destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
+  recyclerEvidenceReference String?
   status          HouseholdListingStatus @default(DRAFT)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -1029,11 +1055,28 @@ model PickupRequest {
   status            PickupStatus @default(REQUESTED)
   requestedSlot     DateTime?
   scheduledSlot     DateTime?
+  acceptedAt        DateTime?
+  availabilityConfirmedAt DateTime?
+  inTransitAt       DateTime?
+  arrivedAt         DateTime?
+  weighedAt         DateTime?
+  cancelledAt       DateTime?
+  noShow            Boolean    @default(false)
+  lateCancellation  Boolean    @default(false)
+  reassignmentReason String?
   actualWeight      Float?
   finalCategory     MaterialCategory?
   grade             String?
   ratePerKg         Float?
   finalAmount       Float?
+  settlementStatus  PickupSettlementStatus?
+  settlementBeforeValue Float?
+  settlementAfterValue  Float?
+  settlementReasonCode String?
+  settlementEvidenceReference String?
+  householdDecision String?
+  settlementDecisionAt DateTime?
+  settlementDisputeNotes String?
   cancelledBy       String?
   cancellationReason String?
   completedAt       DateTime?
@@ -1042,6 +1085,7 @@ model PickupRequest {
   @@unique([listingId, kabadiwalaId])
   @@index([householdId, status, createdAt])
   @@index([kabadiwalaId, status, scheduledSlot])
+  @@index([status, scheduledSlot])
 }
 
 model InventoryBalance {
@@ -1056,6 +1100,28 @@ model InventoryBalance {
   updatedAt       DateTime         @updatedAt
   @@unique([kabadiwalaId, materialCategory, grade])
   @@index([kabadiwalaId, materialCategory])
+}
+
+model InventoryMovement {
+  id                 String   @id @default(cuid()) @map("_id")
+  inventoryBalanceId String
+  kabadiwalaId       String
+  movementType       String
+  quantityKg         Float
+  availableBefore    Float
+  availableAfter     Float
+  reservedBefore     Float
+  reservedAfter      Float
+  soldBefore         Float
+  soldAfter          Float
+  sourceType         String
+  sourceId           String
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([kabadiwalaId, createdAt])
+  @@index([inventoryBalanceId, createdAt])
+  @@index([sourceType, sourceId])
 }
 
 model BulkLot {

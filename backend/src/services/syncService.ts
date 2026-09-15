@@ -95,11 +95,17 @@ export class SyncService {
 
   async changes(cid: string, since?: Date) {
     const where = since ? { collectorId: cid, updatedAt: { gte: since } } : { collectorId: cid };
-    const [lots, payments, handovers] = await Promise.all([
+    const [lots, payments, handovers, pickups, inventory, movements, bulkLots, contributions, pools] = await Promise.all([
       this.db.lot.findMany({ where, orderBy: { updatedAt: 'asc' } }),
       this.db.payment.findMany({ where, orderBy: { updatedAt: 'asc' } }),
-      this.db.handover.findMany({ where, orderBy: { updatedAt: 'asc' } })
+      this.db.handover.findMany({ where, orderBy: { updatedAt: 'asc' } }),
+      this.db.pickupRequest.findMany({ where: since ? { kabadiwalaId: cid, updatedAt: { gte: since } } : { kabadiwalaId: cid }, orderBy: { updatedAt: 'asc' } }),
+      this.db.inventoryBalance.findMany({ where: { kabadiwalaId: cid }, orderBy: { updatedAt: 'asc' } }),
+      this.db.inventoryMovement.findMany({ where: { kabadiwalaId: cid, ...(since ? { createdAt: { gte: since } } : {}) }, orderBy: { createdAt: 'asc' } }),
+      this.db.bulkLot.findMany({ where: { kabadiwalaId: cid, ...(since ? { updatedAt: { gte: since } } : {}) }, orderBy: { updatedAt: 'asc' } }),
+      this.db.poolContribution.findMany({ where: { collectorId: cid, ...(since ? { updatedAt: { gte: since } } : {}) }, orderBy: { updatedAt: 'asc' } }),
+      this.db.pooledConsignment.findMany({ where: { createdByCollectorId: cid, ...(since ? { updatedAt: { gte: since } } : {}) }, orderBy: { updatedAt: 'asc' } })
     ]);
-    return { serverTime: new Date().toISOString(), changes: { lots, payments, handovers } };
+    return { serverTime: new Date().toISOString(), changes: { lots, payments, handovers, pickups, inventory, inventoryMovements: movements, bulkLots, poolContributions: contributions, pools } };
   }
 }

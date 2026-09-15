@@ -45,6 +45,8 @@ export class PriceService {
 
     const history = await this.repo.history(material, location, new Date(Date.now() - 30 * 86400000));
     const stale = Date.now() - price.effectiveAt.getTime() > 7 * 86400000;
+    const observationCount = history.length;
+    const confidence = stale ? 'LOW' : observationCount >= 20 && price.qualityStatus === 'VALIDATED' ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : observationCount > 0 ? 'LOW' : 'INSUFFICIENT';
     return {
       available: true,
       materialCategory: material,
@@ -55,8 +57,13 @@ export class PriceService {
       historicalAverage: price.historicalAverage,
       unit: price.unit,
       source: { type: price.source, organization: price.sourceOrganization, reference: price.sourceReference },
+      sourceClassification: price.source,
       qualityStatus: stale ? 'STALE' : price.qualityStatus,
       ingestedAt: price.ingestedAt.toISOString(),
+      observationCount,
+      dataAgeDays: Math.max(0, Math.floor((Date.now() - price.effectiveAt.getTime()) / 86400000)),
+      confidence,
+      isDemoData: price.source === 'SYSTEM',
       trend: this.trend(price.marketPrice, history),
       lastUpdated: price.effectiveAt.toISOString(),
       complianceRegime: material === 'BATTERY' ? 'BATTERY_WASTE_RULES' : 'E_WASTE_RULES',
