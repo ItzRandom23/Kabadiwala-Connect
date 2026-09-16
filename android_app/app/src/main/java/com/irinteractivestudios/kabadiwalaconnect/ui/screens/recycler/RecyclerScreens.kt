@@ -644,7 +644,8 @@ fun RecyclerRatesScreen(
     saved: Boolean = false,
     error: String? = null,
     onRefresh: () -> Unit = {},
-    onSave: (List<RecyclerRateUpdateDto>) -> Unit = {}
+    onSave: (List<RecyclerRateUpdateDto>) -> Unit = {},
+    demoMode: Boolean = false
 ) {
     val categories = remember(acceptedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory }).filter { it.isNotBlank() }.distinct() }
     var values by remember(categories, rates) { mutableStateOf(categories.associateWith { category -> rates.firstOrNull { it.materialCategory == category }?.pricePerKg?.toString().orEmpty() }) }
@@ -652,6 +653,7 @@ fun RecyclerRatesScreen(
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.recycler_rates_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (demoMode) DemoDataBanner()
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         error?.let { Text(stringResource(R.string.recycler_rates_load_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         categories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }

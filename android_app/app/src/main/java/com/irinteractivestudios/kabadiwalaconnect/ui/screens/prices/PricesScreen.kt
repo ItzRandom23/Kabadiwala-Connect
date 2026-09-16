@@ -72,9 +72,11 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                 Text(stringResource(R.string.prices_title), style = MaterialTheme.typography.headlineLarge)
                 Text(stringResource(R.string.prices_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = vm::refresh, enabled = !refreshing) {
-                if (refreshing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Filled.Refresh, stringResource(R.string.prices_refresh))
+            if (!demoMode) {
+                IconButton(onClick = vm::refresh, enabled = !refreshing) {
+                    if (refreshing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Filled.Refresh, stringResource(R.string.prices_refresh))
+                }
             }
         }
         if (demoMode) DemoDataBanner()

@@ -95,12 +95,13 @@ fun KcBottomBar(
     onNavigate: (String) -> Unit,
     role: AccountRole = AccountRole.COLLECTOR,
     unreadNotifications: Int = 0,
-    demoMode: Boolean = false
+    demoMode: Boolean = false,
+    kabadiwalaDemo: Boolean = false
 ) {
     val tabs = when (role) {
         AccountRole.RECYCLER -> RECYCLER_BOTTOM_TABS
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS
-        AccountRole.COLLECTOR -> if (demoMode) BOTTOM_TABS else KABADIWALA_BOTTOM_TABS
+        AccountRole.COLLECTOR -> if (demoMode && !kabadiwalaDemo) BOTTOM_TABS else KABADIWALA_BOTTOM_TABS
         AccountRole.ADMIN -> emptyList()
     }
     Surface(

@@ -94,14 +94,25 @@ class MainActivity : ComponentActivity() {
         // so UI/API error states can be inspected on a clean emulator.
         val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
         val householdLivePreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHouseholdLive", false)
-        val householdPreviewMode = householdPreview || householdLivePreview
+        val forcedDemoRole = if (BuildConfig.DEBUG) {
+            when (intent.getStringExtra("demoRole")?.uppercase()) {
+                "HOUSEHOLD" -> AccountRole.HOUSEHOLD
+                "KABADIWALA", "COLLECTOR" -> AccountRole.COLLECTOR
+                "RECYCLER" -> AccountRole.RECYCLER
+                else -> if (householdPreview) AccountRole.HOUSEHOLD else null
+            }
+        } else {
+            null
+        }
+        val demoPreviewMode = forcedDemoRole != null
+        val previewMode = demoPreviewMode || householdLivePreview
         val languageWasSelected = LocaleManager.hasPersistedTag(this)
         // The collector id can be created by the remote OTP response during
         // this activity session, so ViewModels read it when they are created.
         val factory = KcViewModelFactory(app, app.container)
         setContent {
             var appearanceMode by remember { mutableStateOf(AppearanceManager.load(this@MainActivity)) }
-            var activeRole by remember { mutableStateOf(if (householdPreviewMode) AccountRole.HOUSEHOLD else AccountRole.COLLECTOR) }
+            var activeRole by remember { mutableStateOf(forcedDemoRole ?: AccountRole.COLLECTOR) }
             KabadiwalaConnectTheme(
                 darkTheme = AppearanceManager.isDark(appearanceMode),
                 role = activeRole
@@ -111,7 +122,8 @@ class MainActivity : ComponentActivity() {
                 // Demo mode has no persisted account/session. Keep only this
                 // short-lived flag across activity recreation so a language
                 // change does not send the demo user back to AUTH.
-                var demoMode by rememberSaveable { mutableStateOf(householdPreview) }
+                var demoMode by rememberSaveable { mutableStateOf(demoPreviewMode) }
+                var demoRoleName by rememberSaveable { mutableStateOf(forcedDemoRole?.name.orEmpty()) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
@@ -121,8 +133,8 @@ class MainActivity : ComponentActivity() {
                 // Check before authentication/onboarding state can block the
                 // rest of the screen. The update manifest is public and must
                 // remain discoverable even when a saved API session is stale.
-                LaunchedEffect(connection, householdPreviewMode) {
-                    if (!householdPreviewMode && connection == ConnectionState.ONLINE) {
+                LaunchedEffect(connection, previewMode) {
+                    if (!previewMode && connection == ConnectionState.ONLINE) {
                         AppUpdateManager.check(this@MainActivity)?.let { update ->
                             availableUpdate = update
                         }
@@ -130,10 +142,10 @@ class MainActivity : ComponentActivity() {
                 }
                 var sessionBootstrap by remember {
                     mutableStateOf<SessionBootstrap?>(
-                        if (householdPreviewMode || !languageWasSelected) SessionBootstrap(false, null) else null
+                        if (previewMode || !languageWasSelected) SessionBootstrap(false, null) else null
                     )
                 }
-                LaunchedEffect(languageWasSelected, householdPreviewMode) {
+                LaunchedEffect(languageWasSelected, previewMode) {
                     if (sessionBootstrap == null) {
                         sessionBootstrap = withContext(Dispatchers.IO) {
                             SessionBootstrap(
@@ -154,10 +166,11 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val initialRoute = if (householdLivePreview || demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (householdLivePreview) Destinations.HOME else if (demoMode && activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
-                val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode)
+                val kabadiwalaDemo = demoMode && activeRole == AccountRole.COLLECTOR && demoRoleName == AccountRole.COLLECTOR.name
+                val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode || kabadiwalaDemo)
                 val languageSelected = languageWasSelected
                 var navGuardReady by remember { mutableStateOf(false) }
 
@@ -312,7 +325,7 @@ class MainActivity : ComponentActivity() {
                         },
                         bottomBar = {
                             if (isTopLevel) {
-                                KcBottomBar(currentRoute = route, role = activeRole, unreadNotifications = unreadNotifications, demoMode = demoMode, onNavigate = { target ->
+                                KcBottomBar(currentRoute = route, role = activeRole, unreadNotifications = unreadNotifications, demoMode = demoMode, kabadiwalaDemo = kabadiwalaDemo, onNavigate = { target ->
                                     navController.navigate(target) {
                                         popUpTo(Destinations.START) { saveState = true }
                                         launchSingleTop = true
@@ -350,18 +363,33 @@ class MainActivity : ComponentActivity() {
                                         app.container.clearAccount()
                                         sessionBootstrap = SessionBootstrap(false, null)
                                         activeRole = AccountRole.COLLECTOR
+                                        demoMode = false
+                                        demoRoleName = ""
                                         navController.navigate(Destinations.AUTH) { popUpTo(0) }
                                     }
                                 },
                                 onDemo = {
                                     demoMode = true
+                                    demoRoleName = "LEGACY"
                                     sessionBootstrap = SessionBootstrap(false, null)
                                     activeRole = AccountRole.COLLECTOR
                                     navController.navigate(Destinations.HOME) {
                                         popUpTo(Destinations.AUTH) { inclusive = true }
                                     }
                                 },
+                                onDemoRole = { selectedRole ->
+                                    demoMode = true
+                                    demoRoleName = selectedRole.name
+                                    sessionBootstrap = SessionBootstrap(false, null)
+                                    activeRole = selectedRole
+                                    val target = if (selectedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                                    navController.navigate(target) {
+                                        popUpTo(Destinations.AUTH) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                },
                                 demoMode = demoMode,
+                                demoRole = activeRole.takeIf { demoMode && demoRoleName != "LEGACY" },
                                 role = activeRole,
                                 onAuthFinished = {
                                     val account = app.container.currentAccount()

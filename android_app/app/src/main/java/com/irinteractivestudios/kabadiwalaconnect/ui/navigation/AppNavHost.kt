@@ -88,6 +88,20 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.Transa
 import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.*
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin.AdminConsoleScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin.AdminConsoleViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoDataProvider
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoInfoScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoKabadiwalaHomeScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoKabadiwalaInventoryScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoKabadiwalaLotsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoKabadiwalaPickupsScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoHouseholdHomeScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoHouseholdKabadiwalasScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoHouseholdDealScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoProfileScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoRecyclerMarketplaceScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoRecyclerOrdersScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoRecyclerScanScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoSessionStore
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitReviewRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Dispute
@@ -95,6 +109,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 import java.io.File
 import androidx.core.content.FileProvider
 
@@ -112,7 +127,9 @@ fun AppNavHost(
     startDestination: String = Destinations.HOME,
     onLogout: () -> Unit = {},
     onDemo: () -> Unit = {},
+    onDemoRole: (AccountRole) -> Unit = {},
     demoMode: Boolean = false,
+    demoRole: AccountRole? = null,
     role: AccountRole = AccountRole.COLLECTOR,
     onAuthFinished: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -121,7 +138,13 @@ fun AppNavHost(
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
     val demoCollectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
     val liveCollectorRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
-    val collectorRoutes = if (demoMode) demoCollectorRoutes else liveCollectorRoutes
+    val kabadiwalaDemoRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS, Destinations.ACTIVITIES)
+    val kabadiwalaDemo = demoMode && role == AccountRole.COLLECTOR && demoRole == AccountRole.COLLECTOR
+    val collectorRoutes = when {
+        kabadiwalaDemo -> kabadiwalaDemoRoutes
+        demoMode -> demoCollectorRoutes
+        else -> liveCollectorRoutes
+    }
     val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
     val adminRoutes = setOf(Destinations.ADMIN_DASHBOARD)
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode) {
@@ -136,7 +159,7 @@ fun AppNavHost(
         val collectorRoute = currentRoute in collectorRoutes || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
         val recyclerRoute = currentRoute in recyclerRoutes
         if (role == AccountRole.RECYCLER && collectorRoute) {
-            navController.navigate(if (factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
+            navController.navigate(if (demoMode || factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
         } else if ((role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD) && recyclerRoute) {
             navController.navigate(Destinations.HOME) { popUpTo(0) }
         } else if (role == AccountRole.COLLECTOR && !demoMode && currentRoute != Destinations.AUTH && currentRoute !in liveCollectorRoutes) {
@@ -169,6 +192,7 @@ fun AppNavHost(
             OnboardingRoute(
                 viewModel = vm,
                 onDemo = onDemo,
+                onDemoRole = { onDemoRole(it) },
                 onFinished = { onAuthFinished() }
             )
         }
@@ -293,12 +317,25 @@ fun AppNavHost(
                     initialArea = factory.currentAccount?.areaName.orEmpty(),
                     busy = state.busy
                 )
-            } else if (role == AccountRole.HOUSEHOLD) HouseholdHomeScreen(
+            } else if (role == AccountRole.HOUSEHOLD && demoMode) DemoHouseholdHomeScreen(
+                onFindKabadiwala = { navController.navigate(Destinations.RECYCLERS) },
+                onOpenDeal = {
+                    val selectedId = DemoSessionStore.state.value.selectedKabadiwalaId
+                        ?: DemoSessionStore.PRIMARY_KABADIWALA_ID
+                    navController.navigate(Destinations.householdDeal(selectedId))
+                }
+            ) else if (role == AccountRole.HOUSEHOLD) HouseholdHomeScreen(
                 area = factory.currentAccount?.areaName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.home_area_not_set),
                 onCreateLot = { navController.navigate(Destinations.HOME) },
                 onFindKabadiwala = { navController.navigate(Destinations.RECYCLERS) },
                 onOpenDeal = { navController.navigate(Destinations.HOME) }
-            ) else if (!demoMode) {
+            ) else if (kabadiwalaDemo) {
+                DemoKabadiwalaHomeScreen(
+                    onInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) },
+                    onPickups = { navController.navigate(Destinations.KABADIWALA_PICKUPS) },
+                    onLots = { navController.navigate(Destinations.KABADIWALA_LOTS) }
+                )
+            } else if (!demoMode) {
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refreshKabadiwala() }
@@ -334,33 +371,41 @@ fun AppNavHost(
             }
         }
         composable(Destinations.KABADIWALA_INVENTORY) {
-            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-             KabadiwalaSupplyScreen(state, KabadiwalaSection.INVENTORY, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            if (kabadiwalaDemo) DemoKabadiwalaInventoryScreen()
+            else {
+                val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.INVENTORY, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            }
         }
         composable(Destinations.KABADIWALA_PICKUPS) {
-            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-             KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            if (kabadiwalaDemo) DemoKabadiwalaPickupsScreen()
+            else {
+                val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            }
         }
         composable(Destinations.KABADIWALA_LOTS) {
-            val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
-            val capturedLots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
-            LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-             KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, capturedLots, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            if (kabadiwalaDemo) DemoKabadiwalaLotsScreen()
+            else {
+                val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
+                val capturedLots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
+                LaunchedEffect(Unit) { vm.refreshKabadiwala() }
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, capturedLots, currentArea = factory.currentAccount?.areaName.orEmpty(), onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+            }
         }
         composable(Destinations.PRICES) {
             val vm: PricesViewModel = viewModel(factory = factory)
             vm.setCatalogRefresher { location -> factory.refreshCatalogs(location = location, force = true) }
             val state by vm.uiState.collectAsStateWithLifecycle()
-            PricesScreen(state = state, vm = vm, speaker = factory.priceSpeaker, demoMode = demoMode)
+            PricesScreen(state = if (demoMode) UiState.Success(DemoDataProvider.prices(LocalContext.current)) else state, vm = vm, speaker = factory.priceSpeaker, demoMode = demoMode)
         }
         composable(Destinations.RECYCLERS) {
             val vm: RecyclersViewModel = viewModel(factory = factory)
             vm.setCatalogRefresher { current -> factory.refreshCatalogs(current = current) }
             val state by vm.uiState.collectAsStateWithLifecycle()
-            if (role == AccountRole.HOUSEHOLD && demoMode) NearbyKabadiwalasScreen(
-                area = factory.currentAccount?.areaName ?: "Kothrud, Pune",
+            if (role == AccountRole.HOUSEHOLD && demoMode) DemoHouseholdKabadiwalasScreen(
                 onInvite = { navController.navigate(Destinations.householdDeal(it)) }
             ) else if (role == AccountRole.HOUSEHOLD) {
                 val supplyVm: SupplyChainViewModel = viewModel(factory = factory)
@@ -381,7 +426,7 @@ fun AppNavHost(
         }
         composable(Destinations.HOUSEHOLD_DEAL, arguments = listOf(navArgument("kabadiwalaId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("kabadiwalaId").orEmpty()
-            if (demoMode && role == AccountRole.HOUSEHOLD) HouseholdDealScreen(
+            if (demoMode && role == AccountRole.HOUSEHOLD) DemoHouseholdDealScreen(
                 kabadiwalaId = id,
                 onFindAnother = {
                     if (!navController.popBackStack(Destinations.RECYCLERS, false)) navController.navigate(Destinations.RECYCLERS)
@@ -601,7 +646,7 @@ fun AppNavHost(
                     onLanguageChange(tag)
                 },
                 onAppearanceChange = { mode -> vm.setAppearance(mode); onAppearanceChange(mode) },
-                onCheckForUpdates = onCheckForUpdates,
+                 onCheckForUpdates = { if (!demoMode) onCheckForUpdates() },
                 onOpenProfile = { navController.navigate(Destinations.PROFILE) },
                 onOpenSafety = { navController.navigate(Destinations.SAFETY) },
                 onOpenHelp = { navController.navigate(Destinations.HELP) },
@@ -614,16 +659,16 @@ fun AppNavHost(
                 // The legacy rewards/chat/dispute tools describe the old
                 // collector↔recycler marketplace. Keep them in the offline
                 // demo only; live roles use the supply-chain workspace.
-                showRoleTools = demoMode,
+                 showRoleTools = demoMode && demoRole == null,
                 syncItems = syncItems,
                 syncPendingCount = syncItems.size,
-                onRetrySync = factory::requestSync,
-                onRetrySyncItem = { uid ->
-                    scope.launch {
-                        factory.resetSyncItem(uid)
-                        factory.requestSync()
-                    }
-                },
+                 onRetrySync = { if (!demoMode) factory.requestSync() },
+                 onRetrySyncItem = { uid ->
+                     if (!demoMode) scope.launch {
+                         factory.resetSyncItem(uid)
+                         factory.requestSync()
+                     }
+                 },
                 onLogout = {
                     onLogout()
                     navController.navigate(Destinations.AUTH) {
@@ -632,103 +677,134 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Destinations.PROFILE) { ProfileScreen(factory.currentAccount) }
+        composable(Destinations.PROFILE) {
+            if (demoMode) DemoProfileScreen(role = role, onExitDemo = onLogout, onResetDemo = DemoSessionStore::reset)
+            else ProfileScreen(factory.currentAccount)
+        }
         composable(Destinations.NOTIFICATIONS) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            NotificationsScreen(
-                notifications = state.notifications,
-                unreadCount = state.unreadNotifications,
-                onRefresh = vm::refresh,
-                onOpen = { notification ->
-                    vm.markNotificationRead(notification.id)
-                    notification.route?.takeIf { isSafeNotificationRoute(it, role, demoMode) }
-                        ?.let { route -> navController.navigate(route) }
-                },
-                onMarkAllRead = vm::markAllNotificationsRead
-            )
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_notifications_title), stringResource(R.string.demo_info_notifications_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                NotificationsScreen(
+                    notifications = state.notifications,
+                    unreadCount = state.unreadNotifications,
+                    onRefresh = vm::refresh,
+                    onOpen = { notification ->
+                        vm.markNotificationRead(notification.id)
+                        notification.route?.takeIf { isSafeNotificationRoute(it, role, demoMode) }
+                            ?.let { route -> navController.navigate(route) }
+                    },
+                    onMarkAllRead = vm::markAllNotificationsRead
+                )
+            }
         }
         composable(Destinations.SAFETY) { SafetyScreen() }
         composable(Destinations.HELP) { HelpScreen() }
         composable(Destinations.REWARDS) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            RewardsScreen(state, vm::refresh)
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_rewards_title), stringResource(R.string.demo_info_rewards_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                RewardsScreen(state, vm::refresh)
+            }
         }
         composable(Destinations.SCHEMES) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            SchemesScreen(state, vm::refresh)
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_schemes_title), stringResource(R.string.demo_info_schemes_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                SchemesScreen(state, vm::refresh)
+            }
         }
         composable(Destinations.ACTIVITIES) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            DiyActivitiesScreen(state.activities)
+            if (demoMode) DiyActivitiesScreen(FutureFeatureViewModel.offlineActivities)
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                DiyActivitiesScreen(state.activities)
+            }
         }
         composable(Destinations.CHAT) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh)
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_messages_title), stringResource(R.string.demo_info_messages_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh)
+            }
         }
         composable(Destinations.CHAT_DETAIL, arguments = listOf(navArgument("conversationId") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("conversationId").orEmpty()
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            val conversation = state.conversations.firstOrNull { it.id == id }
-            LaunchedEffect(id) { vm.refresh(); vm.startPolling(id) }
-            conversation?.let {
-                ChatDetailScreen(
-                    conversation = it,
-                    messages = state.messages[id].orEmpty(),
-                    sending = state.sending,
-                    onSend = { vm.sendMessage(id, it) },
-                    onRetryMessage = { vm.retryMessage(id, it) },
-                    draftSuggestion = state.drafts[id],
-                    drafting = state.draftingConversationId == id,
-                    onDraftReply = { vm.draftReply(id) },
-                    onProceedToHandover = conversation.quoteId?.let { quoteId ->
-                        { navController.navigate(Destinations.handoverCreate(conversation.lotId, quoteId)) }
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_conversation_title), stringResource(R.string.demo_info_conversation_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                val conversation = state.conversations.firstOrNull { it.id == id }
+                LaunchedEffect(id) { vm.refresh(); vm.startPolling(id) }
+                conversation?.let {
+                    ChatDetailScreen(
+                        conversation = it,
+                        messages = state.messages[id].orEmpty(),
+                        sending = state.sending,
+                        onSend = { vm.sendMessage(id, it) },
+                        onRetryMessage = { vm.retryMessage(id, it) },
+                        draftSuggestion = state.drafts[id],
+                        drafting = state.draftingConversationId == id,
+                        onDraftReply = { vm.draftReply(id) },
+                        onProceedToHandover = conversation.quoteId?.let { quoteId ->
+                            { navController.navigate(Destinations.handoverCreate(conversation.lotId, quoteId)) }
+                        }
+                    )
+                }
+            }
+        }
+        composable(Destinations.DISPUTE_ANALYTICS) {
+            if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_fairness_title), stringResource(R.string.demo_info_fairness_detail))
+            else {
+                val vm: FutureFeatureViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
+                DisputeAnalyticsScreen(state.analytics)
+            }
+        }
+        composable(Destinations.RECYCLER_VERIFY) {
+            if (demoMode) {
+                RecyclerVerificationScreen(
+                    profile = DemoDataProvider.profile(AccountRole.RECYCLER),
+                    onOpenMarketplace = { navController.navigate(Destinations.RECYCLER_MARKETPLACE) }
+                )
+            } else {
+                val vm: RecyclerProfileViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                val scope = rememberCoroutineScope()
+                RecyclerVerificationScreen(
+                    profile = factory.currentAccount,
+                    recyclerProfile = state.profile,
+                    loading = state.loading,
+                    saving = state.saving,
+                    error = state.error,
+                    saved = state.saved,
+                    onRefresh = {
+                        vm.refresh()
+                        scope.launch { factory.refreshAccount() }
+                    },
+                    onSubmit = vm::submitVerification,
+                    onOpenMarketplace = {
+                        navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
+                            popUpTo(Destinations.RECYCLER_VERIFY) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
         }
-        composable(Destinations.DISPUTE_ANALYTICS) {
-            val vm: FutureFeatureViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { vm.refresh() }
-            DisputeAnalyticsScreen(state.analytics)
-        }
-        composable(Destinations.RECYCLER_VERIFY) {
-            val vm: RecyclerProfileViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            val scope = rememberCoroutineScope()
-            RecyclerVerificationScreen(
-                profile = factory.currentAccount,
-                recyclerProfile = state.profile,
-                loading = state.loading,
-                saving = state.saving,
-                error = state.error,
-                saved = state.saved,
-                onRefresh = {
-                    vm.refresh()
-                    scope.launch { factory.refreshAccount() }
-                },
-                onSubmit = vm::submitVerification,
-                onOpenMarketplace = {
-                    navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
-                        popUpTo(Destinations.RECYCLER_VERIFY) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
-            )
-        }
         composable(Destinations.RECYCLER_MARKETPLACE) {
-            if (demoMode) RecyclerMarketplaceScreen(demoMode = true)
+            if (demoMode) DemoRecyclerMarketplaceScreen(onOpenScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
             else {
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
@@ -737,7 +813,7 @@ fun AppNavHost(
             }
         }
         composable(Destinations.RECYCLER_ORDERS) {
-            if (demoMode) RecyclerOrdersScreen(demoMode = true, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
+            if (demoMode) DemoRecyclerOrdersScreen(onOpenScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
             else {
                 val vm: RecyclerOrdersViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
@@ -753,18 +829,24 @@ fun AppNavHost(
             }
         }
         composable(Destinations.RECYCLER_RATES) {
-            if (demoMode) RecyclerRatesScreen(rates = listOf(com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto("PCB", 340.0), com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto("COPPER", 535.0)))
+            if (demoMode) RecyclerRatesScreen(rates = listOf(com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto("PCB", 340.0), com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto("COPPER", 535.0)), demoMode = true)
             else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 RecyclerRatesScreen(acceptedMaterials = state.profile?.materialsAccepted?.map { it.category }.orEmpty(), rates = state.profile?.rates.orEmpty(), loading = state.loading, saving = state.saving, saved = state.saved, error = state.error, onRefresh = vm::refresh, onSave = vm::saveRates)
             }
         }
-        composable(Destinations.RECYCLER_PROFILE) { RecyclerProfileScreen(factory.currentAccount, onLogout = onLogout) }
+        composable(Destinations.RECYCLER_PROFILE) {
+            if (demoMode) DemoProfileScreen(AccountRole.RECYCLER, onExitDemo = onLogout, onResetDemo = DemoSessionStore::reset)
+            else RecyclerProfileScreen(factory.currentAccount, onLogout = onLogout)
+        }
         composable(Destinations.RECYCLER_SCAN) {
-            val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = viewModel(factory = factory)
-            val state by vm.state.collectAsStateWithLifecycle()
-            RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset)
+            if (demoMode) DemoRecyclerScanScreen()
+            else {
+                val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = viewModel(factory = factory)
+                val state by vm.state.collectAsStateWithLifecycle()
+                RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset)
+            }
         }
     }
 }

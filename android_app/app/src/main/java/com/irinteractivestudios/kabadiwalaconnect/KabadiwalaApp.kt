@@ -3,6 +3,7 @@ package com.irinteractivestudios.kabadiwalaconnect
 import android.app.Application
 import android.content.Context
 import com.irinteractivestudios.kabadiwalaconnect.di.AppContainer
+import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoSessionStore
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,7 @@ class KabadiwalaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DemoSessionStore.initialize(this)
         container = AppContainer(this)
         container.connectivityObserver.start()
         // Re-arm durable offline work after a process death or device reboot.

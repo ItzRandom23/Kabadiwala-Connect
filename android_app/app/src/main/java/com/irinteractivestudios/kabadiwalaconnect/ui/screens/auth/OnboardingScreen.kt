@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,8 +51,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -73,14 +76,24 @@ import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.delay
 
 @Composable
-fun OnboardingRoute(viewModel: OnboardingViewModel, onFinished: () -> Unit, onDemo: () -> Unit = {}) {
+fun OnboardingRoute(
+    viewModel: OnboardingViewModel,
+    onFinished: () -> Unit,
+    onDemo: () -> Unit = {},
+    onDemoRole: (AccountRole) -> Unit = {}
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.completed) { if (state.completed) onFinished() }
-    OnboardingScreen(state, viewModel, onDemo)
+    OnboardingScreen(state, viewModel, onDemo, onDemoRole)
 }
 
 @Composable
-fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: () -> Unit = {}) {
+fun OnboardingScreen(
+    state: OnboardingState,
+    vm: OnboardingViewModel,
+    onDemo: () -> Unit = {},
+    onDemoRole: (AccountRole) -> Unit = {}
+) {
     val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         vm.locationPermissionResult(granted)
@@ -102,7 +115,7 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
             }
         }
         when (state.step) {
-            OnboardingStep.WELCOME -> Welcome(vm, onDemo)
+            OnboardingStep.WELCOME -> Welcome(vm, onDemo, onDemoRole)
             OnboardingStep.EMAIL -> EmailEntry(state, vm)
             OnboardingStep.ROLE -> RoleEntry(state, vm)
             OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
@@ -130,7 +143,13 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     Text(stringResource(R.string.auth_step, number, total), style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("onboarding_progress"))
 }
 
-@Composable private fun Welcome(vm: OnboardingViewModel, onDemo: () -> Unit) {
+@Composable
+private fun Welcome(
+    vm: OnboardingViewModel,
+    onDemo: () -> Unit,
+    onDemoRole: (AccountRole) -> Unit
+) {
+    var showRolePicker by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)) {
             KcBrandLogo(contentDescription = stringResource(R.string.app_name), size = 88.dp)
@@ -150,6 +169,73 @@ fun OnboardingScreen(state: OnboardingState, vm: OnboardingViewModel, onDemo: ()
     // the real-backend path still uses live authentication and catalogs.
     if (BuildConfig.DEBUG) {
         OutlinedButton(onClick = onDemo, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_demo")) { Text(stringResource(R.string.auth_demo_entry)) }
+        TextButton(
+            onClick = { showRolePicker = true },
+            modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_demo_roles")
+        ) { Text(stringResource(R.string.auth_demo_choose_role)) }
+    }
+    if (showRolePicker) {
+        AlertDialog(
+            onDismissRequest = { showRolePicker = false },
+            title = { Text(stringResource(R.string.auth_demo_choose_role_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.auth_demo_choose_role_detail), style = MaterialTheme.typography.bodyMedium)
+                    DemoRoleOption(
+                        title = stringResource(R.string.auth_demo_household),
+                        detail = stringResource(R.string.auth_role_household_detail),
+                        icon = Icons.Filled.Home,
+                        testTag = "demo_role_household"
+                    ) {
+                        showRolePicker = false
+                        onDemoRole(AccountRole.HOUSEHOLD)
+                    }
+                    DemoRoleOption(
+                        title = stringResource(R.string.auth_demo_kabadiwala),
+                        detail = stringResource(R.string.auth_role_collector_detail),
+                        icon = Icons.Filled.Recycling,
+                        testTag = "demo_role_kabadiwala"
+                    ) {
+                        showRolePicker = false
+                        onDemoRole(AccountRole.COLLECTOR)
+                    }
+                    DemoRoleOption(
+                        title = stringResource(R.string.auth_demo_recycler),
+                        detail = stringResource(R.string.auth_role_recycler_detail),
+                        icon = Icons.Filled.Storefront,
+                        testTag = "demo_role_recycler"
+                    ) {
+                        showRolePicker = false
+                        onDemoRole(AccountRole.RECYCLER)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRolePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DemoRoleOption(
+    title: String,
+    detail: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag(testTag)
+    ) {
+        Icon(icon, contentDescription = null)
+        Column(Modifier.padding(start = 10.dp), horizontalAlignment = Alignment.Start) {
+            Text(title, fontWeight = FontWeight.Bold)
+            Text(detail, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

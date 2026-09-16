@@ -1,7 +1,12 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.demo
 
+import android.content.Context
 import androidx.annotation.DrawableRes
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 
 /** Presentation-only fixtures for the debug judge journey. They never cross a repository/API boundary. */
 data class Money(val rupees: Double) {
@@ -49,6 +54,96 @@ data class DemoScenario(
 )
 
 object DemoDataProvider {
+    /**
+     * Stable, presentation-only price data. Demo screens must never depend on
+     * a populated Room catalog or an available backend.
+     */
+    fun prices(context: Context): List<Price> = listOf(
+        Price(
+            id = "demo-pune-copper",
+            materialLabel = context.getString(R.string.demo_price_material_copper),
+            ratePerKg = 620.0,
+            minRatePerKg = 585.0,
+            maxRatePerKg = 650.0,
+            updatedAtEpochMs = System.currentTimeMillis(),
+            location = context.getString(R.string.demo_pune),
+            trend = "up",
+            trendPercentage = 3.2,
+            history = listOf(570.0, 578.0, 582.0, 590.0, 604.0, 612.0, 620.0),
+            source = context.getString(R.string.demo_price_source),
+            qualityStatus = "VERIFIED",
+            disclaimer = context.getString(R.string.demo_price_disclaimer)
+        ),
+        Price(
+            id = "demo-pune-pcb",
+            materialLabel = context.getString(R.string.demo_price_material_pcb),
+            ratePerKg = 340.0,
+            minRatePerKg = 300.0,
+            maxRatePerKg = 380.0,
+            updatedAtEpochMs = System.currentTimeMillis(),
+            location = context.getString(R.string.demo_pune),
+            trend = "stable",
+            history = listOf(332.0, 338.0, 335.0, 342.0, 340.0, 341.0, 340.0),
+            source = context.getString(R.string.demo_price_source),
+            qualityStatus = "VERIFIED",
+            disclaimer = context.getString(R.string.demo_price_disclaimer)
+        ),
+        Price(
+            id = "demo-pune-plastic",
+            materialLabel = context.getString(R.string.demo_price_material_plastic),
+            ratePerKg = 48.0,
+            minRatePerKg = 42.0,
+            maxRatePerKg = 55.0,
+            updatedAtEpochMs = System.currentTimeMillis(),
+            location = context.getString(R.string.demo_pune),
+            trend = "down",
+            trendPercentage = 1.4,
+            history = listOf(52.0, 51.0, 50.0, 50.0, 49.0, 48.0, 48.0),
+            source = context.getString(R.string.demo_price_source),
+            qualityStatus = "VERIFIED",
+            disclaimer = context.getString(R.string.demo_price_disclaimer)
+        )
+    )
+
+    fun profile(role: AccountRole): AccountProfile = when (role) {
+        AccountRole.HOUSEHOLD -> AccountProfile(
+            id = "demo-household",
+            profileId = "demo-household",
+            email = "demo.household@kabadiwala.example",
+            role = role,
+            displayName = "Aarohi Sharma",
+            phoneNumber = "+91 98765 43210",
+            areaName = "Kothrud, Pune"
+        )
+        AccountRole.COLLECTOR -> AccountProfile(
+            id = "demo-kabadiwala",
+            profileId = "demo-kabadiwala",
+            email = "demo.kabadiwala@kabadiwala.example",
+            role = role,
+            displayName = "Pulkit Kabadiwala",
+            phoneNumber = "+91 98765 12345",
+            areaName = "Kothrud, Pune"
+        )
+        AccountRole.RECYCLER -> AccountProfile(
+            id = "demo-recycler",
+            profileId = "demo-recycler",
+            email = "demo.recycler@kabadiwala.example",
+            role = role,
+            displayName = "GreenLoop Materials",
+            businessName = "GreenLoop Materials",
+            phoneNumber = "+91 98220 45678",
+            areaName = "Bhosari, Pune",
+            verificationStatus = RecyclerVerificationStatus.VERIFIED
+        )
+        AccountRole.ADMIN -> AccountProfile(
+            id = "demo-admin",
+            profileId = "demo-admin",
+            email = "demo.operator@kabadiwala.example",
+            role = role,
+            displayName = "Demo Operator"
+        )
+    }
+
     val scenario = DemoScenario(
         collectorName = "Pulkit",
         location = "Pune",
