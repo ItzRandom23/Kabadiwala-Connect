@@ -1,0 +1,4 @@
+import { AppError } from '../utils/errors.js';
+import { CollectorRepository } from '../repositories/collectorRepository.js';
+export class CollectorService { constructor(private readonly repo: CollectorRepository) {} async getMe(id: string) { const collector = await this.repo.findById(id); if (!collector || collector.accountStatus === 'DELETED') throw new AppError('NOT_FOUND', 'Collector not found', 404); return collector; } async updateProfile(id: string, update: ProfileUpdate) { await this.getMe(id); return this.repo.update(id, { preferredLanguage: update.preferredLanguage, latitude: update.primaryLocation?.latitude, longitude: update.primaryLocation?.longitude, areaName: update.primaryLocation?.areaName, displayName: update.displayName, email: update.email }); } }
+export type ProfileUpdate = { preferredLanguage?: any; primaryLocation?: { latitude?: number|null; longitude?: number|null; areaName?: string }; displayName?: string|null; email?: string|null };

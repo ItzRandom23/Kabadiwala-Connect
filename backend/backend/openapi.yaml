@@ -1,0 +1,2858 @@
+openapi: 3.0.3
+info:
+  title: Kabadiwala Connect API
+  version: 1.1.0
+  description: 'Complete route inventory; see docs/BACKEND_API_CONTRACT.md for detailed request and response semantics.'
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      tags: [Backend]
+      summary: 'Liveness/database health'
+      description: 'Allowed roles: Public. Status: ✅ COMPLETE & VERIFIED. Tests: `app.test.ts`. Problems: No live production health check.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/request-otp:
+    post:
+      tags: [Backend]
+      summary: 'Request phone OTP'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `app.test.ts`, `authService.test.ts`. Problems: Thin route integration coverage.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/verify-otp:
+    post:
+      tags: [Backend]
+      summary: 'Verify OTP and issue account token'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `authService.test.ts`. Problems: Role-registration path not route-tested; legacy no-registration path issues Collector identity.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/refresh:
+    post:
+      tags: [Backend]
+      summary: 'Rotate refresh token'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `sessionService.test.ts`. Problems: No route-level session test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/logout:
+    post:
+      tags: [Backend]
+      summary: 'Revoke refresh session'
+      description: 'Allowed roles: Public/token. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `sessionService.test.ts`. Problems: Access-token revocation is not stateful.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/signup:
+    post:
+      tags: [Backend]
+      summary: 'Email/password signup'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `app.test.ts`. Problems: No complete role/account integration test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/login:
+    post:
+      tags: [Backend]
+      summary: 'Email/password login'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: Service coverage only. Problems: No route-level failure/role coverage.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/admin-login:
+    post:
+      tags: [Backend]
+      summary: 'Admin login'
+      description: 'Allowed roles: Public. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No endpoint/adversarial test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /auth/profile:
+    get:
+      tags: [Backend]
+      summary: 'Current account profile'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Shared contract and role-specific projection not frozen.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /collectors/me:
+    get:
+      tags: [Backend]
+      summary: 'Read own Collector profile'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    put:
+      tags: [Backend]
+      summary: 'Update own Collector profile'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route or IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /lots:
+    post:
+      tags: [Backend]
+      summary: 'Create legacy lot'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `lotService.test.ts`. Problems: Separate from HouseholdListing/BulkLot path; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    get:
+      tags: [Backend]
+      summary: 'List own legacy lots'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /lots/{lotId}:
+    get:
+      tags: [Backend]
+      summary: 'Read own lot'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: IDOR route test absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    put:
+      tags: [Backend]
+      summary: 'Update own mutable lot'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: Legacy state/contract not frozen.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    delete:
+      tags: [Backend]
+      summary: 'Cancel own lot'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `lotService.test.ts`. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /lots/{lotId}/photo:
+    get:
+      tags: [Backend]
+      summary: 'Read own lot photo'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Storage behavior is deployment-dependent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    post:
+      tags: [Backend]
+      summary: 'Upload own lot photo'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No upload/ownership adversarial test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /prices/board:
+    get:
+      tags: [Backend]
+      summary: 'Price range, freshness, confidence'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `priceService.test.ts`. Problems: No route test; fallback context is implicit.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /prices/history:
+    get:
+      tags: [Backend]
+      summary: 'Historical prices'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `priceRepository.test.ts`. Problems: History now returns observation count, confidence, freshness, source context, and demo/source fields; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /lots/{lotId}/valuation:
+    get:
+      tags: [Backend]
+      summary: 'Value estimate for own legacy lot'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: Does not value HouseholdListing.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/prices/{priceId}:
+    put:
+      tags: [Backend]
+      summary: 'Update validated price'
+      description: 'Allowed roles: Admin with `PRICE_MANAGEMENT`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No endpoint/permission integration test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: priceId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/profile:
+    get:
+      tags: [Backend]
+      summary: 'Read own profile'
+      description: 'Allowed roles: Recycler, including pending. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `recyclerVerification.test.ts`. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    patch:
+      tags: [Backend]
+      summary: 'Update operating profile'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/verification-request:
+    post:
+      tags: [Backend]
+      summary: 'Submit authorization evidence'
+      description: 'Allowed roles: Recycler, including pending. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `recyclerVerification.test.ts`. Problems: Renewal submission exists; no route/operator review integration test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/rates:
+    put:
+      tags: [Backend]
+      summary: 'Update buying rates'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Omitted rate rows do not remove corresponding material capability rows.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recyclers:
+    get:
+      tags: [Backend]
+      summary: 'Browse verified Recycler directory'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `recyclerServiceOptimization.test.ts`. Problems: No endpoint/privacy test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recyclers/match:
+    get:
+      tags: [Backend]
+      summary: 'Match legacy lot to Recycler'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: `recyclerServiceOptimization.test.ts`. Problems: Explainable but disconnected from formal net economics/demand.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recyclers/{recyclerId}:
+    get:
+      tags: [Backend]
+      summary: 'Read public Recycler detail'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Public-field contract not frozen.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: recyclerId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/recyclers:
+    get:
+      tags: [Backend]
+      summary: 'Review queue'
+      description: 'Allowed roles: Admin with `RECYCLER_REVIEW`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No admin endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/recyclers/{recyclerId}:
+    get:
+      tags: [Backend]
+      summary: 'Review detail'
+      description: 'Allowed roles: Admin with `RECYCLER_REVIEW`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No admin endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: recyclerId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/recyclers/{recyclerId}/authorization:
+    put:
+      tags: [Backend]
+      summary: 'Set authorization status/evidence'
+      description: 'Allowed roles: Admin with `RECYCLER_AUTHORIZATION`. Status: 🟡 PARTIAL. Tests: `recyclerVerification.test.ts`. Problems: Automated expiry exists; endpoint/operator renewal behavior is not integration-tested.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: recyclerId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/request:
+    post:
+      tags: [Backend]
+      summary: 'Request legacy quote'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `quoteLifecycle.test.ts`. Problems: Legacy lot path; no route IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/request-batch:
+    post:
+      tags: [Backend]
+      summary: 'Request multiple legacy quotes'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: No route/duplicate/concurrency test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/pending:
+    get:
+      tags: [Backend]
+      summary: 'List own pending quotes'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/{quoteId}:
+    get:
+      tags: [Backend]
+      summary: 'Read own quote'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `quotePrivacy.test.ts`. Problems: Route IDOR test absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/{quoteId}/accept:
+    post:
+      tags: [Backend]
+      summary: 'Accept own quote'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `quoteLifecycle.test.ts`. Problems: No route/concurrent acceptance test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /quotes/{quoteId}/reject:
+    post:
+      tags: [Backend]
+      summary: 'Reject own quote'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `quoteLifecycle.test.ts`. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/quote-requests:
+    get:
+      tags: [Backend]
+      summary: 'List incoming quote requests'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: No endpoint ownership test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/quote-requests/{requestId}:
+    get:
+      tags: [Backend]
+      summary: 'Read incoming request'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: No endpoint IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: requestId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/quotes:
+    post:
+      tags: [Backend]
+      summary: 'Submit legacy quote'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: No duplicate/expiry endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /verify/handover:
+    post:
+      tags: [Backend]
+      summary: 'Verify signed legacy QR'
+      description: 'Allowed roles: Public. Status: ♻️ DUPLICATE. Tests: `traceability.test.ts`, `formalisationIntegrity.test.ts`. Problems: Legacy path is separate from SupplyHandover.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers:
+    post:
+      tags: [Backend]
+      summary: 'Create legacy handover'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `handoverLifecycle.test.ts`. Problems: Separate duplicate contract.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/reference/{referenceId}:
+    get:
+      tags: [Backend]
+      summary: 'Read legacy handover by reference'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: No IDOR endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: referenceId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/{handoverId}:
+    get:
+      tags: [Backend]
+      summary: 'Read legacy handover'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: No IDOR endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/{handoverId}/mark-handed-over:
+    post:
+      tags: [Backend]
+      summary: 'Record collector-side handover mark'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: `handoverLifecycle.test.ts`. Problems: Does not change legacy status; Recycler can still confirm before marker.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/{handoverId}/evidence:
+    put:
+      tags: [Backend]
+      summary: 'Add legacy evidence'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: Evidence can race with confirmation.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/{handoverId}/evidence/photo:
+    post:
+      tags: [Backend]
+      summary: 'Upload legacy evidence photo'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No upload/race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /handovers/{handoverId}/dispute:
+    post:
+      tags: [Backend]
+      summary: 'Create legacy dispute'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: No full evidence/idempotency test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers:
+    get:
+      tags: [Backend]
+      summary: 'List legacy handovers'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: Does not share formal path.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}:
+    get:
+      tags: [Backend]
+      summary: 'Read legacy handover'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: No IDOR endpoint test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}/confirm:
+    post:
+      tags: [Backend]
+      summary: 'Confirm legacy handover'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: `handoverLifecycle.test.ts`. Problems: Legacy duplicate now requires `collectorConfirmedAt`; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}/reject:
+    post:
+      tags: [Backend]
+      summary: 'Reject legacy handover'
+      description: 'Allowed roles: Verified Recycler. Status: ♻️ DUPLICATE. Tests: None. Problems: Legacy dispute path.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/disputes:
+    get:
+      tags: [Backend]
+      summary: 'Legacy dispute queue'
+      description: 'Allowed roles: Admin with `DISPUTE_RESOLUTION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Does not cover new anomaly flags.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/disputes/{disputeId}:
+    get:
+      tags: [Backend]
+      summary: 'Legacy dispute detail'
+      description: 'Allowed roles: Admin with `DISPUTE_RESOLUTION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Does not cover formal settlement reviews.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: disputeId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/disputes/{disputeId}/resolve:
+    post:
+      tags: [Backend]
+      summary: 'Resolve legacy dispute'
+      description: 'Allowed roles: Admin with `DISPUTE_RESOLUTION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Formal anomaly resolution is a separate `/admin/formal-anomalies` contract; concurrent resolve not proven.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: disputeId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /payments/record:
+    post:
+      tags: [Backend]
+      summary: 'Record legacy payment'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `paymentLifecycle.test.ts`. Problems: Not connected to SupplyHandover/PoolSettlement.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /payments:
+    get:
+      tags: [Backend]
+      summary: 'List own legacy payments'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `paymentLifecycle.test.ts`. Problems: Formal settlements absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /payments/{paymentId}:
+    get:
+      tags: [Backend]
+      summary: 'Read own payment'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: IDOR route test absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    put:
+      tags: [Backend]
+      summary: 'Edit legacy payment'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: None. Problems: Reason/evidence policy is not target-level.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /payments/{paymentId}/dispute:
+    post:
+      tags: [Backend]
+      summary: 'Dispute payment'
+      description: 'Allowed roles: Collector. Status: ♻️ DUPLICATE. Tests: `paymentLifecycle.test.ts`. Problems: Legacy only.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /earnings/ledger:
+    get:
+      tags: [Backend]
+      summary: 'Legacy + formal earnings ledger'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Formal records are included, but external payment settlement is not performed.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/payments:
+    get:
+      tags: [Backend]
+      summary: 'Payment queue'
+      description: 'Allowed roles: Admin with `PAYMENT_VERIFICATION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Formal settlement queue absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/payments/{paymentId}:
+    get:
+      tags: [Backend]
+      summary: 'Payment detail'
+      description: 'Allowed roles: Admin with `PAYMENT_VERIFICATION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Formal settlement absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/payments/{paymentId}/verify:
+    post:
+      tags: [Backend]
+      summary: 'Verify legacy payment'
+      description: 'Allowed roles: Admin with `PAYMENT_VERIFICATION`. Status: ♻️ DUPLICATE. Tests: None. Problems: Formal settlement absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /sync:
+    post:
+      tags: [Backend]
+      summary: 'Replay queued legacy and formal supply operations'
+      description: 'Allowed roles: Collector/Verified Recycler. Status: 🟡 PARTIAL. Tests: `syncService.test.ts`. Problems: Formal operation branches and replay ledgers exist; live route, replay, and concurrency tests are absent. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncBatchRequest' }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /sync/changes:
+    get:
+      tags: [Backend]
+      summary: 'Pull role-scoped legacy and formal supply deltas'
+      description: 'Allowed roles: Collector/Verified Recycler. Status: 🟡 PARTIAL. Tests: `syncService.test.ts`. Problems: Opaque per-feed timestamp+ID cursor is implemented; live delta/replay tests are absent. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: query, name: cursor, required: false, schema: { type: string } }
+        - { in: query, name: since, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /transactions/{lotId}/timeline:
+    get:
+      tags: [Backend]
+      summary: 'Legacy lot timeline'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: Not the unified material passport.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /activity/changes:
+    get:
+      tags: [Backend]
+      summary: 'Activity delta feed'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Cursor/limit contract not tested.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /notifications:
+    get:
+      tags: [Backend]
+      summary: 'Notification inbox'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `notificationService.test.ts`. Problems: Limit is not bounded at route boundary.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /notifications/unread-count:
+    get:
+      tags: [Backend]
+      summary: 'Unread count'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `notificationService.test.ts`. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /notifications/{notificationId}/read:
+    post:
+      tags: [Backend]
+      summary: 'Mark own notification read'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `notificationService.test.ts`. Problems: No route IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: notificationId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /notifications/read-all:
+    post:
+      tags: [Backend]
+      summary: 'Mark own notifications read'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `notificationService.test.ts`. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/listings:
+    post:
+      tags: [Backend]
+      summary: 'Create source listing'
+      description: 'Allowed roles: Household. Status: 🟡 PARTIAL. Tests: None. Problems: Optional idempotency replay exists; no route/live test and disposal evidence remains downstream.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    get:
+      tags: [Backend]
+      summary: 'List own listings'
+      description: 'Allowed roles: Household. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/listings/{listingId}:
+    get:
+      tags: [Backend]
+      summary: 'Read own listing and pickups'
+      description: 'Allowed roles: Household owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    patch:
+      tags: [Backend]
+      summary: 'Edit open listing'
+      description: 'Allowed roles: Household owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/state test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/kabadiwalas:
+    get:
+      tags: [Backend]
+      summary: 'Discover active collectors'
+      description: 'Allowed roles: Household. Status: 🟡 PARTIAL. Tests: None. Problems: Optional coordinate/radius filtering exists; no live route/geo test. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/listings/{listingId}/pickups:
+    post:
+      tags: [Backend]
+      summary: 'Request a collector pickup'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Optional idempotency only; no full live race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups:
+    get:
+      tags: [Backend]
+      summary: 'List own pickups'
+      description: 'Allowed roles: Household. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}:
+    get:
+      tags: [Backend]
+      summary: 'Read pickup/listing'
+      description: 'Allowed roles: Household owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/passport:
+    get:
+      tags: [Backend]
+      summary: 'Read source/pickup passport'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Pickup projection; listing passport is the downstream chain projection.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/reschedule:
+    post:
+      tags: [Backend]
+      summary: 'Reschedule pickup'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Policy and retry behavior unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/settlement:
+    post:
+      tags: [Backend]
+      summary: 'Accept/dispute final pickup settlement'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Payment linkage is persisted; disputed inventory reconciliation and live payment tests remain. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/settlement-payment:
+    post:
+      tags: [Backend]
+      summary: 'Record household pickup settlement payment'
+      description: 'Allowed roles: Collector owner. Status: 🟡 PARTIAL. Tests: None. Problems: Payment is transactionally idempotent and anomaly-aware, but no live route/concurrency test or external payment provider integration. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+        - { in: header, name: Idempotency-Key, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: 'Pickup settlement payment recorded' }
+        '200': { description: 'Idempotent replay of the recorded payment' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/listings/{listingId}/passport:
+    get:
+      tags: [Backend]
+      summary: 'Read end-to-end listing passport'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Joins downstream lots/pools/handovers/settlements/events but is scalar-link assembled and untested live.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/listings/{listingId}/cancel:
+    post:
+      tags: [Backend]
+      summary: 'Cancel open listing'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Reliability effect and idempotent replay not proven.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/cancel:
+    post:
+      tags: [Backend]
+      summary: 'Cancel open pickup'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Late-cancellation policy not fully connected to matching.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/listings:
+    get:
+      tags: [Backend]
+      summary: 'Discover posted/own-assigned listings'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Assigned IDs are owner-filtered; no live IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups:
+    get:
+      tags: [Backend]
+      summary: 'List own pickups'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/listings/{listingId}/accept:
+    post:
+      tags: [Backend]
+      summary: 'Accept own pickup request'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: No full assignment/retry test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/reject:
+    post:
+      tags: [Backend]
+      summary: 'Reject assigned request'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/confirm-availability:
+    post:
+      tags: [Backend]
+      summary: 'Confirm availability'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/state test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/schedule:
+    post:
+      tags: [Backend]
+      summary: 'Schedule pickup'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Reliability and slot policy incomplete.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/cancel:
+    post:
+      tags: [Backend]
+      summary: 'Cancel own pickup'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Retry and notification behavior unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/reassign:
+    post:
+      tags: [Backend]
+      summary: 'Mark reassignment required'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Replacement remains a Household choice; notification is persisted but live delivery is unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/reassignment-options:
+    get:
+      tags: [Backend]
+      summary: 'List active replacement Kabadiwalas'
+      description: 'Allowed roles: Household. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Distance ordering is available when coordinates exist; no live route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /household/pickups/{pickupId}/reassign:
+    post:
+      tags: [Backend]
+      summary: 'Commit replacement Kabadiwala choice'
+      description: 'Allowed roles: Household owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Conditional owner-scoped transition, prior-row reuse, notification, and optional idempotency exist; no live route/race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/status:
+    post:
+      tags: [Backend]
+      summary: 'Move to in-transit/arrived'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Inline state machine has no integration tests.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pickups/{pickupId}/complete:
+    post:
+      tags: [Backend]
+      summary: 'Weigh, price, acquire inventory'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Atomic conditional claim and optional idempotency replay exist; household settlement/payment linkage and live concurrency test remain.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: pickupId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/inventory:
+    get:
+      tags: [Backend]
+      summary: 'Read own balances'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Projection has invariants, but no live DB proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/inventory/movements:
+    get:
+      tags: [Backend]
+      summary: 'Read own movements'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No pagination cursor or route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-lots:
+    post:
+      tags: [Backend]
+      summary: 'Reserve inventory into bulk lot'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Optional idempotency replay and conditional reservation exist; live oversell/concurrency untested.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    get:
+      tags: [Backend]
+      summary: 'List own bulk lots'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No detail endpoint from collector side.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-lots/{lotId}/cancel:
+    post:
+      tags: [Backend]
+      summary: 'Release listed lot reservation'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No live invariant/idempotency test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-offers:
+    get:
+      tags: [Backend]
+      summary: 'Read offers for own lots'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/bulk-lots:
+    get:
+      tags: [Backend]
+      summary: 'Browse listed lots'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No pagination or route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/bulk-lots/{lotId}:
+    get:
+      tags: [Backend]
+      summary: 'Read lot detail'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Reserved-lot visibility policy not explicit.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/bulk-lots/{lotId}/offers:
+    post:
+      tags: [Backend]
+      summary: 'Create/update offer'
+      description: 'Allowed roles: Verified Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: No idempotency header; capability and race coverage absent.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/offers:
+    get:
+      tags: [Backend]
+      summary: 'Read own offers'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/offers/{offerId}/withdraw:
+    post:
+      tags: [Backend]
+      summary: 'Withdraw own pending offer'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/concurrency test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-offers/{offerId}/reject:
+    post:
+      tags: [Backend]
+      summary: 'Reject offer'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Concurrent accept/reject untested.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-offers/{offerId}/counter:
+    post:
+      tags: [Backend]
+      summary: 'Counter offer'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Conditional pending-state update exists; no live race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-offers/{offerId}/accept:
+    post:
+      tags: [Backend]
+      summary: 'Accept one offer'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Conditional single-winner lot/offer claims exist; no live concurrent test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/bulk-lots/{lotId}/receive:
+    post:
+      tags: [Backend]
+      summary: 'Direct receive compatibility route'
+      description: 'Allowed roles: Verified Recycler. Status: 🗑️ OBSOLETE. Tests: None. Problems: Always returns `FORMAL_HANDOVER_REQUIRED`; formal route must be the contract.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/procurement-requirements:
+    post:
+      tags: [Backend]
+      summary: 'Publish demand'
+      description: 'Allowed roles: Verified Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Minimum/required relation is enforced; no idempotency or route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    get:
+      tags: [Backend]
+      summary: 'List own demand'
+      description: 'Allowed roles: Verified Recycler owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/procurement-requirements/{requirementId}:
+    patch:
+      tags: [Backend]
+      summary: 'Update/pause/cancel demand'
+      description: 'Allowed roles: Verified Recycler owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Ownership exists; no endpoint/lifecycle test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: requirementId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/procurement-requirements:
+    get:
+      tags: [Backend]
+      summary: 'Read open demand'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Demand is privacy-safe but does not yet return the full grade/geography/capability eligibility projection.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/route-advantage:
+    get:
+      tags: [Backend]
+      summary: 'Estimate net formal route outcome'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Grade/weight capability, configured logistics, demand caps, freshness, confidence, and reliability signals exist; provider logistics quotes and historical risk modeling remain. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pool-opportunities:
+    get:
+      tags: [Backend]
+      summary: 'Show demand-linked pool opportunities'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Verified capability, grade, authorization, and strict complete-coordinate radius filtering are present; live proof remains.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools/suggestions:
+    get:
+      tags: [Backend]
+      summary: 'Suggest demand-triggered pools'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Verified capability and grade/radius filters are present; no live proof or automatic contributor selection.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools:
+    post:
+      tags: [Backend]
+      summary: 'Create canonical demand pool'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Unique source key helps duplicate creation; creator-side eligibility/geography is not rechecked at creation.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    get:
+      tags: [Backend]
+      summary: 'Read own/member pools'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No live privacy/ownership test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools/{poolId}/join:
+    post:
+      tags: [Backend]
+      summary: 'Reserve own contribution'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Preferred grade, server rate, source provenance, atomic aggregate update, and idempotency exist; no live concurrency proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: poolId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools/{poolId}/leave:
+    post:
+      tags: [Backend]
+      summary: 'Release own contribution'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Conditional release and atomic aggregate decrement exist; no live race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: poolId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools/{poolId}/lock:
+    post:
+      tags: [Backend]
+      summary: 'Lock threshold pool'
+      description: 'Allowed roles: Pool creator. Status: 🟡 PARTIAL. Tests: None. Problems: Audit is a separate operation; only creator can progress it.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: poolId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/pools:
+    get:
+      tags: [Backend]
+      summary: 'Read targeted pools'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No endpoint/privacy test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/demand-intelligence:
+    get:
+      tags: [Backend]
+      summary: 'Demand, gap, supply intelligence'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Grade, capability, authorization, and strict complete-coordinate radius filtering are present; no live proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/passport:
+    get:
+      tags: [Backend]
+      summary: 'Derived growth passport'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Derived metrics are incomplete/mixed across legacy/formal records.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /safety-routing:
+    get:
+      tags: [Backend]
+      summary: 'Hazard-aware route guidance'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Hardcoded metadata, no authorization/disposal evidence chain.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/safety:
+    get:
+      tags: [Backend]
+      summary: 'Safety modules/progress'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/content version test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/safety/{moduleKey}/acknowledge:
+    post:
+      tags: [Backend]
+      summary: 'Record own module acknowledgement'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: moduleKey, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/pools/{poolId}/prepare-handover:
+    post:
+      tags: [Backend]
+      summary: 'Prepare signed pool handover'
+      description: 'Allowed roles: Pool creator. Status: 🟡 PARTIAL. Tests: None. Problems: Source-key replay, source passport metadata, expiry release, and settlement allocation exist; no live proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: poolId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/bulk-lots/{lotId}/prepare-handover:
+    post:
+      tags: [Backend]
+      summary: 'Prepare signed bulk handover'
+      description: 'Allowed roles: Lot owner. Status: 🟡 PARTIAL. Tests: None. Problems: Source metadata, quantity guard, expiry release, and settlement exist; no live proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/collector-confirm:
+    post:
+      tags: [Backend]
+      summary: 'Confirm formal handover'
+      description: 'Allowed roles: Collector owner. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Optional idempotency; no live replay/ownership test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers:
+    get:
+      tags: [Backend]
+      summary: 'List formal handovers'
+      description: 'Allowed roles: Collector owner/contributor. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No endpoint/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/supply-handovers:
+    get:
+      tags: [Backend]
+      summary: 'List incoming formal handovers'
+      description: 'Allowed roles: Verified Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/freshness test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/confirm:
+    post:
+      tags: [Backend]
+      summary: 'Verify QR and settle/review handover'
+      description: 'Allowed roles: Verified Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Quantity guard, expiry release, variance/review, and formal payment follow-up exist; no live transaction test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}/disposal-evidence:
+    post:
+      tags: [Backend]
+      summary: 'Record data-destruction evidence'
+      description: 'Allowed roles: Verified Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Idempotent evidence state transition exists; storage/authenticity and live test remain.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}/qc:
+    post:
+      tags: [Backend]
+      summary: 'Record Recycler quality-control decision'
+      description: 'Allowed roles: Verified Recycler owner. Status: 🟡 PARTIAL. Tests: `syncService.test.ts` covers formal transaction primitives; no live route/QC test. PASS/FAIL, notes, evidence, anomaly and pool review transitions are conditional and idempotent. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+        - { in: header, name: Idempotency-Key, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: 'QC decision recorded' }
+        '200': { description: 'Idempotent replay of the QC decision' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /recycler/handovers/{handoverId}/payment:
+    post:
+      tags: [Backend]
+      summary: 'Record formal settlement payment'
+      description: 'Allowed roles: Verified Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Unique recipient/handover key, delayed/underpayment anomalies, and replay hash exist; external payment gateway is out of scope. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/payments:
+    get:
+      tags: [Backend]
+      summary: 'Read formal payments'
+      description: 'Allowed roles: Collector owner/contributor. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Owner/contribution scoped; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/payment-confirm:
+    post:
+      tags: [Backend]
+      summary: 'Confirm/dispute formal payment'
+      description: 'Allowed roles: Collector owner/contributor. Status: 🟡 PARTIAL. Tests: None. Problems: Conditional confirmation and anomaly evidence exist; no live test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/settlement:
+    post:
+      tags: [Backend]
+      summary: 'Accept/dispute formal settlement'
+      description: 'Allowed roles: Collector owner/contributor. Status: 🟡 PARTIAL. Tests: None. Problems: Conditional decision, issue reason/evidence, inventory settlement, and final pool transition exist; no live test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/passport:
+    get:
+      tags: [Backend]
+      summary: 'Read formal passport'
+      description: 'Allowed roles: Collector owner/contributor. Status: 🟡 PARTIAL. Tests: None. Problems: Joins source/pickup/inventory/settlement/payment/event projections; scalar-link and live-unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /kabadiwala/handovers/{handoverId}/anomalies:
+    get:
+      tags: [Backend]
+      summary: 'Read anomaly flags'
+      description: 'Allowed roles: Collector owner/contributor. Status: 🟡 PARTIAL. Tests: None. Problems: Deterministic flags and admin resolution exist; no historical/repeated-behavior detector.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: handoverId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/formal-anomalies:
+    get:
+      tags: [Backend]
+      summary: 'List unresolved formal anomalies'
+      description: 'Allowed roles: Admin with `DISPUTE_RESOLUTION`. Status: 🟡 PARTIAL. Tests: None. Problems: Queue exists; no live/admin route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/formal-anomalies/{flagId}/resolve:
+    post:
+      tags: [Backend]
+      summary: 'Accept, revert, release, or acknowledge formal anomaly'
+      description: 'Allowed roles: Admin with `DISPUTE_RESOLUTION`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Internal settlement/reservation/payment rows are updated transactionally; no live/admin route test. Provider-neutral payment reversal is a separate `PAYMENT_VERIFICATION` route. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: flagId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/formal-payments/{paymentId}/reverse:
+    post:
+      tags: [Backend]
+      summary: 'Record an externally confirmed formal-payment reversal'
+      description: 'Allowed roles: Admin with `PAYMENT_VERIFICATION`. Status: 🟡 PARTIAL. Tests: None. Problems: This records provider-neutral reversal evidence and updates internal state transactionally; it does not call a bank, wallet, or cash provider. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: paymentId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: 'Reversal evidence recorded' }
+        '200': { description: 'Idempotent replay of the reversal evidence' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/preferences:
+    get:
+      tags: [Backend]
+      summary: 'Read preferences'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    patch:
+      tags: [Backend]
+      summary: 'Update preferences'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/rewards:
+    get:
+      tags: [Backend]
+      summary: 'Read reward ledger'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Derived from legacy handovers/payments, not formal settlements.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/schemes:
+    get:
+      tags: [Backend]
+      summary: 'Scheme catalogue'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Backend does not verify external freshness.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/schemes/check:
+    post:
+      tags: [Backend]
+      summary: 'Check scheme eligibility'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/content test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/activities:
+    get:
+      tags: [Backend]
+      summary: 'Read activities'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Not the formal safety-routing contract.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/activities/{slug}:
+    get:
+      tags: [Backend]
+      summary: 'Read activity detail'
+      description: 'Allowed roles: Household/Collector/Recycler. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Not disposal authorization.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: slug, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/lots/description-suggestion:
+    post:
+      tags: [Backend]
+      summary: 'Template/AI description suggestion'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: `geminiDescription.test.ts`. Problems: Non-authoritative; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/lots/material-suggestion:
+    post:
+      tags: [Backend]
+      summary: 'Image material suggestion'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Optional AI; no route/upload test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/recyclers/{recyclerId}/reviews:
+    get:
+      tags: [Backend]
+      summary: 'Read verified reviews'
+      description: 'Allowed roles: Authenticated account. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/privacy test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: recyclerId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/reviews:
+    post:
+      tags: [Backend]
+      summary: 'Submit Recycler review'
+      description: 'Allowed roles: Collector with completed legacy handover/payment. Status: 🟡 PARTIAL. Tests: None. Problems: Does not consume formal handover/payment path.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/conversations:
+    get:
+      tags: [Backend]
+      summary: 'List private conversations'
+      description: 'Allowed roles: Collector/Recycler participant. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test; secondary legacy path.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    post:
+      tags: [Backend]
+      summary: 'Open private conversation'
+      description: 'Allowed roles: Collector/Recycler participant. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR/freshness test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/conversations/{conversationId}/messages:
+    get:
+      tags: [Backend]
+      summary: 'Read messages'
+      description: 'Allowed roles: Collector/Recycler participant. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/IDOR test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: conversationId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+    post:
+      tags: [Backend]
+      summary: 'Send message'
+      description: 'Allowed roles: Collector/Recycler participant. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Client ID de-duplication is not a transaction.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: conversationId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/conversations/{conversationId}/draft-reply:
+    post:
+      tags: [Backend]
+      summary: 'Generate non-sending draft'
+      description: 'Allowed roles: Collector/Recycler participant. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Optional AI; no route test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: conversationId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/lots/{lotId}/repeat:
+    post:
+      tags: [Backend]
+      summary: 'Copy completed legacy lot'
+      description: 'Allowed roles: Collector owner. Status: ♻️ DUPLICATE. Tests: None. Problems: Optional idempotency, legacy only.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { in: path, name: lotId, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /future/disputes/analytics:
+    get:
+      tags: [Backend]
+      summary: 'Own legacy dispute analytics'
+      description: 'Allowed roles: Collector/Recycler. Status: 🟡 PARTIAL. Tests: None. Problems: Does not include formal anomaly/settlement records.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/datasets/prices/import:
+    post:
+      tags: [Backend]
+      summary: 'Import validated price rows'
+      description: 'Allowed roles: Admin with `DATASET_EXPORT`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No endpoint/permission/integration test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /admin/datasets/export:
+    get:
+      tags: [Backend]
+      summary: 'Pseudonymized operational export'
+      description: 'Allowed roles: Admin with `DATASET_EXPORT`. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: Configuration and privacy projection need staging proof.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: 'See API contract for the exact success envelope.' }
+        '400': { description: 'Validation error' }
+        '401': { description: 'Authentication required or token invalid' }
+        '403': { description: 'Role, account, or capability denied' }
+        '404': { description: 'Resource not found or not owned by caller' }
+        '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    SyncBatchRequest:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/SyncOperation' }
+    SyncOperation:
+      type: object
+      required: [operationId, operationType, entityType, entityId, payload]
+      properties:
+        operationId: { type: string, minLength: 1, maxLength: 120 }
+        operationType: { type: string, enum: [CREATE, UPDATE] }
+        entityType: { type: string, enum: [LOT, PAYMENT, SUPPLY_HANDOVER, POOL_CONTRIBUTION, POOL_SETTLEMENT, SUPPLY_PAYMENT] }
+        entityId: { type: string, minLength: 1, maxLength: 120 }
+        clientCreatedAt: { type: string, format: date-time }
+        payload: { type: object, additionalProperties: true }
+      description: 'Operation-specific payloads and actions are defined in docs/BACKEND_API_CONTRACT.md. Formal actions are role-scoped: COLLECTOR_CONFIRM, RECYCLER_CONFIRM, DISPOSAL_EVIDENCE, RELEASE, and SETTLEMENT_DECISION.'
+    EmailLogin: { type: object, required: [email, password], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 } } }
+    EmailSignup: { type: object, required: [email, password, role], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 }, role: { type: string, enum: [HOUSEHOLD, COLLECTOR, RECYCLER] }, preferredLanguage: { type: string }, areaName: { type: string }, businessName: { type: string }, authorizationNumber: { type: string }, materialsAccepted: { type: array, items: { type: string } }, pickupAvailable: { type: boolean }, serviceRadiusKm: { type: number } } }
+    RecyclerVerificationRequest: { type: object, required: [authority, registrationNumber, authorizationType, evidenceReference, verificationSource, validUntil], properties: { authority: { type: string, minLength: 2, maxLength: 160 }, registrationNumber: { type: string, minLength: 2, maxLength: 160 }, authorizationType: { type: string, minLength: 2, maxLength: 160 }, evidenceReference: { type: string, minLength: 2, maxLength: 500 }, verificationSource: { type: string, minLength: 2, maxLength: 500 }, validUntil: { type: string, format: date } } }
+    LotCreate: { type: object, required: [materialCategory, condition, weight, collectionLocation], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, materialSubcategory: { type: string }, sourceType: { type: string }, wasteRegime: { type: string, enum: [E_WASTE, BATTERY_WASTE, OTHER] }, imageProvenance: { type: string, enum: [CAMERA, GALLERY, IMPORTED, LEGACY] }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, weight: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 500000 }, weightUnit: { type: string, enum: [KILOGRAM, GRAM, PIECE] }, collectionLocation: { type: object, properties: { latitude: { type: number }, longitude: { type: number }, areaName: { type: string }, precision: { type: string, enum: [GPS, MANUAL] } } }, notes: { type: string, maxLength: 1000 } } }
+    LotUpdate: { type: object, required: [version], properties: { weight: { type: number }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, notes: { type: string }, version: { type: integer, minimum: 1 } } }
+    PhoneRequest: { type: object, required: [phone], properties: { phone: { type: string, pattern: '^[6-9]\\d{9}$' } } }
+    VerifyRequest: { type: object, required: [phone, otp], properties: { phone: { type: string }, otp: { type: string, pattern: '^\\d{6}$' } } }
+    ProfileUpdate: { type: object, properties: { preferredLanguage: { type: string, enum: [MARATHI, HINDI] }, primaryLocation: { type: object, properties: { latitude: { type: number, minimum: -90, maximum: 90 }, longitude: { type: number, minimum: -180, maximum: 180 }, areaName: { type: string, maxLength: 160 } } } } }
+    PriceUpdate: { type: object, required: [priceMin, priceMax, marketPrice], properties: { priceMin: { type: number, exclusiveMinimum: 0 }, priceMax: { type: number, exclusiveMinimum: 0 }, marketPrice: { type: number, exclusiveMinimum: 0 }, reason: { type: string, maxLength: 500 } } }
+    RecyclerProfileUpdate: { type: object, properties: { pickupAvailability: { type: string, enum: [TODAY, THIS_WEEK, FLEXIBLE] }, maxPickupDistanceKm: { type: number, exclusiveMinimum: 0, maximum: 200 }, operatingHours: { type: object } } }
+    RecyclerRatesUpdate: { type: object, required: [rates], properties: { rates: { type: array, minItems: 0, maxItems: 20, items: { type: object, required: [materialCategory, pricePerKg], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, pricePerKg: { type: number, exclusiveMinimum: 0 } } } } } }
+    QuoteBatchRequest: { type: object, required: [lotId, recyclerIds], properties: { lotId: { type: string }, recyclerIds: { type: array, minItems: 1, maxItems: 10, items: { type: string } } } }

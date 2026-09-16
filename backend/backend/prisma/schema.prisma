@@ -1,0 +1,1523 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum PreferredLanguage {
+  ENGLISH
+  MARATHI
+  HINDI
+  ASSAMESE
+  BENGALI
+  BODO
+  DOGRI
+  GUJARATI
+  KANNADA
+  KASHMIRI
+  KONKANI
+  MAITHILI
+  MALAYALAM
+  MANIPURI
+  NEPALI
+  ODIA
+  PUNJABI
+  SANSKRIT
+  SANTALI
+  SINDHI
+  TAMIL
+  TELUGU
+  URDU
+}
+
+enum AccountRole {
+  HOUSEHOLD
+  COLLECTOR
+  RECYCLER
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum MaterialCategory {
+  CRT
+  LCD_PANEL
+  PCB
+  CABLE
+  COPPER
+  BATTERY
+  MOTOR
+  MAGNET
+  PLASTIC
+  OTHER
+}
+
+enum LotCondition {
+  INTACT
+  DAMAGED
+  PARTIAL
+}
+
+enum LocationPrecision {
+  GPS
+  MANUAL
+}
+
+enum LotStatus {
+  CREATED
+  QUOTE_REQUESTED
+  QUOTE_RECEIVED
+  COLLECTOR_CONFIRMED
+  RECYCLER_CONFIRMED
+  HANDED_OVER
+  PAID
+  CANCELLED
+  DISPUTED
+}
+
+// Supply-chain records are deliberately separate from the legacy collector
+// lot model. A household listing is not kabadiwala inventory, and a bulk lot
+// is not a household pickup request.
+enum HouseholdListingStatus {
+  DRAFT
+  POSTED
+  MATCHED
+  CANCELLED
+  COMPLETED
+}
+enum PickupStatus {
+  REQUESTED
+  ACCEPTED
+  SCHEDULED
+  REASSIGNMENT_REQUIRED
+  IN_TRANSIT
+  ARRIVED
+  WEIGHED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+enum PickupSettlementStatus {
+  PENDING_HOUSEHOLD_CONFIRMATION
+  ACCEPTED
+  DISPUTED
+  COMPLETED
+}
+
+enum PickupPaymentStatus {
+  RECORDED
+  VERIFIED
+  DISPUTED
+  REVERSED
+}
+enum BulkLotStatus {
+  DRAFT
+  LISTED
+  RESERVED
+  SOLD
+  CANCELLED
+}
+enum BulkOfferStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+enum ProcurementStatus {
+  OPEN
+  PAUSED
+  FULFILLED
+  CANCELLED
+}
+
+enum PoolStatus {
+  FORMING
+  THRESHOLD_MET
+  LOCKED
+  PICKUP_SCHEDULED
+  IN_TRANSIT
+  RECEIVED
+  SETTLED
+  REVIEW_REQUIRED
+  CANCELLED
+}
+
+enum PoolContributionStatus {
+  RESERVED
+  RELEASED
+  RECEIVED
+  SETTLED
+  REVIEW_REQUIRED
+}
+
+enum SupplyHandoverStatus {
+  PREPARED
+  COLLECTOR_CONFIRMED
+  RECEIVED
+  REVIEW_REQUIRED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  PENDING_COLLECTOR_CONFIRMATION
+  ACCEPTED
+  DISPUTED
+  COMPLETED
+}
+
+enum PriceSource {
+  ADMIN
+  RECYCLER
+  SYSTEM
+}
+
+enum PriceAuditActorRole {
+  ADMIN
+}
+
+enum RecyclerAuthorizationStatus {
+  VERIFIED
+  PENDING
+  UNDER_REVIEW
+  REJECTED
+  REVIEW_REQUIRED
+  EXPIRED
+  REVOKED
+  SUSPENDED
+}
+
+enum DataDestructionStatus {
+  NOT_APPLICABLE
+  OWNER_PREPARATION_PENDING
+  OWNER_PREPARATION_COMPLETED
+  DESTRUCTION_REQUESTED
+  RECYCLER_EVIDENCE_PENDING
+  EVIDENCE_RECEIVED
+}
+
+enum PickupAvailability {
+  TODAY
+  THIS_WEEK
+  FLEXIBLE
+}
+
+enum QuoteRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum QuoteStatus {
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum HandoverLocationType {
+  COLLECTOR_LOCATION
+  RECYCLER_FACILITY
+  THIRD_PARTY
+}
+
+enum HandoverStatus {
+  GENERATED
+  CONFIRMED_BY_RECYCLER
+  DISPUTED
+  COMPLETED
+  PENDING_MANUAL_REVIEW
+  EXPIRED
+}
+
+enum DisputeType {
+  WEIGHT_DISCREPANCY
+  MATERIAL_MISMATCH
+  PRICE_DISAGREEMENT
+  OTHER
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum DisputeResolution {
+  ACCEPT_COLLECTOR
+  ACCEPT_RECYCLER
+  SPLIT_DIFFERENCE
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  DIGITAL_WALLET
+}
+
+enum PaymentStatus {
+  RECORDED
+  DISPUTED
+  VERIFIED
+  REVERSED
+}
+
+enum SupplyReversalStatus {
+  REQUESTED
+  CONFIRMED
+  FAILED
+}
+
+enum QualityControlStatus {
+  PENDING
+  PASSED
+  FAILED
+  REVIEW_REQUIRED
+}
+
+enum PaymentDisputeType {
+  PAYMENT_AMOUNT_DIFFERENCE
+  PAYMENT_NOT_RECEIVED
+  WRONG_PAYMENT_METHOD
+  OTHER
+}
+
+enum SyncOperationStatus {
+  APPLIED
+  REJECTED
+  CONFLICT
+  INVALID
+}
+
+enum RewardType {
+  CASH_BONUS
+  RATE_BOOST
+  FEE_WAIVER
+  VOUCHER
+}
+
+enum RewardStatus {
+  PROGRESS
+  EARNED
+  APPLIED
+  EXPIRED
+}
+
+enum DescriptionSource {
+  USER
+  AI
+  TEMPLATE
+}
+
+enum WeightUnit {
+  KILOGRAM
+  GRAM
+  PIECE
+}
+
+enum DataQualityStatus {
+  UNVERIFIED
+  VALIDATED
+  REJECTED
+  STALE
+}
+
+enum ImageProvenance {
+  CAMERA
+  GALLERY
+  IMPORTED
+  LEGACY
+}
+
+enum WasteRegime {
+  E_WASTE
+  BATTERY_WASTE
+  OTHER
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  BLOCKED
+}
+
+enum MessageStatus {
+  SENT
+  READ
+  FAILED
+}
+
+model Collector {
+  id                String            @id @default(cuid()) @map("_id")
+  phone             String?
+  email             String?
+  displayName       String?
+  preferredLanguage PreferredLanguage
+  latitude          Float?
+  longitude         Float?
+  areaName          String
+  accountStatus     AccountStatus     @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+  lastLoginAt       DateTime?
+  lots              Lot[]
+  quoteRequests     QuoteRequest[]
+  handovers         Handover[]
+  payments          Payment[]
+  syncOperations    SyncOperation[]
+
+  @@index([accountStatus])
+  @@index([areaName])
+  @@index([phone])
+  @@index([email])
+}
+
+// Account identity is separate from business profiles. The profile ids are
+// intentionally explicit so a role can never be inferred from an email
+// string or domain.
+model User {
+  id                 String            @id @default(cuid()) @map("_id")
+  email              String?
+  phone              String?
+  passwordHash       String?
+  role               AccountRole
+  preferredLanguage  PreferredLanguage @default(ENGLISH)
+  appearanceMode     String            @default("SYSTEM")
+  accountStatus      AccountStatus     @default(ACTIVE)
+  collectorProfileId String?
+  recyclerProfileId  String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([role, accountStatus])
+  @@index([email])
+  @@index([phone])
+  @@index([collectorProfileId])
+  @@index([recyclerProfileId])
+}
+
+// Administrative identity is deliberately separate from marketplace
+// accounts. Admin tokens are accepted only while this record is active, so a
+// compromised or retired token can be revoked without changing marketplace
+// role semantics.
+model AdminAccount {
+  id           String   @id @default(cuid()) @map("_id")
+  email        String   @unique
+  passwordHash String?
+  displayName  String?
+  permissions  String[]
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastLoginAt  DateTime?
+
+  @@index([active, updatedAt])
+}
+
+model Price {
+  id                 String            @id @default(cuid()) @map("_id")
+  materialCategory   MaterialCategory
+  city               String
+  areaName           String?
+  latitude           Float?
+  longitude          Float?
+  priceMin           Float
+  priceMax           Float
+  marketPrice        Float
+  historicalAverage  Float?
+  unit               WeightUnit        @default(KILOGRAM)
+  source             PriceSource
+  sourceOrganization String?
+  sourceReference    String?
+  ingestedAt         DateTime          @default(now())
+  qualityStatus      DataQualityStatus @default(UNVERIFIED)
+  effectiveAt        DateTime
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  histories          PriceHistory[]
+  audits             PriceAudit[]
+
+  @@index([materialCategory, city, effectiveAt])
+  @@index([materialCategory, areaName, effectiveAt])
+}
+
+model PriceHistory {
+  id                 String            @id @default(cuid()) @map("_id")
+  priceId            String
+  price              Price             @relation(fields: [priceId], references: [id])
+  materialCategory   MaterialCategory
+  city               String
+  areaName           String?
+  priceMin           Float
+  priceMax           Float
+  marketPrice        Float
+  unit               WeightUnit        @default(KILOGRAM)
+  source             PriceSource
+  sourceOrganization String?
+  sourceReference    String?
+  ingestedAt         DateTime          @default(now())
+  qualityStatus      DataQualityStatus @default(UNVERIFIED)
+  effectiveAt        DateTime
+  createdAt          DateTime          @default(now())
+
+  @@index([materialCategory, city, effectiveAt])
+  @@index([priceId, effectiveAt])
+}
+
+model PriceAudit {
+  id        String              @id @default(cuid()) @map("_id")
+  priceId   String
+  price     Price               @relation(fields: [priceId], references: [id])
+  actorId   String
+  actorRole PriceAuditActorRole
+  oldValues Json
+  newValues Json
+  reason    String?
+  createdAt DateTime            @default(now())
+
+  @@index([priceId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model Recycler {
+  id                             String                       @id @default(cuid()) @map("_id")
+  name                           String
+  latitude                       Float?
+  longitude                      Float?
+  address                        String
+  areaName                       String
+  authorizationStatus            RecyclerAuthorizationStatus
+  authorizationAuthority         String?
+  licenseNumber                  String?
+  authorizationType              String?
+  authorizationEvidenceReference String?
+  verificationSource             String?
+  verifiedAt                     DateTime?
+  verifiedBy                     String?
+  authorizationValidUntil        DateTime?
+  phone                          String?
+  email                          String?
+  alternatePhone                 String?
+  maxPickupDistanceKm            Float
+  logisticsCostPerKm             Float?
+  pickupFee                      Float?
+  pickupIncluded                 Boolean                      @default(false)
+  pickupAvailability             PickupAvailability
+  operatingHours                 Json
+  averageHandoverTime            String?
+  rating                         Float?
+  reviewCount                    Int                          @default(0)
+  createdAt                      DateTime                     @default(now())
+  updatedAt                      DateTime                     @updatedAt
+  materials                      RecyclerMaterial[]
+  rates                          RecyclerRate[]
+  authorizationAudits            RecyclerAuthorizationAudit[]
+  quoteRequests                  QuoteRequest[]
+  quotes                         Quote[]
+  handovers                      Handover[]
+
+  @@index([authorizationStatus])
+  @@index([areaName])
+  @@index([updatedAt])
+}
+
+model RecyclerMaterial {
+  id                  String           @id @default(cuid()) @map("_id")
+  recyclerId          String
+  recycler            Recycler         @relation(fields: [recyclerId], references: [id])
+  category            MaterialCategory
+  subcategories       String[]
+  acceptedGrades      String[]         @default([])
+  minAcceptableWeight Float?
+  maxAcceptableWeight Float?
+
+  @@index([category, recyclerId])
+}
+
+model RecyclerRate {
+  id               String            @id @default(cuid()) @map("_id")
+  recyclerId       String
+  recycler         Recycler          @relation(fields: [recyclerId], references: [id])
+  materialCategory MaterialCategory
+  pricePerKg       Float
+  unit             WeightUnit        @default(KILOGRAM)
+  sourceReference  String?
+  qualityStatus    DataQualityStatus @default(UNVERIFIED)
+  effectiveAt      DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([materialCategory, pricePerKg])
+  @@unique([recyclerId, materialCategory])
+}
+
+model RecyclerAuthorizationAudit {
+  id             String                      @id @default(cuid()) @map("_id")
+  recyclerId     String
+  recycler       Recycler                    @relation(fields: [recyclerId], references: [id])
+  actorId        String
+  previousStatus RecyclerAuthorizationStatus
+  newStatus      RecyclerAuthorizationStatus
+  reason         String?
+  createdAt      DateTime                    @default(now())
+
+  @@index([recyclerId, createdAt])
+}
+
+model QuoteRequest {
+  id                 String             @id @default(cuid()) @map("_id")
+  lotId              String
+  lot                Lot                @relation(fields: [lotId], references: [id])
+  collectorId        String
+  collector          Collector          @relation(fields: [collectorId], references: [id])
+  recyclerId         String
+  recycler           Recycler           @relation(fields: [recyclerId], references: [id])
+  materialCategory   MaterialCategory
+  weight             Float
+  estimatedValue     Float?
+  collectionLocation Json
+  createdAt          DateTime           @default(now())
+  status             QuoteRequestStatus @default(PENDING)
+  expiresAt          DateTime
+  quotes             Quote[]
+
+  @@index([collectorId, status, createdAt])
+  @@index([recyclerId, status, createdAt])
+  @@index([lotId, status])
+  @@index([expiresAt])
+  @@unique([collectorId, lotId, recyclerId, status])
+}
+
+model Quote {
+  id               String       @id @default(cuid()) @map("_id")
+  quoteRequestId   String
+  quoteRequest     QuoteRequest @relation(fields: [quoteRequestId], references: [id])
+  lotId            String
+  lot              Lot          @relation(fields: [lotId], references: [id])
+  recyclerId       String
+  recycler         Recycler     @relation(fields: [recyclerId], references: [id])
+  pricePerKg       Float
+  totalQuotedPrice Float
+  validUntil       DateTime
+  status           QuoteStatus  @default(SENT)
+  recyclerNotes    String?
+  sentAt           DateTime     @default(now())
+  respondedAt      DateTime?
+  acceptedAt       DateTime?
+  rejectedAt       DateTime?
+  anomaly          Boolean      @default(false)
+  comparison       String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  handovers        Handover[]
+
+  @@index([quoteRequestId, status])
+  @@index([lotId, status])
+  @@index([recyclerId, status, createdAt])
+  @@index([validUntil])
+}
+
+model QuoteAudit {
+  id         String   @id @default(cuid()) @map("_id")
+  actorId    String
+  actorRole  String
+  event      String
+  resourceId String
+  metadata   Json
+  createdAt  DateTime @default(now())
+
+  @@index([resourceId, createdAt])
+}
+
+model Lot {
+  id                          String             @id @map("_id")
+  collectorId                 String
+  collector                   Collector          @relation(fields: [collectorId], references: [id])
+  materialCategory            MaterialCategory
+  materialSubcategory         String?
+  sourceType                  String?
+  wasteRegime                 WasteRegime        @default(E_WASTE)
+  condition                   LotCondition
+  weight                      Float
+  weightUnit                  WeightUnit         @default(KILOGRAM)
+  originalWeight              Float?
+  originalWeightUnit          WeightUnit?
+  photoPath                   String?
+  photoUrl                    String?
+  imageProvenance             ImageProvenance?
+  imageQualityStatus          DataQualityStatus  @default(UNVERIFIED)
+  validationNotes             String?
+  estimatedValue              Float?
+  quotedPrice                 Float?
+  finalPrice                  Float?
+  collectionLatitude          Float?
+  collectionLongitude         Float?
+  collectionAreaName          String?
+  collectionLocationPrecision LocationPrecision?
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+  expiresAt                   DateTime?
+  status                      LotStatus          @default(CREATED)
+  notes                       String?
+  version                     Int                @default(1)
+  quoteRequests               QuoteRequest[]
+  quotes                      Quote[]
+  handovers                   Handover[]
+  payments                    Payment[]
+
+  @@index([collectorId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([materialCategory])
+  @@index([collectorId, createdAt])
+}
+
+model Handover {
+  id                         String           @id @default(cuid()) @map("_id")
+  lotId                      String
+  lot                        Lot              @relation(fields: [lotId], references: [id])
+  quoteId                    String
+  quote                      Quote            @relation(fields: [quoteId], references: [id])
+  collectorId                String
+  collector                  Collector        @relation(fields: [collectorId], references: [id])
+  recyclerId                 String
+  recycler                   Recycler         @relation(fields: [recyclerId], references: [id])
+  photoReference             String?
+  materialCategory           MaterialCategory
+  materialDescription        String?
+  weight                     Float
+  quotedPrice                Float
+  collectionLocation         Json
+  handoverLocation           Json
+  timestamp                  DateTime
+  referenceId                String           @unique
+  qrCodeData                 String
+  qrVersion                  Int              @default(1)
+  qrSignature                String?
+  status                     HandoverStatus   @default(GENERATED)
+  recyclerConfirmedAt        DateTime?
+  materialConfirmedAt        DateTime?
+  actualWeightPhotoReference String?
+  collectorConfirmedAt       DateTime?
+  recyclerNotes              String?
+  collectorSignature         String?
+  expiresAt                  DateTime
+  actualWeight               Float?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  disputes                   Dispute[]
+
+  @@unique([lotId])
+  @@index([lotId, status])
+  @@index([quoteId])
+  @@index([collectorId, status])
+  @@index([recyclerId, status])
+  @@index([expiresAt])
+}
+
+model Dispute {
+  id              String             @id @default(cuid()) @map("_id")
+  handoverId      String
+  handover        Handover           @relation(fields: [handoverId], references: [id])
+  lotId           String
+  collectorId     String
+  recyclerId      String
+  type            DisputeType
+  reportedBy      String
+  description     String
+  claimedValue    Float?
+  actualValue     Float?
+  evidence        Json?
+  status          DisputeStatus      @default(OPEN)
+  resolution      DisputeResolution?
+  resolutionNotes String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([handoverId, status])
+  @@index([collectorId, status])
+  @@index([recyclerId, status])
+  @@index([status, createdAt])
+}
+
+model Payment {
+  id            String           @id @default(cuid()) @map("_id")
+  lotId         String
+  lot           Lot              @relation(fields: [lotId], references: [id])
+  collectorId   String
+  collector     Collector        @relation(fields: [collectorId], references: [id])
+  amount        Float
+  paymentMethod PaymentMethod
+  recordedAt    DateTime
+  confirmedAt   DateTime?
+  notes         String?
+  reference     String?
+  status        PaymentStatus    @default(RECORDED)
+  anomaly       Boolean          @default(false)
+  anomalyReason String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  audits        PaymentAudit[]
+  disputes      PaymentDispute[]
+
+  @@unique([lotId])
+  @@index([collectorId, status, recordedAt])
+  @@index([lotId, status])
+  @@index([createdAt])
+}
+
+model PaymentAudit {
+  id        String   @id @default(cuid()) @map("_id")
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  actorId   String
+  actorRole String
+  event     String
+  oldValues Json?
+  newValues Json?
+  createdAt DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+}
+
+model PaymentDispute {
+  id              String             @id @default(cuid()) @map("_id")
+  paymentId       String
+  payment         Payment            @relation(fields: [paymentId], references: [id])
+  reportedBy      String
+  type            PaymentDisputeType
+  description     String
+  status          DisputeStatus      @default(OPEN)
+  resolutionNotes String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime           @default(now())
+
+  @@index([paymentId, status])
+  @@index([reportedBy, createdAt])
+}
+
+model SyncOperation {
+  id            String              @id @default(cuid()) @map("_id")
+  operationId   String
+  collectorId   String
+  collector     Collector           @relation(fields: [collectorId], references: [id])
+  operationType String
+  entityType    String
+  entityId      String
+  status        SyncOperationStatus
+  requestHash   String
+  processedAt   DateTime?
+  errorCode     String?
+  createdAt     DateTime            @default(now())
+
+  @@unique([operationId, collectorId])
+  @@index([collectorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+model RewardProgram {
+  id              String     @id @default(cuid()) @map("_id")
+  programKey      String     @unique
+  title           String
+  description     String
+  rewardType      RewardType
+  thresholdKg     Float?
+  thresholdRupees Float?
+  rewardAmount    Float
+  terms           String
+  startsAt        DateTime
+  endsAt          DateTime?
+  active          Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([active, startsAt, endsAt])
+}
+
+model RewardLedger {
+  id               String       @id @default(cuid()) @map("_id")
+  programId        String
+  collectorId      String
+  periodKey        String
+  qualifyingKg     Float        @default(0)
+  qualifyingRupees Float        @default(0)
+  rewardAmount     Float        @default(0)
+  status           RewardStatus @default(PROGRESS)
+  sourceHandoverId String?
+  earnedAt         DateTime?
+  appliedAt        DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([programId, collectorId, periodKey])
+  @@index([collectorId, status, updatedAt])
+}
+
+model GovernmentScheme {
+  id                 String   @id @default(cuid()) @map("_id")
+  slug               String   @unique
+  title              String
+  description        String
+  eligibilityRules   Json
+  requiredDocuments  String[]
+  sourceUrl          String
+  lastVerifiedAt     DateTime
+  supportedLanguages String[]
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([active, lastVerifiedAt])
+}
+
+model DiyActivity {
+  id                 String   @id @default(cuid()) @map("_id")
+  slug               String   @unique
+  title              String
+  description        String
+  materials          String[]
+  steps              String[]
+  safetyWarnings     String[]
+  difficulty         String
+  minutes            Int
+  imageUrl           String?
+  supportedLanguages String[]
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([active, difficulty])
+}
+
+model LotDescription {
+  id          String            @id @default(cuid()) @map("_id")
+  lotId       String
+  text        String
+  source      DescriptionSource
+  model       String?
+  generatedAt DateTime          @default(now())
+  acceptedAt  DateTime?
+
+  @@index([lotId, generatedAt])
+}
+
+model AiInference {
+  id                 String    @id @default(cuid()) @map("_id")
+  lotId              String?
+  feature            String
+  modelProvider      String
+  modelVersion       String
+  inputProvenance    Json
+  prediction         Json
+  confidence         Float?
+  humanCorrection    Json?
+  correctedAt        DateTime?
+  consentForTraining Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+
+  @@index([lotId, createdAt])
+  @@index([feature, modelVersion, createdAt])
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid()) @map("_id")
+  actorId    String
+  actorRole  String
+  tokenHash  String    @unique
+  familyId   String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?
+  createdAt  DateTime  @default(now())
+
+  @@index([actorId, revokedAt, expiresAt])
+  @@index([familyId, createdAt])
+}
+
+model LoginAudit {
+  id        String   @id @default(cuid()) @map("_id")
+  actorId   String?
+  actorRole String?
+  method    String
+  outcome   String
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([outcome, createdAt])
+}
+
+model RequestRateLimit {
+  id        String    @id @map("_id")
+  count     Int       @default(0)
+  resetAt   DateTime
+  lastAt    DateTime?
+  updatedAt DateTime  @updatedAt
+
+  @@index([resetAt])
+}
+
+model RecyclerReview {
+  id                String   @id @default(cuid()) @map("_id")
+  handoverId        String
+  collectorId       String
+  recyclerId        String
+  rating            Int
+  pickupReliability Int?
+  paymentClarity    Int?
+  comment           String?
+  verified          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  @@unique([handoverId, collectorId])
+  @@index([recyclerId, verified, createdAt])
+  @@index([collectorId, createdAt])
+}
+
+model Conversation {
+  id            String             @id @default(cuid()) @map("_id")
+  lotId         String
+  quoteId       String?
+  collectorId   String
+  recyclerId    String
+  status        ConversationStatus @default(OPEN)
+  lastMessageAt DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([lotId, collectorId, recyclerId])
+  @@index([collectorId, status, lastMessageAt])
+  @@index([recyclerId, status, lastMessageAt])
+}
+
+model ChatMessage {
+  id              String        @id @default(cuid()) @map("_id")
+  conversationId  String
+  senderId        String
+  senderRole      AccountRole
+  clientMessageId String
+  body            String
+  status          MessageStatus @default(SENT)
+  createdAt       DateTime      @default(now())
+  readAt          DateTime?
+
+  @@unique([conversationId, clientMessageId])
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model NotificationEvent {
+  id        String    @id @default(cuid()) @map("_id")
+  accountId String
+  type      String
+  title     String
+  body      String
+  route     String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([accountId, readAt, createdAt])
+}
+
+model IdempotencyRecord {
+  id          String   @id @default(cuid()) @map("_id")
+  actorId     String
+  operationId String
+  action      String
+  entityId    String?
+  requestHash String?
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@unique([actorId, operationId])
+  @@index([actorId, action, createdAt])
+}
+
+model HouseholdListing {
+  id              String                 @id @default(cuid()) @map("_id")
+  householdId     String
+  materialCategory MaterialCategory
+  estimatedWeight Float
+  condition       LotCondition
+  notes           String?
+  photoReference  String?
+  areaName        String
+  latitude        Float?
+  longitude       Float?
+  estimatedPriceMin Float?
+  estimatedPriceMax Float?
+  dataBearingDevice         Boolean                @default(false)
+  ownerPreparationCompleted Boolean                @default(false)
+  dataDestructionRequested  Boolean                @default(false)
+  destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
+  recyclerEvidenceReference String?
+  status          HouseholdListingStatus @default(DRAFT)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  @@index([householdId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
+}
+
+model PickupRequest {
+  id                String       @id @default(cuid()) @map("_id")
+  listingId         String
+  householdId       String
+  kabadiwalaId      String
+  status            PickupStatus @default(REQUESTED)
+  requestedSlot     DateTime?
+  scheduledSlot     DateTime?
+  acceptedAt        DateTime?
+  availabilityConfirmedAt DateTime?
+  inTransitAt       DateTime?
+  arrivedAt         DateTime?
+  weighedAt         DateTime?
+  cancelledAt       DateTime?
+  noShow            Boolean    @default(false)
+  lateCancellation  Boolean    @default(false)
+  reassignmentReason String?
+  actualWeight      Float?
+  finalCategory     MaterialCategory?
+  grade             String?
+  ratePerKg         Float?
+  finalAmount       Float?
+  settlementStatus  PickupSettlementStatus?
+  settlementBeforeValue Float?
+  settlementAfterValue  Float?
+  settlementReasonCode String?
+  settlementEvidenceReference String?
+  householdDecision String?
+  settlementDecisionAt DateTime?
+  settlementDisputeNotes String?
+  cancelledBy       String?
+  cancellationReason String?
+  completedAt       DateTime?
+  settlementPayment PickupSettlementPayment?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  @@unique([listingId, kabadiwalaId])
+  @@index([householdId, status, createdAt])
+  @@index([kabadiwalaId, status, scheduledSlot])
+  @@index([status, scheduledSlot])
+}
+
+model PickupSettlementPayment {
+  id             String             @id @default(cuid()) @map("_id")
+  sourceKey      String             @unique
+  pickupId       String             @unique
+  householdId    String
+  collectorId    String
+  amount         Float
+  paymentMethod  PaymentMethod
+  recordedAt     DateTime
+  confirmedAt    DateTime?
+  requestHash    String?
+  reference      String?
+  notes          String?
+  status         PickupPaymentStatus @default(RECORDED)
+  anomaly        Boolean            @default(false)
+  anomalyReason  String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  pickup         PickupRequest      @relation(fields: [pickupId], references: [id])
+
+  @@index([collectorId, status, recordedAt])
+  @@index([householdId, status, recordedAt])
+}
+
+model InventoryBalance {
+  id              String           @id @default(cuid()) @map("_id")
+  kabadiwalaId    String
+  materialCategory MaterialCategory
+  grade           String           @default("UNSPECIFIED")
+  availableKg     Float            @default(0)
+  reservedKg      Float            @default(0)
+  soldKg          Float            @default(0)
+  purchaseCost    Float            @default(0)
+  updatedAt       DateTime         @updatedAt
+  @@unique([kabadiwalaId, materialCategory, grade])
+  @@index([kabadiwalaId, materialCategory])
+}
+
+model InventoryMovement {
+  id                 String   @id @default(cuid()) @map("_id")
+  inventoryBalanceId String
+  kabadiwalaId       String
+  movementType       String
+  quantityKg         Float
+  availableBefore    Float
+  availableAfter     Float
+  reservedBefore     Float
+  reservedAfter      Float
+  soldBefore         Float
+  soldAfter          Float
+  sourceType         String
+  sourceId           String
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([kabadiwalaId, createdAt])
+  @@index([inventoryBalanceId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model BulkLot {
+  id              String        @id @default(cuid()) @map("_id")
+  kabadiwalaId    String
+  materialCategory MaterialCategory
+  grade           String        @default("UNSPECIFIED")
+  quantityKg      Float
+  askingRatePerKg Float
+  minimumRatePerKg Float?
+  areaName        String
+  latitude        Float?
+  longitude       Float?
+  notes           String?
+  sourceListingIds String[]      @default([])
+  status          BulkLotStatus @default(DRAFT)
+  reservedForId   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@index([kabadiwalaId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
+}
+
+model BulkOffer {
+  id            String          @id @default(cuid()) @map("_id")
+  bulkLotId     String
+  recyclerId    String
+  offeredRatePerKg Float
+  status        BulkOfferStatus @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  @@unique([bulkLotId, recyclerId])
+  @@index([recyclerId, status, createdAt])
+}
+
+model ProcurementRequirement {
+  id                String            @id @default(cuid()) @map("_id")
+  recyclerId        String
+  materialCategory  MaterialCategory
+  minimumLotKg      Float
+  requiredQuantityKg Float
+  preferredGrade    String?
+  maxRatePerKg      Float?
+  procurementRadiusKm Float
+  deadline          DateTime?
+  status            ProcurementStatus @default(OPEN)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  @@index([recyclerId, status, createdAt])
+  @@index([materialCategory, status, createdAt])
+}
+
+// The following models are the formalisation layer for the live
+// household -> Kabadiwala -> Recycler supply-chain boundary. They use scalar
+// ids deliberately: a pooled contribution can be owned by a collector while
+// the shared consignment is owned by a recycler, and a material passport can
+// span both the single-lot and pooled paths without pretending they are the
+// same legacy Lot record.
+model AuditEvent {
+  id         String   @id @default(cuid()) @map("_id")
+  actorId    String
+  actorRole  String
+  event      String
+  entityType String
+  entityId   String
+  metadata   Json
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model CollectorPassport {
+  id                     String   @id @default(cuid()) @map("_id")
+  collectorId            String   @unique
+  operatingZone          String?
+  preferredLanguage      String?
+  materialCategories     String[]
+  completedTransactions  Int      @default(0)
+  formalHandoverCount    Int      @default(0)
+  formalQuantityKg       Float    @default(0)
+  onTimeRate             Float?
+  cancellationRate       Float?
+  paymentDisputeCount    Int      @default(0)
+  safetyModulesCompleted Int      @default(0)
+  platformLabels         String[]
+  verificationState      String   @default("BASIC")
+  lastUpdatedAt          DateTime @updatedAt
+  createdAt              DateTime @default(now())
+
+  @@index([operatingZone, lastUpdatedAt])
+}
+
+model SafetyProgress {
+  id           String    @id @default(cuid()) @map("_id")
+  collectorId  String
+  moduleKey    String
+  acknowledged Boolean   @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([collectorId, moduleKey])
+  @@index([collectorId, acknowledged, updatedAt])
+}
+
+model RouteAdvantageEstimate {
+  id                    String          @id @default(cuid()) @map("_id")
+  collectorId           String
+  targetType            String
+  targetId              String?
+  recyclerId            String
+  materialCategory      MaterialCategory
+  quantityKg            Float
+  offeredRatePerKg      Float
+  grossValue            Float
+  logisticsCost         Float
+  platformFee           Float         @default(0)
+  estimatedNetValue     Float
+  localBaseline         Float?
+  advantageValue        Float?
+  advantagePercent      Float?
+  confidence            String
+  observationCount      Int           @default(0)
+  authorizationSnapshot Json
+  reasons               Json
+  isDemo                Boolean       @default(false)
+  computedAt            DateTime      @default(now())
+  expiresAt             DateTime
+
+  @@index([collectorId, materialCategory, computedAt])
+  @@index([recyclerId, materialCategory, computedAt])
+}
+
+model PooledConsignment {
+  id                String       @id @default(cuid()) @map("_id")
+  requirementId     String?
+  recyclerId        String
+  materialCategory  MaterialCategory
+  preferredGrade    String?
+  minimumQuantityKg Float
+  targetQuantityKg  Float
+  totalReservedKg   Float        @default(0)
+  areaName          String
+  pickupRadiusKm    Float?
+  status            PoolStatus   @default(FORMING)
+  createdByCollectorId String
+  sourceKey           String       @unique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([recyclerId, status, updatedAt])
+  @@index([materialCategory, status, areaName])
+}
+
+model PoolContribution {
+  id                 String                 @id @default(cuid()) @map("_id")
+  poolId             String
+  collectorId        String
+  inventoryBalanceId String
+  materialCategory   MaterialCategory
+  grade              String
+  quantityKg         Float
+  sourceListingIds   String[]              @default([])
+  expectedRatePerKg  Float
+  expectedPayout     Float
+  finalAcceptedKg    Float?
+  finalPayout        Float?
+  status             PoolContributionStatus @default(RESERVED)
+  handoverId         String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@unique([poolId, collectorId])
+  @@index([collectorId, status, updatedAt])
+  @@index([poolId, status])
+}
+
+model PoolSettlement {
+  id                String           @id @default(cuid()) @map("_id")
+  contributionId    String           @unique
+  poolId            String
+  quotedWeightKg    Float
+  quotedRatePerKg   Float
+  quotedValue       Float
+  acceptedWeightKg  Float
+  finalRatePerKg    Float
+  finalValue        Float
+  reasonCode        String?
+  evidenceReference String?
+  changedBy         String
+  collectorDecision String?
+  status            SettlementStatus @default(PENDING_COLLECTOR_CONFIRMATION)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([poolId, status, updatedAt])
+}
+
+model SupplyHandover {
+  id                   String               @id @default(cuid()) @map("_id")
+  sourceKey            String               @unique
+  bulkLotId            String?
+  poolId               String?
+  collectorId          String
+  recyclerId           String
+  referenceId          String               @unique
+  qrCodeData            String
+  qrVersion             Int                  @default(1)
+  qrNonceHash           String
+  consignmentHash       String
+  materialCategory      MaterialCategory
+  sourceListingIds      String[]              @default([])
+  dataBearingDevice     Boolean               @default(false)
+  dataDestructionRequested Boolean            @default(false)
+  destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
+  recyclerEvidenceReference String?
+  destructionEvidenceHash String?
+  destructionCompletedAt DateTime?
+  quotedWeightKg        Float
+  quotedRatePerKg       Float
+  quotedValue           Float
+  finalAcceptedKg       Float?
+  finalRejectedKg       Float?
+  finalRatePerKg        Float?
+  finalValue            Float?
+  handoverLocation      Json
+  authorizationSnapshot Json
+  status                SupplyHandoverStatus @default(PREPARED)
+  collectorConfirmedAt  DateTime?
+  recyclerConfirmedAt   DateTime?
+  preparedAt            DateTime             @default(now())
+  expiresAt             DateTime
+  reviewReason          String?
+  reviewEvidence        String?
+  qcStatus              QualityControlStatus @default(PENDING)
+  qcCompletedAt         DateTime?
+  qcCompletedBy         String?
+  qcNotes               String?
+  qcEvidenceReference   String?
+  payments              SupplyPayment[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([collectorId, status, updatedAt])
+  @@index([recyclerId, status, updatedAt])
+  @@index([poolId, status])
+}
+
+model SupplyPayment {
+  id                String         @id @default(cuid()) @map("_id")
+  sourceKey         String         @unique
+  supplyHandoverId  String
+  supplyHandover    SupplyHandover @relation(fields: [supplyHandoverId], references: [id])
+  collectorId       String
+  recyclerId        String
+  contributionId    String?
+  amount            Float
+  paymentMethod     PaymentMethod
+  recordedAt        DateTime
+  confirmedAt       DateTime?
+  notes             String?
+  reference         String?
+  status            PaymentStatus  @default(RECORDED)
+  anomaly           Boolean        @default(false)
+  anomalyReason     String?
+  requestHash       String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  reversals         SupplyPaymentReversal[]
+
+  @@index([collectorId, status, recordedAt])
+  @@index([recyclerId, status, recordedAt])
+  @@index([supplyHandoverId, collectorId])
+}
+
+model SupplyPaymentReversal {
+  id                 String               @id @default(cuid()) @map("_id")
+  sourceKey          String               @unique
+  supplyPaymentId    String
+  supplyPayment      SupplyPayment        @relation(fields: [supplyPaymentId], references: [id])
+  supplyHandoverId   String
+  requestedBy        String
+  provider           String
+  externalReference  String
+  evidenceReference  String
+  reason             String
+  requestHash        String?
+  amount             Float
+  status             SupplyReversalStatus @default(REQUESTED)
+  processedAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([supplyPaymentId, createdAt])
+  @@index([supplyHandoverId, status, createdAt])
+}
+
+model MaterialPassportEvent {
+  id          String   @id @default(cuid()) @map("_id")
+  entityType  String
+  entityId    String
+  eventType   String
+  actorId     String
+  actorRole   String
+  metadata    Json
+  evidenceHash String?
+  occurredAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorId, occurredAt])
+}
+
+model SettlementBreakdown {
+  id                    String           @id @default(cuid()) @map("_id")
+  handoverId            String           @unique
+  quotedWeightKg        Float
+  quotedRatePerKg       Float
+  quotedValue           Float
+  finalAcceptedKg       Float
+  finalRejectedKg       Float
+  finalRatePerKg        Float
+  finalValue            Float
+  reasonCode            String?
+  evidenceReference     String?
+  changedBy             String
+  collectorDecision     String?
+  status                SettlementStatus @default(PENDING_COLLECTOR_CONFIRMATION)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+model AnomalyFlag {
+  id          String   @id @default(cuid()) @map("_id")
+  entityType  String
+  entityId    String
+  ruleCode    String
+  severity    String
+  details     Json
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([ruleCode, severity, createdAt])
+}
