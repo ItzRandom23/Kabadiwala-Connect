@@ -1,8 +1,0 @@
-{
-  "versionCode": 37,
-  "versionName": "0.0.36-beta",
-  "apkUrl": "kabadiwala-connect-0.0.36-beta-debug.apk",
-  "sha256": "044C9DD694E54C2CC728C360D68BF5A4ED9B6F61A793259807A69D915734C056",
-  "sizeBytes": 9025793,
-  "releaseNotes": "Optimizes app-wide UI spacing and copy, simplifies empty states and actions, and improves household, collector, recycler, pricing, handover, and settings flows."
-}

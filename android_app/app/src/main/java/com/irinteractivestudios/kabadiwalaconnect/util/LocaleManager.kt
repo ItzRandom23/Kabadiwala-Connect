@@ -66,9 +66,14 @@ object LocaleManager {
     private const val PREFS = "kc_locale_prefs"
     private const val KEY_TAG = "language_tag"
 
-    /** Returns [tag] if supported, otherwise [DEFAULT]. Pure — unit-tested. */
-    fun normalizeTag(tag: String?): String =
-        if (SUPPORTED.contains(tag)) tag!! else DEFAULT
+    /** Returns a supported language tag, accepting common BCP-47 variants. */
+    fun normalizeTag(tag: String?): String {
+        val normalized = tag?.trim()?.lowercase(Locale.ROOT)?.replace('_', '-')
+        if (normalized.isNullOrEmpty()) return DEFAULT
+        if (SUPPORTED.contains(normalized)) return normalized
+        val languageOnly = normalized.substringBefore('-')
+        return if (SUPPORTED.contains(languageOnly)) languageOnly else DEFAULT
+    }
 
     fun toBackendName(tag: String?): String = BACKEND_NAMES[normalizeTag(tag)] ?: "ENGLISH"
 
@@ -95,7 +100,12 @@ object LocaleManager {
         val locale = Locale.forLanguageTag(normalizeTag(tag))
         Locale.setDefault(locale)
         val config = Configuration(context.resources.configuration)
-        config.setLocale(locale)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            config.setLocale(locale)
+        } else {
+            @Suppress("DEPRECATION")
+            config.locale = locale
+        }
         config.setLayoutDirection(locale)
         return context.createConfigurationContext(config)
     }

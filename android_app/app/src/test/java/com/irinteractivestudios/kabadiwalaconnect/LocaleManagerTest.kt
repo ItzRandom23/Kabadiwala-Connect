@@ -21,6 +21,12 @@ class LocaleManagerTest {
     }
 
     @Test
+    fun normalizeTag_acceptsCaseAndRegionVariants() {
+        assertEquals("hi", LocaleManager.normalizeTag("HI-in"))
+        assertEquals("mr", LocaleManager.normalizeTag("mr_IN"))
+    }
+
+    @Test
     fun normalizeTag_fallsBackToEnglish() {
         assertEquals("en", LocaleManager.normalizeTag("fr"))
         assertEquals("en", LocaleManager.normalizeTag(""))

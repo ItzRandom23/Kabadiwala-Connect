@@ -58,7 +58,7 @@
     <string name="prices_per_kg">प्रति किलो</string>
     <string name="prices_updated_offline">सहेजे भाव दिखाए गए। इंटरनेट नहीं है।</string>
     <string name="recycler_search">नाम या क्षेत्र खोजें</string><string name="recycler_radius">दायरा</string><string name="recycler_km">%1$d किमी</string><string name="recycler_material">सामान</string><string name="recycler_pickup_only">सिर्फ पिकअप</string><string name="recycler_sort">क्रम:</string><string name="recycler_nearby">पास</string><string name="recycler_rate">भाव</string><string name="recycler_cached">सहेजे रीसायकलर — ऑफलाइन</string><string name="recycler_rate_value">₹%1$.0f / किलो</string><string name="recycler_pickup_yes">पिकअप उपलब्ध</string><string name="recycler_pickup_no">सिर्फ जमा करें</string><string name="recycler_match">मेल %1$d%%</string><string name="recycler_detail_authorization">मान्यता और भाव</string><string name="recycler_not_verified">मान्यता जाँची नहीं गई</string><string name="recycler_materials">सामान: %1$s</string><string name="recycler_hours">समय: %1$s</string><string name="recycler_handover">आम जमा समय: %1$d घंटे</string><string name="recycler_map_placeholder">नक्शा जगह: %1$.3f, %2$.3f</string><string name="recycler_call">कॉल</string><string name="recycler_map">नक्शा</string><string name="recycler_contact_note">संपर्क: %1$s</string>
-    <string name="prices_location_label">जगह</string><string name="prices_cached">सहेजा भाव — ऑफलाइन</string><string name="prices_rate_value">₹%1$.0f / किलो</string><string name="prices_range">आम भाव: ₹%1$.0f–₹%2$.0f / किलो</string><string name="prices_last_updated">आखिरी अपडेट: %1$s</string><string name="prices_hear">भाव सुनें</string><string name="prices_history_title">30 दिन का भाव</string><string name="prices_recycler_placeholder">कनेक्शन होने पर रीसायकलर भाव यहाँ दिखेंगे।</string>
+    <string name="prices_location_label">जगह</string><string name="prices_cached">सहेजा भाव — ऑफलाइन</string><string name="prices_rate_value">₹%1$.0f / किलो</string><string name="prices_range">आम भाव: ₹%1$.0f–₹%2$.0f / %3$s</string><string name="prices_last_updated">आखिरी अपडेट: %1$s</string><string name="prices_hear">भाव सुनें</string><string name="prices_history_title">30 दिन का भाव</string><string name="prices_recycler_placeholder">कनेक्शन होने पर रीसायकलर भाव यहाँ दिखेंगे।</string>
     <string name="lot_estimated_value">बाज़ार का मध्य भाव: ₹%1$.0f</string><string name="lot_price_range">संभावित कीमत: ₹%1$.0f–₹%2$.0f</string><string name="lot_estimate_basis">स्थानीय भाव × वजन × हालत पर आधारित।</string><string name="lot_estimate_disclaimer">यह केवल अनुमान है। अंतिम कीमत जाँच के बाद तय होगी।</string>
 
     <!-- Recyclers -->
@@ -166,7 +166,7 @@
     <!-- Handover, payment, earnings and safety translations -->
     <string name="lot_safety_open">आगे बढ़ने से पहले सुरक्षा जानकारी पढ़ें</string>
     <string name="handover_choose_location">आप इसे कहाँ सौंपेंगे?</string><string name="handover_collection">संग्रह की जगह</string><string name="handover_collector">कलेक्टर की जगह</string><string name="handover_collector_id">कलेक्टर ID</string><string name="handover_create_title">हैंडओवर रिकॉर्ड बनाएँ</string><string name="handover_date">तारीख और समय</string><string name="handover_document_title">हैंडओवर दस्तावेज़</string><string name="handover_expiry">यह रिकॉर्ड अपने पास रखें।</string><string name="handover_handover_location">हैंडओवर की जगह</string><string name="handover_location_label">जगह: %1$s</string><string name="handover_lot_summary">%1$s • %2$.1f किलो • %3$s</string><string name="handover_mark_done">हैंडओवर पूरा हुआ</string><string name="handover_material">सामान</string><string name="handover_offline_note">फोन में सहेजा गया — बाद में सिंक होगा।</string><string name="handover_photo">सामान की फोटो</string><string name="handover_qr">रेफरेंस का QR कोड</string><string name="handover_recycler">रीसायकलर की जगह</string><string name="handover_save">हैंडओवर सहेजें</string><string name="handover_share">शेयर करें</string><string name="handover_share_text">हैंडओवर %1$s — %2$s — ₹%3$.0f</string><string name="handover_sms">SMS</string><string name="handover_status_done">हैंडओवर पूरा हुआ</string><string name="handover_status_saved">फोन में सहेजा — सिंक बाकी</string><string name="handover_third_party">तीसरे पक्ष की जगह</string><string name="handover_time_review">हैंडओवर समय: %1$s</string><string name="handover_value">सहमत कीमत</string><string name="handover_weight">वजन</string>
-    <string name="earnings_average">औसत लॉट कीमत</string><string name="earnings_this_month">इस महीने की कमाई</string><string name="payment_amount">रकम</string><string name="payment_amount_error">सही रकम डालें।</string><string name="payment_choose_lot">लॉट चुनें</string><string name="payment_confirm">पुष्टि करें</string><string name="payment_confirm_text">क्या ₹%.2f का भुगतान सहेजना है?</string><string name="payment_confirm_title">भुगतान की पुष्टि</string><string name="payment_date_now">आज का भुगतान</string><string name="payment_method">भुगतान का तरीका</string><string name="payment_notes">नोट</string><string name="payment_record">भुगतान दर्ज करें</string><string name="payment_save">भुगतान सहेजें</string><string name="payment_title">भुगतान</string><string name="earnings_chart">मासिक कमाई</string><string name="earnings_chart_month">मौजूदा महीना: %1$s</string>
+    <string name="earnings_average">औसत लॉट कीमत</string><string name="earnings_this_month">इस महीने की कमाई</string><string name="payment_amount">रकम</string><string name="payment_amount_error">सही रकम डालें।</string><string name="payment_choose_lot">लॉट चुनें</string><string name="payment_confirm">पुष्टि करें</string><string name="payment_confirm_text">क्या ₹%1$.0f का भुगतान सहेजना है?</string><string name="payment_confirm_title">भुगतान की पुष्टि</string><string name="payment_date_now">आज का भुगतान</string><string name="payment_method">भुगतान का तरीका</string><string name="payment_notes">नोट</string><string name="payment_record">भुगतान दर्ज करें</string><string name="payment_save">भुगतान सहेजें</string><string name="payment_title">भुगतान</string><string name="earnings_chart">मासिक कमाई</string><string name="earnings_chart_month">मौजूदा महीना: %1$s</string>
     <string name="safety_all">सभी</string><string name="safety_battery">बैटरी</string><string name="safety_battery_audio">बैटरी संभालते समय दस्ताने पहनें और उसे न खोलें।</string><string name="safety_battery_do">दस्ताने पहनें और बैटरी को सूखी जगह रखें।</string><string name="safety_battery_dont">बैटरी को तोड़ें, जलाएँ या शॉर्ट न करें।</string><string name="safety_bookmark">सहेजें</string><string name="safety_capacitor">कैपेसिटर</string><string name="safety_capacitor_audio">कैपेसिटर को न छुएँ; प्रशिक्षित व्यक्ति से मदद लें।</string><string name="safety_capacitor_do">बिजली बंद करें और विशेषज्ञ से जाँच कराएँ।</string><string name="safety_capacitor_dont">चार्ज कैपेसिटर को छुएँ या खोलें नहीं।</string><string name="safety_crt">CRT</string><string name="safety_crt_audio">CRT स्क्रीन को सावधानी से रखें और न तोड़ें।</string><string name="safety_crt_do">दस्ताने पहनें और स्क्रीन को सुरक्षित रखें।</string><string name="safety_crt_dont">CRT को तोड़ें, काटें या जलाएँ नहीं।</string><string name="safety_directory_detail">खतरनाक सामान के लिए आसान सुरक्षा सलाह।</string><string name="safety_do">क्या करें</string><string name="safety_do_not">क्या न करें</string><string name="safety_filter">सामान चुनें</string><string name="safety_hear">सुनें</string><string name="safety_localized">हिंदी और मराठी में सलाह उपलब्ध है।</string><string name="safety_motor">मोटर और पुर्जे</string><string name="safety_motor_audio">मोटर के पुर्जों को सावधानी से रखें और तार न काटें।</string><string name="safety_motor_do">दस्ताने पहनें और भारी पुर्जे धीरे उठाएँ।</string><string name="safety_motor_dont">घूमते या जुड़े हुए पुर्जों को न छुएँ।</string><string name="safety_other">अन्य खतरनाक सामान</string><string name="safety_other_audio">अनजान सामान को न खोलें; मदद लें।</string><string name="safety_other_do">सामान की पहचान करें और सुरक्षा उपकरण पहनें।</string><string name="safety_other_dont">अनजान सामान को जलाएँ या खोलें नहीं।</string><string name="safety_saved">सहेजा गया</string><string name="safety_tip_day">आज की सुरक्षा सलाह</string><string name="safety_tip_day_text">दस्ताने पहनें और ई-कचरा जलाएँ नहीं।</string><string name="safety_transformer">ट्रांसफॉर्मर</string><string name="safety_transformer_audio">ट्रांसफॉर्मर में छिपी बिजली हो सकती है; उसे न खोलें।</string><string name="safety_transformer_do">बिजली से अलग रखें और प्रशिक्षित व्यक्ति को दें।</string><string name="safety_transformer_dont">ट्रांसफॉर्मर को खोलें, जलाएँ या पानी में न रखें।</string><string name="safety_visual">सुरक्षा चेतावनी</string>
     <string name="lot_use_demo_photo">पुणे डेमो फोटो इस्तेमाल करें</string><string name="lot_choose_photo">गैलरी से चुनें</string>
     <string name="recycler_marketplace_title">पास के लॉट</string><string name="recycler_orders_title">चालू ऑर्डर</string><string name="recycler_orders_subtitle">स्वीकृत लॉट और हैंडओवर की पुष्टि।</string><string name="recycler_order_reference">हैंडओवर %1$s</string><string name="recycler_order_weight">मापा हुआ वजन · %.1f किलो</string><string name="recycler_order_status">स्थिति · %1$s</string><string name="recycler_order_scan">QR हैंडओवर खोलें</string><string name="recycler_pickups_title">पिकअप समय</string><string name="recycler_rates_title">मेरी खरीद दरें</string><string name="recycler_profile_title">रीसायकलर प्रोफ़ाइल</string><string name="recycler_verification_title">सत्यापन जारी है</string><string name="recycler_verification_verified_title">आपकी सुविधा सत्यापित है</string><string name="recycler_verification_not_approved_title">आपकी सुविधा अभी स्वीकृत नहीं है</string>
@@ -598,4 +598,168 @@
     <string name="demo_pune">पुणे</string>
     <string name="demo_household_message">नमस्ते! मैं आज शाम 5:30 बजे आपका लॉट ले सकता हूँ।</string>
     <string name="demo_recycler_message">आपका लॉट हमारी सत्यापित सुविधा से मैच हो गया है।</string>
+    <!-- Complete Hindi coverage for the current application surface. -->
+    <string name="nav_kabadiwala_inventory">इन्वेंटरी</string>
+    <string name="nav_kabadiwala_pickups">पिकअप</string>
+    <string name="nav_kabadiwala_lots">खरीदार</string>
+    <string name="recycler_marketplace_detail">आपके सामान और क्षेत्र से मेल खाते सत्यापित लॉट।</string>
+    <string name="recycler_marketplace_refresh_error">रिफ्रेश नहीं हो सका। आपका सहेजा काम सुरक्षित है।</string>
+    <string name="recycler_offer_saved">ऑफ़र सहेजा गया · ऑनलाइन होने पर सिंक होगा।</string>
+    <string name="recycler_offer_sent">ऑफ़र भेजा गया · सिंक के बाद कलेक्टर इसे देखेगा।</string>
+    <string name="recycler_passport_matched">मटेरियल पासपोर्ट मिल गया</string>
+    <string name="recycler_receipt_saved">रसीद स्थानीय रूप से सहेजी गई · ऑनलाइन होने पर फिर कोशिश होगी।</string>
+    <string name="recycler_pickup_ready">पिकअप तैयार · सिंक के बाद कलेक्टर देखेगा।</string>
+    <string name="recycler_pickups_detail">जब आपकी सुविधा हैंडओवर ले सके, तब सेट करें।</string>
+    <string name="recycler_availability_visible">कोट माँगने से पहले कलेक्टर इसे देखेंगे।</string>
+    <string name="recycler_rates_detail">सहेजे गए रेट मिलान किए गए कलेक्टरों के साथ साझा होते हैं।</string>
+    <string name="recycler_rates_load_error">वर्तमान रेट लोड नहीं हो सके। फिर कोशिश करें।</string>
+    <string name="recycler_verification_rejected_title">अपनी सत्यापन जानकारी अपडेट करें</string>
+    <string name="home_household_title">आपका स्क्रैप डैशबोर्ड</string>
+    <string name="home_household_subtitle">घर का स्क्रैप पास के कबाड़ीवाले को बेचें।</string>
+    <string name="home_household_action_title">घर से स्क्रैप बेचें</string>
+    <string name="home_household_action_detail">शुरू करने के लिए सामान, वजन और क्षेत्र जोड़ें।</string>
+    <string name="home_household_create_lot">बिक्री शुरू करें</string>
+    <string name="home_tool_rewards_detail">सत्यापित काम से मिले बोनस देखें।</string>
+    <string name="home_tool_schemes_detail">आधिकारिक स्रोतों से योजनाएँ देखें।</string>
+    <string name="home_tool_activities_detail">सुरक्षित छंटाई और पुन: उपयोग सीखें।</string>
+    <string name="home_tool_messages_detail">लेन-देन के संदेश एक जगह रखें।</string>
+    <string name="home_tool_disputes_detail">हैंडओवर से जुड़ी चिंताएँ देखें।</string>
+    <string name="recycler_verification_status_detail">स्थिति समीक्षा टीम तय करती है।</string>
+    <string name="recycler_verification_status_pending">समीक्षा लंबित</string>
+    <string name="recycler_verification_status_verified">सत्यापित</string>
+    <string name="recycler_verification_status_rejected">अपडेट आवश्यक</string>
+    <string name="recycler_verification_status_suspended">निलंबित</string>
+    <string name="recycler_verification_controlled_note">आधिकारिक जानकारी भेजें। एक्सेस खुलने से पहले समीक्षक इसकी जाँच करेगा।</string>
+    <string name="recycler_verification_suspended_action">एक्सेस फिर खोलने के लिए सहायता से संपर्क करें।</string>
+    <string name="recycler_verification_submit_title">प्राधिकरण का प्रमाण भेजें</string>
+    <string name="recycler_verification_submit_detail">अपना वर्तमान प्राधिकरण रिकॉर्ड इस्तेमाल करें। सार्वजनिक लिंक या दस्तावेज़ संदर्भ जोड़ें—पासवर्ड या निजी ID नंबर कभी न दें।</string>
+    <string name="recycler_verification_review_feedback">समीक्षा नोट: %1$s</string>
+    <string name="recycler_verification_authority">जारी करने वाला प्राधिकरण</string>
+    <string name="recycler_verification_type">प्राधिकरण का प्रकार</string>
+    <string name="recycler_verification_type_hint">EPR पंजीकरण, CTO, SPCB प्राधिकरण…</string>
+    <string name="recycler_verification_registration_number">पंजीकरण संख्या</string>
+    <string name="recycler_verification_valid_until">मान्य तिथि</string>
+    <string name="recycler_verification_valid_until_hint">YYYY-MM-DD</string>
+    <string name="recycler_verification_evidence_reference">प्रमाण लिंक या दस्तावेज़ संदर्भ</string>
+    <string name="recycler_verification_evidence_hint">आधिकारिक रिकॉर्ड URL, आवेदन ID या दस्तावेज़ संदर्भ…</string>
+    <string name="recycler_verification_source">हम इसे कहाँ सत्यापित करें?</string>
+    <string name="recycler_verification_source_hint">CPCB EPR Portal, SPCB portal या जारी करने वाला कार्यालय…</string>
+    <string name="recycler_verification_declaration">ये जानकारी मेरे आधिकारिक रिकॉर्ड से मेल खाती है।</string>
+    <string name="recycler_verification_submit">समीक्षा के लिए भेजें</string>
+    <string name="recycler_verification_submitting">भेजा जा रहा है…</string>
+    <string name="recycler_verification_submit_error">यह अनुरोध भेजा नहीं जा सका। कनेक्शन जाँचकर फिर कोशिश करें।</string>
+    <string name="recycler_verification_submitted">अनुरोध भेज दिया गया। समीक्षा के बाद हम स्थिति अपडेट करेंगे।</string>
+    <string name="recycler_verification_refresh">स्थिति रिफ्रेश करें</string>
+    <string name="recycler_verification_open_marketplace">मार्केटप्लेस खोलें</string>
+    <string name="recycler_verification_evidence_title">सत्यापित प्राधिकरण</string>
+    <string name="recycler_verification_type_value">प्रकार: %1$s</string>
+    <string name="recycler_verification_registration_value">पंजीकरण: %1$s</string>
+    <string name="recycler_verification_valid_until_value">मान्य तिथि: %1$s</string>
+    <string name="recycler_verification_evidence_private">प्रमाण निजी रहता है। प्रोफ़ाइल में केवल प्राधिकरण और वैधता दिखती है।</string>
+    <string name="recycler_verification_error_authority">जारी करने वाला प्राधिकरण दर्ज करें।</string>
+    <string name="recycler_verification_error_type">प्राधिकरण का प्रकार दर्ज करें।</string>
+    <string name="recycler_verification_error_registration">पंजीकरण संख्या दर्ज करें।</string>
+    <string name="recycler_verification_error_date">YYYY-MM-DD दिनांक प्रारूप इस्तेमाल करें।</string>
+    <string name="recycler_verification_error_evidence">दस्तावेज़ ID या आधिकारिक सत्यापन लिंक जोड़ें।</string>
+    <string name="recycler_verification_error_source">बताएँ कि रिकॉर्ड कहाँ जाँचा जा सकता है।</string>
+    <string name="recycler_verification_error_declaration">पुष्टि करें कि ये जानकारी आपके आधिकारिक रिकॉर्ड से मेल खाती है।</string>
+    <string name="lot_details">लॉट विवरण</string>
+    <string name="lot_estimate_warning">यह बाज़ार संदर्भ है, वादा नहीं। जाँच के बाद अंतिम कीमत तय करें।</string>
+    <string name="lot_user_price_label">अपनी कीमत बताएँ (वैकल्पिक)</string>
+    <string name="lot_user_price_detail">अपेक्षित कीमत साझा करें।</string>
+    <string name="lot_user_price_error">₹0 से अधिक मान्य राशि दर्ज करें।</string>
+    <string name="lot_view_saved">बनाया गया लॉट देखें</string>
+    <string name="prices_subtitle">बिक्री तय करने से पहले स्थानीय संदर्भ।</string>
+    <string name="prices_location_context">%1$s के आसपास की कीमतें दिखाई जा रही हैं</string>
+    <string name="prices_location_help">रेट की तुलना करने के लिए क्षेत्र बदलें।</string>
+    <string name="prices_empty_title">%1$s के लिए अभी कीमतें नहीं हैं</string>
+    <string name="prices_empty_detail">यहाँ अभी सत्यापित रेट नहीं हैं। कोई दूसरा क्षेत्र आज़माएँ।</string>
+    <string name="prices_refresh">कीमतें रिफ्रेश करें</string>
+    <string name="prices_refreshing">अपडेट जाँचे जा रहे हैं…</string>
+    <string name="prices_source">स्रोत: %1$s</string>
+    <string name="prices_stale">पुरानी कीमत — बिक्री से पहले वर्तमान रेट की पुष्टि करें</string>
+    <string name="recyclers_match_title">इस लॉट के लिए बेहतर मिलान</string>
+    <string name="recyclers_match_detail">मिलान में सामान, रेट, दूरी और पिकअप की तैयारी देखी जाती है।</string>
+    <string name="quote_user_price">आपकी माँगी गई कीमत: ₹%1$.0f</string>
+    <string name="payment_save_error">भुगतान सहेजा नहीं जा सका। फिर कोशिश करें।</string>
+    <string name="settings_profile_section">खाता</string>
+    <string name="settings_language_section">भाषा</string>
+    <string name="settings_appearance_section">प्रदर्शन</string>
+    <string name="settings_safety_section">सुरक्षा और सहायता</string>
+    <string name="settings_about_section">ऐप</string>
+    <string name="settings_check_for_updates">अपडेट जाँचें</string>
+    <string name="transaction_passport_title">लेन-देन पासपोर्ट</string>
+    <string name="transaction_passport_error">लेन-देन टाइमलाइन अभी उपलब्ध नहीं है।</string>
+    <string name="transaction_passport_cached">अंतिम उपलब्ध टाइमलाइन दिखाई जा रही है।</string>
+    <string name="transaction_status">स्थिति: %1$s</string>
+    <string name="transaction_quoted_value">बताई गई कीमत: ₹%1$.0f</string>
+    <string name="transaction_final_value">अंतिम कीमत: ₹%1$.0f</string>
+    <string name="transaction_refresh">टाइमलाइन रिफ्रेश करें</string>
+    <string name="loading">लोड हो रहा है…</string>
+    <string name="auth_benefit_sell_title">अपने दरवाज़े से बेचें</string>
+    <string name="auth_benefit_sell_detail">कुछ आसान चरणों में स्क्रैप लॉट बनाएँ।</string>
+    <string name="auth_benefit_price_title">उचित, वर्तमान कीमतें देखें</string>
+    <string name="auth_benefit_price_detail">बेचने से पहले सोच-समझकर निर्णय लें।</string>
+    <string name="auth_benefit_trust_title">भरोसे के साथ जुड़ें</string>
+    <string name="auth_benefit_trust_detail">पास के सत्यापित रीसाइक्लिंग पार्टनर खोजें।</string>
+    <string name="auth_use_email_instead">इसके बजाय ईमेल से साइन इन करें</string>
+    <string name="auth_role_household">मैं एक घर / स्थानीय विक्रेता हूँ</string>
+    <string name="auth_role_household_detail">अपने घर का स्क्रैप बेचें। आप स्क्रैप खरीदते या प्रोसेस नहीं करते।</string>
+    <string name="auth_area_household_title">आपका स्क्रैप कहाँ से लिया जाए?</string>
+    <string name="auth_area_household_detail">आपका मोहल्ला या पास का कोई लैंडमार्क पर्याप्त है। कबाड़ीवाले के साथ सटीक पता बाद में तय किया जा सकता है।</string>
+    <string name="auth_area_recycler_title">आपकी सुविधा कहाँ है?</string>
+    <string name="auth_area_recycler_detail">पास के कबाड़ीवाला सप्लायरों से मिलान के लिए सुविधा का क्षेत्र जोड़ें।</string>
+    <string name="quote_action_failed">यह कोट अब उपलब्ध नहीं है। रिफ्रेश करके फिर कोशिश करें।</string>
+    <string name="lot_repeat_failed">दोबारा लॉट नहीं बनाया जा सका। कनेक्शन जाँचकर फिर कोशिश करें।</string>
+    <string name="lot_repeat_sending">दोबारा लॉट बनाया जा रहा है…</string>
+    <string name="home_next_label">अगला काम</string>
+    <string name="home_sync_pending">सिंक के लिए %1$d बाकी</string>
+    <string name="home_next_create_title">सामान का लॉट दर्ज करें</string>
+    <string name="home_next_create_detail">सत्यापित जानकारी के आधार पर मार्केटप्लेस चलाने के लिए सामान, वजन और क्षेत्र दर्ज करें।</string>
+    <string name="home_next_create_button">लॉट बनाएँ</string>
+    <string name="home_next_match_title">सत्यापित रीसाइक्लर खोजें</string>
+    <string name="home_next_match_detail">यह सहेजा गया लॉट रीसाइक्लर मिलान और कोट अनुरोध के लिए तैयार है।</string>
+    <string name="home_next_match_button">मिलान खोजें</string>
+    <string name="home_next_quotes_title">रीसाइक्लर कोट की तुलना करें</string>
+    <string name="home_next_quotes_detail">नवीनतम ऑफ़र देखें और अगला स्पष्ट सौदा चुनें।</string>
+    <string name="home_next_quotes_button">कोट देखें</string>
+    <string name="home_next_handover_title">हैंडओवर तैयार करें</string>
+    <string name="home_next_handover_detail">आपका स्वीकार किया गया सौदा प्रमाण, QR सत्यापन और रसीद के लिए तैयार है।</string>
+    <string name="home_next_handover_button">लॉट खोलें</string>
+    <string name="home_next_payment_title">सेटलमेंट दर्ज करें</string>
+    <string name="home_next_payment_detail">अंतिम भुगतान की पुष्टि करें ताकि कमाई, रिवॉर्ड्स और लेन-देन पासपोर्ट पूरा रहे।</string>
+    <string name="home_next_payment_button">भुगतान दर्ज करें</string>
+    <string name="home_next_dispute_title">अंतर की समीक्षा करें</string>
+    <string name="home_next_dispute_detail">लेन-देन पूरा करने से पहले एक हैंडओवर पर ध्यान देना ज़रूरी है।</string>
+    <string name="home_next_dispute_button">समस्या देखें</string>
+    <string name="settings_sync_retry_action">फिर कोशिश करें</string>
+    <string name="payment_calculated_amount">गणना किया गया सेटलमेंट</string>
+    <string name="recycler_settlement_title">उचित सेटलमेंट की गणना हुई</string>
+    <string name="recycler_settlement_amount">अपेक्षित भुगतान: ₹%1$.2f</string>
+    <string name="recycler_settlement_variance">वजन का अंतर: %1$.2f%%</string>
+    <string name="earnings_ledger_title">हाल के लेन-देन</string>
+    <string name="earnings_lot_reference">लॉट …%1$s</string>
+    <string name="earnings_payment_status">%1$s · %2$s</string>
+    <string name="settings_sync_center">सिंक केंद्र</string>
+    <string name="settings_sync_now">अभी सिंक करें</string>
+    <string name="settings_sync_details">हाल की स्थानीय गतिविधियाँ</string>
+    <string name="settings_sync_waiting">प्रतीक्षा में</string>
+    <string name="settings_sync_retrying">फिर कोशिश %1$d</string>
+    <string name="settings_sync_failed">विफल: %1$s</string>
+    <string name="lot_edit">लॉट संपादित करें</string>
+    <string name="lot_edit_title">लॉट विवरण संपादित करें</string>
+    <string name="lot_edit_detail">लॉट खुला रहने तक वजन, स्थिति और नोट बदलें। सामान और पिकअप स्थिर रहेंगे।</string>
+    <string name="lot_edit_weight">वास्तविक वजन</string>
+    <string name="lot_edit_condition">स्थिति</string>
+    <string name="lot_edit_notes">नोट्स</string>
+    <string name="lot_edit_save">बदलाव सहेजें</string>
+    <string name="lot_edit_saving">सहेजा जा रहा है…</string>
+    <string name="lot_edit_cancel">रद्द करें</string>
+    <string name="lot_edit_validation_error">0 से अधिक और 500 kg से कम वजन दर्ज करें।</string>
+    <string name="lot_edit_locked">यह लॉट संपादित नहीं किया जा सकता</string>
+    <string name="lot_edit_locked_detail">कोट, पिकअप, हैंडओवर या भुगतान शुरू होने से पहले ही संपादन उपलब्ध है।</string>
+    <string name="lot_edit_locked_error">लॉट बदल गया है या अब खुला नहीं है। रिफ्रेश करके फिर कोशिश करें।</string>
+    <string name="quote_choose_recyclers">रीसाइक्लर चुनें</string>
+    <string name="quote_selected_recyclers">चुने गए रीसाइक्लर</string>
+    <string name="home_area_not_set">पास की कीमतें और रीसाइक्लर देखने के लिए अपना क्षेत्र सेट करें</string>
 </resources>

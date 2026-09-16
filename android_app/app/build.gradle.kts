@@ -42,15 +42,11 @@ android {
             // Cleartext is limited to the debug/testing variant. Move this host
             // behind TLS before supplying it to a production build.
             manifestPlaceholders["apiUsesCleartext"] = testingApiBaseUrl.startsWith("http://").toString()
-            // The testing update channel distributes this variant. Keep it
-            // debuggable, but apply the same code/resource optimization users
-            // receive in production so field builds are not artificially slow.
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // Keep the debug/testing variant debuggable and unminified so
+            // instrumentation tests do not invoke the separate test APK R8
+            // shrinker. Production release remains optimized below.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
         release {
             require(productionApiBaseUrl.startsWith("https://")) {
