@@ -1,8 +1,8 @@
 {
-  "versionCode": 38,
-  "versionName": "0.0.37-beta",
-  "apkUrl": "kabadiwala-connect-0.0.37-beta-debug.apk",
-  "sha256": "84FD764B2A23F4E3E1E7070BBE3C8EE421BBE400FD7D149781CCE3EFA9563E36",
-  "sizeBytes": 26932307,
-  "releaseNotes": "Hardens production account privacy, protected photo uploads, pickup scheduling, notification delivery, account deletion/export, and release safety."
+  "versionCode": 39,
+  "versionName": "0.0.38-beta",
+  "apkUrl": "kabadiwala-connect-0.0.38-beta-debug.apk",
+  "sha256": "7D50086A0FF59712242F0F780567669167562C3195223398D86BE616ECEC45A3",
+  "sizeBytes": 27094102,
+  "releaseNotes": "Adds complete feature coverage, all-locale resource validation, Hindi and Marathi updates, and English fallbacks for newly added strings."
 }
