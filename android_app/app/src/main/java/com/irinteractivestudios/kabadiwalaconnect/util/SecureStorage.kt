@@ -41,6 +41,10 @@ interface SecureStorage {
         const val ACCOUNT_LONGITUDE = "account_longitude"
         const val ACCOUNT_PERMISSIONS = "account_permissions"
 
+        /** Current FCM token and a retryable token awaiting authenticated registration. */
+        const val PUSH_TOKEN = "push_token"
+        const val PENDING_PUSH_TOKEN = "pending_push_token"
+
         /** Opaque server cursor used by bidirectional change reconciliation. */
         const val SYNC_CURSOR = "sync_cursor"
 

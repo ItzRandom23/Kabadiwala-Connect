@@ -39,6 +39,8 @@ New Android accounts use email/password:
 - `POST /api/v1/auth/refresh` rotates the refresh token. Reuse revokes its token family.
 - `POST /api/v1/auth/logout` revokes the supplied refresh-token family; the access token expires shortly afterward.
 - `GET /api/v1/auth/profile` revalidates the profile after an offline launch.
+- `GET /api/v1/auth/account/export` returns an account-scoped JSON export without password hashes, refresh tokens, OTP challenges, or server secrets.
+- `POST /api/v1/auth/account/delete` accepts `{ "confirmation": "DELETE" }`. It soft-deletes the authenticated account, revokes refresh sessions, removes direct contact/authentication data and in-app notifications, and preserves transactional/audit records for controlled retention.
 
 Recycler accounts are created with `authorizationStatus=PENDING`; only secure backend/admin data can move them to `VERIFIED`. Role is never inferred from an email string or domain.
 
@@ -48,13 +50,15 @@ The phone/OTP contract below remains for older collector clients during migratio
 
 ## Household seller API
 
-Household accounts use `POST /api/v1/household/listings` to post a material listing (including an optional prototype photo reference and demo estimate range), `GET /api/v1/household/listings` to view owned listings, `GET /api/v1/household/kabadiwalas` to discover active collection partners, and `POST /api/v1/household/listings/{listingId}/pickups` to request a pickup. A household can cancel an open listing with `POST /api/v1/household/listings/{listingId}/cancel` or cancel a requested/accepted/scheduled pickup with `POST /api/v1/household/pickups/{pickupId}/cancel`. All routes are ownership- and role-gated; final weight, rate, settlement, and inventory are written by the Kabadiwala workflow.
+Household accounts use `POST /api/v1/household/listings` to post a server-owned material listing, `POST /api/v1/household/listings/{listingId}/photo` for an authenticated validated photo upload, `GET /api/v1/household/listings` to view owned listings, `GET /api/v1/household/kabadiwalas` to discover active collection partners, and `POST /api/v1/household/listings/{listingId}/pickups` to request a pickup. A household can cancel an open listing with `POST /api/v1/household/listings/{listingId}/cancel` or cancel a requested/accepted/scheduled pickup with `POST /api/v1/household/pickups/{pickupId}/cancel`. All routes are ownership- and role-gated; final weight, rate, settlement, and inventory are written by the Kabadiwala workflow.
+
+Pickup slots are server-owned: requested, rescheduled and collector-scheduled times must be on an hour or half-hour, at least 90 minutes in the future and within 14 days. A collector's `dailyPickupCapacity` (default `8`) is reserved atomically in `CollectorPickupDay` using the `Asia/Kolkata` calendar day and released on cancellation, reassignment or cross-day rescheduling. Capacity conflicts return `PICKUP_CAPACITY_FULL`; ETA/routing, holidays and operating-hour calendars remain future production work.
 
 ## Android test updates
 
 The server exposes `backend/app-update` at `/app`. The Android app checks `/app/update.json` on launch and compares its `versionCode`. Upload an APK and a manifest there to offer an update. The APK must have a higher `versionCode` and the same signing key as the installed app. The app asks before downloading, and Android asks for final installation confirmation; silent installation is not supported.
 
-For local development, set `OTP_PROVIDER=development` and use `DEV_OTP_CODE` (default `123456`). This provider is rejected when `NODE_ENV=production`; no OTP is returned by the API. Set `OTP_PROVIDER=twilio` and provide the three `TWILIO_*` variables to use Twilio Verify. OTP values and tokens are never logged.
+For local development, set `OTP_PROVIDER=development` and use `DEV_OTP_CODE` (default `123456`). This provider is rejected when `NODE_ENV=production`; no OTP is returned by the API. Set `OTP_PROVIDER=twilio` and provide the three `TWILIO_*` variables to use Twilio Verify, or set `OTP_PROVIDER=twofactor` with `TWOFACTOR_API_KEY` to send India SMS through 2Factor. The 2Factor provider uses the documented custom-OTP endpoint and stores only an HMAC of the pending code in the database; set `TWOFACTOR_BASE_URL` only when 2Factor gives your account a different API base. OTP values and tokens are never logged.
 
 Gemini features are optional and fail safely when the key is absent or the provider is unavailable. Set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` (for example, `gemini-2.5-flash`). The key remains server-side and is sent to Google's `generateContent` API. Lot descriptions still fall back to a deterministic template; photo material identification falls back to `OTHER` and always requires collector confirmation. Transaction chat remains human-to-human: `POST /api/v1/future/conversations/:conversationId/draft-reply` returns an editable Gemini reply draft and never sends or stores it automatically.
 
@@ -80,11 +84,11 @@ npm prune --omit=dev
 npm start
 ```
 
-Use `NODE_ENV=production`, separate strong JWT/traceability secrets, a production MongoDB replica set, HTTPS-only explicit `CORS_ORIGIN` values, `RATE_LIMIT_STORE=database`, and private S3-compatible storage for horizontally scaled deployments. Keep `.env.example` as the configuration reference; never upload local credentials.
+Use `NODE_ENV=production`, `OTP_PROVIDER=twofactor` or `twilio`, separate strong JWT/traceability secrets, a production MongoDB replica set, HTTPS-only explicit `CORS_ORIGIN` values, `RATE_LIMIT_STORE=database`, and private S3-compatible storage for horizontally scaled deployments. Apply the Prisma schema to a disposable/staging database first, then run `npm run db:prepare` to create the runtime indexes. Keep `.env.example` as the configuration reference; never upload local credentials.
 
 ## API
 
-- `GET /api/v1/health` reports API/database status, timestamp, and version.
+- `GET /api/v1/health` reports liveness/API/database status, timestamp, and version. `GET /api/v1/ready` is the deployment readiness probe and also checks storage initialization, non-development OTP configuration in production, and the shared database rate-limit requirement.
 - `GET /api/v1/collectors/me` returns the authenticated collector using `Authorization: Bearer <JWT>`.
 
 The implemented `/api/v1/prices`, `/recyclers`, `/quotes`, `/handovers`, `/payments`, and `/earnings` endpoints are documented in the feature sections below. Admin functionality is limited to the explicitly listed review and authorization routes.
@@ -105,7 +109,7 @@ Moving a recycler to `VERIFIED` requires authority, registration number, authori
 
 Collector endpoints: `POST /api/v1/quotes/request`, `GET /api/v1/quotes/pending`, `GET /api/v1/quotes/{quoteId}`, and quote accept/reject actions. Recycler endpoints use `RECYCLER` JWTs: `GET /api/v1/recycler/quote-requests`, `GET /api/v1/recycler/quote-requests/{requestId}`, and `POST /api/v1/recycler/quotes`.
 
-Requests are scoped to the authenticated owner, require a VERIFIED recycler accepting the lot material, and expire after 24 hours. Recycler submissions calculate totals server-side, compare against the latest market price when available, and flag quotes at least 2× market as anomalies. Acceptance is transactional and rejects other active quotes for the lot. No SMS/push delivery is implemented.
+Requests are scoped to the authenticated owner, require a VERIFIED recycler accepting the lot material, and expire after 24 hours. Recycler submissions calculate totals server-side, compare against the latest market price when available, and flag quotes at least 2× market as anomalies. Acceptance is transactional and rejects other active quotes for the lot. The in-app notification inbox is durable and deduplicated; authenticated clients can register/unregister provider device tokens at `POST/GET /api/v1/notifications/devices` and `POST /api/v1/notifications/devices/unregister`. SMS notifications use a durable retry outbox and a server-only 2Factor adapter, but remain disabled until `NOTIFICATION_SMS_ENABLED=true`, sender/DLT configuration, and a staging delivery test are complete. Push now has an FCM HTTP v1 adapter, Android token registration, per-device retry targets, invalid-token cleanup, and preference enforcement; it remains disabled until the Firebase project, `google-services.json`, service-account secrets, and staging delivery monitoring are configured as documented in `docs/FIREBASE_PUSH_SETUP.md`.
 
 ## Price API (Phase 4)
 

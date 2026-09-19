@@ -23,8 +23,9 @@ npm run db:seed
 npm run dev
 ```
 
-The Android debug build uses `http://140.245.232.208:4000/api/v1/` by default;
-the emulator/device must be able to reach that host over the testing network.
+The Android debug build has no implicit remote host. Configure the backend
+explicitly, for example `-PtestingApiBaseUrl=http://10.0.2.2:4000/api/v1/`
+for an Android emulator, or an approved HTTPS staging URL for a device.
 
 The baseline manual path is Household listing → selected Kabadiwala pickup →
 arrival and final weighing → inventory increment. The formal path then continues

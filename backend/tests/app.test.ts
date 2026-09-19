@@ -32,6 +32,9 @@ describe('app', () => {
     const health = await request(app).get('/api/v1/health');
     expect(health.status).toBe(200);
     expect(health.body.data.status).toBe('healthy');
+    const ready = await request(app).get('/api/v1/ready');
+    expect(ready.status).toBe(200);
+    expect(ready.body.data.status).toBe('ready');
     const missing = await request(app).get('/missing');
     expect(missing.status).toBe(404);
     expect(missing.body.error.code).toBe('NOT_FOUND');

@@ -111,6 +111,11 @@ This is the backend contract for the current repository. Android must consume th
 | `GET /notifications/unread-count` | Household/Collector/Recycler | None. | `{ count }`. | Own account only. |
 | `POST /notifications/:notificationId/read` | Household/Collector/Recycler | Path ID. | `{ marked }`. | Own notification; repeated read is safe. |
 | `POST /notifications/read-all` | Household/Collector/Recycler | None. | Count marked. | Own account only. |
+| `POST /notifications/devices` | Household/Collector/Recycler | `token`, `platform`, optional `appVersion`. | Safe device registration summary. | Own account; token is unique and moves to the authenticated account on re-registration. |
+| `GET /notifications/devices` | Household/Collector/Recycler | None. | Registered device metadata without provider tokens. | Own account only. |
+| `POST /notifications/devices/unregister` | Household/Collector/Recycler | `token`. | `{ removed }`. | Deletes only the caller's matching device token. |
+
+Notification delivery is an internal outbox worker, not a public client route. SMS is disabled by default and requires a server-side 2Factor key, approved sender/template/DLT configuration, and a staging delivery test. Push is disabled by default and requires FCM HTTP v1 service-account configuration. Push fan-out creates per-device target rows, retries transient failures with bounded backoff, disables invalid tokens, honors `pushNotificationsEnabled`, and never fails the originating business mutation. Provider tokens are never returned by the device routes.
 
 `POST /sync` operation contract:
 
@@ -140,13 +145,13 @@ Every operation is hashed over operation type, entity type, entity ID and payloa
 | `GET /household/listings/:listingId/passport` | Household | Path ID. | Listing, pickup IDs, passport events, inventory movements and disclaimer. | Own source only; evidence is not a government certificate. |
 | `POST /household/listings/:listingId/cancel` | Household | Optional reason. | Success acknowledgement. | Only open listing; active pickups are cancelled in the same transaction and reliability markers are written. |
 | `GET /household/kabadiwalas` | Household | Optional `latitude`, `longitude`, `radiusKm` (coordinates must be supplied together). | Active Kabadiwala public-safe profiles, optionally distance-filtered. | No private contact/evidence fields; radius is server-enforced. |
-| `POST /household/listings/:listingId/pickups` | Household | `kabadiwalaId`, optional ISO `requestedSlot`. | Pickup request (`201`) or canonical existing/replayed request (`200`). | Listing ownership, active collector, single-winner claim and optional request-hash idempotency. |
+| `POST /household/listings/:listingId/pickups` | Household | `kabadiwalaId`, optional ISO `requestedSlot` aligned to an hour/half-hour. | Pickup request (`201`) or canonical existing/replayed request (`200`). | Listing ownership, active collector, single-winner claim, 90-minute minimum lead time, 14-day horizon and optional request-hash idempotency. |
 | `GET /household/pickups` | Household | None. | Own pickup requests with reliability/settlement fields. | Own household only. |
 | `GET /household/pickups/:pickupId` | Household | Path ID. | Pickup plus source listing. | IDOR-safe. |
 | `GET /household/pickups/:pickupId/passport` | Household | Path ID. | Pickup, source listing, ordered passport events, inventory movements and disclaimer. | Own pickup only. |
-| `POST /household/pickups/:pickupId/reschedule` | Household | New ISO `scheduledSlot`. | Updated pickup. | Only request/accepted/scheduled/reassignment states; resets reassignment reason. |
+| `POST /household/pickups/:pickupId/reschedule` | Household | New ISO `scheduledSlot` aligned to an hour/half-hour. | Updated pickup or `PICKUP_CAPACITY_FULL`. | Only request/accepted/scheduled/reassignment states; server validates the lead-time/horizon window, reserves the collector's India-local pickup day and releases the previous day when it changes; resets reassignment reason. |
 | `POST /household/pickups/:pickupId/settlement` | Household | `decision: ACCEPT|RAISE_ISSUE`, required `reasonCode` for issue, optional evidence/notes and `Idempotency-Key`. | Settlement decision and updated pickup. | Only completed pickup pending household confirmation; conditional update prevents duplicate decisions and creates anomaly evidence for issues. |
-| `POST /household/pickups/:pickupId/cancel` | Household | Optional reason. | Success acknowledgement. | Eligible pre-completion states only; late cancellation is classified. |
+| `POST /household/pickups/:pickupId/cancel` | Household | Optional reason. | Success acknowledgement. | Eligible pre-completion states only; late cancellation is classified and any scheduled capacity is released. |
 | `GET /household/pickups/:pickupId/reassignment-options` | Household | Path ID. | Active replacement Kabadiwala options with privacy-safe profile and distance when coordinates exist. | Own `REASSIGNMENT_REQUIRED` pickup only; explicit household selection remains a client action. |
 | `POST /household/pickups/:pickupId/reassign` | Household | `kabadiwalaId`, optional `requestedSlot`, optional `Idempotency-Key`. | New `REQUESTED` pickup assigned to the selected Kabadiwala. | Own `REASSIGNMENT_REQUIRED` pickup only; conditional transition, prior-request reuse, and collector notification are server-side. |
 
@@ -154,14 +159,14 @@ Every operation is hashed over operation type, entity type, entity ID and payloa
 
 | Method and route | Allowed roles | Request | Response/validation | Ownership/state |
 |---|---|---|---|---|
-| `GET /kabadiwala/listings` | Collector | None. | Open listings plus listings assigned to this Kabadiwala. | No hidden household-private fields; max 100 rows. |
+| `GET /kabadiwala/listings` | Collector | None. | Listings attached to this Kabadiwala's pickup requests, with non-sensitive summary fields and `photoAttached` (never the private storage key). | Assignment-scoped; max 100 rows. Fetching an image requires the separate authorized `/kabadiwala/listings/:listingId/photo` endpoint. |
 | `GET /kabadiwala/pickups` | Collector | None. | Own assigned pickups and lifecycle timestamps. | Kabadiwala ownership only. |
 | `POST /kabadiwala/listings/:listingId/accept` | Collector | Path ID. | Accepted pickup. | Assigned request only; conditional `REQUESTED → ACCEPTED`. |
 | `POST /kabadiwala/pickups/:pickupId/reject` | Collector | Optional reason. | Rejected/cancelled request. | Assigned request only; listing can reopen. |
-| `POST /kabadiwala/pickups/:pickupId/confirm-availability` | Collector | Optional availability note/slot. | Availability-confirmed pickup. | Assigned request only; writes availability timestamp. |
-| `POST /kabadiwala/pickups/:pickupId/schedule` | Collector | Scheduled ISO slot. | Scheduled pickup. | Assigned accepted/reassignment request only. |
-| `POST /kabadiwala/pickups/:pickupId/cancel` | Collector | Optional reason. | Cancelled pickup. | Assigned pre-completion pickup; reason/audit/reliability fields. |
-| `POST /kabadiwala/pickups/:pickupId/reassign` | Collector | Reason and optional `noShow`. | `REASSIGNMENT_REQUIRED` pickup and reopened listing. | Assigned pickup only; no arbitrary collector transfer. |
+| `POST /kabadiwala/pickups/:pickupId/confirm-availability` | Collector | Optional availability note/slot aligned to an hour/half-hour. | Availability-confirmed pickup or `PICKUP_CAPACITY_FULL`. | Assigned request only; writes availability timestamp and applies the same server slot window/capacity rules. |
+| `POST /kabadiwala/pickups/:pickupId/schedule` | Collector | Scheduled ISO slot aligned to an hour/half-hour. | Scheduled pickup or `PICKUP_CAPACITY_FULL`. | Assigned accepted/reassignment request only; capacity is reserved atomically for the collector's India-local day. |
+| `POST /kabadiwala/pickups/:pickupId/cancel` | Collector | Optional reason. | Cancelled pickup. | Assigned pre-completion pickup; reason/audit/reliability fields and scheduled-capacity release. |
+| `POST /kabadiwala/pickups/:pickupId/reassign` | Collector | Reason and optional `noShow`. | `REASSIGNMENT_REQUIRED` pickup and reopened listing. | Assigned pickup only; no arbitrary collector transfer; any scheduled-capacity reservation is released. |
 | `POST /kabadiwala/pickups/:pickupId/status` | Collector | `IN_TRANSIT` or `ARRIVED`. | Updated pickup. | Assigned state transition only; timestamps are server time. |
 | `POST /kabadiwala/pickups/:pickupId/complete` | Collector | Actual weight, final category/grade/rate, optional reason/evidence. | Completed pickup, settlement breakdown and inventory update. | Only `ARRIVED`; material/weight/value changes require reason; exactly-once conditional claim and inventory movement transaction. |
 | `POST /kabadiwala/pickups/:pickupId/settlement-payment` | Collector owner | Positive amount not above accepted settlement, `method`, optional recorded date/reference/notes. | Pickup settlement payment with `VERIFIED` or `DISPUTED` status. | Only completed, household-accepted/disputed settlement; unique pickup source key and request hash prevent duplicate or conflicting replay; underpayment creates an anomaly and exact payment completes settlement. |
@@ -227,7 +232,7 @@ All routes below are mounted under `/api/v1/future` and require an authenticated
 
 | Method and route | Allowed roles | Request | Response/validation and ownership |
 |---|---|---|---|
-| `GET/PATCH /future/preferences` | Any account | Read or language/appearance fields. | Own preferences; validated bounded values. |
+| `GET/PATCH /future/preferences` | Any account | Read or update language, appearance, `smsNotificationsEnabled`, and `pushNotificationsEnabled`. | Own preferences; validated bounded values. SMS and configured FCM delivery honor the account opt-outs. |
 | `GET /future/rewards` | Collector | Optional range. | Own derived reward ledger. |
 | `GET /future/schemes` | Any account | Optional filters. | Scheme catalogue. |
 | `POST /future/schemes/check` | Any account | Eligibility inputs. | Eligibility result. |

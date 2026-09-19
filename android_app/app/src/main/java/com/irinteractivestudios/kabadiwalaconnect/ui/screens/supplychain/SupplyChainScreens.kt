@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
@@ -96,7 +95,8 @@ private fun money(value: Double?) = value?.let { "₹${"%.2f".format(it)}" } ?: 
 fun HouseholdSupplyScreen(
     state: SupplyChainState,
     onRefresh: () -> Unit,
-    onCreateListing: (HouseholdListingCreateDto) -> Unit,
+    onCreateListing: (HouseholdListingCreateDto, String?) -> Unit,
+    onRetryPhoto: () -> Unit = {},
     onRequestPickup: (String, String) -> Unit,
     onCancelListing: (String) -> Unit = {},
     onCancelPickup: (String) -> Unit = {},
@@ -139,9 +139,13 @@ fun HouseholdSupplyScreen(
                 }
             }
         }
-        item { SupplyChainDemoPanel() }
         item { SummaryStrip("${state.listings.count { it.status == "POSTED" }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
+        if (state.pendingPhotoUpload != null) item {
+            OutlinedButton(onClick = onRetryPhoto, enabled = "upload-listing-photo" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(if ("upload-listing-photo" in busy) "Uploading photo…" else "Retry photo upload")
+            }
+        }
         item { Text("My listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.loading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
         if (!state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
@@ -159,7 +163,7 @@ fun HouseholdSupplyScreen(
             )
         }
     }
-    if (showCreate) HouseholdListingDialog(initialArea = initialArea, photoReference = selectedPhoto, onSelectPhoto = { gallery.launch("image/*") }, onClearPhoto = { selectedPhoto = null }, onDismiss = { showCreate = false }, onSubmit = { onCreateListing(it); showCreate = false })
+    if (showCreate) HouseholdListingDialog(initialArea = initialArea, photoReference = selectedPhoto, onSelectPhoto = { gallery.launch("image/*") }, onClearPhoto = { selectedPhoto = null }, onDismiss = { showCreate = false }, onSubmit = { listing -> onCreateListing(listing, selectedPhoto); showCreate = false })
 }
 
 /** Live directory for a household. Pickup requests are made from a listing,
@@ -209,11 +213,10 @@ private fun HouseholdListingCard(
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(listing.areaName, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (!listing.photoReference.isNullOrBlank()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            if (listing.photoAttached || !listing.photoReference.isNullOrBlank()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             val minEstimate = listing.estimatedPriceMin
             val maxEstimate = listing.estimatedPriceMax
             if (minEstimate != null && maxEstimate != null) Text("Estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            Text("Demo range; final value follows inspection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (pickup == null && listing.status == "POSTED") {
                 if (kabadiwalas.isNotEmpty()) {
                     Text("Choose a partner", style = MaterialTheme.typography.labelLarge)
@@ -282,7 +285,6 @@ private fun HouseholdListingDialog(initialArea: String, photoReference: String?,
     var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf(initialArea) }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }; var safetyAcknowledged by remember { mutableStateOf(false) }; var dataBearingDevice by remember { mutableStateOf(false) }; var ownerPreparationCompleted by remember { mutableStateOf(false) }; var dataDestructionRequested by remember { mutableStateOf(false) }
     val isHazardous = material in setOf("BATTERY", "CRT", "LCD_PANEL", "PCB")
     val parsedWeight = weight.toDoubleOrNull()
-    val estimate = parsedWeight?.let { demoEstimate(material, it, condition) }
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
     val areaError = area.isNotBlank() && area.trim().length < 2
     val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged)
@@ -326,34 +328,9 @@ private fun HouseholdListingDialog(initialArea: String, photoReference: String?,
                     TextButton(onClick = onClearPhoto) { Text("Remove") }
                 }
             }
-            estimate?.let { (min, max) ->
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)); Text("Price range", Modifier.padding(start = 7.dp), fontWeight = FontWeight.Bold) }
-                        Text("₹${"%.0f".format(min)}–₹${"%.0f".format(max)} · demo", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        Text("Reference only; final offer follows inspection.", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
             OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4)
         }
-    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { value -> onSubmit(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, photoReference = photoReference, areaName = area.trim(), estimatedPriceMin = estimate?.first, estimatedPriceMax = estimate?.second, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested)) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
-}
-
-private data class DemoRateRange(val minPerKg: Double, val maxPerKg: Double)
-
-private val demoRateRanges = mapOf(
-    "CRT" to DemoRateRange(35.0, 48.0), "LCD_PANEL" to DemoRateRange(95.0, 128.0),
-    "PCB" to DemoRateRange(270.0, 355.0), "CABLE" to DemoRateRange(70.0, 96.0),
-    "COPPER" to DemoRateRange(570.0, 665.0), "BATTERY" to DemoRateRange(48.0, 72.0),
-    "MOTOR" to DemoRateRange(85.0, 120.0), "MAGNET" to DemoRateRange(140.0, 180.0),
-    "PLASTIC" to DemoRateRange(20.0, 35.0), "OTHER" to DemoRateRange(15.0, 35.0)
-)
-
-private fun demoEstimate(material: String, weightKg: Double, condition: String): Pair<Double, Double> {
-    val multiplier = when (condition) { "DAMAGED" -> .8; "PARTIAL" -> .65; else -> 1.0 }
-    val range = demoRateRanges[material] ?: demoRateRanges.getValue("OTHER")
-    return (weightKg * range.minPerKg * multiplier) to (weightKg * range.maxPerKg * multiplier)
+    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { value -> onSubmit(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, photoReference = null, areaName = area.trim(), estimatedPriceMin = null, estimatedPriceMax = null, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested)) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
@@ -363,22 +340,12 @@ private fun PhotoAttachmentPreview(path: String) {
     else Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Text("Photo attached locally", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
 }
 
-@Composable
-private fun SupplyChainDemoPanel() {
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(19.dp)); Text("Prototype demo data", Modifier.padding(start = 7.dp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-            Text("Prototype data is labelled. Final weight, grade and payment are confirmed at handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-        }
-    }
-}
 
 @Composable
 fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }) {
     var showBulk by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Households → inventory → verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
-        item { SupplyChainDemoPanel() }
         if (section == KabadiwalaSection.HOME) item {
             OutlinedButton(onClick = onCreateCapturedLot, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 Icon(Icons.Filled.Inventory2, null)
@@ -739,7 +706,6 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
     var showDemand by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
-        item { SupplyChainDemoPanel() }
         item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }

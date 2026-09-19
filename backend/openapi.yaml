@@ -1272,7 +1272,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Request a collector pickup'
-      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Optional idempotency only; no full live race test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Optional requestedSlot values are validated as hour/half-hour ISO times at least 90 minutes ahead and within 14 days; capacity is reserved when a pickup is scheduled. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: listingId, required: true, schema: { type: string } }
@@ -1335,7 +1335,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Reschedule pickup'
-      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Policy and retry behavior unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. scheduledSlot must be an hour/half-hour ISO time at least 90 minutes ahead and within 14 days; the collector day capacity is moved atomically and PICKUP_CAPACITY_FULL is returned when unavailable. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }
@@ -1432,7 +1432,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Cancel open pickup'
-      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Problems: Late-cancellation policy not fully connected to matching.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Household owner. Status: 🟡 PARTIAL. Tests: None. Cancellation releases any reserved collector-day pickup capacity; late-cancellation policy remains operational work. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }
@@ -1518,7 +1518,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Confirm availability'
-      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Problems: No route/state test.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Collector. Status: ⚠️ IMPLEMENTED BUT UNVERIFIED. Tests: None. Optional scheduledSlot uses the same server slot window and collector-day capacity rules. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }
@@ -1538,7 +1538,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Schedule pickup'
-      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Reliability and slot policy incomplete.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. scheduledSlot must be an hour/half-hour ISO time at least 90 minutes ahead and within 14 days; reservation is atomic and can return PICKUP_CAPACITY_FULL. ETA/routing and operating calendars remain incomplete. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }
@@ -1558,7 +1558,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Cancel own pickup'
-      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Retry and notification behavior unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Cancellation releases any reserved collector-day pickup capacity; retry and live notification behavior remain unverified. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }
@@ -1578,7 +1578,7 @@ paths:
     post:
       tags: [Backend]
       summary: 'Mark reassignment required'
-      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Problems: Replacement remains a Household choice; notification is persisted but live delivery is unverified.. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
+      description: 'Allowed roles: Collector. Status: 🟡 PARTIAL. Tests: None. Reassignment releases any reserved collector-day pickup capacity; replacement remains a Household choice and live notification delivery is unverified. See docs/BACKEND_API_CONTRACT.md for exact semantics.'
       security: [{ bearerAuth: [] }]
       parameters:
         - { in: path, name: pickupId, required: true, schema: { type: string } }

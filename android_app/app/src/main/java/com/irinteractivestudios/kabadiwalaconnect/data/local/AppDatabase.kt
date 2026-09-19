@@ -15,8 +15,8 @@ import androidx.room.RoomDatabase
  * already kept outside this database in Keystore-backed storage.
  */
 @Database(
-    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class],
-    version = 22,
+    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class, PendingPhotoUploadEntity::class],
+    version = 23,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentDao(): PaymentDao
     abstract fun disputeDao(): DisputeDao
     abstract fun futureCacheDao(): FutureCacheDao
+    abstract fun pendingPhotoUploadDao(): PendingPhotoUploadDao
 
     companion object {
         const val DB_NAME = "kabadiwala.db"
@@ -44,7 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
                     .build().also { instance = it }
             }
 
@@ -187,6 +188,13 @@ abstract class AppDatabase : RoomDatabase() {
                 // Preserve existing offline lots while adding the backend
                 // optimistic-concurrency version required for editing.
                 db.execSQL("ALTER TABLE lots ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS pending_photo_uploads (listingId TEXT NOT NULL PRIMARY KEY, accountId TEXT NOT NULL, localPath TEXT NOT NULL, createdAtEpochMs INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_photo_uploads_accountId ON pending_photo_uploads(accountId)")
             }
         }
 

@@ -29,10 +29,13 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
@@ -63,6 +68,10 @@ fun SettingsScreen(
     appVersion: String,
     onLanguageChange: (String) -> Unit,
     onAppearanceChange: (String) -> Unit = {},
+    smsNotificationsEnabled: Boolean = true,
+    pushNotificationsEnabled: Boolean = true,
+    onSmsNotificationsChange: (Boolean) -> Unit = {},
+    onPushNotificationsChange: (Boolean) -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onOpenSafety: () -> Unit,
     onOpenHelp: () -> Unit,
@@ -78,11 +87,14 @@ fun SettingsScreen(
     onRetrySync: () -> Unit = {},
     onRetrySyncItem: (Long) -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
+    onExportAccount: () -> Unit = {},
+    onDeleteAccount: () -> Unit = {},
     onLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
@@ -153,6 +165,38 @@ fun SettingsScreen(
                 SettingsRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.settings_messages), onOpenChat, "settings_messages")
                 SettingsRow(Icons.Filled.Gavel, stringResource(R.string.settings_disputes), onOpenDisputes, "settings_disputes")
             }
+        }
+
+        SectionCard(title = stringResource(R.string.settings_notification_preferences_section)) {
+            NotificationPreferenceRow(
+                label = stringResource(R.string.settings_sms_notifications),
+                supportingText = stringResource(R.string.settings_sms_notifications_detail),
+                checked = smsNotificationsEnabled,
+                onCheckedChange = onSmsNotificationsChange,
+                testTag = "settings_sms_notifications"
+            )
+            NotificationPreferenceRow(
+                label = stringResource(R.string.settings_push_notifications),
+                supportingText = stringResource(R.string.settings_push_notifications_detail),
+                checked = pushNotificationsEnabled,
+                onCheckedChange = onPushNotificationsChange,
+                testTag = "settings_push_notifications"
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_privacy_section)) {
+            SettingsRow(
+                icon = Icons.Filled.FileDownload,
+                label = stringResource(R.string.settings_export_account),
+                onClick = onExportAccount,
+                testTag = "settings_export_account"
+            )
+            SettingsRow(
+                icon = Icons.Filled.DeleteForever,
+                label = stringResource(R.string.settings_delete_account),
+                onClick = { showDeleteConfirm = true },
+                testTag = "settings_delete_account"
+            )
         }
 
         SectionCard(title = stringResource(R.string.settings_about_section)) {
@@ -258,6 +302,21 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.settings_delete_account)) },
+            text = { Text(stringResource(R.string.settings_delete_account_warning)) },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDeleteAccount()
+                }) { Text(stringResource(R.string.settings_delete_account_confirm)) }
+            }
+        )
+    }
 }
 
 @Composable
@@ -325,5 +384,39 @@ private fun SettingsRow(
         Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(12.dp))
         Text(label, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun NotificationPreferenceRow(
+    label: String,
+    supportingText: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 8.dp)
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            Text(
+                supportingText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier
+                .testTag(testTag)
+                .semantics { contentDescription = label }
+        )
     }
 }

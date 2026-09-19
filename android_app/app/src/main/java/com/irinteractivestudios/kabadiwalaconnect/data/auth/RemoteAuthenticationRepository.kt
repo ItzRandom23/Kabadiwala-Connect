@@ -11,6 +11,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.OtpRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifyOtpRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RefreshTokenRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountDeletionRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
@@ -214,19 +215,22 @@ class RemoteAuthenticationRepository(
         // from encrypted storage while the rotating session is refreshed.
         storage?.readAccount()?.takeIf { it.role == AccountRole.ADMIN }?.let { return@runCatching it }
         val remote = api.getAccountProfile().requireData().toDomain()
-        // The backend deliberately treats household sellers as collector
-        // accounts for permissions and data ownership. Preserve the local
-        // household presentation role across refreshes so a network recovery
-        // does not unexpectedly move the user into the collector dashboard.
-        val previousRole = storage?.readAccount()?.role
-        val profile = if (previousRole == AccountRole.HOUSEHOLD && remote.role == AccountRole.COLLECTOR) {
-            remote.copy(role = AccountRole.HOUSEHOLD)
-        } else {
-            remote
-        }
-        storage?.saveAccount(profile)
-        profile
+        // Role is an authorization result owned by the server. Never preserve
+        // or synthesize a local presentation role across refreshes.
+        storage?.saveAccount(remote)
+        remote
     }.getOrNull()
+
+    override suspend fun exportAccount(): JsonObject = api.exportAccount().requireData()
+
+    override suspend fun deleteAccount(): Boolean {
+        val result = api.deleteAccount(AccountDeletionRequestDto()).requireData()
+        if (result.deleted) {
+            session.clear()
+            clearCachedAccount()
+        }
+        return result.deleted
+    }
 
     override fun isSessionValid() = session.isSessionValid()
 
@@ -237,6 +241,20 @@ class RemoteAuthenticationRepository(
             }
         }
         session.clear()
+    }
+
+    private fun clearCachedAccount() {
+        storage?.let {
+            listOf(
+                SecureStorage.ACCOUNT_EMAIL, SecureStorage.ACCOUNT_PHONE,
+                SecureStorage.ACCOUNT_DISPLAY_NAME, SecureStorage.ACCOUNT_AREA_NAME,
+                SecureStorage.ACCOUNT_ROLE, SecureStorage.ACCOUNT_VERIFICATION_STATUS,
+                SecureStorage.ACCOUNT_LANGUAGE, SecureStorage.ACCOUNT_PROFILE_ID,
+                SecureStorage.ACCOUNT_LATITUDE, SecureStorage.ACCOUNT_LONGITUDE,
+                SecureStorage.ACCOUNT_PERMISSIONS, SecureStorage.COLLECTOR_ID,
+                SecureStorage.SYNC_CURSOR, SecureStorage.ACTIVITY_CURSOR
+            ).forEach(it::remove)
+        }
     }
 
 

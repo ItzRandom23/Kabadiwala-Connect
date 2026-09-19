@@ -11,7 +11,7 @@ data class ApiEnvelope<T>(val success: Boolean = false, val data: T? = null, val
 // transport boundary; the UI formats them locally and never renders nulls.
 data class HouseholdListingCreateDto(val materialCategory: String, val estimatedWeight: Double, val condition: String, val notes: String? = null, val photoReference: String? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean = false, val ownerPreparationCompleted: Boolean = false, val dataDestructionRequested: Boolean = false)
 data class HouseholdListingUpdateDto(val materialCategory: String? = null, val estimatedWeight: Double? = null, val condition: String? = null, val notes: String? = null, val photoReference: String? = null, val areaName: String? = null, val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean? = null, val ownerPreparationCompleted: Boolean? = null, val dataDestructionRequested: Boolean? = null)
-data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean = false, val ownerPreparationCompleted: Boolean = false, val dataDestructionRequested: Boolean = false, val destructionEvidenceStatus: String = "NOT_APPLICABLE", val recyclerEvidenceReference: String? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
+data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val photoAttached: Boolean = false, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean = false, val ownerPreparationCompleted: Boolean = false, val dataDestructionRequested: Boolean = false, val destructionEvidenceStatus: String = "NOT_APPLICABLE", val recyclerEvidenceReference: String? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
 data class KabadiwalaProfileDto(val id: String = "", val displayName: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null)
 data class PickupRequestCreateDto(val kabadiwalaId: String, val requestedSlot: String? = null)
 data class CancellationRequestDto(val reason: String? = null)
@@ -74,6 +74,8 @@ data class VerifyOtpRequestDto(
 )
 data class OtpRequestedDto(val message: String? = null)
 data class LogoutDto(val loggedOut: Boolean = true)
+data class AccountDeletionRequestDto(val confirmation: String = "DELETE")
+data class AccountDeletionDto(val deleted: Boolean = false, val alreadyDeleted: Boolean = false, val profileId: String = "")
 data class AuthResponseDto(val token: String, val refreshToken: String? = null, val collector: CollectorDto? = null, val user: AccountProfileDto? = null)
 data class EmailAuthRequestDto(val email: String, val password: String, val role: String? = null, val preferredLanguage: String? = null, val areaName: String? = null, val businessName: String? = null, val authorizationNumber: String? = null, val materialsAccepted: List<String>? = null, val pickupAvailable: Boolean? = null, val serviceRadiusKm: Int? = null)
 data class AccountAuthResponseDto(val token: String, val refreshToken: String? = null, val user: AccountProfileDto)
@@ -196,6 +198,9 @@ data class EarningsLedgerDto(val total: Double = 0.0, val pending: Double = 0.0,
 data class NotificationDto(val id: String = "", val accountId: String = "", val type: String = "", val title: String = "", val body: String = "", val route: String? = null, val readAt: String? = null, val createdAt: String? = null)
 data class UnreadCountDto(val count: Int = 0)
 data class NotificationReadDto(val marked: Boolean = false, val count: Int? = null)
+data class NotificationDeviceRequestDto(val token: String, val platform: String = "ANDROID", val appVersion: String? = null)
+data class NotificationDeviceDto(val id: String = "", val platform: String = "ANDROID", val appVersion: String? = null, val enabled: Boolean = true, val lastSeenAt: String? = null, val createdAt: String? = null)
+data class NotificationDeviceUnregisterDto(val removed: Boolean = false)
 data class ActivityChangeSetDto(
     val lotIds: List<String> = emptyList(),
     val quoteIds: List<String> = emptyList(),
@@ -215,8 +220,18 @@ data class SyncBatchResponseDto(val results: List<SyncOperationResultDto> = empt
 data class SyncChangesDto(val serverTime: String? = null, val changes: SyncChangeSetDto = SyncChangeSetDto())
 data class SyncChangeSetDto(val lots: List<LotDto> = emptyList(), val payments: List<PaymentDto> = emptyList(), val handovers: List<HandoverDto> = emptyList())
 
-data class PreferencesDto(val preferredLanguage: String = "ENGLISH", val appearanceMode: String = "SYSTEM")
-data class PreferencesUpdateDto(val preferredLanguage: String? = null, val appearanceMode: String? = null)
+data class PreferencesDto(
+    val preferredLanguage: String = "ENGLISH",
+    val appearanceMode: String = "SYSTEM",
+    val smsNotificationsEnabled: Boolean = true,
+    val pushNotificationsEnabled: Boolean = true
+)
+data class PreferencesUpdateDto(
+    val preferredLanguage: String? = null,
+    val appearanceMode: String? = null,
+    val smsNotificationsEnabled: Boolean? = null,
+    val pushNotificationsEnabled: Boolean? = null
+)
 data class RewardProgramDto(val id: String = "", val title: String = "", val description: String = "", val rewardType: String = "", val thresholdKg: Double? = null, val thresholdRupees: Double? = null, val rewardAmount: Double = 0.0, val terms: String = "", val startsAt: String? = null, val endsAt: String? = null)
 data class RewardLedgerDto(val id: String = "", val programId: String = "", val periodKey: String = "", val qualifyingKg: Double = 0.0, val qualifyingRupees: Double = 0.0, val rewardAmount: Double = 0.0, val status: String = "PROGRESS", val earnedAt: String? = null, val expiresAt: String? = null, val program: RewardProgramDto? = null)
 data class GovernmentSchemeDto(val id: String = "", val slug: String = "", val title: String = "", val description: String = "", val eligibilityRules: JsonObject? = null, val requiredDocuments: List<String> = emptyList(), val sourceUrl: String = "", val lastVerifiedAt: String? = null, val supportedLanguages: List<String> = emptyList())

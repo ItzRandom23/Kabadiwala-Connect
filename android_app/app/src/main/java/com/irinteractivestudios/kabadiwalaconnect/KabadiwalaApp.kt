@@ -29,14 +29,19 @@ class KabadiwalaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        DemoSessionStore.initialize(this)
+        // Demo state is never initialized in a production process. This keeps
+        // the local fixture store outside the production session lifecycle.
+        if (BuildConfig.DEBUG) DemoSessionStore.initialize(this)
         container = AppContainer(this)
         container.connectivityObserver.start()
         // Re-arm durable offline work after a process death or device reboot.
         // WorkManager still waits for connectivity and exits immediately when
         // there is no authenticated session.
         applicationScope.launch {
-            if (container.hasRestorableSession()) container.syncScheduler.requestSync()
+            if (container.hasRestorableSession()) {
+                container.syncScheduler.requestSync()
+                if (container.hasValidSession()) container.startPushTokenRegistration()
+            }
         }
     }
 

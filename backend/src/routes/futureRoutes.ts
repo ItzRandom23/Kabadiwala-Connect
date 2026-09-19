@@ -11,7 +11,7 @@ import { AppError } from '../utils/errors.js';
 
 const { AccountRole, DescriptionSource, MessageStatus, PreferredLanguage, RewardStatus } = prismaPackage;
 
-const languageSchema = z.nativeEnum(PreferredLanguage).default(PreferredLanguage.ENGLISH);
+const languageSchema = z.nativeEnum(PreferredLanguage);
 const appearanceSchema = z.enum(['SYSTEM', 'LIGHT', 'DARK']);
 const materialUpload = multer({
   storage: multer.memoryStorage(),
@@ -195,24 +195,36 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   router.get('/preferences', async (req, res) => {
     const identity = actor(req);
     const user = identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD'
-      ? await db.user.findFirst({ where: { collectorProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true } })
-      : await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true } });
-    return res.json({ success: true, data: { preferredLanguage: user?.preferredLanguage ?? 'ENGLISH', appearanceMode: user?.appearanceMode ?? 'SYSTEM' }, message: 'Preferences retrieved' });
+      ? await db.user.findFirst({ where: { collectorProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true, smsNotificationsEnabled: true, pushNotificationsEnabled: true } })
+      : await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { preferredLanguage: true, appearanceMode: true, smsNotificationsEnabled: true, pushNotificationsEnabled: true } });
+    return res.json({ success: true, data: {
+      preferredLanguage: user?.preferredLanguage ?? 'ENGLISH',
+      appearanceMode: user?.appearanceMode ?? 'SYSTEM',
+      smsNotificationsEnabled: user?.smsNotificationsEnabled ?? true,
+      pushNotificationsEnabled: user?.pushNotificationsEnabled ?? true
+    }, message: 'Preferences retrieved' });
   });
 
   router.patch('/preferences', async (req, res) => {
     const identity = actor(req);
-    const parsed = z.object({ preferredLanguage: languageSchema.optional(), appearanceMode: appearanceSchema.optional() }).safeParse(req.body);
+    const parsed = z.object({ preferredLanguage: languageSchema.optional(), appearanceMode: appearanceSchema.optional(), smsNotificationsEnabled: z.boolean().optional(), pushNotificationsEnabled: z.boolean().optional() }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Invalid preferences', 422);
     const user = identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD'
       ? await db.user.findFirst({ where: { collectorProfileId: identity.collectorId } })
       : await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId } });
     if (!user) throw new AppError('NOT_FOUND', 'Account not found', 404);
-    const data: { preferredLanguage?: any; appearanceMode?: string } = {};
+    const data: { preferredLanguage?: any; appearanceMode?: string; smsNotificationsEnabled?: boolean; pushNotificationsEnabled?: boolean } = {};
     if (parsed.data.preferredLanguage) data.preferredLanguage = parsed.data.preferredLanguage;
     if (parsed.data.appearanceMode) data.appearanceMode = parsed.data.appearanceMode;
-    const updated = await db.user.update({ where: { id: user.id }, data, select: { preferredLanguage: true, appearanceMode: true } });
-    return res.json({ success: true, data: updated, message: 'Preferences saved' });
+    if (parsed.data.smsNotificationsEnabled !== undefined) data.smsNotificationsEnabled = parsed.data.smsNotificationsEnabled;
+    if (parsed.data.pushNotificationsEnabled !== undefined) data.pushNotificationsEnabled = parsed.data.pushNotificationsEnabled;
+    const updated = await db.user.update({ where: { id: user.id }, data, select: { preferredLanguage: true, appearanceMode: true, smsNotificationsEnabled: true, pushNotificationsEnabled: true } });
+    return res.json({ success: true, data: {
+      preferredLanguage: updated.preferredLanguage ?? 'ENGLISH',
+      appearanceMode: updated.appearanceMode ?? 'SYSTEM',
+      smsNotificationsEnabled: updated.smsNotificationsEnabled ?? true,
+      pushNotificationsEnabled: updated.pushNotificationsEnabled ?? true
+    }, message: 'Preferences saved' });
   });
 
   router.get('/rewards', async (req, res) => {

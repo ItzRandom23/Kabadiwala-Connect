@@ -1,6 +1,8 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.navigation
 
 import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.navigation.compose.composable
 import com.irinteractivestudios.kabadiwalaconnect.di.KcViewModelFactory
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeScreen
@@ -103,6 +106,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoRecyclerOrdersScre
 import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoRecyclerScanScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoSessionStore
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitReviewRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.PreferencesUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Dispute
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeStatus
@@ -110,6 +114,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
+import com.irinteractivestudios.kabadiwalaconnect.util.DemoModePolicy
 import java.io.File
 import androidx.core.content.FileProvider
 
@@ -128,12 +133,16 @@ fun AppNavHost(
     onLogout: () -> Unit = {},
     onDemo: () -> Unit = {},
     onDemoRole: (AccountRole) -> Unit = {},
-    demoMode: Boolean = false,
+    requestedDemoMode: Boolean = false,
     demoRole: AccountRole? = null,
     role: AccountRole = AccountRole.COLLECTOR,
     onAuthFinished: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Demo is a debug/testing surface only. Enforce the boundary here as well
+    // as at the onboarding entry so a release deep link or caller cannot
+    // activate fixture routes by passing demoMode=true.
+    val demoMode = DemoModePolicy.enabled(BuildConfig.DEBUG, requestedDemoMode)
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
     val demoCollectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
@@ -308,7 +317,8 @@ fun AppNavHost(
                 HouseholdSupplyScreen(
                     state = state,
                     onRefresh = vm::refreshHousehold,
-                    onCreateListing = vm::createListing,
+                    onCreateListing = { input, photoPath -> vm.createListing(input, photoPath) },
+                    onRetryPhoto = vm::retryListingPhoto,
                     onRequestPickup = vm::requestPickup,
                     onCancelListing = vm::cancelListing,
                     onCancelPickup = vm::cancelPickup,
@@ -633,12 +643,29 @@ fun AppNavHost(
         composable(Destinations.SETTINGS) {
             val vm: SettingsViewModel = viewModel(factory = factory)
             val scope = rememberCoroutineScope()
+            val context = LocalContext.current
             val language by vm.language.collectAsStateWithLifecycle()
             val appearance by vm.appearance.collectAsStateWithLifecycle()
+            val accountId = factory.currentAccount?.profileId
+            var smsNotificationsEnabled by remember(accountId) { mutableStateOf(true) }
+            var pushNotificationsEnabled by remember(accountId) { mutableStateOf(true) }
+            LaunchedEffect(accountId, demoMode) {
+                if (!demoMode && accountId != null && !BuildConfig.API_BASE_URL.contains(".invalid")) {
+                    runCatching { factory.apiService.getPreferences().requireData() }
+                        .onSuccess { preferences ->
+                            if (factory.currentAccount?.profileId == accountId) {
+                                smsNotificationsEnabled = preferences.smsNotificationsEnabled
+                                pushNotificationsEnabled = preferences.pushNotificationsEnabled
+                            }
+                        }
+                }
+            }
             val syncItems by factory.syncQueue.observeForAccount(factory.currentAccount?.profileId.orEmpty()).collectAsStateWithLifecycle(initialValue = emptyList())
             SettingsScreen(
                 language = language,
                 appearance = appearance,
+                smsNotificationsEnabled = smsNotificationsEnabled,
+                pushNotificationsEnabled = pushNotificationsEnabled,
                 appVersion = vm.appVersion,
                 onLanguageChange = { tag ->
                     vm.setLanguage(tag)
@@ -646,7 +673,66 @@ fun AppNavHost(
                     onLanguageChange(tag)
                 },
                 onAppearanceChange = { mode -> vm.setAppearance(mode); onAppearanceChange(mode) },
+                onSmsNotificationsChange = { enabled ->
+                    val previous = smsNotificationsEnabled
+                    smsNotificationsEnabled = enabled
+                    if (!demoMode) scope.launch {
+                        runCatching {
+                            factory.apiService.updatePreferences(PreferencesUpdateDto(smsNotificationsEnabled = enabled)).requireData()
+                        }.onFailure {
+                            if (factory.currentAccount?.profileId == accountId) {
+                                smsNotificationsEnabled = previous
+                                Toast.makeText(context, R.string.settings_notification_save_failed, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                },
+                onPushNotificationsChange = { enabled ->
+                    val previous = pushNotificationsEnabled
+                    pushNotificationsEnabled = enabled
+                    if (!demoMode) scope.launch {
+                        runCatching {
+                            factory.apiService.updatePreferences(PreferencesUpdateDto(pushNotificationsEnabled = enabled)).requireData()
+                        }.onFailure {
+                            if (factory.currentAccount?.profileId == accountId) {
+                                pushNotificationsEnabled = previous
+                                Toast.makeText(context, R.string.settings_notification_save_failed, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                },
                  onCheckForUpdates = { if (!demoMode) onCheckForUpdates() },
+                onExportAccount = {
+                    if (!demoMode) scope.launch {
+                        runCatching { factory.exportAccount() }
+                            .onSuccess { export ->
+                                if (export == null) {
+                                    Toast.makeText(context, R.string.settings_export_unavailable, Toast.LENGTH_LONG).show()
+                                } else {
+                                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/json"
+                                        putExtra(Intent.EXTRA_TEXT, export.toString())
+                                    }, context.getString(R.string.settings_export_share_title)))
+                                }
+                            }
+                            .onFailure { Toast.makeText(context, R.string.settings_export_failed, Toast.LENGTH_LONG).show() }
+                    }
+                },
+                onDeleteAccount = {
+                    if (!demoMode) scope.launch {
+                        runCatching { factory.deleteAccount() }
+                            .onSuccess { deleted ->
+                                if (deleted) {
+                                    factory.clearAccount()
+                                    onLogout()
+                                    navController.navigate(Destinations.AUTH) { popUpTo(0) }
+                                } else {
+                                    Toast.makeText(context, R.string.settings_delete_account_failed, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .onFailure { Toast.makeText(context, R.string.settings_delete_account_failed, Toast.LENGTH_LONG).show() }
+                    }
+                },
                 onOpenProfile = { navController.navigate(Destinations.PROFILE) },
                 onOpenSafety = { navController.navigate(Destinations.SAFETY) },
                 onOpenHelp = { navController.navigate(Destinations.HELP) },

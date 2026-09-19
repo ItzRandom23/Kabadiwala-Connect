@@ -67,6 +67,9 @@ class KcViewModelFactory(
     suspend fun refreshEarnings() = container.refreshEarnings()
     suspend fun refreshAccount() = container.refreshAccount()
     suspend fun refreshActivity() = container.refreshActivity()
+    suspend fun exportAccount() = container.authenticationRepository.exportAccount()
+    suspend fun deleteAccount() = container.authenticationRepository.deleteAccount()
+    suspend fun clearAccount() = container.clearAccount()
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
@@ -103,7 +106,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app), container.database.syncQueueDao()) { container.syncScheduler.requestSync() }
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app), container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao())
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

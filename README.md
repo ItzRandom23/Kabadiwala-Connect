@@ -68,14 +68,14 @@ cd android_app
 ./gradlew.bat assembleRelease -PproductionApiBaseUrl=https://your-host.example/api/v1/
 ```
 
-The debug testing build targets `http://140.245.232.208:4000/api/v1/` by
-default. Override it with `-PtestingApiBaseUrl=...` when using another test
-host. Release builds remain HTTPS-only and use a separate
+The debug testing build has no implicit remote host; it defaults to an invalid
+non-network URL. Supply `-PtestingApiBaseUrl=...` for a local or approved
+staging host. Release builds remain HTTPS-only and use a separate
 `-PproductionApiBaseUrl=...` value; release signing credentials are intentionally not included.
 
 ## Offline and AI integration boundaries
 
-Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence uploads independently to private storage. Household listing photos are kept as local prototype references until a production upload endpoint is configured. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
+Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence and household listing photos upload independently to private storage; failed household photo uploads are retained in an account-scoped local retry queue. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
 
 ## Testing
 

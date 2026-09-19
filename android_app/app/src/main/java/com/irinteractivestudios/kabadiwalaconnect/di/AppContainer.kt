@@ -56,6 +56,8 @@ import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.SystemConnectivityObserver
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidPriceSpeaker
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
+import com.irinteractivestudios.kabadiwalaconnect.notifications.FcmTokenRegistrar
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDeviceRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.readAccount
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
@@ -146,6 +148,56 @@ class AppContainer(context: Context) {
     fun hasRestorableSession(): Boolean = hasValidSession() || !secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()
+
+    /**
+     * Stores a provider token before authentication if necessary, then retries
+     * registration once a server session exists. The token is not an auth
+     * credential and is never sent anywhere except the authenticated backend.
+     */
+    fun queuePushToken(token: String) {
+        val normalized = token.trim()
+        if (normalized.isBlank()) return
+        secureStorage.put(SecureStorage.PUSH_TOKEN, normalized)
+        secureStorage.put(SecureStorage.PENDING_PUSH_TOKEN, normalized)
+        registerPendingPushToken()
+    }
+
+    fun startPushTokenRegistration() {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        FcmTokenRegistrar.fetchToken(appContext) { token -> queuePushToken(token) }
+        registerPendingPushToken()
+    }
+
+    fun registerPendingPushToken() {
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        val accountId = currentAccount()?.profileId ?: return
+        val token = secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return
+        preferenceScope.launch {
+            runCatching {
+                apiService.registerNotificationDevice(
+                    NotificationDeviceRequestDto(
+                        token = token,
+                        platform = "ANDROID",
+                        appVersion = appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName
+                    )
+                ).requireData()
+            }.onSuccess {
+                if (currentAccount()?.profileId == accountId && secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) == token) {
+                    secureStorage.remove(SecureStorage.PENDING_PUSH_TOKEN)
+                }
+            }
+        }
+    }
+
+    suspend fun unregisterCurrentPushToken(): Boolean {
+        val token = secureStorage.get(SecureStorage.PUSH_TOKEN) ?: secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return true
+        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
+        return runCatching {
+            apiService.unregisterNotificationDevice(NotificationDeviceRequestDto(token = token)).requireData()
+            secureStorage.remove(SecureStorage.PUSH_TOKEN)
+            secureStorage.remove(SecureStorage.PENDING_PUSH_TOKEN)
+        }.isSuccess
+    }
 
     /** Keeps the cached account snapshot aligned with the app language setting. */
     fun updateStoredAccountLanguage(tag: String) {
@@ -476,6 +528,7 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.COLLECTOR_ID)
         secureStorage.remove(SecureStorage.SYNC_CURSOR)
         secureStorage.remove(SecureStorage.ACTIVITY_CURSOR)
+        secureStorage.remove(SecureStorage.PENDING_PUSH_TOKEN)
     }
 
     /**

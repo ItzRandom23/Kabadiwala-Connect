@@ -1,5 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="app_name">Kabadiwala Connect</string>
+    <string name="notification_channel_name">Account updates</string>
 
     <!-- Bottom navigation -->
     <string name="nav_home">Home</string>
@@ -271,6 +272,7 @@
     <string name="settings_language_section">Language</string>
     <string name="settings_appearance_section">Display</string>
     <string name="settings_safety_section">Safety &amp; help</string>
+    <string name="settings_privacy_section">Privacy</string>
     <string name="settings_about_section">App</string>
     <string name="settings_change_language">Choose your language</string>
     <string name="cancel">Cancel</string>
@@ -285,7 +287,21 @@
     <string name="settings_offline_note">All settings work without internet.</string>
     <string name="settings_logout">Log out</string>
     <string name="settings_logout_warning">Offline drafts and cached private data will be removed. Server records stay safe.</string>
+    <string name="settings_export_account">Export my account data</string>
+    <string name="settings_export_share_title">Share account export</string>
+    <string name="settings_export_unavailable">Account export is unavailable in offline mode.</string>
+    <string name="settings_export_failed">Could not create the account export. Try again.</string>
+    <string name="settings_delete_account">Delete my account</string>
+    <string name="settings_delete_account_warning">Your account will be deactivated, contact credentials and private notifications will be removed, and active sessions will be revoked. Financial and traceability records may be retained for legal and operational requirements.</string>
+    <string name="settings_delete_account_confirm">Delete account</string>
+    <string name="settings_delete_account_failed">Account deletion failed. Your account was not changed.</string>
     <string name="settings_trust_tools">Trust &amp; useful tools</string>
+    <string name="settings_notification_preferences_section">Notification preferences</string>
+    <string name="settings_sms_notifications">SMS alerts</string>
+    <string name="settings_sms_notifications_detail">Receive transactional updates by text message.</string>
+    <string name="settings_push_notifications">Push alerts</string>
+    <string name="settings_push_notifications_detail">Allow future app notifications on this device.</string>
+    <string name="settings_notification_save_failed">Could not save notification preference. Try again.</string>
     <string name="settings_rewards">Bonuses</string>
     <string name="settings_schemes">Government schemes</string>
     <string name="settings_diy">Best out of Waste</string>

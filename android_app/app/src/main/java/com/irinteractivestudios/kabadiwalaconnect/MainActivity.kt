@@ -1,7 +1,10 @@
 package com.irinteractivestudios.kabadiwalaconnect
 
+import android.Manifest
 import android.content.Context
 import android.content.res.Configuration
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -217,6 +220,7 @@ class MainActivity : ComponentActivity() {
                             // broader catalogue refresh runs.
                                 runCatching { app.container.reconcileChanges() }
                                 app.container.refreshCatalogs()
+                                app.container.startPushTokenRegistration()
                             } else if (!wasValid && refreshed == null) {
                                 // A revoked/expired session must not erase a
                                 // lot or receipt captured offline. Preserve
@@ -359,6 +363,7 @@ class MainActivity : ComponentActivity() {
                                 startDestination = initialRoute,
                                 onLogout = {
                                     uiScope.launch {
+                                        app.container.unregisterCurrentPushToken()
                                         app.container.authenticationRepository.logout()
                                         app.container.clearAccount()
                                         sessionBootstrap = SessionBootstrap(false, null)
@@ -369,30 +374,36 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 onDemo = {
-                                    demoMode = true
-                                    demoRoleName = "LEGACY"
-                                    sessionBootstrap = SessionBootstrap(false, null)
-                                    activeRole = AccountRole.COLLECTOR
-                                    navController.navigate(Destinations.HOME) {
-                                        popUpTo(Destinations.AUTH) { inclusive = true }
+                                    if (BuildConfig.DEBUG) {
+                                        demoMode = true
+                                        demoRoleName = "LEGACY"
+                                        sessionBootstrap = SessionBootstrap(false, null)
+                                        activeRole = AccountRole.COLLECTOR
+                                        navController.navigate(Destinations.HOME) {
+                                            popUpTo(Destinations.AUTH) { inclusive = true }
+                                        }
                                     }
                                 },
                                 onDemoRole = { selectedRole ->
-                                    demoMode = true
-                                    demoRoleName = selectedRole.name
-                                    sessionBootstrap = SessionBootstrap(false, null)
-                                    activeRole = selectedRole
-                                    val target = if (selectedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
-                                    navController.navigate(target) {
-                                        popUpTo(Destinations.AUTH) { inclusive = true }
-                                        launchSingleTop = true
+                                    if (BuildConfig.DEBUG) {
+                                        demoMode = true
+                                        demoRoleName = selectedRole.name
+                                        sessionBootstrap = SessionBootstrap(false, null)
+                                        activeRole = selectedRole
+                                        val target = if (selectedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                                        navController.navigate(target) {
+                                            popUpTo(Destinations.AUTH) { inclusive = true }
+                                            launchSingleTop = true
+                                        }
                                     }
                                 },
-                                demoMode = demoMode,
+                                requestedDemoMode = demoMode,
                                 demoRole = activeRole.takeIf { demoMode && demoRoleName != "LEGACY" },
                                 role = activeRole,
                                 onAuthFinished = {
                                     val account = app.container.currentAccount()
+                                    app.container.startPushTokenRegistration()
+                                    requestNotificationPermissionIfNeeded()
                                     sessionBootstrap = SessionBootstrap(account != null, account)
                                     activeRole = account?.role ?: AccountRole.COLLECTOR
                                     val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
@@ -430,5 +441,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+        }
+    }
+
+    private companion object {
+        const val NOTIFICATION_PERMISSION_REQUEST = 7001
     }
 }

@@ -44,6 +44,10 @@ export class LocalStorageService implements StorageService {
       const body = await processImage(input);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(temporary, body, { flag: 'wx' });
+      // Object keys used by retryable uploads are intentionally stable. Replace
+      // the prior object before the atomic rename so replayed uploads also work
+      // on Windows, where rename does not overwrite an existing file.
+      await rm(target, { force: true });
       await rename(temporary, target);
       return { key: objectKey, url: `${this.baseUrl.replace(/\/$/, '')}/${objectKey}` };
     } catch {

@@ -10,10 +10,20 @@ const schema = z.object({
   TRACEABILITY_SIGNING_SECRET: z.string().min(32),
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   APP_VERSION: z.string().min(1).default('1.0.0'),
-  OTP_PROVIDER: z.enum(['development', 'twilio']).default('development'),
+  OTP_PROVIDER: z.enum(['development', 'twilio', 'twofactor']).default('development'),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_VERIFY_SERVICE_SID: z.string().optional(),
+  TWOFACTOR_API_KEY: z.string().optional(),
+  TWOFACTOR_BASE_URL: z.string().url().optional(),
+  NOTIFICATION_SMS_PROVIDER: z.enum(['disabled', 'twofactor']).optional(),
+  NOTIFICATION_SMS_ENABLED: z.coerce.boolean().optional(),
+  TWOFACTOR_SMS_SENDER_ID: z.string().trim().min(1).max(20).optional(),
+  NOTIFICATION_PUSH_PROVIDER: z.enum(['disabled', 'fcm']).optional(),
+  NOTIFICATION_PUSH_ENABLED: z.coerce.boolean().optional(),
+  FCM_PROJECT_ID: z.string().trim().min(1).optional(),
+  FCM_CLIENT_EMAIL: z.string().email().optional(),
+  FCM_PRIVATE_KEY: z.string().min(1).optional(),
   DEV_OTP_CODE: z.string().regex(/^\d{6}$/).default('123456'),
   AI_DESCRIPTION_URL: z.string().url().optional().or(z.literal('')),
   AI_DESCRIPTION_API_KEY: z.string().optional(),
@@ -44,6 +54,14 @@ const schema = z.object({
   if (value.NODE_ENV === 'production' && value.STORAGE_PROVIDER === 's3' && value.S3_PUBLIC_BASE_URL) ctx.addIssue({ code: 'custom', path: ['S3_PUBLIC_BASE_URL'], message: 'Public object URLs are not allowed in production; use signed access' });
   if (value.NODE_ENV === 'production' && value.RATE_LIMIT_STORE !== 'database') ctx.addIssue({ code: 'custom', path: ['RATE_LIMIT_STORE'], message: 'Production rate limiting must use the shared database store' });
   if (value.OTP_PROVIDER === 'twilio' && (!value.TWILIO_ACCOUNT_SID || !value.TWILIO_AUTH_TOKEN || !value.TWILIO_VERIFY_SERVICE_SID)) ctx.addIssue({ code: 'custom', path: ['TWILIO_*'], message: 'Twilio credentials are required when OTP_PROVIDER=twilio' });
+  if (value.OTP_PROVIDER === 'twofactor' && !value.TWOFACTOR_API_KEY) ctx.addIssue({ code: 'custom', path: ['TWOFACTOR_API_KEY'], message: 'TWOFACTOR_API_KEY is required when OTP_PROVIDER=twofactor' });
+  if (value.NOTIFICATION_SMS_ENABLED && value.NOTIFICATION_SMS_PROVIDER !== 'twofactor') ctx.addIssue({ code: 'custom', path: ['NOTIFICATION_SMS_PROVIDER'], message: 'Notification SMS requires NOTIFICATION_SMS_PROVIDER=twofactor' });
+  if (value.NOTIFICATION_SMS_PROVIDER === 'twofactor' && !value.TWOFACTOR_API_KEY) ctx.addIssue({ code: 'custom', path: ['TWOFACTOR_API_KEY'], message: 'TWOFACTOR_API_KEY is required when notification SMS uses 2Factor' });
+  if (value.NOTIFICATION_SMS_PROVIDER === 'twofactor' && !value.TWOFACTOR_SMS_SENDER_ID) ctx.addIssue({ code: 'custom', path: ['TWOFACTOR_SMS_SENDER_ID'], message: 'TWOFACTOR_SMS_SENDER_ID is required when notification SMS uses 2Factor' });
+  if (value.NOTIFICATION_PUSH_ENABLED && value.NOTIFICATION_PUSH_PROVIDER !== 'fcm') ctx.addIssue({ code: 'custom', path: ['NOTIFICATION_PUSH_PROVIDER'], message: 'Notification push requires NOTIFICATION_PUSH_PROVIDER=fcm' });
+  if (value.NOTIFICATION_PUSH_ENABLED && !value.FCM_PROJECT_ID) ctx.addIssue({ code: 'custom', path: ['FCM_PROJECT_ID'], message: 'FCM_PROJECT_ID is required when notification push is enabled' });
+  if (value.NOTIFICATION_PUSH_ENABLED && !value.FCM_CLIENT_EMAIL) ctx.addIssue({ code: 'custom', path: ['FCM_CLIENT_EMAIL'], message: 'FCM_CLIENT_EMAIL is required when notification push is enabled' });
+  if (value.NOTIFICATION_PUSH_ENABLED && !value.FCM_PRIVATE_KEY) ctx.addIssue({ code: 'custom', path: ['FCM_PRIVATE_KEY'], message: 'FCM_PRIVATE_KEY is required when notification push is enabled' });
 });
 
 export type AppConfig = z.infer<typeof schema>;

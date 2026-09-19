@@ -6,18 +6,81 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Firebase configuration is deployment-owned. Local builds remain useful
+// without google-services.json; configured builds apply the official plugin.
+if (file("google-services.json").isFile) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.irinteractivestudios.kabadiwalaconnect"
     val testingApiBaseUrl = providers.gradleProperty("testingApiBaseUrl")
-        // This is the shared non-production testing host. Override it with
-        // -PtestingApiBaseUrl for a local emulator/device backend.
-        .orElse("http://140.245.232.208:4000/api/v1/")
-        .get()
-        .let { if (it.endsWith('/')) it else "$it/" }
-    val productionApiBaseUrl = providers.gradleProperty("productionApiBaseUrl")
+        // No remote host is implicit. Supply -PtestingApiBaseUrl for a local
+        // emulator/device backend or an explicitly approved staging host.
+        // The invalid fallback also activates the existing debug-only local
+        // repository boundary without enabling cleartext traffic.
         .orElse("https://api.invalid/api/v1/")
         .get()
         .let { if (it.endsWith('/')) it else "$it/" }
+    // A release build must be pointed at an explicitly provisioned production
+    // API. Keeping an invalid fallback here makes it too easy to distribute a
+    // signed APK that starts successfully but can never reach the backend.
+    val configuredProductionApiBaseUrl = providers.gradleProperty("productionApiBaseUrl")
+        .orNull
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { if (it.endsWith('/')) it else "$it/" }
+    // Gradle configures every build type even when only a debug task is run.
+    // Validate the production endpoint when a release-capable task is
+    // requested, without blocking local unit tests and IDE sync.
+    val releaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
+        val task = taskName.substringAfterLast(':').lowercase()
+        task == "build" || task == "assemble" || task == "bundle" || task.contains("release")
+    }
+    if (releaseBuildRequested) {
+        val releaseApiBaseUrl = requireNotNull(configuredProductionApiBaseUrl) {
+            "Missing -PproductionApiBaseUrl. Release builds must target an explicitly configured HTTPS production API."
+        }
+        require(releaseApiBaseUrl.startsWith("https://")) {
+            "productionApiBaseUrl must use HTTPS"
+        }
+        val allowPlaceholderProductionApiUrl = providers.gradleProperty("allowPlaceholderProductionApiUrl").orNull?.toBooleanStrictOrNull() == true
+        if (!allowPlaceholderProductionApiUrl) require(
+            !releaseApiBaseUrl.contains(".invalid", ignoreCase = true)
+                && !releaseApiBaseUrl.contains("example.com", ignoreCase = true)
+                && !releaseApiBaseUrl.contains("example.org", ignoreCase = true)
+                && !releaseApiBaseUrl.contains("localhost", ignoreCase = true)
+                && !releaseApiBaseUrl.contains("127.0.0.1")
+        ) {
+            "productionApiBaseUrl must be a real HTTPS host, not a placeholder/example/local host"
+        }
+    }
+    val productionSigningStoreFile = providers.gradleProperty("productionSigningStoreFile").orNull?.trim()?.takeIf { it.isNotBlank() }
+    val productionSigningStorePassword = providers.gradleProperty("productionSigningStorePassword").orNull?.takeIf { it.isNotBlank() }
+    val productionSigningKeyAlias = providers.gradleProperty("productionSigningKeyAlias").orNull?.trim()?.takeIf { it.isNotBlank() }
+    val productionSigningKeyPassword = providers.gradleProperty("productionSigningKeyPassword").orNull?.takeIf { it.isNotBlank() }
+    val productionSigningConfigured = listOf(
+        productionSigningStoreFile,
+        productionSigningStorePassword,
+        productionSigningKeyAlias,
+        productionSigningKeyPassword
+    ).all { it != null }
+    val productionSigningRequired = providers.gradleProperty("requireProductionSigning").orNull?.toBooleanStrictOrNull() ?: releaseBuildRequested
+    if (releaseBuildRequested && productionSigningRequired) {
+        require(productionSigningConfigured) {
+            "Production signing is required. Supply productionSigningStoreFile, productionSigningStorePassword, productionSigningKeyAlias, and productionSigningKeyPassword through CI secrets or -P properties."
+        }
+    }
+    val productionSigning = if (productionSigningConfigured) {
+        signingConfigs.create("production") {
+            storeFile = file(productionSigningStoreFile!!)
+            storePassword = productionSigningStorePassword
+            keyAlias = productionSigningKeyAlias
+            keyPassword = productionSigningKeyPassword
+        }
+    } else {
+        null
+    }
     // compileSdk 37: required by androidx.lifecycle 2.11.0. Kept in step
     // with the newest installed SDK platform; minSdk stays low for
     // entry-level devices (see defaultConfig below).
@@ -29,8 +92,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 37
-        versionName = "0.0.36-beta"
+        versionCode = 38
+        versionName = "0.0.37-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -49,13 +112,11 @@ android {
             isShrinkResources = false
         }
         release {
-            require(productionApiBaseUrl.startsWith("https://")) {
-                "Production API URL must use HTTPS"
-            }
-            buildConfigField("String", "API_BASE_URL", "\"$productionApiBaseUrl\"")
+            buildConfigField("String", "API_BASE_URL", "\"${configuredProductionApiBaseUrl.orEmpty()}\"")
             buildConfigField("String", "APP_ENVIRONMENT", "\"PRODUCTION\"")
-            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${productionApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
+            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${configuredProductionApiBaseUrl.orEmpty().removeSuffix("api/v1/")}app/update.json\"")
             manifestPlaceholders["apiUsesCleartext"] = "false"
+            signingConfig = productionSigning
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -129,6 +190,10 @@ dependencies {
 
     // Encrypted local credentials via Android Keystore.
     implementation(libs.androidx.security.crypto)
+
+    // FCM push token/message support. The BoM keeps Firebase modules compatible.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

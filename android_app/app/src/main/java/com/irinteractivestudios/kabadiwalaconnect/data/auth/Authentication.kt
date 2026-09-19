@@ -6,6 +6,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
+import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -207,6 +208,10 @@ interface AuthenticationRepository {
     suspend fun authenticateEmail(request: EmailAccountRequest): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun refreshAccount(): AccountProfile? = null
+    /** Returns the authenticated account export without exposing credentials. */
+    suspend fun exportAccount(): JsonObject? = null
+    /** Performs the server-side privacy deletion and returns whether it completed. */
+    suspend fun deleteAccount(): Boolean = false
     /** Refreshes credentials without loading profile data; used by the HTTP 401 authenticator. */
     suspend fun refreshAccessToken(): String? = null
     fun isSessionValid(): Boolean
@@ -263,6 +268,8 @@ class MockAuthenticationRepository(
         return EmailAuthentication.Success("mock-email", expiry, profile)
     }
     override suspend fun refreshAccount(): AccountProfile? = secureStorage?.readAccount()
+    override suspend fun exportAccount(): JsonObject? = null
+    override suspend fun deleteAccount(): Boolean = false
     override fun isSessionValid() = session.isSessionValid()
     override fun logout() = session.clear()
 }

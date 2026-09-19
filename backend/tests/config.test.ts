@@ -11,6 +11,18 @@ const production = {
 
 describe('production configuration boundary', () => {
   it('accepts explicit HTTPS/private/shared-store configuration', () => expect(loadConfig(production).NODE_ENV).toBe('production'));
+  it('accepts 2Factor credentials for production OTP', () => expect(loadConfig({ ...production, OTP_PROVIDER:'twofactor', TWILIO_ACCOUNT_SID:undefined, TWILIO_AUTH_TOKEN:undefined, TWILIO_VERIFY_SERVICE_SID:undefined, TWOFACTOR_API_KEY:'test-key' }).OTP_PROVIDER).toBe('twofactor'));
+  it('requires a 2Factor API key when selected', () => expect(() => loadConfig({ ...production, OTP_PROVIDER:'twofactor', TWILIO_ACCOUNT_SID:undefined, TWILIO_AUTH_TOKEN:undefined, TWILIO_VERIFY_SERVICE_SID:undefined })).toThrow(/TWOFACTOR_API_KEY/));
+  it('requires an approved sender when notification SMS is enabled', () => {
+    expect(() => loadConfig({ ...production, NOTIFICATION_SMS_ENABLED:'true', NOTIFICATION_SMS_PROVIDER:'disabled' })).toThrow(/NOTIFICATION_SMS_PROVIDER/);
+    expect(() => loadConfig({ ...production, NOTIFICATION_SMS_ENABLED:'true', NOTIFICATION_SMS_PROVIDER:'twofactor', TWOFACTOR_API_KEY:'test-key' })).toThrow(/TWOFACTOR_SMS_SENDER_ID/);
+    expect(loadConfig({ ...production, NOTIFICATION_SMS_ENABLED:'true', NOTIFICATION_SMS_PROVIDER:'twofactor', TWOFACTOR_API_KEY:'test-key', TWOFACTOR_SMS_SENDER_ID:'KABADI' }).NOTIFICATION_SMS_ENABLED).toBe(true);
+  });
+  it('requires a complete FCM server configuration when push is enabled', () => {
+    expect(() => loadConfig({ ...production, NOTIFICATION_PUSH_ENABLED: 'true', NOTIFICATION_PUSH_PROVIDER: 'disabled' })).toThrow(/NOTIFICATION_PUSH_PROVIDER/);
+    expect(() => loadConfig({ ...production, NOTIFICATION_PUSH_ENABLED: 'true', NOTIFICATION_PUSH_PROVIDER: 'fcm' })).toThrow(/FCM_PROJECT_ID/);
+    expect(loadConfig({ ...production, NOTIFICATION_PUSH_ENABLED: 'true', NOTIFICATION_PUSH_PROVIDER: 'fcm', FCM_PROJECT_ID: 'project', FCM_CLIENT_EMAIL: 'firebase-adminsdk@example.iam.gserviceaccount.com', FCM_PRIVATE_KEY: 'private-key' }).NOTIFICATION_PUSH_ENABLED).toBe(true);
+  });
   it('rejects wildcard or cleartext origins', () => {
     expect(() => loadConfig({ ...production, CORS_ORIGIN:'*' })).toThrow(/CORS/);
     expect(() => loadConfig({ ...production, CORS_ORIGIN:'http:\/\/app.example.org' })).toThrow(/HTTPS/);

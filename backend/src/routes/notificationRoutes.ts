@@ -3,11 +3,24 @@ import type { PrismaClient } from '@prisma/client';
 import type { JwtService } from '../services/jwt.js';
 import { requireAccount } from '../middleware/auth.js';
 import { NotificationService } from '../services/notificationService.js';
+import { NotificationDeviceService, parseNotificationDeviceInput } from '../services/notificationDeviceService.js';
 
 export const notificationRoutes = (jwt: JwtService, db: PrismaClient) => {
   const service = new NotificationService(db);
+  const devices = new NotificationDeviceService(db);
   return Router()
     .use(requireAccount(jwt, db, false))
+    .post('/devices', async (req, res) => {
+      const device = await devices.register(req.identity!.collectorId, parseNotificationDeviceInput(req.body));
+      res.status(201).json({ success: true, data: device, message: 'Notification device registered' });
+    })
+    .get('/devices', async (req, res) => {
+      res.json({ success: true, data: await devices.list(req.identity!.collectorId), message: 'Notification devices retrieved' });
+    })
+    .post('/devices/unregister', async (req, res) => {
+      const input = parseNotificationDeviceInput(req.body);
+      res.json({ success: true, data: await devices.unregister(req.identity!.collectorId, input.token), message: 'Notification device unregistered' });
+    })
     .get('/', async (req, res) => {
       const unreadOnly = req.query.unread === 'true';
       const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 50;

@@ -35,6 +35,8 @@ import type { HandoverService } from './services/handoverService.js';
 import type { PaymentService } from './services/paymentService.js';
 import type { SyncService } from './services/syncService.js';
 import type { EmailAuthService } from './services/emailAuthService.js';
+import type { StorageService } from './services/storage.js';
+import type { AccountPrivacyService } from './services/accountPrivacyService.js';
 
 export function createApp(
   config: AppConfig,
@@ -50,7 +52,10 @@ export function createApp(
   handoverService?: HandoverService,
   paymentService?: PaymentService,
   syncService?: SyncService,
-  emailAuthService?: EmailAuthService
+  emailAuthService?: EmailAuthService,
+  storage?: StorageService,
+  storageReady = true,
+  accountPrivacyService?: AccountPrivacyService
 ) {
   const app = express();
   app.disable('x-powered-by');
@@ -77,10 +82,10 @@ export function createApp(
   app.use(requestContext);
 
   const api = express.Router();
-  api.use(healthRoutes(db, config));
-  if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db));
+  api.use(healthRoutes(db, config, storageReady));
+  if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db, accountPrivacyService));
   if (collectorRepository) api.use('/collectors', collectorRoutes(jwt, collectorRepository, collectorService, db));
-  if (collectorRepository) api.use(supplyChainRoutes(jwt, collectorRepository, db));
+  if (collectorRepository) api.use(supplyChainRoutes(jwt, collectorRepository, db, storage));
   if (collectorRepository) api.use(formalisationRoutes(jwt, collectorRepository, db, config.TRACEABILITY_SIGNING_SECRET));
   if (lotService && collectorRepository) api.use('/lots', lotRoutes(jwt, collectorRepository, lotService, db));
   if (priceService && collectorRepository) api.use(priceRoutes(jwt, collectorRepository, priceService, db));

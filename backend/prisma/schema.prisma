@@ -367,6 +367,7 @@ model Collector {
   latitude          Float?
   longitude         Float?
   areaName          String
+  dailyPickupCapacity Int              @default(8)
   accountStatus     AccountStatus     @default(ACTIVE)
   createdAt         DateTime          @default(now())
   lastLoginAt       DateTime?
@@ -393,6 +394,8 @@ model User {
   role               AccountRole
   preferredLanguage  PreferredLanguage @default(ENGLISH)
   appearanceMode     String            @default("SYSTEM")
+  smsNotificationsEnabled  Boolean     @default(true)
+  pushNotificationsEnabled Boolean     @default(true)
   accountStatus      AccountStatus     @default(ACTIVE)
   collectorProfileId String?
   recyclerProfileId  String?
@@ -971,6 +974,22 @@ model RequestRateLimit {
   @@index([resetAt])
 }
 
+// Pending OTPs are provider-scoped challenge records. The code is stored only
+// as an HMAC, so a database read cannot reveal a usable OTP.
+model OtpChallenge {
+  id          String    @id @default(cuid()) @map("_id")
+  phone       String    @unique
+  provider    String
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
+
 model RecyclerReview {
   id                String   @id @default(cuid()) @map("_id")
   handoverId        String
@@ -1031,6 +1050,72 @@ model NotificationEvent {
   createdAt DateTime  @default(now())
 
   @@index([accountId, readAt, createdAt])
+}
+
+// Device tokens are account-scoped so a shared phone cannot receive another
+// account's notifications after the user signs out and registers again. The
+// token is replaceable provider state, not an authentication credential.
+model NotificationDevice {
+  id          String   @id @default(cuid()) @map("_id")
+  accountId   String
+  token       String   @unique
+  platform    String   @default("ANDROID")
+  appVersion  String?
+  enabled     Boolean  @default(true)
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([accountId, enabled])
+  @@index([accountId, lastSeenAt])
+}
+
+// Provider delivery is an outbox, not a synchronous side effect of a business
+// mutation. A worker can claim retries safely and record provider outcomes.
+model NotificationDelivery {
+  id                 String   @id @default(cuid()) @map("_id")
+  notificationId     String
+  accountId          String
+  channel            String   @default("SMS")
+  status             String   @default("PENDING")
+  attempts           Int      @default(0)
+  nextAttemptAt      DateTime @default(now())
+  claimedAt          DateTime?
+  providerMessageId  String?
+  lastError          String?
+  sentAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([notificationId, channel])
+  @@index([status, nextAttemptAt])
+  @@index([accountId, channel, status])
+}
+
+// Push delivery is fan-out per device. Keeping target state separate from the
+// account-level event prevents a transient failure on one device from causing
+// a duplicate push to another device that already accepted the event.
+model NotificationDeliveryTarget {
+  id                 String   @id @default(cuid()) @map("_id")
+  deliveryId         String
+  notificationId     String
+  accountId          String
+  deviceId           String
+  token              String
+  status             String   @default("PENDING")
+  attempts           Int      @default(0)
+  nextAttemptAt      DateTime @default(now())
+  claimedAt          DateTime?
+  providerMessageId  String?
+  lastError          String?
+  sentAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([deliveryId, deviceId])
+  @@index([status, nextAttemptAt])
+  @@index([deliveryId, status])
+  @@index([accountId, deviceId])
 }
 
 model IdempotencyRecord {
@@ -1112,6 +1197,21 @@ model PickupRequest {
   @@index([householdId, status, createdAt])
   @@index([kabadiwalaId, status, scheduledSlot])
   @@index([status, scheduledSlot])
+}
+
+// Capacity is counted per collector and local operating day. The conditional
+// increment used by the scheduling service makes the limit race-safe inside a
+// database transaction while leaving the exact time window on PickupRequest.
+model CollectorPickupDay {
+  id          String   @id @default(cuid()) @map("_id")
+  collectorId String
+  dayKey      String
+  capacity    Int      @default(8)
+  bookedCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([collectorId, dayKey])
 }
 
 model PickupSettlementPayment {

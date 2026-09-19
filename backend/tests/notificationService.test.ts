@@ -24,4 +24,17 @@ describe('notification inbox service', () => {
     });
     expect(result).toBeNull();
   });
+
+  it('uses a stable event ID and returns the existing event on a retry', async () => {
+    const existing = { id: 'stable-event', accountId: 'account-1', type: 'QUOTE_RECEIVED' };
+    const create = vi.fn().mockRejectedValue({ code: 'P2002' });
+    const findUnique = vi.fn().mockResolvedValue(existing);
+    const result = await emitNotification({ notificationEvent: { create, findUnique } } as never, {
+      accountId: 'account-1', type: 'QUOTE_RECEIVED', title: 'Quote', body: 'A quote arrived', dedupeKey: 'QUOTE_RECEIVED:quote-1'
+    });
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: expect.stringMatching(/^[a-f0-9]{64}$/) }) }));
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: expect.stringMatching(/^[a-f0-9]{64}$/) } });
+    expect(result).toEqual(existing);
+  });
 });

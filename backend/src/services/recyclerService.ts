@@ -37,7 +37,7 @@ export async function expireStaleRecyclerAuthorizations(db: PrismaClient, now = 
           reason: 'Authorization validity period elapsed'
         }
       });
-      await tx.notificationEvent.create({
+      const notification = await tx.notificationEvent.create({
         data: {
           accountId: candidate.id,
           type: 'RECYCLER_AUTHORIZATION_EXPIRED',
@@ -46,6 +46,15 @@ export async function expireStaleRecyclerAuthorizations(db: PrismaClient, now = 
           route: 'recycler/profile'
         }
       });
+      try {
+        await tx.notificationDelivery?.upsert({
+          where: { notificationId_channel: { notificationId: notification.id, channel: 'SMS' } },
+          update: {},
+          create: { notificationId: notification.id, accountId: candidate.id, channel: 'SMS', status: 'PENDING', attempts: 0, nextAttemptAt: new Date() }
+        });
+      } catch {
+        // SMS outbox persistence must never roll back an authorization expiry.
+      }
       return true;
     });
     if (changed) expired += 1;

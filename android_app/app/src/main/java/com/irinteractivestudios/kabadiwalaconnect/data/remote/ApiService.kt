@@ -1,8 +1,10 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.remote
 
+import com.google.gson.Gson
 import com.google.gson.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -30,6 +32,11 @@ interface ApiService {
     // legacy collector-to-recycler lot/quote APIs below.
     @POST("household/listings")
     suspend fun createHouseholdListing(@Body body: HouseholdListingCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<HouseholdListingDto>>
+    @Multipart
+    @POST("household/listings/{listingId}/photo")
+    suspend fun uploadHouseholdListingPhoto(@Path("listingId") listingId: String, @Part photo: MultipartBody.Part): Response<ApiEnvelope<HouseholdListingDto>>
+    @GET("household/listings/{listingId}/photo")
+    suspend fun getHouseholdListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
     @GET("household/listings")
     suspend fun getHouseholdListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("household/listings/{listingId}")
@@ -58,6 +65,8 @@ interface ApiService {
     suspend fun cancelHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/listings")
     suspend fun getKabadiwalaListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    @GET("kabadiwala/listings/{listingId}/photo")
+    suspend fun getKabadiwalaListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
     @GET("kabadiwala/pickups")
     suspend fun getKabadiwalaPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
     @POST("kabadiwala/listings/{listingId}/accept")
@@ -183,6 +192,12 @@ interface ApiService {
 
     @POST("auth/logout")
     suspend fun logout(@Body body: RefreshTokenRequestDto): Response<ApiEnvelope<LogoutDto>>
+
+    @GET("auth/account/export")
+    suspend fun exportAccount(): Response<ApiEnvelope<JsonObject>>
+
+    @POST("auth/account/delete")
+    suspend fun deleteAccount(@Body body: AccountDeletionRequestDto = AccountDeletionRequestDto()): Response<ApiEnvelope<AccountDeletionDto>>
 
     @GET("collectors/me")
     suspend fun getCollector(): Response<ApiEnvelope<CollectorDto>>
@@ -335,6 +350,16 @@ interface ApiService {
     @POST("notifications/read-all")
     suspend fun markAllNotificationsRead(): Response<ApiEnvelope<NotificationReadDto>>
 
+    /** Provider token registration is optional until the deployment enables FCM. */
+    @POST("notifications/devices")
+    suspend fun registerNotificationDevice(@Body body: NotificationDeviceRequestDto): Response<ApiEnvelope<NotificationDeviceDto>>
+
+    @GET("notifications/devices")
+    suspend fun getNotificationDevices(): Response<ApiEnvelope<List<NotificationDeviceDto>>>
+
+    @POST("notifications/devices/unregister")
+    suspend fun unregisterNotificationDevice(@Body body: NotificationDeviceRequestDto): Response<ApiEnvelope<NotificationDeviceUnregisterDto>>
+
     @GET("activity/changes")
     suspend fun getActivityChanges(@Query("since") since: String? = null): Response<ApiEnvelope<ActivityChangesDto>>
 
@@ -438,6 +463,10 @@ class RemoteApiException(val code: String, override val message: String, val htt
 
 fun <T> Response<ApiEnvelope<T>>.requireData(): T {
     val body = body()
-    if (!isSuccessful) throw RemoteApiException("HTTP_${code()}", errorBody()?.string().orEmpty().ifBlank { "Request failed" }, code())
+    if (!isSuccessful) {
+        val raw = errorBody()?.string().orEmpty()
+        val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: raw.ifBlank { "Request failed" }, code())
+    }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
 }

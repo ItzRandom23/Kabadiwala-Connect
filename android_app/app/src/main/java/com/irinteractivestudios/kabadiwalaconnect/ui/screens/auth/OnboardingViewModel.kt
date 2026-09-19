@@ -265,19 +265,21 @@ class OnboardingViewModel(
                         displayName = current.displayName.ifBlank { null },
                         areaName = current.area
                     )
-                    val selectedProfile = if (current.role == AccountRole.HOUSEHOLD && profile.role == AccountRole.COLLECTOR) profile.copy(role = AccountRole.HOUSEHOLD) else profile
-                    secureStorage?.saveAccount(selectedProfile)
-                    if (selectedProfile.role != AccountRole.RECYCLER) saveCollectorCacheIfNeeded(selectedProfile.profileId, current, selectedProfile.role)
+                    // The backend owns the authenticated role. The client may
+                    // request a role during signup, but must not rewrite the
+                    // returned authorization result for presentation.
+                    secureStorage?.saveAccount(profile)
+                    if (profile.role != AccountRole.RECYCLER) saveCollectorCacheIfNeeded(profile.profileId, current, profile.role)
                     current.copy(
                         step = OnboardingStep.COMPLETE,
                         completed = true,
                         isBusy = false,
                         otpError = null,
-                        role = selectedProfile.role,
-                        email = selectedProfile.email.ifBlank { current.email },
-                        phone = selectedProfile.phoneNumber.ifBlank { current.phone },
-                        displayName = selectedProfile.displayName.orEmpty(),
-                        area = selectedProfile.areaName.orEmpty().ifBlank { current.area }
+                        role = profile.role,
+                        email = profile.email.ifBlank { current.email },
+                        phone = profile.phoneNumber.ifBlank { current.phone },
+                        displayName = profile.displayName.orEmpty(),
+                        area = profile.areaName.orEmpty().ifBlank { current.area }
                     )
                 }
                 OtpVerification.Incorrect -> current.copy(isBusy = false, otpError = OtpError.INCORRECT)
@@ -384,10 +386,9 @@ class OnboardingViewModel(
                 val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
                 when (val result = auth.authenticateEmail(request)) {
                     is EmailAuthentication.Success -> {
-                        val selectedProfile = if (current.role == AccountRole.HOUSEHOLD && result.profile.role == AccountRole.COLLECTOR) result.profile.copy(role = AccountRole.HOUSEHOLD) else result.profile
-                        secureStorage?.saveAccount(selectedProfile)
-                        saveCollectorCacheIfNeeded(selectedProfile.profileId, current, selectedProfile.role)
-                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = selectedProfile.role)
+                        secureStorage?.saveAccount(result.profile)
+                        saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
+                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role)
                     }
                     else -> _state.value = current.copy(isBusy = false, authError = true)
                 }

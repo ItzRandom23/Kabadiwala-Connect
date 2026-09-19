@@ -21,6 +21,8 @@ import { EmailAuthService } from './services/emailAuthService.js';
 import { ensureOptionalUniqueIndexes } from './config/mongoIndexes.js';
 import { DatabaseAuthenticationRateLimiter, OtpRateLimiter } from './services/rateLimiter.js';
 import { SessionService } from './services/sessionService.js';
+import { AccountPrivacyService } from './services/accountPrivacyService.js';
+import { createNotificationDeliveryService } from './services/notificationDeliveryService.js';
 
 const config = loadConfig();
 // Index maintenance is a best-effort startup task. Some MongoDB deployments
@@ -36,10 +38,12 @@ try {
 const collectors = new CollectorRepository(prisma);
 const jwt = new JwtService(config);
 let storage: StorageService;
+let storageReady = true;
 
 try {
   storage = config.STORAGE_PROVIDER === 'local' ? new LocalStorageService(config) : new S3StorageService(config);
 } catch {
+  storageReady = false;
   storage = {
     putImage: async () => { throw new Error('Configured photo storage is not available'); },
     getImage: async () => { throw new Error('Configured photo storage is not available'); },
@@ -50,12 +54,13 @@ try {
 const paymentService = new PaymentService(prisma);
 const authenticationRateLimiter = config.RATE_LIMIT_STORE === 'database' ? new DatabaseAuthenticationRateLimiter(prisma) : new OtpRateLimiter();
 const sessionService = new SessionService(prisma, jwt, config);
+const notificationDelivery = createNotificationDeliveryService(prisma, config);
 const app = createApp(
   config,
   prisma,
   jwt,
   new CollectorService(collectors),
-  new AuthService(createOtpProvider(config), collectors, jwt, authenticationRateLimiter, prisma, sessionService),
+  new AuthService(createOtpProvider(config, prisma), collectors, jwt, authenticationRateLimiter, prisma, sessionService),
   collectors,
   new LotService(new LotRepository(prisma), storage, prisma),
   new PriceService(new PriceRepository(prisma), prisma),
@@ -64,7 +69,10 @@ const app = createApp(
   new HandoverService(prisma, config.TRACEABILITY_SIGNING_SECRET, authenticationRateLimiter, storage),
   paymentService,
   new SyncService(prisma, paymentService, config.TRACEABILITY_SIGNING_SECRET),
-  new EmailAuthService(prisma, jwt, sessionService, authenticationRateLimiter)
+  new EmailAuthService(prisma, jwt, sessionService, authenticationRateLimiter),
+  storage,
+  storageReady,
+  new AccountPrivacyService(prisma)
 );
 
 const runRecyclerFreshnessSweep = () => expireStaleRecyclerAuthorizations(prisma)
@@ -74,12 +82,26 @@ void runRecyclerFreshnessSweep();
 const recyclerFreshnessTimer = setInterval(runRecyclerFreshnessSweep, 60 * 60 * 1000);
 recyclerFreshnessTimer.unref();
 
+const runNotificationDelivery = () => Promise.all([
+  notificationDelivery.dispatchPendingSms(),
+  notificationDelivery.dispatchPendingPush()
+])
+  .then(([sms, push]) => {
+    if (sms.sent || sms.retried) console.log(`Notification SMS worker: sent=${sms.sent}, retried=${sms.retried}`);
+    if (push.sent || push.retried) console.log(`Notification push worker: sent=${push.sent}, retried=${push.retried}`);
+  })
+  .catch(error => console.warn('Notification delivery worker skipped:', error));
+void runNotificationDelivery();
+const notificationDeliveryTimer = setInterval(runNotificationDelivery, 30 * 1000);
+notificationDeliveryTimer.unref();
+
 // Bind explicitly to IPv4 so Android emulators can reach the local development
 // server through 10.0.2.2. This remains a local/SIH prototype server; deployment
 // exposure is controlled separately by the hosting environment.
 const server = app.listen(config.PORT, '0.0.0.0', () => console.log(`Kabadiwala backend listening on port ${config.PORT}`));
 const shutdown = async () => {
   clearInterval(recyclerFreshnessTimer);
+  clearInterval(notificationDeliveryTimer);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);
