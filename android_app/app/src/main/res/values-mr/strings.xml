@@ -1,4 +1,5 @@
 <resources>
+    <string name="notification_channel_name">खात्याचे अपडेट</string>
     <string name="nav_marketplace">मार्केटप्लेस</string><string name="nav_orders">ऑर्डर</string><string name="nav_pickups">पिकअप</string><string name="nav_rates">दर</string><string name="nav_profile">प्रोफाइल</string>
     <string name="auth_existing_account">माझे खाते आधीच आहे</string><string name="auth_email_title">खाते तयार करा</string><string name="auth_sign_in_title">पुन्हा स्वागत आहे</string><string name="auth_email_detail">तुमचे ईमेल वापरा.</string><string name="auth_email_label">ईमेल</string><string name="auth_password_label">पासवर्ड (8+ अक्षरे)</string><string name="auth_continue">पुढे चला</string><string name="auth_sign_in">साइन इन</string><string name="auth_role_title">तुम्ही Kabadiwala Connect कसे वापरता?</string><string name="auth_role_collector">मी भंगार गोळा करतो</string><string name="auth_role_recycler">मी भंगार खरेदी किंवा प्रक्रिया करतो</string><string name="auth_business_name">व्यवसाय किंवा सुविधा नाव</string><string name="auth_materials_accepted">स्वीकारल्या जाणाऱ्या वस्तू</string><string name="auth_pickup_available">तुम्ही पिकअप करू शकता का?</string><string name="auth_recycler_complete_title">माहिती पाठवली</string><string name="auth_recycler_complete_detail">तुमचे रीसायकलर खाते पडताळणीच्या प्रतीक्षेत आहे.</string>
     <string name="app_name">कबाडीवाला कनेक्ट</string>
@@ -89,6 +90,14 @@
     <string name="settings_offline_note">सर्व सेटिंग्ज इंटरनेटशिवाय चालतात.</string>
     <string name="settings_logout">लॉग आउट</string>
     <string name="settings_logout_warning">साइन आउट केल्यावर या फोनवरील ऑफलाइन ड्राफ्ट, रांगेतील संदेश आणि खास सेव्ह केलेला डेटा हटवला जाईल. सर्व्हरवरील डेटा हटणार नाही.</string>
+    <string name="settings_export_account">माझ्या खात्याचा डेटा एक्सपोर्ट करा</string>
+    <string name="settings_export_share_title">खात्याचा एक्सपोर्ट शेअर करा</string>
+    <string name="settings_export_unavailable">ऑफलाइन मोडमध्ये खात्याचा एक्सपोर्ट उपलब्ध नाही.</string>
+    <string name="settings_export_failed">खात्याचा एक्सपोर्ट तयार करता आला नाही. पुन्हा प्रयत्न करा.</string>
+    <string name="settings_delete_account">माझे खाते हटवा</string>
+    <string name="settings_delete_account_warning">तुमचे खाते निष्क्रिय केले जाईल, संपर्काची माहिती आणि खास सूचना हटवल्या जातील आणि सक्रिय सेशन रद्द केली जातील. कायदेशीर आणि कार्यात्मक गरजांसाठी आर्थिक व ट्रेसिबिलिटी नोंदी ठेवता येतील.</string>
+    <string name="settings_delete_account_confirm">खाते हटवा</string>
+    <string name="settings_delete_account_failed">खाते हटवता आले नाही. तुमच्या खात्यात बदल झाला नाही.</string>
 
     <string name="auth_step">पायरी %1$d / %2$d</string>
     <string name="auth_welcome_title">कबाडीवाला कनेक्टमध्ये स्वागत आहे</string>
@@ -226,6 +235,12 @@
     <string name="dispute_status_rejected">बंद</string>
     <string name="handover_rate_recycler">या सत्यापित रीसायकलरला रेटिंग द्या</string>
     <string name="settings_trust_tools">विश्वास आणि उपयुक्त साधने</string>
+    <string name="settings_notification_preferences_section">सूचना प्राधान्ये</string>
+    <string name="settings_sms_notifications">SMS सूचना</string>
+    <string name="settings_sms_notifications_detail">टेक्स्ट मेसेजद्वारे व्यवहाराचे अपडेट मिळवा.</string>
+    <string name="settings_push_notifications">पुश सूचना</string>
+    <string name="settings_push_notifications_detail">या डिव्हाइसवर भविष्यातील अॅप सूचना परवानगी द्या.</string>
+    <string name="settings_notification_save_failed">सूचना प्राधान्य जतन करता आले नाही. पुन्हा प्रयत्न करा.</string>
     <string name="settings_rewards">बोनस</string>
     <string name="settings_schemes">सरकारी योजना</string>
     <string name="settings_diy">कचऱ्यातून उपयोगी वस्तू</string>
@@ -687,6 +702,7 @@
     <string name="settings_language_section">भाषा</string>
     <string name="settings_appearance_section">डिस्प्ले</string>
     <string name="settings_safety_section">सुरक्षा आणि मदत</string>
+    <string name="settings_privacy_section">गोपनीयता</string>
     <string name="settings_about_section">अॅप</string>
     <string name="settings_check_for_updates">अपडेट तपासा</string>
     <string name="transaction_passport_title">व्यवहार पासपोर्ट</string>

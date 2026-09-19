@@ -352,6 +352,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 Spacer(Modifier.width(8.dp))
                 Text("Record lot")
             }
+            ProductFeaturePanel(state)
             FormalisationDashboard(
                 state = state,
                 currentArea = currentArea,
@@ -408,6 +409,61 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         }
     }
     if (showBulk) BulkLotDialog(state.inventory, currentArea, onDismiss = { showBulk = false }, onSubmit = { onCreateBulk(it); showBulk = false })
+}
+
+@Composable
+private fun ProductFeaturePanel(state: SupplyChainState) {
+    val features = remember(state) { productFeatureMatrix(state) }
+    Surface(
+        shape = RoundedCornerShape(28.dp, 8.dp, 28.dp, 8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Recycling, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Kabadiwala Connect advantage", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                StatusChip("9 features")
+            }
+            Text(
+                "One field workflow from doorstep pickup to fair, traceable recycler settlement.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            features.forEach { feature ->
+                ProductFeatureRow(feature)
+            }
+            Text(
+                "LIVE = connected workflow is available. PILOT = the workflow is built, but estimates or connectivity still matter.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProductFeatureRow(feature: ProductFeature) {
+    val isLive = feature.state == ProductFeatureState.LIVE
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (isLive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (isLive) Icons.Filled.CheckCircle else Icons.Filled.LocationOn,
+                contentDescription = null,
+                tint = if (isLive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+            )
+            Column(Modifier.padding(start = 10.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(feature.title, fontWeight = FontWeight.SemiBold)
+                Text(feature.evidence, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            StatusChip(if (isLive) "LIVE" else "PILOT")
+        }
+    }
 }
 
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS }

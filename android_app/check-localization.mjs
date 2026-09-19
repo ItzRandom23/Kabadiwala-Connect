@@ -25,11 +25,12 @@ function formatTokens(value) {
 }
 
 const english = readStrings(path.join("values", "strings.xml"));
-const hindi = readStrings(path.join("values-hi", "strings.xml"));
-const marathi = readStrings(path.join("values-mr", "strings.xml"));
 const failures = [];
+const localeResources = fs.readdirSync(resourceDir, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.startsWith("values-") && fs.existsSync(path.join(resourceDir, entry.name, "strings.xml")))
+  .map((entry) => [entry.name, readStrings(path.join(entry.name, "strings.xml"))]);
 
-for (const [locale, resource] of [["Hindi", hindi], ["Marathi", marathi]]) {
+for (const [locale, resource] of localeResources) {
   for (const name of english.values.keys()) {
     if (!resource.values.has(name)) failures.push(`${locale} is missing ${name}`);
     else if (JSON.stringify(formatTokens(english.values.get(name))) !== JSON.stringify(formatTokens(resource.values.get(name)))) {
@@ -52,4 +53,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Localization check passed: ${english.values.size} English, ${hindi.values.size} Hindi, ${marathi.values.size} Marathi keys.`);
+console.log(`Localization check passed: ${english.values.size} English keys across ${localeResources.length} locale resources.`);
