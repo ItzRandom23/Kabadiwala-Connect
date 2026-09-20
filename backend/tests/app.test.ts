@@ -5,6 +5,7 @@ import { JwtService } from '../src/services/jwt.js';
 import { CollectorService } from '../src/services/collectorService.js';
 
 const config = {
+  APP_ENV: 'testing' as const,
   NODE_ENV: 'test' as const,
   PORT: 4000,
   DATABASE_URL: 'mongodb://test',
@@ -99,7 +100,7 @@ describe('app', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(capturedAccount).toBeUndefined();
+    expect(capturedAccount).toEqual({});
   });
 
   it('requires mandatory phone-registration fields when creating an account', async () => {

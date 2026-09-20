@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,8 +21,6 @@ data class RecyclerMarketplaceState(
 class RecyclerMarketplaceViewModel(private val api: ApiService) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerMarketplaceState())
     val state: StateFlow<RecyclerMarketplaceState> = _state.asStateFlow()
-
-    init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
@@ -45,7 +44,7 @@ class RecyclerMarketplaceViewModel(private val api: ApiService) : ViewModel() {
                         error = null
                     )
                 }
-                .onFailure { error -> _state.value = _state.value.copy(loading = false, error = error.message ?: "Could not load requests") }
+                .onFailure { error -> _state.value = _state.value.copy(loading = false, error = userFacingError(error, "Could not load requests")) }
         }
     }
 
@@ -55,7 +54,7 @@ class RecyclerMarketplaceViewModel(private val api: ApiService) : ViewModel() {
         viewModelScope.launch {
             runCatching { api.submitRecyclerQuote(com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitRecyclerQuoteRequestDto(requestId, rate)).requireData() }
                 .onSuccess { _state.value = _state.value.copy(submittedIds = _state.value.submittedIds + requestId, submittingIds = _state.value.submittingIds - requestId) }
-                .onFailure { error -> _state.value = _state.value.copy(submittingIds = _state.value.submittingIds - requestId, error = error.message ?: "Offer could not be sent") }
+                .onFailure { error -> _state.value = _state.value.copy(submittingIds = _state.value.submittingIds - requestId, error = userFacingError(error, "Offer could not be sent")) }
         }
     }
 

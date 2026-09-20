@@ -17,7 +17,9 @@ object PhotoValidator {
     enum class Warning { TOO_DARK, TOO_BRIGHT, LOW_DETAIL }
     const val MIN_WIDTH = 320
     const val MIN_HEIGHT = 240
-    const val MAX_BYTES = 8L * 1024L * 1024L
+    // Keep the client-side limit aligned with the backend multipart limit so a
+    // valid image is never accepted locally only to be rejected in transit.
+    const val MAX_BYTES = 5L * 1024L * 1024L
 
     fun validate(path: String): PhotoValidation {
         val file = File(path)

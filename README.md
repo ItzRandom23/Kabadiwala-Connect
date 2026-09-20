@@ -63,19 +63,38 @@ Open `android_app/` in Android Studio, or build from PowerShell:
 
 ```text
 cd android_app
-./gradlew.bat testDebugUnitTest
-./gradlew.bat assembleDebug
-./gradlew.bat assembleRelease -PproductionApiBaseUrl=https://your-host.example/api/v1/
+./gradlew.bat :app:testEnvTestingDebugUnitTest
+./gradlew.bat :app:assembleEnvTestingDebug -PtestingApiBaseUrl=https://testing-host.example/api/v1/
+./gradlew.bat :app:assembleProductionRelease -PproductionApiBaseUrl=https://your-production-host.example/api/v1/ \
+  -PproductionSigningStoreFile=... -PproductionSigningStorePassword=... \
+  -PproductionSigningKeyAlias=... -PproductionSigningKeyPassword=...
 ```
 
-The debug testing build has no implicit remote host; it defaults to an invalid
-non-network URL. Supply `-PtestingApiBaseUrl=...` for a local or approved
-staging host. Release builds remain HTTPS-only and use a separate
-`-PproductionApiBaseUrl=...` value; release signing credentials are intentionally not included.
+Android uses product flavors for environment selection. `envTesting` is the
+disposable testing flavor and `production` is the release flavor; environment
+values are generated into `BuildConfig` rather than scattered through source.
+The testing endpoint can be set with `-PtestingApiBaseUrl=...` (the checked-in
+developer properties file points at the current testing service). Production
+variants require an explicit HTTPS `-PproductionApiBaseUrl` and release builds
+also require signing properties supplied by CI or local secret configuration.
+Never put production credentials, Gemini keys, storage credentials, or signing
+secrets in this repository.
+
+The backend uses the matching centralized environment contract. Start from
+`backend/.env.testing.example` or `backend/.env.production.example`, copy the
+selected file to an untracked `.env`, and set `APP_ENV=testing` or
+`APP_ENV=production`. Production startup rejects development mode, insecure
+CORS, placeholder secrets, and incomplete provider configuration.
 
 ## Offline and AI integration boundaries
 
 Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence and household listing photos upload independently to private storage; failed household photo uploads are retained in an account-scoped local retry queue. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
+
+The lot material classifier is assistive only: it validates JPEG/PNG/WebP input
+and never blocks manual material selection. Provider outage and low confidence
+are distinct UI states. GPS lot capture stores latitude, longitude, precision,
+and a separate human-readable area label; the helper text is never persisted as
+the area name.
 
 ## Testing
 
@@ -86,7 +105,7 @@ npm test
 npm run lint
 
 cd ../android_app
-./gradlew.bat testDebugUnitTest
+./gradlew.bat :app:testEnvTestingDebugUnitTest
 ```
 
 The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote rematching/idempotency, handover recovery, notification isolation, Room-backed state, and ViewModel transitions. Device validation is still required for CameraX permissions, QR camera scanning, TalkBack, GPS, and real network loss/recovery.

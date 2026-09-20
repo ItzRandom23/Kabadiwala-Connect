@@ -12,6 +12,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpChallenge
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
@@ -55,12 +56,14 @@ data class OnboardingState(
     val displayNameError: Boolean = false,
     val passwordError: Boolean = false,
     val phoneError: Boolean = false,
-    val authError: Boolean = false,
+    val authError: AuthError? = null,
+    val otpRetryAfterSeconds: Long? = null,
     val isBusy: Boolean = false,
     val completed: Boolean = false
 )
 
 enum class OtpError { INCORRECT, EXPIRED, ATTEMPTS_EXCEEDED, ACCOUNT_CONFLICT, SERVER, NETWORK }
+enum class AuthError { INVALID_CREDENTIALS, OTP_RATE_LIMITED, NETWORK }
 
 class OnboardingViewModel(
     private val auth: AuthenticationRepository,
@@ -81,7 +84,8 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(
             returningUser = true,
             step = OnboardingStep.EMAIL,
-            authError = false,
+            authError = null,
+            otpRetryAfterSeconds = null,
             phoneError = false
         )
     }
@@ -90,11 +94,12 @@ class OnboardingViewModel(
             returningUser = true,
             role = AccountRole.ADMIN,
             step = OnboardingStep.EMAIL,
-            authError = false,
+            authError = null,
+            otpRetryAfterSeconds = null,
             phoneError = false
         )
     }
-    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = false) }
+    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = null) }
     fun goBack() {
         val current = _state.value
         val previous = when (current.step) {
@@ -114,7 +119,8 @@ class OnboardingViewModel(
             challenge = if (previous == OnboardingStep.PHONE) null else current.challenge,
             otpError = null,
             phoneError = false,
-            authError = false,
+            authError = null,
+            otpRetryAfterSeconds = null,
             isBusy = false
         )
     }
@@ -123,8 +129,8 @@ class OnboardingViewModel(
         authenticatedCollectorId = null
         _state.value = OnboardingState(language = language)
     }
-    fun setEmail(value: String) { _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = false) }
-    fun setPassword(value: String) { _state.value = _state.value.copy(password = value, passwordError = false, authError = false) }
+    fun setEmail(value: String) { _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = null) }
+    fun setPassword(value: String) { _state.value = _state.value.copy(password = value, passwordError = false, authError = null) }
     fun continueEmail() {
         val current = _state.value
         val validEmail = EmailValidator.isValid(current.email)
@@ -136,10 +142,11 @@ class OnboardingViewModel(
         val current = _state.value
         if (!EmailValidator.isValid(current.email) || current.password.length < 8) { continueEmail(); return }
         viewModelScope.launch {
-            _state.value = current.copy(isBusy = true, authError = false)
-            when (val result = if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password) else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, AccountRole.COLLECTOR, LocaleManager.ENGLISH, isReturning = true))) {
+            _state.value = current.copy(isBusy = true, authError = null)
+            when (val result = if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password) else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, LocaleManager.ENGLISH, isReturning = true))) {
                 is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false) }
-                else -> _state.value = current.copy(isBusy = false, authError = true)
+                is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
+                else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)
             }
         }
     }
@@ -170,15 +177,21 @@ class OnboardingViewModel(
             // submit is stored, with no punctuation, spaces, or country code.
             phone = value.filter(Char::isDigit).take(10),
             phoneError = false,
-            authError = false
+            authError = null,
+            otpRetryAfterSeconds = null
         )
     }
     fun requestOtp() {
-        val phone = IndianPhoneValidator.normalize(_state.value.phone)
+        val current = _state.value
+        // Compose disables the button after recomposition, but a rapid double
+        // tap can reach the ViewModel before that recomposition happens.
+        // Claim the busy state synchronously so only one request is launched.
+        if (current.isBusy) return
+        val phone = IndianPhoneValidator.normalize(current.phone)
         _state.value = _state.value.copy(phone = phone)
         if (phone.length != 10 || !IndianPhoneValidator.isValid(phone)) { _state.value = _state.value.copy(phoneError = true); return }
+        _state.value = _state.value.copy(isBusy = true, phoneError = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(isBusy = true, phoneError = false)
             try {
                 val challenge = auth.requestOtp(phone)
                 _state.value = _state.value.copy(
@@ -186,9 +199,17 @@ class OnboardingViewModel(
                     challenge = challenge,
                     otp = challenge.developmentCodeHint.orEmpty(),
                     isBusy = false,
-                    authError = false
+                    authError = null,
+                    otpRetryAfterSeconds = null
                 )
-            } catch (_: Exception) { _state.value = _state.value.copy(isBusy = false, authError = true) }
+            } catch (error: Exception) {
+                val remote = error as? RemoteApiException
+                _state.value = _state.value.copy(
+                    isBusy = false,
+                    authError = if (remote?.code == "OTP_RATE_LIMITED" || remote?.code == "OTP_COOLDOWN") AuthError.OTP_RATE_LIMITED else AuthError.NETWORK,
+                    otpRetryAfterSeconds = remote?.retryAfterSeconds
+                )
+            }
         }
     }
     fun setOtp(value: String) { _state.value = _state.value.copy(otp = value.filter(Char::isDigit).take(6), otpError = null) }
@@ -297,7 +318,8 @@ class OnboardingViewModel(
             otp = "",
             challenge = null,
             otpError = null,
-            authError = false,
+            authError = null,
+            otpRetryAfterSeconds = null,
             isBusy = false
         )
     }
@@ -381,7 +403,7 @@ class OnboardingViewModel(
         val current = _state.value
         if (current.area.isBlank() && current.role != AccountRole.RECYCLER) return
         viewModelScope.launch {
-            _state.value = current.copy(isBusy = true, authError = false)
+            _state.value = current.copy(isBusy = true, authError = null)
             if (current.email.isNotBlank() && authenticatedCollectorId == null) {
                 val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
                 when (val result = auth.authenticateEmail(request)) {
@@ -390,7 +412,8 @@ class OnboardingViewModel(
                         saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
                         _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role)
                     }
-                    else -> _state.value = current.copy(isBusy = false, authError = true)
+                    is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
+                    else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)
                 }
             } else {
                 val timestamp = now()

@@ -34,7 +34,7 @@ interface ApiService {
     suspend fun createHouseholdListing(@Body body: HouseholdListingCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<HouseholdListingDto>>
     @Multipart
     @POST("household/listings/{listingId}/photo")
-    suspend fun uploadHouseholdListingPhoto(@Path("listingId") listingId: String, @Part photo: MultipartBody.Part): Response<ApiEnvelope<HouseholdListingDto>>
+    suspend fun uploadHouseholdListingPhotos(@Path("listingId") listingId: String, @Part photos: List<MultipartBody.Part>): Response<ApiEnvelope<HouseholdListingDto>>
     @GET("household/listings/{listingId}/photo")
     suspend fun getHouseholdListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
     @GET("household/listings")
@@ -46,7 +46,7 @@ interface ApiService {
     @GET("household/listings/{listingId}/passport")
     suspend fun getHouseholdListingPassport(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdPassportResponseDto>>
     @GET("household/kabadiwalas")
-    suspend fun getHouseholdKabadiwalas(): Response<ApiEnvelope<List<KabadiwalaProfileDto>>>
+    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null): Response<ApiEnvelope<List<KabadiwalaProfileDto>>>
     @POST("household/listings/{listingId}/pickups")
     suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<PickupRequestDto>>
     @GET("household/pickups")
@@ -224,7 +224,7 @@ interface ApiService {
 
     @Multipart
     @POST("lots/{lotId}/photo")
-    suspend fun uploadLotPhoto(@Path("lotId") lotId: String, @Part photo: MultipartBody.Part): Response<ApiEnvelope<LotDto>>
+    suspend fun uploadLotPhotos(@Path("lotId") lotId: String, @Part photos: List<MultipartBody.Part>): Response<ApiEnvelope<LotDto>>
 
     @GET("prices/board")
     suspend fun getPriceBoard(@Query("materialCategory") materialCategory: String, @Query("location") location: String?): Response<ApiEnvelope<PriceBoardDto>>
@@ -459,14 +459,14 @@ interface ApiService {
     suspend fun adminExportDataset(@Query("from") from: String? = null): Response<ApiEnvelope<JsonObject>>
 }
 
-class RemoteApiException(val code: String, override val message: String, val httpCode: Int? = null) : Exception(message)
+class RemoteApiException(val code: String, override val message: String, val httpCode: Int? = null, val retryAfterSeconds: Long? = null) : Exception(message)
 
 fun <T> Response<ApiEnvelope<T>>.requireData(): T {
     val body = body()
     if (!isSuccessful) {
         val raw = errorBody()?.string().orEmpty()
         val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
-        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: raw.ifBlank { "Request failed" }, code())
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: raw.ifBlank { "Request failed" }, code(), headers()["Retry-After"]?.toLongOrNull())
     }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
 }

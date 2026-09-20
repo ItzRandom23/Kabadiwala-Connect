@@ -3,6 +3,7 @@ import { TwoFactorOtpProvider } from '../src/services/otp.js';
 import type { AppConfig } from '../src/config/env.js';
 
 const config: AppConfig = {
+  APP_ENV: 'testing',
   NODE_ENV: 'test',
   PORT: 4000,
   DATABASE_URL: 'mongodb://test',

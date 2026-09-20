@@ -73,9 +73,11 @@ export class AuthService {
     if (result === 'locked') throw new AppError('OTP_ATTEMPTS_EXCEEDED', 'Too many verification attempts', 429);
     if (result !== 'approved') throw new AppError('OTP_INVALID', 'Invalid OTP', 400);
 
-    // Keep the repository-backed path for unit tests and older callers.
-    // Production phone signup passes input and uses the atomic Prisma path.
-    if (!this.db || !input) {
+    // Keep the repository-backed path only when the account database is not
+    // available. A returning phone login intentionally omits registration
+    // fields, but it must still resolve the existing User row so household
+    // and recycler roles are preserved instead of falling back to collector.
+    if (!this.db) {
       let collector = await this.collectors.findByPhone(phone);
       const created = !collector;
       collector ??= await this.collectors.create(phone);
@@ -86,7 +88,7 @@ export class AuthService {
     }
 
     try {
-      return await this.verifyPhoneAccount(phone, input);
+      return await this.verifyPhoneAccount(phone, input ?? {});
     } catch (error) {
       const details = error instanceof AppError && typeof error.details === 'object' && error.details !== null
         ? error.details as { code?: string }

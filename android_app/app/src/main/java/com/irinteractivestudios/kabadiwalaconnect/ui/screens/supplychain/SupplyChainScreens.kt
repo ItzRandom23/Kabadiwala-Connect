@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -18,18 +19,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOn
@@ -37,8 +41,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -49,6 +55,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text as MaterialText
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,7 +67,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -76,6 +82,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.gson.JsonObject
+import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -95,9 +102,10 @@ private fun money(value: Double?) = value?.let { "₹${"%.2f".format(it)}" } ?: 
 fun HouseholdSupplyScreen(
     state: SupplyChainState,
     onRefresh: () -> Unit,
-    onCreateListing: (HouseholdListingCreateDto, String?) -> Unit,
+    onCreateListing: () -> Unit,
+    onIncreaseRadius: () -> Unit = {},
     onRetryPhoto: () -> Unit = {},
-    onRequestPickup: (String, String) -> Unit,
+    onRequestPickup: (String, String?) -> Unit,
     onCancelListing: (String) -> Unit = {},
     onCancelPickup: (String) -> Unit = {},
     onReschedulePickup: (String, String) -> Unit = { _, _ -> },
@@ -105,41 +113,18 @@ fun HouseholdSupplyScreen(
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
-    var showCreate by remember { mutableStateOf(false) }
-    var selectedPhoto by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
-    val photoScope = rememberCoroutineScope()
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        photoScope.launch(Dispatchers.IO) {
-            val extension = when (context.contentResolver.getType(uri)?.lowercase(Locale.US)) {
-                "image/png" -> "png"
-                "image/webp" -> "webp"
-                else -> "jpg"
-            }
-            val target = File(context.filesDir, "household_photos/listing_${System.currentTimeMillis()}.$extension")
-            val path = runCatching {
-                target.parentFile?.mkdirs()
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    target.outputStream().use { output -> input.copyTo(output) }
-                } ?: error("Unable to read selected image")
-                target.absolutePath
-            }.getOrNull()
-            withContext(Dispatchers.Main.immediate) { selectedPhoto = path }
-        }
-    }
-    LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Sell your scrap", "A nearby Kabadiwala weighs it and confirms payment.", Icons.Filled.Sell, onRefresh, state.loading) }
         item {
             Surface(shape = RoundedCornerShape(26.dp, 26.dp, 8.dp, 26.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Ready to sell?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("Share an estimate; your partner confirms weight and price.", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Button(onClick = { selectedPhoto = null; showCreate = true }, enabled = "create-listing" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text(if ("create-listing" in busy) "Posting…" else "Sell scrap") }
+                    Button(onClick = onCreateListing, enabled = "create-listing" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text(if ("create-listing" in busy) "Posting…" else "Sell scrap") }
                 }
             }
         }
-        item { SummaryStrip("${state.listings.count { it.status == "POSTED" }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
+        item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
         if (state.pendingPhotoUpload != null) item {
             OutlinedButton(onClick = onRetryPhoto, enabled = "upload-listing-photo" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -156,6 +141,8 @@ fun HouseholdSupplyScreen(
                 kabadiwalas = state.kabadiwalas,
                 busy = busy,
                 onRequestPickup = onRequestPickup,
+                radiusKm = state.kabadiwalaRadiusKm,
+                onIncreaseRadius = onIncreaseRadius,
                 onCancelListing = onCancelListing,
                 onCancelPickup = onCancelPickup,
                 onReschedulePickup = onReschedulePickup,
@@ -163,7 +150,6 @@ fun HouseholdSupplyScreen(
             )
         }
     }
-    if (showCreate) HouseholdListingDialog(initialArea = initialArea, photoReference = selectedPhoto, onSelectPhoto = { gallery.launch("image/*") }, onClearPhoto = { selectedPhoto = null }, onDismiss = { showCreate = false }, onSubmit = { listing -> onCreateListing(listing, selectedPhoto); showCreate = false })
 }
 
 /** Live directory for a household. Pickup requests are made from a listing,
@@ -196,13 +182,15 @@ private fun HouseholdListingCard(
     pickups: List<PickupRequestDto>,
     kabadiwalas: List<KabadiwalaProfileDto>,
     busy: Set<String>,
-    onRequestPickup: (String, String) -> Unit,
+    onRequestPickup: (String, String?) -> Unit,
+    radiusKm: Int,
+    onIncreaseRadius: () -> Unit,
     onCancelListing: (String) -> Unit,
     onCancelPickup: (String) -> Unit,
     onReschedulePickup: (String, String) -> Unit,
     onDecideSettlement: (String, String, String?, String?) -> Unit
 ) {
-    val activePickupStatuses = setOf("REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
+    val activePickupStatuses = setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
     val pickup = pickups.firstOrNull { it.status in activePickupStatuses }
     var showCancelListing by remember(listing.id) { mutableStateOf(false) }
     var showCancelPickup by remember(pickup?.id) { mutableStateOf(false) }
@@ -210,10 +198,10 @@ private fun HouseholdListingCard(
     var showSettlement by remember(pickup?.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(listing.areaName, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (listing.photoAttached || !listing.photoReference.isNullOrBlank()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            if (listing.photoAttached == true || !listing.photoReference.isNullOrBlank() || listing.photoReferences.isNotEmpty()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             val minEstimate = listing.estimatedPriceMin
             val maxEstimate = listing.estimatedPriceMax
             if (minEstimate != null && maxEstimate != null) Text("Estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -226,7 +214,15 @@ private fun HouseholdListingCard(
                             Icon(Icons.Filled.LocalShipping, null); Spacer(Modifier.width(8.dp)); Text("Request pickup · ${kabadiwala.displayName ?: "Kabadiwala"}")
                         }
                     }
-                } else Text("No active partner in this area yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("No Kabadiwala is available within ${radiusKm} km right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (radiusKm < 20) OutlinedButton(onClick = onIncreaseRadius, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text("Increase radius to ${if (radiusKm == 5) 10 else 20} km")
+                    }
+                    OutlinedButton(onClick = { onRequestPickup(listing.id, null) }, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Notify nearby Kabadiwalas")
+                    }
+                }
                 OutlinedButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel listing") }
             } else if (pickup == null && pickups.any { it.status == "CANCELLED" }) {
                 Text("A previous pickup request was cancelled. You can choose another partner.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -236,7 +232,7 @@ private fun HouseholdListingCard(
                 Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 item.scheduledSlot?.let { Text("Scheduled: ${it.take(16).replace('T', ' ')}") }
                 if (item.finalAmount != null) Text("Final settlement: ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                if (item.status in setOf("REQUESTED", "ACCEPTED", "SCHEDULED")) {
+                if (item.status in setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED")) {
                     OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
                 }
                 if (item.status in setOf("ACCEPTED", "SCHEDULED")) {
@@ -281,63 +277,121 @@ private fun HouseholdListingCard(
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun HouseholdListingDialog(initialArea: String, photoReference: String?, onSelectPhoto: () -> Unit, onClearPhoto: () -> Unit, onDismiss: () -> Unit, onSubmit: (HouseholdListingCreateDto) -> Unit) {
-    var material by remember { mutableStateOf(materials.first()) }; var weight by remember { mutableStateOf("") }; var area by remember { mutableStateOf(initialArea) }; var notes by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("INTACT") }; var safetyAcknowledged by remember { mutableStateOf(false) }; var dataBearingDevice by remember { mutableStateOf(false) }; var ownerPreparationCompleted by remember { mutableStateOf(false) }; var dataDestructionRequested by remember { mutableStateOf(false) }
-    val isHazardous = material in setOf("BATTERY", "CRT", "LCD_PANEL", "PCB")
+fun HouseholdListingCreateScreen(
+    state: SupplyChainState,
+    initialArea: String,
+    onBack: () -> Unit,
+    onSuggestMaterial: (String) -> Unit,
+    onClearMaterialSuggestion: () -> Unit,
+    onCreateListing: (HouseholdListingCreateDto, List<String>) -> Unit,
+    busy: Set<String> = emptySet()
+) {
+    var material by remember { mutableStateOf(friendlyMaterials.first().key) }
+    var weight by remember { mutableStateOf("") }
+    var area by remember(initialArea) { mutableStateOf(initialArea) }
+    var notes by remember { mutableStateOf("") }
+    var condition by remember { mutableStateOf("INTACT") }
+    var safetyAcknowledged by remember { mutableStateOf(false) }
+    var dataBearingDevice by remember { mutableStateOf(false) }
+    var ownerPreparationCompleted by remember { mutableStateOf(false) }
+    var dataDestructionRequested by remember { mutableStateOf(false) }
+    var photoPaths by remember { mutableStateOf(emptyList<String>()) }
+    var photoError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val ioScope = rememberCoroutineScope()
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        ioScope.launch(Dispatchers.IO) {
+            val paths = uris.mapNotNull { uri ->
+                runCatching {
+                    ImagePipeline.importUri(context, uri, File(context.filesDir, "household_photos")).absolutePath
+                }.getOrNull()
+            }
+            withContext(Dispatchers.Main.immediate) {
+                val wasEmpty = photoPaths.isEmpty()
+                photoPaths = (photoPaths + paths).distinct().take(6)
+                photoError = paths.size < uris.size
+                if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
+            }
+        }
+    }
+    LaunchedEffect(state.materialSuggestion?.materialCategory, state.materialDetectionStatus) {
+        if (state.materialDetectionStatus == HouseholdMaterialDetectionStatus.SUCCESS) {
+            state.materialSuggestion?.materialCategory?.takeIf { friendlyMaterials.any { item -> item.key == it } }?.let { material = it; safetyAcknowledged = false }
+        }
+    }
+    LaunchedEffect(state.notice) { if (state.notice?.startsWith("Listing") == true) onBack() }
+    val isHazardous = friendlyMaterial(material).hazardous
     val parsedWeight = weight.toDoubleOrNull()
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
     val areaError = area.isNotBlank() && area.trim().length < 2
-    val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged)
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Sell scrap") }, text = {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Add material details. Your partner confirms weight and price at pickup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Material", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { materials.forEach { FilterChip(selected = material == it, onClick = { material = it; safetyAcknowledged = false }, label = { Text(materialName(it), maxLines = 1) }) } }
-            if (isHazardous) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Handle with care", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text("Do not dismantle, burn, puncture or mix it. Keep it away from children, heat and water.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = safetyAcknowledged, onCheckedChange = { safetyAcknowledged = it })
-                            Text("I understand the warning", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+    val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item {
+                Text(
+                    "Add photos and a few simple details",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            item {
+                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Show the scrap clearly", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Add up to 6 photos from different angles. Clear photos help your Kabadiwala prepare.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (photoPaths.isNotEmpty()) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(photoPaths, key = { it }) { path ->
+                                    val bitmap = remember(path) { runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull() }
+                                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(96.dp)) {
+                                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                                            if (bitmap != null) Image(bitmap, "Scrap photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            IconButton(onClick = { photoPaths = photoPaths - path; if (photoPaths.isEmpty()) onClearMaterialSuggestion() }, modifier = Modifier.size(36.dp).align(Alignment.TopEnd)) { Icon(Icons.Filled.Close, "Remove photo") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = { gallery.launch("image/*") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.AddPhotoAlternate, "Add photos"); Spacer(Modifier.width(8.dp)); Text(if (photoPaths.isEmpty()) "Add scrap photos" else "Add more photos") }
+                        if (photoError) Text("Some photos could not be processed. Please choose a JPEG, PNG, or WebP image.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+            item {
+                Text("What are you selling?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Pick the closest everyday description. You can change the AI suggestion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when (state.materialDetectionStatus) {
+                    HouseholdMaterialDetectionStatus.PROCESSING -> Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Checking the first photo…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall) }
+                    HouseholdMaterialDetectionStatus.SUCCESS -> state.materialSuggestion?.let { Text("We think this may be ${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                    HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text("Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    HouseholdMaterialDetectionStatus.IDLE -> Unit
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    friendlyMaterials.forEach { option ->
+                        val selected = material == option.key
+                        Card(onClick = { material = option.key; safetyAcknowledged = false }, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow), border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null, modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
+                            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) { Text(option.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold); Text(option.examples, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                if (selected) Icon(Icons.Filled.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
             }
-            Text("Condition", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase(), maxLines = 1) }) } }
-            OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(area, { area = it.take(160) }, modifier = Modifier.fillMaxWidth(), label = { Text("Pickup area") }, supportingText = { if (areaError) Text("Add a little more detail, for example an area or landmark") }, isError = areaError, singleLine = true)
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Data-bearing device", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                    Text("For phones, laptops, drives or other personal-data devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-                    if (dataBearingDevice) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-                    }
-                }
+            if (isHazardous) item {
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Handle with care", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer); Text("Do not dismantle, burn, puncture or mix it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(safetyAcknowledged, { safetyAcknowledged = it }); Text("I understand", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer) } } }
             }
-            if (photoReference == null) OutlinedButton(onClick = onSelectPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Icon(Icons.Filled.AddPhotoAlternate, null); Spacer(Modifier.width(8.dp)); Text("Attach scrap photo") }
-            else {
-                PhotoAttachmentPreview(photoReference)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Photo attached", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    TextButton(onClick = onClearPhoto) { Text("Remove") }
-                }
-            }
-            OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4)
+            item { Text("Condition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase().replaceFirstChar(Char::uppercase)) }) } } }
+            item { OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
+            item { OutlinedTextField(area, { area = it.take(160) }, modifier = Modifier.fillMaxWidth(), label = { Text("Pickup area") }, supportingText = { if (areaError) Text("Add an area or nearby landmark") }, isError = areaError, singleLine = true) }
+            item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
+            item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
-    }, confirmButton = { TextButton(onClick = { parsedWeight?.let { value -> onSubmit(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, photoReference = null, areaName = area.trim(), estimatedPriceMin = null, estimatedPriceMax = null, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested)) } }, enabled = canSubmit) { Text("Post listing") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
-}
-
-@Composable
-private fun PhotoAttachmentPreview(path: String) {
-    val bitmap = remember(path) { runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull() }
-    if (bitmap != null) Image(bitmap, contentDescription = "Attached scrap photo", modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp), contentScale = ContentScale.Crop)
-    else Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Text("Photo attached locally", Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
+        Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = area.trim(), dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
+    }
 }
 
 
@@ -481,6 +535,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing?.materialCategory ?: "OTHER"), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup.status)) }
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · ${listing?.areaName ?: "Area unavailable"}")
             when (pickup.status) {
+                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Claim pickup") }
                 "REQUESTED" -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Accept pickup") }
@@ -760,7 +815,7 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
 @Composable
 fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}) {
     var showDemand by remember { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow))), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
         item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
@@ -1020,7 +1075,7 @@ private fun Text(
 @Composable private fun RoleHeader(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onRefresh: () -> Unit, loading: Boolean) { Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) { Column(Modifier.weight(1f)) { BoxRule(); Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }; IconButton(onClick = onRefresh, enabled = !loading) { if (loading) CircularProgressIndicator(Modifier.size(22.dp)) else Icon(Icons.Filled.Refresh, "Refresh") } } }
 @Composable private fun BoxRule() { Spacer(Modifier.height(4.dp)); Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.width(36.dp).height(4.dp)) {}; Spacer(Modifier.height(8.dp)) }
 @Composable private fun SummaryStrip(left: String, right: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(left, fontWeight = FontWeight.Bold); Text(right, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } } }
-@Composable private fun StatusChip(text: String) { Surface(shape = RoundedCornerShape(99.dp), color = MaterialTheme.colorScheme.tertiaryContainer) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
+@Composable private fun StatusChip(text: String) { Surface(shape = RoundedCornerShape(99.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable private fun ErrorPanel(text: String, retry: () -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = retry) { Text("Retry") } } } }
 @Composable private fun LoadingPanel(text: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun EmptyPanel(title: String, detail: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .2f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }

@@ -43,6 +43,10 @@ interface SyncQueueDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueue(item: SyncQueueItemEntity): Long
 
+    /** Stable idempotency keys must map to one local outbox row as well as one server mutation. */
+    @Query("SELECT uid FROM sync_queue WHERE operation = :operation AND accountId = :accountId AND payloadJson LIKE '%' || :idempotencyKey || '%' LIMIT 1")
+    suspend fun findUidByOperationAndIdempotencyKey(operation: String, accountId: String, idempotencyKey: String): Long?
+
     @Query("SELECT * FROM sync_queue ORDER BY createdAtEpochMs ASC")
     fun observeAll(): Flow<List<SyncQueueItemEntity>>
 

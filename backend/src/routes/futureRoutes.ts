@@ -32,9 +32,12 @@ function actor(req: Request) {
   return req.identity;
 }
 
-function requireRole(req: Request, role: 'COLLECTOR' | 'RECYCLER') {
+function requireRole(req: Request, ...roles: Array<'COLLECTOR' | 'RECYCLER' | 'HOUSEHOLD'>) {
   const identity = actor(req);
-  if (identity.role !== role) throw new AppError('AUTHORIZATION_ERROR', `${role === 'COLLECTOR' ? 'Kabadiwala' : 'Recycler'} access required`, 403);
+  if (!roles.includes(identity.role as 'COLLECTOR' | 'RECYCLER' | 'HOUSEHOLD')) {
+    const label = roles.includes('COLLECTOR') ? 'Kabadiwala' : roles.includes('RECYCLER') ? 'Recycler' : 'Household';
+    throw new AppError('AUTHORIZATION_ERROR', `${label} access required`, 403);
+  }
   return identity.collectorId;
 }
 
@@ -273,7 +276,10 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.post('/lots/material-suggestion', materialUpload.single('photo'), async (req, res) => {
-    requireRole(req, 'COLLECTOR');
+    // Both field collectors and households can use the same assistive
+    // classifier. Ownership-sensitive lot/listing mutations remain guarded by
+    // their dedicated route handlers.
+    requireRole(req, 'COLLECTOR', 'HOUSEHOLD');
     const language = typeof req.body?.language === 'string' ? req.body.language.slice(0, 24) : 'English';
     const photo = req.file;
     if (!photo) throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422);
@@ -288,14 +294,17 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       ].join('\n') },
       { inline_data: { mime_type: photo.mimetype, data: photo.buffer.toString('base64') } }
     ], 220);
-    const parsed = result ? parseJsonObject(result.text) : null;
+    if (!result) {
+      throw new AppError('SERVICE_UNAVAILABLE', 'Material detection is temporarily unavailable. Choose the material manually.', 503, { code: 'GEMINI_UNAVAILABLE' });
+    }
+    const parsed = parseJsonObject(result.text);
     const category = typeof parsed?.materialCategory === 'string' && materialCategories.includes(parsed.materialCategory as typeof materialCategories[number]) ? parsed.materialCategory : 'OTHER';
     const confidence = typeof parsed?.confidence === 'number' && Number.isFinite(parsed.confidence) ? Math.max(0, Math.min(1, parsed.confidence)) : 0;
     const alternatives = Array.isArray(parsed?.alternatives) ? parsed.alternatives.filter((item): item is string => typeof item === 'string' && materialCategories.includes(item as typeof materialCategories[number])).slice(0, 2) : [];
     const rationale = typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
-    const data = result ? { materialCategory: category, confidence, alternatives, rationale, source: 'AI', model: result.model } : fallback;
-    await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: result ? 'GOOGLE_GEMINI' : 'TEMPLATE', modelVersion: result?.model ?? 'manual-fallback-v1', inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
-    return res.json({ success: true, data, message: result ? 'Material suggestion generated' : 'Material suggestion unavailable; choose manually' });
+    const data = { materialCategory: category, confidence, alternatives, rationale, source: 'AI', model: result.model };
+    await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: 'GOOGLE_GEMINI', modelVersion: result.model, inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
+    return res.json({ success: true, data, message: 'Material suggestion generated' });
   });
 
   router.get('/recyclers/:recyclerId/reviews', async (req, res) => {
@@ -392,12 +401,16 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     if (!original) throw new AppError('NOT_FOUND', 'Lot not found', 404);
     if (!['PAID', 'HANDED_OVER'].includes(original.status)) throw new AppError('CONFLICT', 'Only completed lots can be repeated', 409);
     const operationId = req.header('idempotency-key');
+    const operationHash = operationId ? createHash('sha256').update(JSON.stringify({ action: 'REPEAT_LOT', lotId: original.id })).digest('hex') : undefined;
     if (operationId) {
       const previous = await db.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: collectorId, operationId } } });
-      if (previous?.action === 'REPEAT_LOT') return res.status(201).json({ success: true, data: previous.response, message: 'Repeat lot already created' });
+      if (previous) {
+        if (previous.action !== 'REPEAT_LOT' || (previous.requestHash && previous.requestHash !== operationHash)) throw new AppError('CONFLICT', 'Idempotency key was already used for a different operation', 409, { code: 'IDEMPOTENCY_KEY_REUSED' });
+        return res.status(201).json({ success: true, data: previous.response, message: 'Repeat lot already created' });
+      }
     }
     const newLot = await db.lot.create({ data: { id: randomUUID(), collectorId, materialCategory: original.materialCategory, materialSubcategory: original.materialSubcategory, sourceType: original.sourceType, wasteRegime: original.wasteRegime, condition: original.condition, weight: original.weight, weightUnit: original.weightUnit, originalWeight: original.originalWeight, originalWeightUnit: original.originalWeightUnit, photoPath: null, photoUrl: null, imageProvenance: null, imageQualityStatus: 'UNVERIFIED', collectionLatitude: original.collectionLatitude, collectionLongitude: original.collectionLongitude, collectionAreaName: original.collectionAreaName, collectionLocationPrecision: original.collectionLocationPrecision, notes: original.notes, status: 'CREATED', version: 1 } });
-    if (operationId) await db.idempotencyRecord.create({ data: { actorId: collectorId, operationId, action: 'REPEAT_LOT', entityId: newLot.id, response: newLot } });
+    if (operationId) await db.idempotencyRecord.create({ data: { actorId: collectorId, operationId, action: 'REPEAT_LOT', entityId: newLot.id, requestHash: operationHash, response: newLot } });
     return res.status(201).json({ success: true, data: newLot, message: 'New lot created from history' });
   });
 

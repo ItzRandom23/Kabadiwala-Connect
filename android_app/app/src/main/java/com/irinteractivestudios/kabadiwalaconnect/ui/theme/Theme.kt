@@ -1,7 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -20,16 +19,16 @@ import androidx.core.view.WindowCompat
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
 private val LightColorScheme = lightColorScheme(
-    primary = KcVioletStrong,
-    onPrimary = Color.White,
+    primary = KcLime,
+    onPrimary = KcLimeOn,
     primaryContainer = KcGreenPrimaryContainer,
     onPrimaryContainer = KcGreenOnPrimaryContainer,
-    secondary = KcMagenta,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF3D7FF),
-    onSecondaryContainer = Color(0xFF3C064B),
+    secondary = KcLightMuted,
+    onSecondary = KcWhite,
+    secondaryContainer = KcLightRaised,
+    onSecondaryContainer = KcLightText,
     tertiary = KcCyan,
-    onTertiary = Color(0xFF002F3A),
+    onTertiary = KcLightText,
     background = KcLightBackground,
     onBackground = KcLightText,
     surface = KcLightSurface,
@@ -38,7 +37,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerLowest = KcLightSurface,
     surfaceContainerLow = KcLightRaised,
     surfaceContainer = KcSurfaceSunken,
-    surfaceContainerHigh = KcSurfaceHigh.copy(alpha = .18f),
+    surfaceContainerHigh = KcLightRaised,
     onSurfaceVariant = KcLightMuted,
     outline = KcLightOutline,
     error = KcError,
@@ -48,31 +47,31 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = KcViolet,
-    onPrimary = Color(0xFF1E093E),
-    primaryContainer = KcVioletStrong,
-    onPrimaryContainer = Color(0xFFF3E9FF),
-    secondary = KcMagenta,
-    onSecondary = Color(0xFF30003D),
-    secondaryContainer = Color(0xFF4B165D),
-    onSecondaryContainer = Color(0xFFFFD7FF),
+    primary = KcLime,
+    onPrimary = KcLimeOn,
+    primaryContainer = Color(0xFF354A1A),
+    onPrimaryContainer = Color(0xFFE7FFAA),
+    secondary = KcMutedText,
+    onSecondary = KcLimeOn,
+    secondaryContainer = KcGraphiteRaised,
+    onSecondaryContainer = KcText,
     tertiary = KcCyan,
-    onTertiary = Color(0xFF00333D),
-    background = KcNight,
+    onTertiary = KcLimeOn,
+    background = KcGraphiteBackground,
     onBackground = KcText,
-    surface = KcSurface,
+    surface = KcGraphiteSurface,
     onSurface = KcText,
-    surfaceVariant = KcSurfaceRaised,
-    surfaceContainerLowest = KcNight,
-    surfaceContainerLow = KcSurface,
-    surfaceContainer = KcSurfaceRaised,
+    surfaceVariant = KcGraphiteRaised,
+    surfaceContainerLowest = KcGraphiteBackground,
+    surfaceContainerLow = KcGraphiteSurface,
+    surfaceContainer = KcGraphiteRaised,
     surfaceContainerHigh = KcSurfaceHigh,
     onSurfaceVariant = KcMuted,
-    outline = KcOutline,
-    error = KcCoral,
-    onError = Color(0xFF3C0010),
-    errorContainer = Color(0xFF5F1730),
-    onErrorContainer = Color(0xFFFFD9E1)
+    outline = KcGraphiteBorder,
+    error = KcErrorRed,
+    onError = KcLimeOn,
+    errorContainer = Color(0xFF5B2424),
+    onErrorContainer = Color(0xFFFFDADA)
 )
 
 @Immutable
@@ -87,11 +86,11 @@ data class KcExtendedColors(
 
 private val LocalKcExtendedColors = staticCompositionLocalOf {
     KcExtendedColors(
-        value = KcVioletStrong,
+        value = KcLime,
         success = KcMint,
         warning = KcAmber,
         logoPlate = KcSurfaceRaised,
-        logoPlateBorder = KcViolet.copy(alpha = .7f),
+        logoPlateBorder = KcLime.copy(alpha = .7f),
         isOperations = false
     )
 }
@@ -102,12 +101,33 @@ object KcTheme {
 }
 
 private val KcShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp)
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp)
 )
+
+/** Shared 4/8/12/16/20/24/32dp rhythm for all Compose surfaces. */
+object KcSpacing {
+    val xxs = 4.dp
+    val xs = 8.dp
+    val sm = 12.dp
+    val md = 16.dp
+    val lg = 20.dp
+    val xl = 24.dp
+    val xxl = 32.dp
+}
+
+/** Radius roles: controls stay crisp while hero surfaces get more air. */
+object KcRadius {
+    val control = 8.dp
+    val surface = 12.dp
+    val hero = 16.dp
+    val sheet = 24.dp
+    /** Fully rounded capsule shape for full-width actions and compact controls. */
+    val pill = RoundedCornerShape(percent = 50)
+}
 
 /**
  * Kabadiwala Connect theme.
@@ -118,7 +138,7 @@ private val KcShapes = Shapes(
  */
 @Composable
 fun KabadiwalaConnectTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     role: AccountRole = AccountRole.COLLECTOR,
     content: @Composable () -> Unit
 ) {
@@ -128,11 +148,11 @@ fun KabadiwalaConnectTheme(
     val effectiveDark = darkTheme
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
-        value = if (effectiveDark) KcViolet else KcVioletStrong,
+        value = KcLime,
         success = if (effectiveDark) KcMint else KcSuccess,
         warning = if (effectiveDark) KcAmber else KcWarning,
         logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,
-        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcVioletStrong.copy(alpha = .22f),
+        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcLime.copy(alpha = .22f),
         isOperations = role == AccountRole.RECYCLER
     )
     val view = LocalView.current

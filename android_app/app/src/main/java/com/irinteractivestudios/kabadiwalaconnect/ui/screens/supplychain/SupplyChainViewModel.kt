@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
+import com.irinteractivestudios.kabadiwalaconnect.data.local.HouseholdListingCacheDao
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toCacheEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toHouseholdListing
 import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadEntity
@@ -12,9 +15,11 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import okhttp3.MultipartBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,12 +27,14 @@ import kotlinx.coroutines.launch
 import com.google.gson.Gson
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 
 data class SupplyChainState(
     val loading: Boolean = false,
     val error: String? = null,
     val listings: List<HouseholdListingDto> = emptyList(),
     val kabadiwalas: List<KabadiwalaProfileDto> = emptyList(),
+    val kabadiwalaRadiusKm: Int = 5,
     val pickups: List<PickupRequestDto> = emptyList(),
     val inventory: List<InventoryBalanceDto> = emptyList(),
     val inventoryMovements: List<InventoryMovementDto> = emptyList(),
@@ -49,10 +56,15 @@ data class SupplyChainState(
     val cachedAtEpochMs: Long = 0L,
     val busy: Set<String> = emptySet(),
     val notice: String? = null,
-    val pendingPhotoUpload: PendingPhotoUpload? = null
+    val pendingPhotoUpload: PendingPhotoUpload? = null,
+    val materialSuggestion: MaterialSuggestionDto? = null,
+    val materialDetectionStatus: HouseholdMaterialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE,
+    val materialDetectionMessage: String? = null
 )
 
-data class PendingPhotoUpload(val listingId: String, val localPath: String)
+enum class HouseholdMaterialDetectionStatus { IDLE, PROCESSING, SUCCESS, LOW_CONFIDENCE, UNSUPPORTED_IMAGE, NETWORK_ERROR, SERVICE_ERROR }
+
+data class PendingPhotoUpload(val listingId: String, val localPaths: List<String>)
 
 class SupplyChainViewModel(
     private val api: ApiService,
@@ -62,13 +74,21 @@ class SupplyChainViewModel(
     private val idempotencyKeys: IdempotencyKeyStore? = null,
     private val syncQueue: SyncQueueDao? = null,
     private val requestSync: (() -> Unit)? = null,
-    private val pendingPhotoUploads: PendingPhotoUploadDao? = null
+    private val pendingPhotoUploads: PendingPhotoUploadDao? = null,
+    private val householdListingCache: HouseholdListingCacheDao? = null,
+    /**
+     * A restored navigation stack can briefly compose a protected screen
+     * before MainActivity has finished validating the persisted session. Keep
+     * the final network gate in the ViewModel as well as in navigation so a
+     * stale collector screen cannot issue an unauthenticated request.
+     */
+    private val authenticatedSessionReady: () -> Boolean = { true }
 ) : ViewModel() {
     private val _state = MutableStateFlow(SupplyChainState())
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
 
     private fun friendly(error: Throwable) = when ((error as? RemoteApiException)?.code) {
-        "HTTP_401", "TOKEN_EXPIRED" -> "Your session expired. Please sign in again."
+        "HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED" -> "Your session expired. Please sign in again."
         "HTTP_403" -> "This action is not available for your role."
         "HTTP_409" -> "That record changed. Refresh and try again."
         "HTTP_422" -> "Check the highlighted details and try again."
@@ -78,14 +98,39 @@ class SupplyChainViewModel(
 
     private fun allowed(role: AccountRole): Boolean = roleProvider()?.let { it == role } ?: true
 
+    private fun protectedSessionReady(): Boolean = authenticatedSessionReady()
+
     private fun accountId() = accountIdProvider()
+
+    private suspend fun cachedHouseholdListings(): List<HouseholdListingDto> {
+        val account = accountId()?.takeIf { it.isNotBlank() } ?: return emptyList()
+        val rows = householdListingCache?.findForAccount(account).orEmpty()
+        return rows.map { it.toHouseholdListing() }
+    }
+
+    /**
+     * Merge a successful server read without dropping drafts that are still
+     * waiting in the account-scoped outbox. A process restart can therefore
+     * render the user's offline listing before the network comes back.
+     */
+    private suspend fun mergeHouseholdListings(remote: List<HouseholdListingDto>): List<HouseholdListingDto> {
+        val account = accountId()?.takeIf { it.isNotBlank() } ?: return remote
+        val cache = householdListingCache ?: return remote
+        val local = cache.findForAccount(account).map { it.toHouseholdListing() }
+        val pending = local.filter { cached -> cached.id !in remote.map { it.id }.toSet() && cached.status == "PENDING_SYNC" }
+        cache.upsertAll(remote.map { it.toCacheEntity(account, synced = true) })
+        return (remote + pending).distinctBy { it.id }
+    }
 
     private suspend fun restorePendingPhotoUpload() {
         val account = accountId() ?: return
         val pending = pendingPhotoUploads?.findForAccount(account) ?: return
-        if (File(pending.localPath).isFile) {
+        val paths = pending.localPathsJson?.let { runCatching { Gson().fromJson(it, Array<String>::class.java).toList() }.getOrNull() }
+            ?.ifEmpty { listOf(pending.localPath) }
+            ?: listOf(pending.localPath)
+        if (paths.all { File(it).isFile }) {
             _state.value = _state.value.copy(
-                pendingPhotoUpload = PendingPhotoUpload(pending.listingId, pending.localPath)
+                pendingPhotoUpload = PendingPhotoUpload(pending.listingId, paths)
             )
         } else {
             // The app-private file was removed externally; do not leave a
@@ -122,18 +167,40 @@ class SupplyChainViewModel(
         ))
     }
 
-    fun refreshHousehold() {
-        if (!allowed(AccountRole.HOUSEHOLD)) return
-        load {
-        restorePendingPhotoUpload()
-        val listings = api.getHouseholdListings().requireData()
-        val pickups = api.getHouseholdPickups().requireData()
-        val kabadiwalas = api.getHouseholdKabadiwalas().requireData()
-        _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = kabadiwalas, error = null)
+    fun refreshHousehold(radiusKm: Int = _state.value.kabadiwalaRadiusKm) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(loading = true, error = null, notice = null)
+            val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
+            if (cached.isNotEmpty()) {
+                _state.value = _state.value.copy(listings = cached)
+            }
+            runCatching {
+                restorePendingPhotoUpload()
+                val listings = mergeHouseholdListings(api.getHouseholdListings().requireData())
+                val pickups = api.getHouseholdPickups().requireData()
+                val anchor = listings.firstOrNull { it.latitude != null && it.longitude != null }
+                val kabadiwalas = api.getHouseholdKabadiwalas(anchor?.latitude, anchor?.longitude, radiusKm).requireData()
+                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = kabadiwalas, kabadiwalaRadiusKm = radiusKm, error = null)
+            }.onFailure { error ->
+                // Keep the durable account-scoped cache visible when the
+                // request fails after process death or during an offline
+                // transition. The error remains actionable via Retry.
+                val latestCached = runCatching { cachedHouseholdListings() }.getOrDefault(cached)
+                _state.value = _state.value.copy(
+                    loading = false,
+                    listings = latestCached.ifEmpty { _state.value.listings },
+                    error = friendly(error)
+                )
+            }
         }
     }
+    fun increaseHouseholdRadius() {
+        val next = when (_state.value.kabadiwalaRadiusKm) { 5 -> 10; 10 -> 20; else -> 20 }
+        if (next != _state.value.kabadiwalaRadiusKm) refreshHousehold(next)
+    }
     fun refreshKabadiwala() {
-        if (!allowed(AccountRole.COLLECTOR)) return
+        if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
         cache?.load(accountId())?.let(::applyCached)
         load {
         var partialFailure = false
@@ -158,7 +225,7 @@ class SupplyChainViewModel(
         }
     }
     fun refreshRecycler() {
-        if (!allowed(AccountRole.RECYCLER)) return
+        if (!allowed(AccountRole.RECYCLER) || !protectedSessionReady()) return
         cache?.load(accountId())?.let(::applyCached)
         load {
         var partialFailure = false
@@ -180,7 +247,7 @@ class SupplyChainViewModel(
         }
     }
     private fun action(key: String, requiredRole: AccountRole? = null, block: suspend () -> String = { "Done" }) {
-        if (requiredRole != null && !allowed(requiredRole)) return
+        if (!protectedSessionReady() || (requiredRole != null && !allowed(requiredRole))) return
         if (key in _state.value.busy) return
         _state.value = _state.value.copy(busy = _state.value.busy + key, error = null, notice = null)
         viewModelScope.launch {
@@ -188,29 +255,83 @@ class SupplyChainViewModel(
             _state.value = _state.value.copy(busy = _state.value.busy - key)
         }
     }
-    private suspend fun uploadListingPhoto(listingId: String, localPath: String) {
-        val photo = File(localPath)
-        check(photo.isFile) { "Selected photo is no longer available" }
-        val body = photo.asRequestBody(photo.imageMimeType().toMediaTypeOrNull())
-        api.uploadHouseholdListingPhoto(
-            listingId = listingId,
-            photo = MultipartBody.Part.createFormData("photo", photo.name, body)
-        ).requireData()
-        photo.delete()
+    private suspend fun uploadListingPhotos(listingId: String, localPaths: List<String>) {
+        require(localPaths.isNotEmpty()) { "Selected photo is no longer available" }
+        val photos = localPaths.map { path ->
+            val photo = File(path)
+            check(photo.isFile) { "Selected photo is no longer available" }
+            MultipartBody.Part.createFormData("photos", photo.name, photo.asRequestBody(photo.imageMimeType().toMediaTypeOrNull()))
+        }
+        api.uploadHouseholdListingPhotos(listingId, photos).requireData()
+        localPaths.forEach { File(it).delete() }
     }
-    fun createListing(input: HouseholdListingCreateDto, localPhotoPath: String? = null) = action("create-listing", AccountRole.HOUSEHOLD, {
+    fun createListing(input: HouseholdListingCreateDto, localPhotoPath: String? = null) = createListing(input, listOfNotNull(localPhotoPath))
+    fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>) = action("create-listing", AccountRole.HOUSEHOLD, {
         val operation = "listing-${input.materialCategory}-${input.areaName}-${input.estimatedWeight}"
         val operationKey = idempotencyKeys?.getOrCreate(operation)
-        val created = api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
-        localPhotoPath?.takeIf { it.isNotBlank() }?.let { path ->
+        val created = try {
+            api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
+        } catch (error: Throwable) {
+            val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
+            if (!transient || syncQueue == null) throw error
+            val account = accountId()?.takeIf { it.isNotBlank() }
+            val localListingId = "local-${operationKey ?: UUID.nameUUIDFromBytes(operation.toByteArray()).toString()}"
+            if (account != null) {
+                householdListingCache?.upsert(
+                    HouseholdListingDto(
+                        id = localListingId,
+                        householdId = account,
+                        materialCategory = input.materialCategory,
+                        estimatedWeight = input.estimatedWeight,
+                        condition = input.condition,
+                        notes = input.notes,
+                        areaName = input.areaName,
+                        latitude = input.latitude,
+                        longitude = input.longitude,
+                        estimatedPriceMin = input.estimatedPriceMin,
+                        estimatedPriceMax = input.estimatedPriceMax,
+                        status = "PENDING_SYNC"
+                    ).toCacheEntity(account, synced = false)
+                )
+            }
+            val payload = JsonObject().apply {
+                add("input", com.google.gson.JsonParser.parseString(Gson().toJson(input.copy(photoReference = null))))
+                operationKey?.let { addProperty("idempotencyKey", it) }
+                addProperty("idempotencyOperation", operation)
+                addProperty("localListingId", localListingId)
+                val paths = localPhotoPaths.filter { it.isNotBlank() }
+                if (paths.isNotEmpty()) {
+                    add("photoPaths", com.google.gson.JsonArray().also { array -> paths.forEach(array::add) })
+                    addProperty("photoPath", paths.first())
+                }
+            }
+            val queueAccount = account?.takeIf { it.isNotBlank() }
+            val alreadyQueued = operationKey?.let { key ->
+                queueAccount?.let { owner -> syncQueue.findUidByOperationAndIdempotencyKey("CREATE_HOUSEHOLD_LISTING", owner, key) }
+            }
+            if (alreadyQueued == null) {
+                syncQueue.enqueue(SyncQueueItemEntity(
+                    operation = "CREATE_HOUSEHOLD_LISTING",
+                    payloadJson = Gson().toJson(payload),
+                    createdAtEpochMs = System.currentTimeMillis(),
+                    accountId = queueAccount
+                ))
+            }
+            // Keep the key until the worker receives an applied response. A
+            // repeated offline tap must replay the same server mutation, not
+            // create a second listing with a fresh idempotency key.
+            requestSync?.invoke()
+            return@action "Listing saved offline and will post when connected."
+        }
+        localPhotoPaths.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { paths ->
             val account = accountId()
-            val pending = PendingPhotoUpload(created.id, path)
+            val pending = PendingPhotoUpload(created.id, paths)
             _state.value = _state.value.copy(pendingPhotoUpload = pending)
             if (account != null) {
-                pendingPhotoUploads?.upsert(PendingPhotoUploadEntity(created.id, account, path, System.currentTimeMillis()))
+                pendingPhotoUploads?.upsert(PendingPhotoUploadEntity(created.id, account, paths.first(), System.currentTimeMillis(), Gson().toJson(paths)))
             }
             try {
-                uploadListingPhoto(created.id, path)
+                uploadListingPhotos(created.id, paths)
                 if (account != null) pendingPhotoUploads?.remove(account, created.id)
                 _state.value = _state.value.copy(pendingPhotoUpload = null)
             } catch (error: Throwable) {
@@ -218,39 +339,75 @@ class SupplyChainViewModel(
                 throw error
             }
         }
+        accountId()?.takeIf { it.isNotBlank() }?.let { account ->
+            householdListingCache?.upsert(created.toCacheEntity(account, synced = true))
+        }
         idempotencyKeys?.clear(operation)
         refreshHousehold()
         "Listing posted — choose a nearby Kabadiwala."
     })
     fun retryListingPhoto() = action("upload-listing-photo", AccountRole.HOUSEHOLD, {
         val pending = _state.value.pendingPhotoUpload ?: return@action "No photo upload needs retrying."
-        uploadListingPhoto(pending.listingId, pending.localPath)
+        uploadListingPhotos(pending.listingId, pending.localPaths)
         accountId()?.let { pendingPhotoUploads?.remove(it, pending.listingId) }
         _state.value = _state.value.copy(pendingPhotoUpload = null)
         refreshHousehold()
         "Photo uploaded securely."
     })
-    fun requestPickup(listingId: String, kabadiwalaId: String) = action("pickup-$listingId", AccountRole.HOUSEHOLD, {
-        val operation = "pickup-$listingId-$kabadiwalaId"
-        val key = idempotencyKeys?.getOrCreate(operation) ?: "pickup-$listingId-$kabadiwalaId"
+    fun requestPickup(listingId: String, kabadiwalaId: String? = null) = action("pickup-$listingId", AccountRole.HOUSEHOLD, {
+        val operation = "pickup-$listingId-${kabadiwalaId ?: "waiting"}"
+        val key = idempotencyKeys?.getOrCreate(operation) ?: "pickup-$listingId-${kabadiwalaId ?: "waiting"}"
         try {
             api.requestHouseholdPickup(listingId, PickupRequestCreateDto(kabadiwalaId), key).requireData()
             idempotencyKeys?.clear(operation)
             refreshHousehold()
-            "Pickup request sent."
+            if (kabadiwalaId == null) "Pickup saved. We’ll notify nearby Kabadiwalas." else "Pickup request sent."
         } catch (error: Throwable) {
             val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
             if (!transient || syncQueue == null) throw error
             val payload = com.google.gson.JsonObject().apply {
                 addProperty("listingId", listingId)
-                addProperty("kabadiwalaId", kabadiwalaId)
+                kabadiwalaId?.let { addProperty("kabadiwalaId", it) }
                 addProperty("idempotencyKey", key)
+                addProperty("idempotencyOperation", operation)
             }
             syncQueue.enqueue(SyncQueueItemEntity(operation = "REQUEST_HOUSEHOLD_PICKUP", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
             requestSync?.invoke()
             "Pickup saved offline and will sync when connected."
         }
     })
+    fun clearHouseholdMaterialSuggestion() {
+        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE, materialDetectionMessage = null)
+    }
+    fun suggestHouseholdMaterial(path: String) {
+        if (!allowed(AccountRole.HOUSEHOLD) || path.isBlank()) return
+        if (_state.value.materialDetectionStatus == HouseholdMaterialDetectionStatus.PROCESSING) return
+        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
+        viewModelScope.launch {
+            try {
+                val source = File(path)
+                val prepared = ImagePipeline.prepareForUpload(source, source.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
+                val suggestion = try {
+                    val body = prepared.asRequestBody(prepared.imageMimeType().toMediaTypeOrNull())
+                    val language = "English".toRequestBody("text/plain".toMediaTypeOrNull())
+                    api.suggestLotMaterial(MultipartBody.Part.createFormData("photo", prepared.name, body), language).requireData()
+                } finally {
+                    prepared.delete()
+                }
+                val confident = suggestion.confidence >= 0.5 && !suggestion.materialCategory.equals("OTHER", ignoreCase = true)
+                _state.value = _state.value.copy(materialSuggestion = suggestion, materialDetectionStatus = if (confident) HouseholdMaterialDetectionStatus.SUCCESS else HouseholdMaterialDetectionStatus.LOW_CONFIDENCE)
+            } catch (_: IllegalArgumentException) {
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This image could not be processed.")
+            } catch (error: RemoteApiException) {
+                val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "SERVICE_UNAVAILABLE" || error.code == "GEMINI_UNAVAILABLE"
+                _state.value = _state.value.copy(materialDetectionStatus = when { error.httpCode == 422 || error.code == "VALIDATION_ERROR" -> HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> HouseholdMaterialDetectionStatus.SERVICE_ERROR; else -> HouseholdMaterialDetectionStatus.NETWORK_ERROR }, materialDetectionMessage = null)
+            } catch (_: IOException) {
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = null)
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = null)
+            }
+        }
+    }
     fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", AccountRole.HOUSEHOLD, { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Listing cancelled." })
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })

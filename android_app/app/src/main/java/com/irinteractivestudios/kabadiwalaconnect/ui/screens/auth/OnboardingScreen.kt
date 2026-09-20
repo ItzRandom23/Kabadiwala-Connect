@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,12 +65,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcMinTouchHeight
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBrandLogo
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcRadius
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSpacing
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.delay
 
@@ -115,7 +115,7 @@ fun OnboardingScreen(
             }
         }
         when (state.step) {
-            OnboardingStep.WELCOME -> Welcome(vm, onDemo, onDemoRole)
+            OnboardingStep.WELCOME -> Welcome(vm)
             OnboardingStep.EMAIL -> EmailEntry(state, vm)
             OnboardingStep.ROLE -> RoleEntry(state, vm)
             OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
@@ -145,98 +145,46 @@ fun OnboardingScreen(
 
 @Composable
 private fun Welcome(
-    vm: OnboardingViewModel,
-    onDemo: () -> Unit,
-    onDemoRole: (AccountRole) -> Unit
+    vm: OnboardingViewModel
 ) {
-    var showRolePicker by remember { mutableStateOf(false) }
-    Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)) {
-            KcBrandLogo(contentDescription = stringResource(R.string.app_name), size = 88.dp)
-            Text(stringResource(R.string.auth_welcome_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
-            Text(stringResource(R.string.auth_welcome_detail), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 14.dp, bottomEnd = 28.dp, bottomStart = 14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .72f)),
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(KcSpacing.sm),
+            modifier = Modifier.padding(horizontal = KcSpacing.xl, vertical = KcSpacing.xl)
+        ) {
+            KcBrandLogo(contentDescription = stringResource(R.string.app_name), size = 68.dp)
+            Text(
+                stringResource(R.string.auth_welcome_title),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                stringResource(R.string.auth_welcome_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(KcSpacing.sm)) {
         WelcomeBenefit(Icons.Filled.Home, stringResource(R.string.auth_benefit_sell_title), stringResource(R.string.auth_benefit_sell_detail))
         WelcomeBenefit(Icons.Filled.AttachMoney, stringResource(R.string.auth_benefit_price_title), stringResource(R.string.auth_benefit_price_detail))
         WelcomeBenefit(Icons.Filled.Verified, stringResource(R.string.auth_benefit_trust_title), stringResource(R.string.auth_benefit_trust_detail))
     }
     KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
-    OutlinedButton(onClick = { vm.toggleReturning(); vm.start() }, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text(stringResource(R.string.auth_existing_account)) }
-    TextButton(onClick = vm::useAdminSignIn, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text("Operator sign in") }
-    // Demo is a development-only facility. It is absent from release builds;
-    // the real-backend path still uses live authentication and catalogs.
-    if (BuildConfig.DEBUG) {
-        OutlinedButton(onClick = onDemo, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_demo")) { Text(stringResource(R.string.auth_demo_entry)) }
-        TextButton(
-            onClick = { showRolePicker = true },
-            modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_demo_roles")
-        ) { Text(stringResource(R.string.auth_demo_choose_role)) }
-    }
-    if (showRolePicker) {
-        AlertDialog(
-            onDismissRequest = { showRolePicker = false },
-            title = { Text(stringResource(R.string.auth_demo_choose_role_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.auth_demo_choose_role_detail), style = MaterialTheme.typography.bodyMedium)
-                    DemoRoleOption(
-                        title = stringResource(R.string.auth_demo_household),
-                        detail = stringResource(R.string.auth_role_household_detail),
-                        icon = Icons.Filled.Home,
-                        testTag = "demo_role_household"
-                    ) {
-                        showRolePicker = false
-                        onDemoRole(AccountRole.HOUSEHOLD)
-                    }
-                    DemoRoleOption(
-                        title = stringResource(R.string.auth_demo_kabadiwala),
-                        detail = stringResource(R.string.auth_role_collector_detail),
-                        icon = Icons.Filled.Recycling,
-                        testTag = "demo_role_kabadiwala"
-                    ) {
-                        showRolePicker = false
-                        onDemoRole(AccountRole.COLLECTOR)
-                    }
-                    DemoRoleOption(
-                        title = stringResource(R.string.auth_demo_recycler),
-                        detail = stringResource(R.string.auth_role_recycler_detail),
-                        icon = Icons.Filled.Storefront,
-                        testTag = "demo_role_recycler"
-                    ) {
-                        showRolePicker = false
-                        onDemoRole(AccountRole.RECYCLER)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showRolePicker = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun DemoRoleOption(
-    title: String,
-    detail: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    testTag: String,
-    onClick: () -> Unit
-) {
     OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag(testTag)
-    ) {
-        Icon(icon, contentDescription = null)
-        Column(Modifier.padding(start = 10.dp), horizontalAlignment = Alignment.Start) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(detail, style = MaterialTheme.typography.bodySmall)
-        }
-    }
+        onClick = { vm.toggleReturning(); vm.start() },
+        shape = KcRadius.pill,
+        modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)
+    ) { Text(stringResource(R.string.auth_existing_account)) }
 }
 
 @Composable
@@ -257,7 +205,17 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     Text(stringResource(R.string.auth_email_detail), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_label)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email"))
     OutlinedTextField(state.password, vm::setPassword, label = { Text(stringResource(R.string.auth_password_label)) }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), singleLine = true, isError = state.passwordError, supportingText = { if (state.passwordError) Text(stringResource(R.string.auth_password_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_password"))
-    if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
+    state.authError?.let { error ->
+        val message = when (error) {
+            AuthError.INVALID_CREDENTIALS -> stringResource(R.string.auth_invalid_credentials)
+            AuthError.OTP_RATE_LIMITED -> state.otpRetryAfterSeconds?.let { seconds -> stringResource(R.string.auth_otp_rate_limited_for, seconds.coerceAtLeast(1)) } ?: stringResource(R.string.auth_otp_rate_limited)
+            AuthError.NETWORK -> stringResource(R.string.auth_network_error)
+        }
+        Text(
+            message,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
     KcPrimaryButton(if (state.returningUser) stringResource(R.string.auth_sign_in) else stringResource(R.string.auth_continue), if (state.returningUser) vm::signIn else vm::continueEmail, icon = Icons.Filled.CheckCircle, enabled = !state.isBusy, testTag = "auth_email_continue")
 }
 
@@ -427,7 +385,17 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         supportingText = { if (state.phoneError) Text(stringResource(R.string.auth_phone_error)) },
         modifier = Modifier.fillMaxWidth().testTag("auth_phone")
     )
-    if (state.authError) Text(stringResource(R.string.auth_network_error), color = MaterialTheme.colorScheme.error)
+    state.authError?.let { error ->
+        val message = when (error) {
+            AuthError.INVALID_CREDENTIALS -> stringResource(R.string.auth_invalid_credentials)
+            AuthError.OTP_RATE_LIMITED -> state.otpRetryAfterSeconds?.let { seconds -> stringResource(R.string.auth_otp_rate_limited_for, seconds.coerceAtLeast(1)) } ?: stringResource(R.string.auth_otp_rate_limited)
+            AuthError.NETWORK -> stringResource(R.string.auth_network_error)
+        }
+        Text(
+            message,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
     KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
     if (state.returningUser) {
         TextButton(

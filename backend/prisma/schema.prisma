@@ -92,6 +92,7 @@ enum HouseholdListingStatus {
   COMPLETED
 }
 enum PickupStatus {
+  WAITING_FOR_PICKUP
   REQUESTED
   ACCEPTED
   SCHEDULED
@@ -655,6 +656,7 @@ model Lot {
   originalWeight              Float?
   originalWeightUnit          WeightUnit?
   photoPath                   String?
+  photoReferences              String[]           @default([])
   photoUrl                    String?
   imageProvenance             ImageProvenance?
   imageQualityStatus          DataQualityStatus  @default(UNVERIFIED)
@@ -1140,6 +1142,7 @@ model HouseholdListing {
   condition       LotCondition
   notes           String?
   photoReference  String?
+  photoReferences String[] @default([])
   areaName        String
   latitude        Float?
   longitude       Float?
@@ -1161,7 +1164,9 @@ model PickupRequest {
   id                String       @id @default(cuid()) @map("_id")
   listingId         String
   householdId       String
-  kabadiwalaId      String
+  // Null only while the household is waiting for the network to match a
+  // nearby collector. It is claimed atomically before a collector can act.
+  kabadiwalaId      String?
   status            PickupStatus @default(REQUESTED)
   requestedSlot     DateTime?
   scheduledSlot     DateTime?

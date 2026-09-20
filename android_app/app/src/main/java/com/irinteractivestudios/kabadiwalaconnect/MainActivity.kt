@@ -21,7 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -45,6 +44,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectThem
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionSnapshot
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionState
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.util.AppearanceManager
@@ -54,11 +55,6 @@ import com.irinteractivestudios.kabadiwalaconnect.util.InstallUpdateResult
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private data class SessionBootstrap(
-    val restorable: Boolean,
-    val account: AccountProfile?
-)
 
 /**
  * Single-activity Compose host.
@@ -122,11 +118,13 @@ class MainActivity : ComponentActivity() {
             ) {
                 val navController = rememberNavController()
                 val uiScope = rememberCoroutineScope()
-                // Demo mode has no persisted account/session. Keep only this
-                // short-lived flag across activity recreation so a language
-                // change does not send the demo user back to AUTH.
-                var demoMode by rememberSaveable { mutableStateOf(demoPreviewMode) }
-                var demoRoleName by rememberSaveable { mutableStateOf(forcedDemoRole?.name.orEmpty()) }
+                // Demo mode is a deliberate, debug-only entry point. It must
+                // never be restored from an old Activity/task snapshot after
+                // force-stop, process death, or a data-clear test: doing so
+                // could resurrect fixture content before a real session is
+                // restored. Keep it process-local and intent-driven.
+                var demoMode by remember { mutableStateOf(demoPreviewMode) }
+                var demoRoleName by remember { mutableStateOf(forcedDemoRole?.name.orEmpty()) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
@@ -144,21 +142,20 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 var sessionBootstrap by remember {
-                    mutableStateOf<SessionBootstrap?>(
-                        if (previewMode || !languageWasSelected) SessionBootstrap(false, null) else null
+                    mutableStateOf<SessionSnapshot?>(
+                         if (previewMode || !languageWasSelected) SessionSnapshot(SessionState.UNAUTHENTICATED, null) else null
                     )
                 }
                 LaunchedEffect(languageWasSelected, previewMode) {
                     if (sessionBootstrap == null) {
                         sessionBootstrap = withContext(Dispatchers.IO) {
-                            SessionBootstrap(
-                                restorable = app.container.hasRestorableSession(),
-                                account = app.container.currentAccount()
-                            )
+                            app.container.restoreAuthenticatedSession()
+                            app.container.sessionCoordinator.snapshot.value
                         }
                     }
                 }
                 val bootstrap = sessionBootstrap
+                val liveSession by app.container.sessionCoordinator.snapshot.collectAsStateWithLifecycle()
                 if (bootstrap == null) {
                     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                         LoadingContent(Modifier.fillMaxSize())
@@ -176,6 +173,23 @@ class MainActivity : ComponentActivity() {
                 val isTopLevel = route in Destinations.topLevelFor(activeRole, newNavigation = !demoMode || kabadiwalaDemo)
                 val languageSelected = languageWasSelected
                 var navGuardReady by remember { mutableStateOf(false) }
+
+                // A failed refresh (including a rotated-token reuse response)
+                // can invalidate a session after the initial bootstrap. Keep
+                // the account boundary honest and move the user to sign-in
+                // without requiring a restart or exposing a raw 401.
+                LaunchedEffect(liveSession.state, bootstrap.restorable, demoMode) {
+                    if (!demoMode && bootstrap.restorable && liveSession.state in setOf(SessionState.UNAUTHENTICATED, SessionState.EXPIRED)) {
+                        sessionBootstrap = liveSession
+                        activeRole = AccountRole.COLLECTOR
+                        if (route != Destinations.AUTH) {
+                            navController.navigate(Destinations.AUTH) {
+                                popUpTo(0)
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                }
 
                 // A restored NavHost back stack can outlive a session (for
                 // example after process death or test/activity recreation).
@@ -210,39 +224,28 @@ class MainActivity : ComponentActivity() {
                     .collectAsStateWithLifecycle(initialValue = 0)
                 LaunchedEffect(connection, bootstrap.restorable) {
                     if (!householdLivePreview && connection == ConnectionState.ONLINE && bootstrap.restorable) {
-                        val (hadValidSession, refreshedAccount, hasValidSession) = withContext(Dispatchers.IO) {
-                            val wasValid = app.container.hasValidSession()
-                            val refreshed = app.container.refreshAccount()
-                            val isValid = app.container.hasValidSession()
+                        val hasValidSession = withContext(Dispatchers.IO) {
+                            val isValid = app.container.hasValidSession() && app.container.currentAccount() != null
                             if (isValid) {
-                            // Pull server deltas after auth refresh so a
-                            // reconnect repairs stale local state before the
-                            // broader catalogue refresh runs.
+                                // Pull server deltas only after the bootstrap
+                                // has established a valid authenticated session.
                                 runCatching { app.container.reconcileChanges() }
                                 app.container.refreshCatalogs()
+                                // Re-arm durable offline work only after the
+                                // process-local session gate has opened.
+                                app.container.syncScheduler.requestSync()
                                 app.container.startPushTokenRegistration()
-                            } else if (!wasValid && refreshed == null) {
-                                // A revoked/expired session must not erase a
-                                // lot or receipt captured offline. Preserve
-                                // Room/outbox data until the user explicitly
-                                // logs out; only remove the invalid session
-                                // and account snapshot before re-authentication.
-                                app.container.expireAccountSession()
                             }
-                            Triple(wasValid, refreshed, isValid)
+                            isValid
                         }
-                        if (hasValidSession) {
-                            refreshedAccount?.let {
-                                sessionBootstrap = SessionBootstrap(true, it)
-                                activeRole = it.role
-                            }
-                        } else if (!hadValidSession && refreshedAccount == null) {
+                        if (!hasValidSession) {
                             // A refresh token can be present after an expired
                             // or revoked session. Do not strand the user on a
                             // collector screen with a permanent “session
                             // expired” banner: clear the account boundary and
                             // return to the real sign-in route.
-                            sessionBootstrap = SessionBootstrap(false, null)
+                            app.container.expireAccountSession()
+                            sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                             activeRole = AccountRole.COLLECTOR
                             if (route != Destinations.AUTH) {
                                 navController.navigate(Destinations.AUTH) {
@@ -288,6 +291,7 @@ class MainActivity : ComponentActivity() {
                     Destinations.ACTIVITIES -> stringResource(R.string.settings_diy)
                     Destinations.CHAT, Destinations.CHAT_DETAIL -> stringResource(R.string.settings_messages)
                     Destinations.DISPUTE_ANALYTICS -> stringResource(R.string.settings_disputes)
+                    Destinations.CREATE_HOUSEHOLD_LISTING -> "Sell scrap"
                     else -> stringResource(R.string.app_name)
                 }
 
@@ -366,7 +370,7 @@ class MainActivity : ComponentActivity() {
                                         app.container.unregisterCurrentPushToken()
                                         app.container.authenticationRepository.logout()
                                         app.container.clearAccount()
-                                        sessionBootstrap = SessionBootstrap(false, null)
+                                        sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                         activeRole = AccountRole.COLLECTOR
                                         demoMode = false
                                         demoRoleName = ""
@@ -377,7 +381,7 @@ class MainActivity : ComponentActivity() {
                                     if (BuildConfig.DEBUG) {
                                         demoMode = true
                                         demoRoleName = "LEGACY"
-                                        sessionBootstrap = SessionBootstrap(false, null)
+                                        sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                         activeRole = AccountRole.COLLECTOR
                                         navController.navigate(Destinations.HOME) {
                                             popUpTo(Destinations.AUTH) { inclusive = true }
@@ -388,7 +392,7 @@ class MainActivity : ComponentActivity() {
                                     if (BuildConfig.DEBUG) {
                                         demoMode = true
                                         demoRoleName = selectedRole.name
-                                        sessionBootstrap = SessionBootstrap(false, null)
+                                        sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                         activeRole = selectedRole
                                         val target = if (selectedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                                         navController.navigate(target) {
@@ -400,11 +404,14 @@ class MainActivity : ComponentActivity() {
                                 requestedDemoMode = demoMode,
                                 demoRole = activeRole.takeIf { demoMode && demoRoleName != "LEGACY" },
                                 role = activeRole,
+                                sessionAuthenticated = bootstrap.restorable || demoMode,
                                 onAuthFinished = {
                                     val account = app.container.currentAccount()
+                                    app.container.markAuthenticatedBackgroundWorkReady(account)
+                                    app.container.syncScheduler.requestSync()
                                     app.container.startPushTokenRegistration()
                                     requestNotificationPermissionIfNeeded()
-                                    sessionBootstrap = SessionBootstrap(account != null, account)
+                                    sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                     activeRole = account?.role ?: AccountRole.COLLECTOR
                                     val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                                     navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }

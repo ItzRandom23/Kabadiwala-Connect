@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  APP_ENV: z.enum(['testing', 'production']).default('testing'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1),
@@ -41,18 +42,30 @@ const schema = z.object({
   S3_PUBLIC_BASE_URL: z.string().url().optional().or(z.literal('')),
   RATE_LIMIT_STORE: z.enum(['memory', 'database']).default('memory')
 }).superRefine((value, ctx) => {
+  const production = value.APP_ENV === 'production' || value.NODE_ENV === 'production';
   const placeholder = /^(replace-with|generate-a-random|change-me|your[-_])/i;
+  try {
+    const databaseUrl = new URL(value.DATABASE_URL);
+    const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\/+/, ''));
+    if (!['mongodb:', 'mongodb+srv:'].includes(databaseUrl.protocol)) ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: 'DATABASE_URL must use mongodb:// or mongodb+srv://' });
+    if (/\s/.test(databaseName)) ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: 'DATABASE_URL database name must not contain whitespace' });
+  } catch {
+    ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: 'DATABASE_URL must be a valid MongoDB connection URL' });
+  }
   if (placeholder.test(value.JWT_SECRET)) ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'JWT_SECRET must be a real random secret, not a template placeholder' });
   if (placeholder.test(value.TRACEABILITY_SIGNING_SECRET)) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must be a real random secret, not a template placeholder' });
   if (value.JWT_SECRET === value.TRACEABILITY_SIGNING_SECRET) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must differ from JWT_SECRET' });
-  if (value.NODE_ENV === 'production' && value.OTP_PROVIDER === 'development') ctx.addIssue({ code: 'custom', path: ['OTP_PROVIDER'], message: 'Development OTP provider is not allowed in production' });
-  if (value.NODE_ENV === 'production' && value.CORS_ORIGIN === '*') ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Wildcard CORS is not allowed in production' });
-  if (value.NODE_ENV === 'production' && value.CORS_ORIGIN.split(',').some(origin => !origin.trim().startsWith('https://'))) ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Production CORS origins must use HTTPS' });
-  if (value.NODE_ENV === 'production' && value.JWT_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'JWT_SECRET must be at least 32 characters in production' });
-  if (value.NODE_ENV === 'production' && value.TRACEABILITY_SIGNING_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must be at least 32 characters in production' });
-  if (value.NODE_ENV === 'production' && value.STORAGE_PROVIDER === 'local' && value.LOCAL_UPLOAD_PUBLIC) ctx.addIssue({ code: 'custom', path: ['LOCAL_UPLOAD_PUBLIC'], message: 'Public local uploads are not allowed in production; use protected storage or set LOCAL_UPLOAD_PUBLIC=false' });
-  if (value.NODE_ENV === 'production' && value.STORAGE_PROVIDER === 's3' && value.S3_PUBLIC_BASE_URL) ctx.addIssue({ code: 'custom', path: ['S3_PUBLIC_BASE_URL'], message: 'Public object URLs are not allowed in production; use signed access' });
-  if (value.NODE_ENV === 'production' && value.RATE_LIMIT_STORE !== 'database') ctx.addIssue({ code: 'custom', path: ['RATE_LIMIT_STORE'], message: 'Production rate limiting must use the shared database store' });
+  if (value.APP_ENV === 'production' && value.NODE_ENV !== 'production') ctx.addIssue({ code: 'custom', path: ['NODE_ENV'], message: 'APP_ENV=production requires NODE_ENV=production' });
+  if (production && value.OTP_PROVIDER === 'development') ctx.addIssue({ code: 'custom', path: ['OTP_PROVIDER'], message: 'Development OTP provider is not allowed in production' });
+  if (production && value.CORS_ORIGIN === '*') ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Wildcard CORS is not allowed in production' });
+  if (production && value.CORS_ORIGIN.split(',').some(origin => !origin.trim().startsWith('https://'))) ctx.addIssue({ code: 'custom', path: ['CORS_ORIGIN'], message: 'Production CORS origins must use HTTPS' });
+  if (production && value.JWT_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'JWT_SECRET must be at least 32 characters in production' });
+  if (production && value.TRACEABILITY_SIGNING_SECRET.length < 32) ctx.addIssue({ code: 'custom', path: ['TRACEABILITY_SIGNING_SECRET'], message: 'TRACEABILITY_SIGNING_SECRET must be at least 32 characters in production' });
+  if (production && value.STORAGE_PROVIDER === 'local' && value.LOCAL_UPLOAD_PUBLIC) ctx.addIssue({ code: 'custom', path: ['LOCAL_UPLOAD_PUBLIC'], message: 'Public local uploads are not allowed in production; use protected storage or set LOCAL_UPLOAD_PUBLIC=false' });
+  if (production && value.STORAGE_PROVIDER === 's3' && value.S3_PUBLIC_BASE_URL) ctx.addIssue({ code: 'custom', path: ['S3_PUBLIC_BASE_URL'], message: 'Public object URLs are not allowed in production; use signed access' });
+  if (production && value.RATE_LIMIT_STORE !== 'database') ctx.addIssue({ code: 'custom', path: ['RATE_LIMIT_STORE'], message: 'Production rate limiting must use the shared database store' });
+  if (production && (!value.GEMINI_API_KEY || placeholder.test(value.GEMINI_API_KEY))) ctx.addIssue({ code: 'custom', path: ['GEMINI_API_KEY'], message: 'A real GEMINI_API_KEY is required in production' });
+  if (production && (!value.GEMINI_MODEL || placeholder.test(value.GEMINI_MODEL))) ctx.addIssue({ code: 'custom', path: ['GEMINI_MODEL'], message: 'A real GEMINI_MODEL is required in production' });
   if (value.OTP_PROVIDER === 'twilio' && (!value.TWILIO_ACCOUNT_SID || !value.TWILIO_AUTH_TOKEN || !value.TWILIO_VERIFY_SERVICE_SID)) ctx.addIssue({ code: 'custom', path: ['TWILIO_*'], message: 'Twilio credentials are required when OTP_PROVIDER=twilio' });
   if (value.OTP_PROVIDER === 'twofactor' && !value.TWOFACTOR_API_KEY) ctx.addIssue({ code: 'custom', path: ['TWOFACTOR_API_KEY'], message: 'TWOFACTOR_API_KEY is required when OTP_PROVIDER=twofactor' });
   if (value.NOTIFICATION_SMS_ENABLED && value.NOTIFICATION_SMS_PROVIDER !== 'twofactor') ctx.addIssue({ code: 'custom', path: ['NOTIFICATION_SMS_PROVIDER'], message: 'Notification SMS requires NOTIFICATION_SMS_PROVIDER=twofactor' });

@@ -14,6 +14,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockOtpService
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.RemoteAuthenticationRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.RoomCollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionCoordinator
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RetrofitProvider
@@ -45,6 +46,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.toSyncEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentRecordState
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentSyncState
@@ -80,6 +82,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Manual service locator for the app's local and remote repositories.
@@ -93,17 +96,20 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val catalogRefreshMutex = Mutex()
+    private val authenticatedBackgroundWorkReady = AtomicBoolean(false)
     private var lastCatalogRefreshKey: String? = null
     private var lastCatalogRefreshElapsedMs: Long = 0L
 
     val database: AppDatabase by lazy { AppDatabase.get(appContext) }
+    val sessionCoordinator = SessionCoordinator()
 
     /** Uses the configured backend and injects the current encrypted bearer token. */
     val apiService: ApiService by lazy {
         RetrofitProvider.create(
             baseUrl = BuildConfig.API_BASE_URL,
             tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
-            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken() } }
+            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken() } },
+            onAuthenticationFailure = { expireAccountSession() }
         )
     }
 
@@ -113,20 +119,20 @@ class AppContainer(context: Context) {
     val priceSpeaker: PriceSpeaker by lazy { AndroidPriceSpeaker(appContext) }
     val recyclerRepository: RecyclerRepository by lazy { RoomRecyclerRepository(database.recyclerDao()) }
     val quoteRepository: QuoteRepository by lazy {
-        if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomQuoteRepository(database.quoteDao())
+        if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomQuoteRepository(database.quoteDao()) { currentAccount()?.profileId }
         else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId }
     }
     val handoverRepository: HandoverRepository by lazy {
-        if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomHandoverRepository(database.handoverDao())
+        if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomHandoverRepository(database.handoverDao()) { currentAccount()?.profileId }
         else OfflineFirstHandoverRepository(
-            RoomHandoverRepository(database.handoverDao()),
-            RemoteHandoverRepository(database.handoverDao(), apiService),
+            RoomHandoverRepository(database.handoverDao()) { currentAccount()?.profileId },
+            RemoteHandoverRepository(database.handoverDao(), apiService) { currentAccount()?.profileId },
             database.syncQueueDao()
         ) { syncScheduler.requestSync() }
     }
     val paymentRepository: PaymentRepository by lazy { RoomPaymentRepository(database.paymentDao(), database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId } }
     val earningsRepository: EarningsRepository get() = paymentRepository
-    val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository by lazy { RoomDisputeRepository(database.disputeDao()) }
+    val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository by lazy { RoomDisputeRepository(database.disputeDao()) { currentAccount()?.profileId } }
 
     val connectivityObserver: ConnectivityObserver by lazy {
         SystemConnectivityObserver(appContext)
@@ -134,7 +140,15 @@ class AppContainer(context: Context) {
 
     val secureStorage: SecureStorage by lazy { KeystoreSecureStorage(appContext) }
 
-    val sessionRepository by lazy { SecureSessionRepository(secureStorage) }
+    val sessionRepository by lazy {
+        SecureSessionRepository(secureStorage) { token ->
+            // The local placeholder backend is deliberately offline and uses
+            // opaque mock credentials. Every configured real backend issues a
+            // JWT, so malformed cached credentials must never unlock protected
+            // navigation or background work.
+            (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) || token.isJwtShape()
+        }
+    }
     val authenticationRepository: AuthenticationRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) {
             MockAuthenticationRepository(MockOtpService(), sessionRepository, secureStorage)
@@ -145,7 +159,65 @@ class AppContainer(context: Context) {
     val collectorProfileRepository: CollectorProfileRepository by lazy { RoomCollectorProfileRepository(database.collectorProfileDao()) }
 
     fun hasValidSession(): Boolean = sessionRepository.isSessionValid()
-    fun hasRestorableSession(): Boolean = hasValidSession() || !secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()
+    /** A refresh credential alone is not an authenticated session. */
+    fun hasRestorableSession(): Boolean = hasValidSession() && currentAccount() != null
+
+    /**
+     * Process-local gate for work that can send an authenticated request.
+     * Cached credentials are not enough: MainActivity must finish session
+     * restoration (or a fresh sign-in) before WorkManager and FCM registration
+     * are allowed to run.
+     */
+    fun isAuthenticatedBackgroundWorkReady(): Boolean = authenticatedBackgroundWorkReady.get()
+
+    fun markAuthenticatedBackgroundWorkReady(account: AccountProfile?) {
+        authenticatedBackgroundWorkReady.set(
+            account != null && hasValidSession() && currentAccount()?.profileId == account.profileId
+        )
+        if (account != null && isAuthenticatedBackgroundWorkReady()) sessionCoordinator.authenticated(account)
+        else sessionCoordinator.unauthenticated()
+    }
+
+    fun revokeAuthenticatedBackgroundWork() {
+        authenticatedBackgroundWorkReady.set(false)
+    }
+
+    /**
+     * Resolves the account boundary before protected destinations are composed.
+     * A refresh token is never treated as permission to render a protected
+     * screen; it must first produce a valid access token and account profile.
+     */
+    suspend fun restoreAuthenticatedSession(): AccountProfile? {
+        sessionCoordinator.beginRestoration()
+        revokeAuthenticatedBackgroundWork()
+        if (!hasValidSession()) {
+            if (secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) {
+                sessionCoordinator.unauthenticated()
+                return null
+            }
+            return authenticationRepository.refreshAccount().also {
+                if (it == null) {
+                    // A rotating refresh credential that the backend has
+                    // rejected is no longer a recoverable session. Remove
+                    // the cached identity as well as the token so a stale
+                    // profile cannot keep WorkManager looking for an account
+                    // that is no longer authenticated. Room/outbox data is
+                    // intentionally retained and remains keyed to its owner
+                    // for recovery after a fresh sign-in.
+                    if (!hasValidSession() && secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) {
+                        expireAccountSession()
+                    } else {
+                        sessionCoordinator.unauthenticated()
+                    }
+                }
+                markAuthenticatedBackgroundWorkReady(it)
+            }
+        }
+        return (currentAccount() ?: authenticationRepository.refreshAccount()).also {
+            if (it == null) sessionCoordinator.unauthenticated()
+            markAuthenticatedBackgroundWorkReady(it)
+        }
+    }
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()
 
@@ -163,13 +235,13 @@ class AppContainer(context: Context) {
     }
 
     fun startPushTokenRegistration() {
-        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        if (!isAuthenticatedBackgroundWorkReady() || !hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
         FcmTokenRegistrar.fetchToken(appContext) { token -> queuePushToken(token) }
         registerPendingPushToken()
     }
 
     fun registerPendingPushToken() {
-        if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        if (!isAuthenticatedBackgroundWorkReady() || !hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
         val accountId = currentAccount()?.profileId ?: return
         val token = secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return
         preferenceScope.launch {
@@ -342,6 +414,8 @@ class AppContainer(context: Context) {
                     imageProvenance = lot.imageProvenance,
                     imageQualityStatus = lot.imageQualityStatus ?: "UNVERIFIED",
                     locationPrecision = lot.collectionLocation?.precision,
+                    locationLatitude = lot.collectionLocation?.latitude,
+                    locationLongitude = lot.collectionLocation?.longitude,
                     serverUpdatedAtEpochMs = lot.updatedAt?.let(::parseRemoteTimestamp),
                     version = lot.version
                 )
@@ -420,17 +494,22 @@ class AppContainer(context: Context) {
     suspend fun reconcileChanges(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
         if (currentAccount()?.role != AccountRole.COLLECTOR) return false
+        val accountId = currentAccount()?.profileId ?: return false
         val cursor = secureStorage.get(SecureStorage.SYNC_CURSOR)
         val payload = apiService.getChanges(cursor).requireData()
         database.withTransaction {
             payload.changes.lots.forEach { remote ->
-                val local = database.lotDao().findById(remote.id)
+                // Deltas are expected to be server-scoped, but keep the local
+                // account boundary defensive if a cursor is stale or a backend
+                // regression returns another collector's record.
+                if (remote.collectorId != accountId) return@forEach
+                val local = database.lotDao().findByIdForCollector(remote.id, accountId)
                 if (local == null || local.synced) {
                     val now = System.currentTimeMillis()
                     database.lotDao().save(
                         LotEntity(
                             id = remote.id,
-                            collectorId = remote.collectorId ?: currentAccount()?.profileId.orEmpty(),
+                            collectorId = remote.collectorId,
                             materialLabel = remote.materialCategory.toDisplayMaterial(),
                             condition = remote.condition,
                             weightKg = remote.weight,
@@ -453,6 +532,8 @@ class AppContainer(context: Context) {
                             imageProvenance = remote.imageProvenance,
                             imageQualityStatus = remote.imageQualityStatus ?: "UNVERIFIED",
                             locationPrecision = remote.collectionLocation?.precision,
+                            locationLatitude = remote.collectionLocation?.latitude,
+                            locationLongitude = remote.collectionLocation?.longitude,
                             serverUpdatedAtEpochMs = remote.updatedAt?.let(::parseRemoteTimestamp),
                             version = remote.version
                         )
@@ -460,7 +541,7 @@ class AppContainer(context: Context) {
                 }
             }
             payload.changes.payments.forEach { remote ->
-                val local = database.paymentDao().findById(remote.id)
+                val local = database.paymentDao().findByIdForAccount(remote.id, accountId)
                 if (local == null || local.syncState == PaymentSyncState.SYNCED.name) {
                     database.paymentDao().insert(
                         PaymentEntity(
@@ -480,7 +561,11 @@ class AppContainer(context: Context) {
                 }
             }
             payload.changes.handovers.forEach { remote ->
-                val local = database.handoverDao().get(remote.id)
+                // This delta endpoint is collector-scoped. Require an explicit
+                // owner instead of accepting an incomplete DTO and attaching
+                // it to the current account as a fallback.
+                if (remote.collectorId != accountId) return@forEach
+                val local = database.handoverDao().getForAccount(remote.id, accountId)
                 if (local == null) {
                     database.handoverDao().insert(remote.toSyncEntity())
                 } else if (local.synced) {
@@ -498,6 +583,9 @@ class AppContainer(context: Context) {
      * next account on a shared phone or be uploaded under the next token.
      */
     suspend fun clearAccount() {
+        revokeAuthenticatedBackgroundWork()
+        sessionCoordinator.unauthenticated()
+        IdempotencyKeyStore(appContext).clearAccount(currentAccount()?.profileId)
         database.withTransaction {
             database.syncQueueDao().clear()
             database.collectorProfileDao().clear()
@@ -509,10 +597,13 @@ class AppContainer(context: Context) {
             database.futureCacheDao().clearConversations()
             database.futureCacheDao().clearMessages()
             database.futureCacheDao().clearNotifications()
+            database.pendingPhotoUploadDao().clearAll()
+            database.householdListingCacheDao().clearAll()
         }
         withContext(Dispatchers.IO) {
             File(appContext.filesDir, "lot_photos").deleteRecursively()
             File(appContext.filesDir, "handover_photos").deleteRecursively()
+            File(appContext.filesDir, "household_photos").deleteRecursively()
         }
         secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)
         secureStorage.remove(SecureStorage.ACCOUNT_ROLE)
@@ -540,6 +631,8 @@ class AppContainer(context: Context) {
      * as the shared-device privacy boundary.
      */
     fun expireAccountSession() {
+        revokeAuthenticatedBackgroundWork()
+        sessionCoordinator.expired()
         secureStorage.remove(SecureStorage.AUTH_TOKEN)
         secureStorage.remove(SecureStorage.REFRESH_TOKEN)
         secureStorage.remove(SecureStorage.SESSION_EXPIRY)
@@ -568,6 +661,9 @@ private fun String.toDisplayMaterial() = when (this) {
     "CABLE" -> "Cables"
     else -> replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
+
+private fun String.isJwtShape(): Boolean =
+    split('.').let { parts -> parts.size == 3 && parts.all { it.isNotBlank() } }
 
 private fun String.toLocalLotStatus() = when (this) {
     "PAID" -> LotStatus.PAID

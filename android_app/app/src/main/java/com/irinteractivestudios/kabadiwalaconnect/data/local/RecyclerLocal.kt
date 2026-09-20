@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+internal fun shouldSeedSyntheticRecyclerCatalog(debugBuild: Boolean, apiBaseUrl: String): Boolean =
+    debugBuild && apiBaseUrl.contains(".invalid", ignoreCase = true)
+
 @Entity(tableName = "recyclers")
 data class RecyclerEntity(
     @androidx.room.PrimaryKey val id: String,
@@ -54,13 +57,11 @@ data class RecyclerEntity(
 class RoomRecyclerRepository(private val dao: RecyclerDao) : RecyclerCatalogRepository {
     init {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            // Keep sample facilities isolated to the intentionally offline
-            // development build. Never present them as live facilities when
-            // the app is configured for the real backend.
-            // Demo and testing builds must remain useful without a populated
-            // backend. Keep the bundled facilities as a visible fallback;
-            // production builds never seed synthetic shops.
-            if (BuildConfig.DEBUG && (BuildConfig.APP_ENVIRONMENT == "TESTING" || BuildConfig.API_BASE_URL.contains(".invalid")) && dao.count() == 0) {
+            // Synthetic facilities are allowed only for the explicitly
+            // offline preview backend. A debug/testing APK pointed at a real
+            // testing VPS must show the server's result (including a genuine
+            // empty state) rather than presenting bundled records as live.
+            if (shouldSeedSyntheticRecyclerCatalog(BuildConfig.DEBUG, BuildConfig.API_BASE_URL) && dao.count() == 0) {
                 dao.insertAll(MockRecyclerData.all.map { it.toEntity() })
             }
         }

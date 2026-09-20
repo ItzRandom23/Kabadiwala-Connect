@@ -1,7 +1,10 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.sync
 
 import android.content.Context
+import android.util.Log
+import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import androidx.work.CoroutineWorker
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -21,11 +24,14 @@ import java.io.IOException
 import java.io.File
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.toCacheEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.CreateHandoverRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.HouseholdListingCreateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.PickupRequestCreateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SendMessageRequestDto
@@ -48,6 +54,22 @@ class SyncWorker(
 
     override suspend fun doWork(): Result {
         val app = applicationContext.applicationContext as? KabadiwalaApp ?: return Result.failure()
+        // A WorkManager instance can survive process death and wake before
+        // MainActivity has restored the local session. Do not refresh tokens
+        // or replay protected mutations from that early worker. If a valid
+        // account is already persisted, retry so the worker is not marked
+        // successful and stranded before the process-local gate opens. A
+        // genuinely signed-out process has no authenticated work to replay,
+        // so it can finish without creating an endless retry loop.
+        if (!app.container.isAuthenticatedBackgroundWorkReady()) {
+            val accountPresent = app.container.currentAccount() != null
+            if (BuildConfig.DEBUG) Log.d(TAG, "deferred before auth gate: accountPresent=$accountPresent")
+            return if (accountPresent) {
+                Result.retry()
+            } else {
+                Result.success()
+            }
+        }
         val queue = app.container.database.syncQueueDao()
         val accountId = app.container.secureStorage.get(com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage.ACCOUNT_PROFILE_ID)
         if (accountId.isNullOrBlank()) return Result.success()
@@ -55,7 +77,10 @@ class SyncWorker(
         // confirmations are also queued, but a recycler must never replay
         // collector lot/payment operations with its token.
         val currentRole = app.container.currentAccount()?.role
-        if (currentRole != AccountRole.COLLECTOR && currentRole != AccountRole.RECYCLER) return Result.success()
+        if (currentRole != AccountRole.HOUSEHOLD && currentRole != AccountRole.COLLECTOR && currentRole != AccountRole.RECYCLER) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "skipped: unsupported role=$currentRole")
+            return Result.success()
+        }
 
         // A worker can wake after the short-lived access token has expired.
         // Previously we returned success when the token was missing, leaving
@@ -90,9 +115,22 @@ class SyncWorker(
         // rows owned by the currently authenticated account; legacy rows with
         // no owner remain visible as unresolved instead of crossing accounts.
         val pending = queue.observePendingForAccount(accountId).first()
-            .filter { currentRole == AccountRole.COLLECTOR || it.operation == "CONFIRM_SUPPLY_HANDOVER" }
+            .filter { item ->
+                when (currentRole) {
+                    AccountRole.HOUSEHOLD -> item.operation in setOf("CREATE_HOUSEHOLD_LISTING", "REQUEST_HOUSEHOLD_PICKUP")
+                    AccountRole.COLLECTOR -> item.operation != "REQUEST_HOUSEHOLD_PICKUP"
+                    AccountRole.RECYCLER -> item.operation == "CONFIRM_SUPPLY_HANDOVER"
+                }
+            }
             .take(BATCH_SIZE)
-        if (pending.isEmpty()) return pullChanges(app)
+        if (BuildConfig.DEBUG) {
+            val allQueued = queue.observeAll().first()
+            Log.d(TAG, "queue state: total=${allQueued.size}, owned=${allQueued.count { it.accountId == accountId }}, eligible=${pending.size}, role=$currentRole")
+        }
+        if (pending.isEmpty()) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "no eligible pending operations for role=$currentRole")
+            return pullChanges(app)
+        }
         val pendingCreateLotIds = pending
             .filter { it.operation == "CREATE_LOT" }
             .mapNotNull { item -> runCatching { JsonParser.parseString(item.payloadJson).asJsonObject.get("id")?.asString }.getOrNull() }
@@ -123,7 +161,10 @@ class SyncWorker(
                 }
             }
             when (processExtended(app, item)) {
-                QueueResult.APPLIED -> queue.remove(item.uid)
+                QueueResult.APPLIED -> {
+                    clearQueuedIdempotencyKey(app, item)
+                    queue.remove(item.uid)
+                }
                 QueueResult.RETRY -> { queue.incrementAttempts(item.uid, retryAt(item.attempts)); return Result.retry() }
                 QueueResult.REJECTED -> {
                     queue.markFailed(item.uid, "EXTENDED_OPERATION_REJECTED", retryAt(item.attempts))
@@ -180,21 +221,21 @@ class SyncWorker(
                                     // stuck forever as "waiting".
                                     if (operation.operationType == "UPDATE") {
                                         val clientVersion = operation.payload.get("clientVersion")?.asInt ?: 1
-                                        app.container.database.lotDao().markSyncedWithVersion(operation.entityId, clientVersion + 1)
+                                        app.container.database.lotDao().markSyncedWithVersionForCollector(operation.entityId, clientVersion + 1, accountId)
                                     } else {
-                                        app.container.database.lotDao().markSynced(operation.entityId)
+                                        app.container.database.lotDao().markSyncedForCollector(operation.entityId, accountId)
                                     }
                                     queue.markFailed(item.uid, "LOT_PHOTO_UPLOAD_REJECTED", Long.MAX_VALUE)
                                     return Result.failure()
                                 }
                                 if (operation.operationType == "UPDATE") {
                                     val clientVersion = operation.payload.get("clientVersion")?.asInt ?: 1
-                                    app.container.database.lotDao().markSyncedWithVersion(operation.entityId, clientVersion + 1)
+                                    app.container.database.lotDao().markSyncedWithVersionForCollector(operation.entityId, clientVersion + 1, accountId)
                                 } else {
-                                    app.container.database.lotDao().markSynced(operation.entityId)
+                                    app.container.database.lotDao().markSyncedForCollector(operation.entityId, accountId)
                                 }
                             }
-                            "PAYMENT" -> app.container.database.paymentDao().markSynced(operation.entityId)
+                            "PAYMENT" -> app.container.database.paymentDao().markSyncedForAccount(operation.entityId, accountId)
                         }
                         queue.remove(item.uid)
                     } else {
@@ -228,27 +269,69 @@ class SyncWorker(
     }
 
     private suspend fun processExtended(app: KabadiwalaApp, item: SyncQueueItemEntity): QueueResult {
+        // The caller already selected rows for the current account. Re-check
+        // the owner here because this function is the final boundary before a
+        // queued payload can resolve a local record or call a protected API.
+        val accountId = item.accountId?.takeIf { it.isNotBlank() }
+            ?: app.container.currentAccount()?.profileId
+            ?: return QueueResult.REJECTED
         val payload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull() ?: return QueueResult.REJECTED
         return try {
             when (item.operation) {
+                "CREATE_HOUSEHOLD_LISTING" -> {
+                    val input = Gson().fromJson(payload.getAsJsonObject("input"), HouseholdListingCreateDto::class.java)
+                    val created = app.container.apiService.createHouseholdListing(
+                        input,
+                        payload.get("idempotencyKey")?.asString
+                    ).requireData()
+                    var synchronizedListing = created
+                    val photoPaths = payload.getAsJsonArray("photoPaths")?.map { it.asString }
+                        ?.filter { it.isNotBlank() }
+                        ?.ifEmpty { null }
+                        ?: listOfNotNull(payload.get("photoPath")?.asString?.takeIf { it.isNotBlank() })
+                    if (photoPaths.isNotEmpty()) {
+                        // The create request and photo upload are two server
+                        // mutations. If the process dies after the upload but
+                        // before the outbox row is removed, replaying the
+                        // idempotent create returns the original listing. Do
+                        // not upload the same files a second time; first
+                        // reconcile the authoritative server photo state.
+                        val remoteListing = findHouseholdListing(app, created.id)
+                        if (created.hasAttachedPhotos() || remoteListing?.hasAttachedPhotos() == true) {
+                            synchronizedListing = remoteListing ?: created
+                            photoPaths.forEach { File(it).delete() }
+                        } else {
+                            val files = photoPaths.map { path -> File(path).takeIf { it.isFile } ?: return QueueResult.REJECTED }
+                            synchronizedListing = app.container.apiService.uploadHouseholdListingPhotos(
+                                created.id,
+                                files.map { file -> MultipartBody.Part.createFormData("photos", file.name, file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())) }
+                            ).requireData()
+                            files.forEach(File::delete)
+                        }
+                    }
+                    payload.get("localListingId")?.asString?.takeIf { it.isNotBlank() }?.let { localId ->
+                        app.container.database.householdListingCacheDao().removeForAccount(localId, accountId)
+                    }
+                    app.container.database.householdListingCacheDao().upsert(synchronizedListing.toCacheEntity(accountId, synced = true))
+                }
                 "REQUEST_QUOTE" -> {
                     app.container.apiService.requestQuote(QuoteRequestDto(payload.string("lotId"), payload.string("recyclerId"))).requireData()
-                    app.container.database.quoteDao().delete(payload.string("id"))
+                    app.container.database.quoteDao().deleteForAccount(payload.string("id"), accountId)
                 }
                 "ACCEPT_QUOTE" -> {
                     val quote = app.container.apiService.acceptQuote(payload.string("id")).requireData()
-                    app.container.database.quoteDao().updateStatus(quote.id, QuoteStatus.ACCEPTED.name)
+                    app.container.database.quoteDao().updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, accountId)
                 }
                 "REJECT_QUOTE" -> {
                     val quote = app.container.apiService.rejectQuote(payload.string("id")).requireData()
-                    app.container.database.quoteDao().updateStatus(quote.id, QuoteStatus.REJECTED.name)
+                    app.container.database.quoteDao().updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, accountId)
                 }
                 "CANCEL_LOT" -> {
                     app.container.apiService.cancelLot(payload.string("id")).requireData()
                 }
                 "CREATE_HANDOVER" -> {
                     val id = payload.string("id")
-                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val fallback = app.container.database.handoverDao().getForAccount(id, accountId)?.toDomain() ?: return QueueResult.REJECTED
                     val dto = app.container.apiService.createHandover(CreateHandoverRequestDto(
                         lotId = payload.string("lotId"), quoteId = payload.string("quoteId"), clientHandoverId = id,
                         handoverLocation = HandoverLocationDto(payload.string("locationType"), address = payload.string("location")),
@@ -258,13 +341,13 @@ class SyncWorker(
                 }
                 "MARK_HANDOVER" -> {
                     val id = payload.string("id")
-                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val fallback = app.container.database.handoverDao().getForAccount(id, accountId)?.toDomain() ?: return QueueResult.REJECTED
                     val dto = app.container.apiService.markHandover(id).requireData()
                     app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
                 }
                 "UPDATE_HANDOVER_EVIDENCE" -> {
                     val id = payload.string("id")
-                    val fallback = app.container.database.handoverDao().get(id)?.toDomain() ?: return QueueResult.REJECTED
+                    val fallback = app.container.database.handoverDao().getForAccount(id, accountId)?.toDomain() ?: return QueueResult.REJECTED
                     var dto = app.container.apiService.updateHandoverEvidence(id, HandoverEvidenceRequestDto(payload.double("actualWeight"), payload.boolean("materialMatch"), collectorConfirmed = payload.boolean("collectorConfirmed"))).requireData()
                     payload.get("scalePhotoPath")?.takeUnless { it.isJsonNull }?.asString?.let { path ->
                         val file = File(path)
@@ -286,7 +369,7 @@ class SyncWorker(
                     val handoverId = payload.string("handoverId")
                     val body = payload.deepCopy().apply { addProperty("clientDisputeId", localId); remove("id"); remove("handoverId") }
                     val dispute = app.container.apiService.disputeHandover(handoverId, body).requireData()
-                    app.container.database.disputeDao().markSynced(localId, dispute.id)
+                    app.container.database.disputeDao().markSyncedForAccount(localId, dispute.id, accountId)
                 }
                 "CONFIRM_SUPPLY_HANDOVER" -> {
                     app.container.apiService.confirmSupplyHandover(SupplyHandoverConfirmRequestDto(
@@ -300,7 +383,7 @@ class SyncWorker(
                 "REQUEST_HOUSEHOLD_PICKUP" -> {
                     app.container.apiService.requestHouseholdPickup(
                         payload.string("listingId"),
-                        PickupRequestCreateDto(payload.string("kabadiwalaId")),
+                        PickupRequestCreateDto(payload.get("kabadiwalaId")?.asString?.takeIf { it.isNotBlank() }),
                         payload.get("idempotencyKey")?.asString
                     ).requireData()
                 }
@@ -308,13 +391,26 @@ class SyncWorker(
             }
             QueueResult.APPLIED
         } catch (error: com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "extended operation failed: operation=${item.operation}, http=${error.httpCode}, code=${error.code}")
             if (error.httpCode == 409 && alreadyApplied(app, item, payload)) QueueResult.APPLIED
             else if (error.httpCode == 408 || error.httpCode == 429 || (error.httpCode ?: 0) >= 500) QueueResult.RETRY else QueueResult.REJECTED
         } catch (_: IOException) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "extended operation deferred: operation=${item.operation}, reason=network")
             QueueResult.RETRY
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "extended operation rejected: operation=${item.operation}, type=${error.javaClass.simpleName}")
             QueueResult.REJECTED
         }
+    }
+
+    private suspend fun findHouseholdListing(app: KabadiwalaApp, listingId: String) = runCatching {
+        app.container.apiService.getHouseholdListings().requireData().firstOrNull { it.id == listingId }
+    }.getOrNull()
+
+    private fun clearQueuedIdempotencyKey(app: KabadiwalaApp, item: SyncQueueItemEntity) {
+        val payload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull() ?: return
+        val operation = payload.get("idempotencyOperation")?.asString?.takeIf { it.isNotBlank() } ?: return
+        IdempotencyKeyStore(app.applicationContext) { item.accountId }.clear(operation)
     }
 
     private suspend fun alreadyApplied(app: KabadiwalaApp, item: SyncQueueItemEntity, payload: JsonObject): Boolean = runCatching {
@@ -325,10 +421,13 @@ class SyncWorker(
             "UPDATE_HANDOVER_EVIDENCE" -> app.container.apiService.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
             "CANCEL_LOT" -> app.container.apiService.getLot(payload.string("id")).requireData().status == "CANCELLED"
             "CONFIRM_SUPPLY_HANDOVER" -> app.container.apiService.getSupplyHandovers().requireData().firstOrNull { it.id == payload.string("handoverId") }?.status in setOf("COMPLETED", "REVIEW_REQUIRED")
-            "REQUEST_HOUSEHOLD_PICKUP" -> app.container.apiService.getHouseholdPickups().requireData().any { it.listingId == payload.string("listingId") && it.kabadiwalaId == payload.string("kabadiwalaId") && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
+            "REQUEST_HOUSEHOLD_PICKUP" -> app.container.apiService.getHouseholdPickups().requireData().any { it.listingId == payload.string("listingId") && (payload.get("kabadiwalaId")?.asString == null || it.kabadiwalaId == payload.get("kabadiwalaId")?.asString) && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
             else -> false
         }
     }.getOrDefault(false)
+
+    private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.HouseholdListingDto.hasAttachedPhotos(): Boolean =
+        photoAttached == true || (photoCount ?: 0) > 0 || photoReferences.isNotEmpty() || !photoReference.isNullOrBlank()
 
     private enum class QueueResult { APPLIED, RETRY, REJECTED }
 
@@ -339,15 +438,16 @@ class SyncWorker(
 
     private suspend fun uploadLotPhotoIfPresent(app: KabadiwalaApp, operation: SyncOperationDto): PhotoUploadResult {
         if (operation.entityType != "LOT") return PhotoUploadResult.NOT_NEEDED
-        val path = operation.payload.get("photoPath")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-        if (path.isBlank()) return PhotoUploadResult.NOT_NEEDED
-        val file = File(path)
-        if (!file.exists()) return PhotoUploadResult.PERMANENT_FAILURE
+        val paths = operation.payload.getAsJsonArray("photoPaths")?.map { it.asString }
+            ?.filter { it.isNotBlank() }
+            ?.ifEmpty { null }
+            ?: listOfNotNull(operation.payload.get("photoPath")?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() })
+        if (paths.isEmpty()) return PhotoUploadResult.NOT_NEEDED
+        val files = paths.map { path -> File(path).takeIf { it.isFile } ?: return PhotoUploadResult.PERMANENT_FAILURE }
         return try {
-            val body = file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())
-            val response = app.container.apiService.uploadLotPhoto(operation.entityId, MultipartBody.Part.createFormData("photo", file.name, body))
+            val response = app.container.apiService.uploadLotPhotos(operation.entityId, files.map { file -> MultipartBody.Part.createFormData("photos", file.name, file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())) })
             when {
-                response.isSuccessful -> PhotoUploadResult.UPLOADED
+                response.isSuccessful -> { files.forEach(File::delete); PhotoUploadResult.UPLOADED }
                 response.code() == 408 || response.code() == 429 || response.code() >= 500 -> PhotoUploadResult.RETRY
                 else -> PhotoUploadResult.PERMANENT_FAILURE
             }
@@ -371,6 +471,7 @@ class SyncWorker(
     }
 
     companion object {
+        private const val TAG = "KabadiwalaSync"
         private const val BATCH_SIZE = 100
         private val TERMINAL_STATUSES = setOf("APPLIED", "ALREADY_APPLIED", "CONFLICT", "REJECTED", "INVALID")
     }

@@ -38,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -86,13 +85,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    0f to MaterialTheme.colorScheme.background,
-                    .72f to MaterialTheme.colorScheme.background,
-                    1f to MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
@@ -213,25 +206,14 @@ private fun NextActionCard(data: HomeData, onNextAction: (HomeNextAction, String
 @Composable
 private fun NextCollectionPanel(demoMode: Boolean, household: Boolean, onCreateLot: () -> Unit) {
     Surface(
-        color = androidx.compose.ui.graphics.Color.Transparent,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.large,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
         shadowElevation = 3.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            Modifier
-                .heightIn(min = 190.dp)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.surfaceContainerLow
-                        )
-                    )
-                )
-        ) {
+        Column(Modifier.heightIn(min = 190.dp)) {
             Column(
                 Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)

@@ -15,8 +15,8 @@ import androidx.room.RoomDatabase
  * already kept outside this database in Keystore-backed storage.
  */
 @Database(
-    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class, PendingPhotoUploadEntity::class],
-    version = 23,
+    entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class, PendingPhotoUploadEntity::class, HouseholdListingCacheEntity::class],
+    version = 27,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun disputeDao(): DisputeDao
     abstract fun futureCacheDao(): FutureCacheDao
     abstract fun pendingPhotoUploadDao(): PendingPhotoUploadDao
+    abstract fun householdListingCacheDao(): HouseholdListingCacheDao
 
     companion object {
         const val DB_NAME = "kabadiwala.db"
@@ -45,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
                     .build().also { instance = it }
             }
 
@@ -195,6 +196,33 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS pending_photo_uploads (listingId TEXT NOT NULL PRIMARY KEY, accountId TEXT NOT NULL, localPath TEXT NOT NULL, createdAtEpochMs INTEGER NOT NULL)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_photo_uploads_accountId ON pending_photo_uploads(accountId)")
+            }
+        }
+
+        val MIGRATION_23_24 = object : androidx.room.migration.Migration(23, 24) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lots ADD COLUMN locationLatitude REAL")
+                db.execSQL("ALTER TABLE lots ADD COLUMN locationLongitude REAL")
+            }
+        }
+
+        val MIGRATION_24_25 = object : androidx.room.migration.Migration(24, 25) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS household_listings (id TEXT NOT NULL PRIMARY KEY, accountId TEXT NOT NULL, payloadJson TEXT NOT NULL, synced INTEGER NOT NULL, createdAtEpochMs INTEGER NOT NULL, updatedAtEpochMs INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_household_listings_accountId ON household_listings(accountId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_household_listings_accountId_synced ON household_listings(accountId, synced)")
+            }
+        }
+
+        val MIGRATION_25_26 = object : androidx.room.migration.Migration(25, 26) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_photo_uploads ADD COLUMN localPathsJson TEXT")
+            }
+        }
+
+        val MIGRATION_26_27 = object : androidx.room.migration.Migration(26, 27) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lots ADD COLUMN localPhotoPathsJson TEXT NOT NULL DEFAULT '[]'")
             }
         }
 

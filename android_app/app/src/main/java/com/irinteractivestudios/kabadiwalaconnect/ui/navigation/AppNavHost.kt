@@ -136,6 +136,7 @@ fun AppNavHost(
     requestedDemoMode: Boolean = false,
     demoRole: AccountRole? = null,
     role: AccountRole = AccountRole.COLLECTOR,
+    sessionAuthenticated: Boolean = false,
     onAuthFinished: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -154,10 +155,10 @@ fun AppNavHost(
         demoMode -> demoCollectorRoutes
         else -> liveCollectorRoutes
     }
-    val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
+    val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS, Destinations.CREATE_HOUSEHOLD_LISTING) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
     val adminRoutes = setOf(Destinations.ADMIN_DASHBOARD)
-    LaunchedEffect(role, factory.currentAccount?.profileId, demoMode) {
-        if (!demoMode && factory.currentAccount?.profileId?.isNotBlank() == true) {
+    LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated) {
+        if (sessionAuthenticated && !demoMode && factory.currentAccount?.profileId?.isNotBlank() == true) {
             while (true) {
                 runCatching { factory.refreshActivity() }
                 delay(30_000)
@@ -209,6 +210,7 @@ fun AppNavHost(
             if (role == AccountRole.ADMIN) {
                 val vm: AdminConsoleViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
                 AdminConsoleScreen(
                     state = state,
                     onSection = vm::selectSection,
@@ -242,6 +244,19 @@ fun AppNavHost(
                     }
                 },
                 demoMode = demoMode
+            )
+        }
+        composable(Destinations.CREATE_HOUSEHOLD_LISTING) {
+            val vm: SupplyChainViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            HouseholdListingCreateScreen(
+                state = state,
+                initialArea = factory.currentAccount?.areaName.orEmpty(),
+                busy = state.busy,
+                onBack = { navController.popBackStack() },
+                onSuggestMaterial = vm::suggestHouseholdMaterial,
+                onClearMaterialSuggestion = vm::clearHouseholdMaterialSuggestion,
+                onCreateListing = { input, paths -> vm.createListing(input, paths) }
             )
         }
         composable(Destinations.MY_LOTS) {
@@ -313,11 +328,12 @@ fun AppNavHost(
             if (role == AccountRole.HOUSEHOLD && !demoMode) {
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) { vm.refreshHousehold() }
+                LaunchedEffect(currentRoute) { if (currentRoute == Destinations.HOME) vm.refreshHousehold() }
                 HouseholdSupplyScreen(
                     state = state,
                     onRefresh = vm::refreshHousehold,
-                    onCreateListing = { input, photoPath -> vm.createListing(input, photoPath) },
+                    onCreateListing = { navController.navigate(Destinations.CREATE_HOUSEHOLD_LISTING) },
+                    onIncreaseRadius = vm::increaseHouseholdRadius,
                     onRetryPhoto = vm::retryListingPhoto,
                     onRequestPickup = vm::requestPickup,
                     onCancelListing = vm::cancelListing,
@@ -868,6 +884,7 @@ fun AppNavHost(
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 val scope = rememberCoroutineScope()
+                LaunchedEffect(Unit) { vm.refresh() }
                 RecyclerVerificationScreen(
                     profile = factory.currentAccount,
                     recyclerProfile = state.profile,
@@ -903,6 +920,7 @@ fun AppNavHost(
             else {
                 val vm: RecyclerOrdersViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
                 RecyclerOrdersScreen(liveHandovers = state.handovers, liveLoading = state.loading, liveError = state.error, onRefresh = vm::refresh, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
             }
         }
@@ -911,6 +929,7 @@ fun AppNavHost(
             else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
                 RecyclerPickupsScreen(availability = state.profile?.pickupAvailability, loading = state.loading, saving = state.saving, error = state.error, onRefresh = vm::refresh, onSave = vm::saveAvailability)
             }
         }
@@ -919,6 +938,7 @@ fun AppNavHost(
             else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { vm.refresh() }
                 RecyclerRatesScreen(acceptedMaterials = state.profile?.materialsAccepted?.map { it.category }.orEmpty(), rates = state.profile?.rates.orEmpty(), loading = state.loading, saving = state.saving, saved = state.saved, error = state.error, onRefresh = vm::refresh, onSave = vm::saveRates)
             }
         }

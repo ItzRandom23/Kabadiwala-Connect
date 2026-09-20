@@ -6,33 +6,42 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidator
+import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
 import com.irinteractivestudios.kabadiwalaconnect.util.ConditionMultiplier
 import com.irinteractivestudios.kabadiwalaconnect.util.Valuation
 import com.irinteractivestudios.kabadiwalaconnect.util.ValuationCalculator
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DescriptionSuggestionRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.MaterialSuggestionDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 enum class LotStep { PHOTO, MATERIAL, CONDITION, WEIGHT, LOCATION, REVIEW, SAVED }
 enum class WeightUnit { KG, GRAMS }
 enum class Material(val key: String, val hazardous: Boolean) { CRT("CRT", true), LCD("LCD Panel", false), PCB("PCB / Circuit Board", true), CABLES("Cables", false), COPPER("Copper", false), BATTERY("Battery", true), MOTOR("Motor", false), MAGNET("Magnet", false), PLASTIC("Plastic", false), OTHER("Other", false) }
 enum class LotCondition { INTACT, DAMAGED, PARTIAL }
+enum class LotLocationStatus { IDLE, REQUESTING, SAVED, NEEDS_AREA, ERROR }
+enum class MaterialDetectionStatus { IDLE, PROCESSING, SUCCESS, LOW_CONFIDENCE, UNSUPPORTED_IMAGE, NETWORK_ERROR, SERVICE_ERROR }
 
 data class LotDraftState(
     val step: LotStep = LotStep.PHOTO,
     val photoPath: String? = null,
+    val photoPaths: List<String> = emptyList(),
     val photoError: String? = null,
     val photoWarning: PhotoValidator.Warning? = null,
     val material: Material? = null,
@@ -42,6 +51,10 @@ data class LotDraftState(
     val weightError: Boolean = false,
     val location: String = "",
     val locationSource: String = "manual",
+    val locationLatitude: Double? = null,
+    val locationLongitude: Double? = null,
+    val locationStatus: LotLocationStatus = LotLocationStatus.IDLE,
+    val locationError: Boolean = false,
     val notes: String = "",
     val quotePriceText: String = "",
     val quotePriceError: Boolean = false,
@@ -50,6 +63,8 @@ data class LotDraftState(
     val materialSuggestion: MaterialSuggestionDto? = null,
     val materialSuggestionLoading: Boolean = false,
     val materialSuggestionError: Boolean = false,
+    val materialDetectionStatus: MaterialDetectionStatus = MaterialDetectionStatus.IDLE,
+    val materialDetectionMessage: String? = null,
     val valuation: Valuation? = null,
     val savedLotId: String? = null,
     val isSaving: Boolean = false,
@@ -79,8 +94,21 @@ class LotManagementViewModel(
     }
     fun photoCaptured(path: String) {
         val result = PhotoValidator.validate(path)
-        _state.value = if (result.valid) _state.value.copy(photoPath = path, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
+        _state.value = if (result.valid) _state.value.copy(photoPath = path, photoPaths = listOf(path), photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
     }
+    fun addPhoto(path: String) {
+        val result = PhotoValidator.validate(path)
+        if (!result.valid) { _state.value = _state.value.copy(photoError = "invalid", photoWarning = null); return }
+        val paths = (_state.value.photoPaths + path).distinct().take(6)
+        _state.value = _state.value.copy(photoPath = paths.firstOrNull(), photoPaths = paths, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL)
+    }
+    fun addPhotos(paths: List<String>) { paths.forEach(::addPhoto) }
+    fun setPhotoError() { _state.value = _state.value.copy(photoError = "invalid", photoWarning = null) }
+    fun removePhoto(path: String) {
+        val paths = _state.value.photoPaths - path
+        _state.value = _state.value.copy(photoPath = paths.firstOrNull(), photoPaths = paths, materialSuggestion = null, materialDetectionStatus = MaterialDetectionStatus.IDLE)
+    }
+    fun confirmPhotos() { if (_state.value.photoPaths.isNotEmpty()) _state.value = _state.value.copy(step = LotStep.MATERIAL) }
     fun demoPhotoCaptured(path: String) {
         photoCaptured(path)
         if (_state.value.photoPath == path) {
@@ -92,7 +120,9 @@ class LotManagementViewModel(
                     source = "DEMO"
                 ),
                 materialSuggestionLoading = false,
-                materialSuggestionError = false
+                materialSuggestionError = false,
+                materialDetectionStatus = MaterialDetectionStatus.SUCCESS,
+                materialDetectionMessage = null
             )
             // Demo mode is offline and unauthenticated, so it must not depend
             // on the collector-only Gemini endpoint to complete the flow.
@@ -123,24 +153,44 @@ class LotManagementViewModel(
         val path = current.photoPath ?: return
         val service = api ?: return
         if (current.materialSuggestionLoading) return
-        _state.value = current.copy(materialSuggestionLoading = true, materialSuggestionError = false)
+        _state.value = current.copy(materialSuggestionLoading = true, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
         viewModelScope.launch {
-            val suggestion = runCatching {
+            try {
                 val file = File(path)
-                val body = file.asRequestBody(file.imageMimeType().toMediaTypeOrNull())
-                service.suggestLotMaterial(okhttp3.MultipartBody.Part.createFormData("photo", file.name, body)).requireData()
-            }.getOrNull()
-            // Material identification is an assistive hint, never a gate for
-            // creating a lot. If the API/Gemini provider is unavailable, keep
-            // the manual picker usable and explain the fallback without
-            // presenting a red blocking error.
-            val resolved = suggestion ?: MaterialSuggestionDto(
-                materialCategory = "OTHER",
-                confidence = 0.0,
-                rationale = "Automatic identification is unavailable right now. Choose the material manually below.",
-                source = "TEMPLATE"
-            )
-            _state.value = _state.value.copy(materialSuggestion = resolved, materialSuggestionLoading = false, materialSuggestionError = false)
+                val mime = file.imageMimeType()
+                if (!file.exists() || !file.isFile || file.length() <= 0L || mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+                    throw IllegalArgumentException("unsupported_image")
+                }
+                val prepared = ImagePipeline.prepareForUpload(file, file.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
+                val suggestion = try {
+                    val body = prepared.asRequestBody(prepared.imageMimeType().toMediaTypeOrNull())
+                    val language = "English".toRequestBody("text/plain".toMediaType())
+                    service.suggestLotMaterial(
+                        okhttp3.MultipartBody.Part.createFormData("photo", prepared.name, body),
+                        language
+                    ).requireData()
+                } finally {
+                    prepared.delete()
+                }
+                val confident = suggestion.confidence >= 0.5 && !suggestion.materialCategory.equals("OTHER", ignoreCase = true)
+                _state.value = _state.value.copy(
+                    materialSuggestion = suggestion,
+                    materialSuggestionLoading = false,
+                    materialSuggestionError = false,
+                    materialDetectionStatus = if (confident) MaterialDetectionStatus.SUCCESS else MaterialDetectionStatus.LOW_CONFIDENCE,
+                    materialDetectionMessage = null
+                )
+            } catch (error: IllegalArgumentException) {
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = error.message)
+            } catch (error: RemoteApiException) {
+                val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "GEMINI_UNAVAILABLE" || error.code == "SERVICE_UNAVAILABLE"
+                val unsupported = error.httpCode == 422 || error.code == "VALIDATION_ERROR"
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = when { unsupported -> MaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> MaterialDetectionStatus.SERVICE_ERROR; else -> MaterialDetectionStatus.NETWORK_ERROR }, materialDetectionMessage = null)
+            } catch (error: IOException) {
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = null)
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = null)
+            }
         }
     }
     fun chooseCondition(condition: LotCondition) { _state.value = recalc(_state.value.copy(condition = condition, step = LotStep.WEIGHT)) }
@@ -162,7 +212,33 @@ class LotManagementViewModel(
         val value = _state.value.weightKgOrNull()
         _state.value = if (value != null && value > 0 && value <= 500) _state.value.copy(step = LotStep.LOCATION, weightError = false) else _state.value.copy(weightError = true)
     }
-    fun setLocation(value: String, source: String = "manual") { _state.value = _state.value.copy(location = value, locationSource = source) }
+    fun setLocation(value: String, source: String = "manual") {
+        val current = _state.value
+        _state.value = current.copy(
+            location = value,
+            // Editing the readable label does not discard coordinates captured
+            // by GPS; it only changes the label shown to the user.
+            locationSource = if (current.locationSource == "gps") "gps" else source,
+            locationStatus = if (value.isBlank()) LotLocationStatus.IDLE else current.locationStatus
+        )
+    }
+    fun beginLocationRequest() { _state.value = _state.value.copy(locationStatus = LotLocationStatus.REQUESTING, locationError = false) }
+    fun setGpsLocation(current: CurrentLocation?) {
+        if (current == null) {
+            _state.value = _state.value.copy(locationStatus = LotLocationStatus.ERROR, locationError = true)
+            return
+        }
+        val area = current.areaName?.takeIf(String::isNotBlank) ?: _state.value.location
+        _state.value = _state.value.copy(
+            location = area,
+            locationSource = "gps",
+            locationLatitude = current.latitude,
+            locationLongitude = current.longitude,
+            locationStatus = if (area.isNullOrBlank()) LotLocationStatus.NEEDS_AREA else LotLocationStatus.SAVED,
+            locationError = false
+        )
+    }
+    fun setLocationError() { _state.value = _state.value.copy(locationStatus = LotLocationStatus.ERROR, locationError = true) }
     fun confirmLocation() { if (_state.value.location.isNotBlank()) { _state.value = _state.value.copy(step = LotStep.REVIEW); suggestDescription() } }
     fun setNotes(value: String) {
         _state.value = _state.value.copy(
@@ -209,7 +285,7 @@ class LotManagementViewModel(
         _state.value = s.copy(isSaving = true, saveError = false)
         viewModelScope.launch {
             try {
-                writer.save(Lot(id = id, collectorId = collectorId, materialLabel = s.material.key, condition = s.condition.name, weightKg = weight, localPhotoPath = s.photoPath, estimatedValueRupees = s.valuation?.estimatedValue, quoteRupees = quotePrice, location = s.location, createdAtEpochMs = timestamp, updatedAtEpochMs = timestamp, status = LotStatus.SAVED, notes = s.notes, synced = false, sourceType = "FIELD_CAPTURE", wasteRegime = if (s.material.hazardous && s.material == Material.BATTERY) "BATTERY_WASTE" else "E_WASTE", originalWeight = s.weightText.toDoubleOrNull(), originalWeightUnit = s.weightUnit.toBackendUnit(), locationPrecision = "MANUAL"))
+                writer.save(Lot(id = id, collectorId = collectorId, materialLabel = s.material.key, condition = s.condition.name, weightKg = weight, localPhotoPath = s.photoPath, localPhotoPaths = s.photoPaths, estimatedValueRupees = s.valuation?.estimatedValue, quoteRupees = quotePrice, location = s.location, createdAtEpochMs = timestamp, updatedAtEpochMs = timestamp, status = LotStatus.SAVED, notes = s.notes, synced = false, sourceType = "FIELD_CAPTURE", wasteRegime = if (s.material.hazardous && s.material == Material.BATTERY) "BATTERY_WASTE" else "E_WASTE", originalWeight = s.weightText.toDoubleOrNull(), originalWeightUnit = s.weightUnit.toBackendUnit(), locationPrecision = if (s.locationSource == "gps") "GPS" else "MANUAL", locationLatitude = s.locationLatitude, locationLongitude = s.locationLongitude))
                 _state.value = _state.value.copy(step = LotStep.SAVED, savedLotId = id, isSaving = false, saveError = false)
             } catch (_: Exception) {
                 _state.value = _state.value.copy(isSaving = false, saveError = true)

@@ -9,6 +9,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
@@ -29,6 +30,35 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthenticationTest {
+    @Test fun onboarding_rapidOtpTapsLaunchOnlyOneRequest() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var requestCount = 0
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String): OtpChallenge {
+                    requestCount++
+                    return OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                }
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            })
+            vm.setPhone("9876543210")
+            vm.requestOtp()
+            vm.requestOtp()
+            advanceUntilIdle()
+            assertEquals(1, requestCount)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun indianPhoneValidator_acceptsOnlyTenDigitIndianMobile() {
         assertTrue(IndianPhoneValidator.isValid("9876543210"))
         assertTrue(IndianPhoneValidator.isValid("6123456789"))
@@ -64,6 +94,17 @@ class AuthenticationTest {
         session.save("token", 200)
         session.clear()
         assertFalse(session.isSessionValid(99))
+    }
+
+    @Test fun secureSession_rejectsMalformedRemoteTokenBeforeProtectedWork() {
+        val session = SecureSessionRepository(InMemorySecureStorage()) { token ->
+            token.split('.').size == 3 && token.split('.').all { it.isNotBlank() }
+        }
+        session.save("not-a-jwt", 10_000)
+        assertFalse(session.isSessionValid(1_000))
+
+        session.save("header.payload.signature", 10_000)
+        assertTrue(session.isSessionValid(1_000))
     }
 
     @Test fun onboarding_manualLocationMovesToArea() = runTest {
@@ -166,6 +207,51 @@ class AuthenticationTest {
 
             assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
             assertTrue(vm.state.value.completed)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun onboardingUsesServerReturnedRoleForReturningPhoneLogin() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification =
+                    OtpVerification.Success(
+                        token = "household-token",
+                        expiresAtEpochMs = Long.MAX_VALUE,
+                        collectorId = "household-profile",
+                        profile = AccountProfile(
+                            id = "household-user",
+                            email = "household@example.test",
+                            role = AccountRole.HOUSEHOLD,
+                            profileId = "household-profile",
+                            phoneNumber = phoneNumber,
+                            displayName = "Household A"
+                        )
+                    )
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.useEmailSignIn()
+            vm.start()
+            vm.setPhone("9876543201")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+            assertEquals(AccountRole.HOUSEHOLD, vm.state.value.role)
         } finally {
             Dispatchers.resetMain()
         }

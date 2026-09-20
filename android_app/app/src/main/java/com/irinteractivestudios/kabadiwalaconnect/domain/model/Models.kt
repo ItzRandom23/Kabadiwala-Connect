@@ -73,7 +73,11 @@ data class Lot(
     val locationPrecision: String? = null,
     val serverUpdatedAtEpochMs: Long? = null,
     /** Backend version used for safe edits while a lot is still CREATED. */
-    val version: Int = 1
+    val version: Int = 1,
+    /** Device-derived coordinates are optional and remain separate from the human label. */
+    val locationLatitude: Double? = null,
+    val locationLongitude: Double? = null,
+    val localPhotoPaths: List<String> = emptyList()
 )
 
 /** Market price for a material, shown per kg. */

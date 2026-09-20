@@ -103,6 +103,8 @@ interface FutureCacheDao {
 
     @Query("SELECT * FROM future_messages WHERE conversationId = :conversationId ORDER BY createdAt ASC")
     suspend fun messages(conversationId: String): List<MessageCacheEntity>
+    @Query("SELECT m.* FROM future_messages m INNER JOIN future_conversations c ON m.conversationId = c.id WHERE m.conversationId = :conversationId AND (c.collectorId = :accountId OR c.recyclerId = :accountId) ORDER BY m.createdAt ASC")
+    suspend fun messagesForAccount(conversationId: String, accountId: String): List<MessageCacheEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveMessages(items: List<MessageCacheEntity>)
     @Query("DELETE FROM future_messages WHERE id = :id")
@@ -129,14 +131,14 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
     suspend fun saveSchemes(items: List<GovernmentSchemeDto>) { dao.clearSchemes(); dao.saveSchemes(items.map { SchemeCacheEntity(it.id, it.slug, it.title, it.description, it.requiredDocuments.joinToString("\u001f"), it.sourceUrl, it.lastVerifiedAt.orEmpty(), System.currentTimeMillis()) }) }
     suspend fun activities(): List<DiyActivityDto> = dao.activities().map { DiyActivityDto(it.id, it.slug, it.title, it.description, it.materialsCsv.csv(), it.stepsCsv.csv(), it.warningsCsv.csv(), it.difficulty, it.minutes) }
     suspend fun saveActivities(items: List<DiyActivityDto>) { dao.clearActivities(); dao.saveActivities(items.map { ActivityCacheEntity(it.id, it.slug, it.title, it.description, it.materials.joinToString("\u001f"), it.steps.joinToString("\u001f"), it.safetyWarnings.joinToString("\u001f"), it.difficulty, it.minutes, System.currentTimeMillis()) }) }
-    suspend fun conversations(accountId: String? = null): List<ConversationDto> = dao.conversations()
-        .filter { accountId.isNullOrBlank() || it.collectorId == accountId }
+    suspend fun conversations(accountId: String? = null): List<ConversationDto> = accountId?.takeIf { it.isNotBlank() }?.let { active -> dao.conversations().filter { it.collectorId == active || it.recyclerId == active } }
+        .orEmpty()
         .map { ConversationDto(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }
     suspend fun saveConversations(items: List<ConversationDto>) { dao.saveConversations(items.map { ConversationCacheEntity(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }) }
-    suspend fun messages(conversationId: String): List<ChatMessageDto> = dao.messages(conversationId).map { ChatMessageDto(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }
+    suspend fun messages(conversationId: String, accountId: String? = null): List<ChatMessageDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.messagesForAccount(conversationId, it) } ?: emptyList()).map { ChatMessageDto(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }
     suspend fun saveMessages(items: List<ChatMessageDto>) { dao.saveMessages(items.map { MessageCacheEntity(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }) }
     suspend fun deleteMessage(id: String) { dao.deleteMessage(id) }
-    suspend fun notifications(accountId: String? = null): List<NotificationDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.notificationsForAccount(it) } ?: dao.notifications()).map { NotificationDto(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) }
+    suspend fun notifications(accountId: String? = null): List<NotificationDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.notificationsForAccount(it) } ?: emptyList()).map { NotificationDto(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) }
     suspend fun saveNotifications(items: List<NotificationDto>) {
         for (accountId in items.map { it.accountId }.filter { it.isNotBlank() }.distinct()) {
             dao.clearNotificationsForAccount(accountId)

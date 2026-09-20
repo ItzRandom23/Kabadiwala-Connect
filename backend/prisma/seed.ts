@@ -3,6 +3,9 @@ import { randomBytes, scryptSync } from 'node:crypto';
 const prisma = new PrismaClient();
 const demoPasswordHash = `${Buffer.from('kabadiwala-demo-salt').toString('hex')}:${scryptSync('DemoPass123!', Buffer.from('kabadiwala-demo-salt'), 64).toString('hex')}`;
 async function main() {
+  if (process.env.APP_ENV !== 'testing' || process.env.NODE_ENV === 'production') {
+    throw new Error('The development seed is restricted to APP_ENV=testing and cannot run against production.');
+  }
   const adminEmail = process.env.ADMIN_SEED_EMAIL?.trim().toLowerCase();
   const adminPassword = process.env.ADMIN_SEED_PASSWORD;
   if (adminEmail && adminPassword) {

@@ -1,8 +1,8 @@
 {
-  "versionCode": 39,
-  "versionName": "0.0.38-beta",
-  "apkUrl": "kabadiwala-connect-0.0.38-beta-debug.apk",
-  "sha256": "7D50086A0FF59712242F0F780567669167562C3195223398D86BE616ECEC45A3",
-  "sizeBytes": 27094102,
-  "releaseNotes": "Adds complete feature coverage, all-locale resource validation, Hindi and Marathi updates, and English fallbacks for newly added strings."
+  "versionCode": 40,
+  "versionName": "0.0.39-beta",
+  "apkUrl": "kabadiwala-connect-0.0.39-beta-debug.apk",
+  "sha256": "18B35E90705DADB07D3DFEADD95828BA3C38C996BCCB8F269853EB724C1601D6",
+  "sizeBytes": 27230575,
+  "releaseNotes": "Production-readiness hardening, safer authentication, multi-photo scrap capture, GPS lot locations, offline reliability, and a refined Graphite Neon welcome experience."
 }

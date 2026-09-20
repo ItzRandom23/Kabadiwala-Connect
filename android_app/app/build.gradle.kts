@@ -37,6 +37,14 @@ android {
         val task = taskName.substringAfterLast(':').lowercase()
         task == "build" || task == "assemble" || task == "bundle" || task.contains("release")
     }
+    val productionVariantRequested = gradle.startParameter.taskNames.any { taskName ->
+        taskName.substringAfterLast(':').contains("production", ignoreCase = true)
+    }
+    if (productionVariantRequested) {
+        requireNotNull(configuredProductionApiBaseUrl) {
+            "Missing -PproductionApiBaseUrl. Production variants must target an explicitly configured HTTPS API."
+        }
+    }
     if (releaseBuildRequested) {
         val releaseApiBaseUrl = requireNotNull(configuredProductionApiBaseUrl) {
             "Missing -PproductionApiBaseUrl. Release builds must target an explicitly configured HTTPS production API."
@@ -86,25 +94,42 @@ android {
     // entry-level devices (see defaultConfig below).
     compileSdk = 37
 
+    flavorDimensions += "environment"
+
+    productFlavors {
+        // AGP reserves flavor names beginning with "test" for the test
+        // component, so the testing environment is intentionally named
+        // envTesting (APP_ENVIRONMENT remains TESTING).
+        create("envTesting") {
+            dimension = "environment"
+            buildConfigField("String", "API_BASE_URL", "\"$testingApiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"TESTING\"")
+            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${testingApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
+            manifestPlaceholders["apiUsesCleartext"] = testingApiBaseUrl.startsWith("http://").toString()
+        }
+        create("production") {
+            dimension = "environment"
+            val productionUrl = configuredProductionApiBaseUrl.orEmpty()
+            buildConfigField("String", "API_BASE_URL", "\"$productionUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"PRODUCTION\"")
+            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${productionUrl.removeSuffix("api/v1/")}app/update.json\"")
+            manifestPlaceholders["apiUsesCleartext"] = "false"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.irinteractivestudios.kabadiwalaconnect"
         // minSdk 23 (Android 6.0): covers entry-level devices in the field
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 39
-        versionName = "0.0.38-beta"
+        versionCode = 40
+        versionName = "0.0.39-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"$testingApiBaseUrl\"")
-            buildConfigField("String", "APP_ENVIRONMENT", "\"TESTING\"")
-            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${testingApiBaseUrl.removeSuffix("api/v1/")}app/update.json\"")
-            // Cleartext is limited to the debug/testing variant. Move this host
-            // behind TLS before supplying it to a production build.
-            manifestPlaceholders["apiUsesCleartext"] = testingApiBaseUrl.startsWith("http://").toString()
             // Keep the debug/testing variant debuggable and unminified so
             // instrumentation tests do not invoke the separate test APK R8
             // shrinker. Production release remains optimized below.
@@ -112,10 +137,6 @@ android {
             isShrinkResources = false
         }
         release {
-            buildConfigField("String", "API_BASE_URL", "\"${configuredProductionApiBaseUrl.orEmpty()}\"")
-            buildConfigField("String", "APP_ENVIRONMENT", "\"PRODUCTION\"")
-            buildConfigField("String", "APP_UPDATE_MANIFEST_URL", "\"${configuredProductionApiBaseUrl.orEmpty().removeSuffix("api/v1/")}app/update.json\"")
-            manifestPlaceholders["apiUsesCleartext"] = "false"
             signingConfig = productionSigning
             isMinifyEnabled = true
             isShrinkResources = true
@@ -159,6 +180,7 @@ dependencies {
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.core.ktx)
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

@@ -1,5 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.auth
 
+import android.util.Log
 import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -130,7 +131,10 @@ class RemoteAuthenticationRepository(
             val body = EmailAuthRequestDto(
                 email = request.email,
                 password = request.password,
-                role = request.role.wireName(),
+                // Login identifies the role from the account record. Sending
+                // the onboarding default here could mislabel a Household or
+                // Recycler account before the server has resolved it.
+                role = request.role.wireName().takeUnless { request.isReturning },
                 preferredLanguage = LocaleManager.toBackendName(request.preferredLanguage),
                 areaName = request.areaName,
                 businessName = request.businessName,
@@ -147,6 +151,10 @@ class RemoteAuthenticationRepository(
             storage?.saveAccount(profile)
             EmailAuthentication.Success(result.token, expiry, profile)
         } catch (error: Exception) {
+            if (BuildConfig.DEBUG) {
+                val remote = error as? RemoteApiException
+                Log.w(TAG, "Email authentication failed: type=${error::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
+            }
             when {
                 error is IOException -> EmailAuthentication.NetworkError
                 errorCode(error) == "EMAIL_IN_USE" -> EmailAuthentication.EmailInUse
@@ -276,6 +284,7 @@ class RemoteAuthenticationRepository(
     }.getOrNull()
 
     companion object {
+        private const val TAG = "KcAuthentication"
         private const val OTP_TTL_MS = 10 * 60 * 1000L
         private const val RESEND_COOLDOWN_MS = 30 * 1000L
         private const val SESSION_FALLBACK_MS = 30L * 24L * 60L * 60L * 1000L

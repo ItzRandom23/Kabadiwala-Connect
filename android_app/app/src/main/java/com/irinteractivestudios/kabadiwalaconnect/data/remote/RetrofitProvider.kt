@@ -6,6 +6,7 @@ import okhttp3.Request
 import okhttp3.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** Retrofit construction point. The base URL is supplied at build time. */
@@ -16,7 +17,8 @@ object RetrofitProvider {
     fun create(
         baseUrl: String = PLACEHOLDER_BASE_URL,
         tokenProvider: () -> String? = { null },
-        tokenRefresher: (() -> String?)? = null
+        tokenRefresher: (() -> String?)? = null,
+        onAuthenticationFailure: (() -> Unit)? = null
     ): ApiService {
         val authInterceptor = Interceptor { chain ->
             val original = chain.request()
@@ -26,6 +28,13 @@ object RetrofitProvider {
             // `/auth/*` path as public caused the startup profile request to
             // return `Bearer token required` immediately after sign-in.
             val isPublicAuthEndpoint = original.url.encodedPath.isPublicAuthEndpoint()
+            // A protected call without a token is a client-side session race,
+            // not a request the backend should have to reject. This guard is
+            // deliberately below the public-auth check so login, signup,
+            // OTP, refresh, and logout can still run without an access token.
+            if (token.isNullOrBlank() && !isPublicAuthEndpoint) {
+                throw ProtectedRequestBlockedException
+            }
             val request: Request = if (token.isNullOrBlank() || isPublicAuthEndpoint) {
                 original
             } else {
@@ -45,8 +54,19 @@ object RetrofitProvider {
                         val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
                         val current = tokenProvider()
                         val fresh = if (!current.isNullOrBlank() && current != requestToken) current else tokenRefresher()
-                        fresh?.let { response.request.newBuilder().header("Authorization", "Bearer $it").build() }
-                    }
+                    fresh?.let { response.request.newBuilder().header("Authorization", "Bearer $it").build() }
+                        ?: run {
+                            // A rotated refresh token can be rejected when a
+                            // stale process/device presents it after another
+                            // session has already advanced the token family.
+                            // Do not keep replaying the same credential or
+                            // leave the UI in a protected state with a dead
+                            // session. The owner clears the local session and
+                            // returns the user to authentication.
+                            onAuthenticationFailure?.invoke()
+                            null
+                        }
+                }
                 }
             }
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -80,4 +100,8 @@ object RetrofitProvider {
             endsWith("/auth/signup") ||
             endsWith("/auth/login") ||
             endsWith("/auth/admin-login")
+
+    private object ProtectedRequestBlockedException : IOException(
+        "Protected request blocked until an authenticated session is available"
+    )
 }

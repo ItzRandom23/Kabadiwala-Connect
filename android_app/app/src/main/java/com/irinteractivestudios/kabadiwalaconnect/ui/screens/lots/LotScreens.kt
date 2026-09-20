@@ -25,12 +25,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cable
@@ -47,6 +49,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -86,7 +89,10 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.PermissionRationaleDialog
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ProofRow
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.WorkflowProgress
+import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.friendlyMaterial
 import com.irinteractivestudios.kabadiwalaconnect.util.FeaturePermission
+import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
+import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -105,9 +111,23 @@ fun LotRoute(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val gpsSaved = stringResource(R.string.lot_gps_saved)
+    val locationProvider = remember(context) { AndroidLocationProvider(context) }
     var pendingPath by remember { mutableStateOf<String?>(null) }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok && pendingPath != null) vm.photoCaptured(pendingPath!!) }
+    val ioScope = androidx.compose.runtime.rememberCoroutineScope()
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val capturedPath = pendingPath
+        if (ok && capturedPath != null) {
+            ioScope.launch(Dispatchers.IO) {
+                val normalized = runCatching {
+                    ImagePipeline.prepareForUpload(File(capturedPath), File(context.filesDir, "lot_photos"))
+                }.getOrNull()
+                if (normalized != null) File(capturedPath).delete()
+                withContext(Dispatchers.Main.immediate) {
+                    if (normalized != null) vm.addPhoto(normalized.absolutePath) else vm.setPhotoError()
+                }
+            }
+        }
+    }
     val launchCamera = {
         val dir = File(context.filesDir, "lot_photos").apply { mkdirs() }
         val file = File(dir, "lot_${System.currentTimeMillis()}.jpg")
@@ -122,29 +142,31 @@ fun LotRoute(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
         else showCameraRationale = true
     }
-    val ioScope = androidx.compose.runtime.rememberCoroutineScope()
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
         ioScope.launch(Dispatchers.IO) {
-            val dir = File(context.filesDir, "lot_photos").apply { mkdirs() }
-            // Keep the real image extension so the multipart request can send
-            // a MIME type accepted by the backend's upload filter.
-            val extension = when (context.contentResolver.getType(uri)?.lowercase(Locale.US)) {
-                "image/png" -> "png"
-                "image/webp" -> "webp"
-                else -> "jpg"
+            val paths = uris.mapNotNull { uri ->
+                runCatching {
+                    ImagePipeline.importUri(context, uri, File(context.filesDir, "lot_photos")).absolutePath
+                }.getOrNull()
             }
-            val path = File(dir, "gallery_${System.currentTimeMillis()}.$extension").absolutePath
-            val copied = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    File(path).outputStream().use { output -> input.copyTo(output) }
-                } ?: error("Unable to read selected image")
-                path
-            }.getOrNull()
-            withContext(Dispatchers.Main.immediate) { vm.photoCaptured(copied ?: path) }
+            withContext(Dispatchers.Main.immediate) {
+                vm.addPhotos(paths)
+                if (paths.size < uris.size) vm.setPhotoError()
+            }
         }
     }
-    val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> vm.setLocation(if (granted) gpsSaved else "", if (granted) "gps" else "manual") }
+    val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            vm.setLocationError()
+        } else {
+            vm.beginLocationRequest()
+            ioScope.launch {
+                val current = runCatching { locationProvider.current() }.getOrNull()
+                withContext(Dispatchers.Main.immediate) { vm.setGpsLocation(current) }
+            }
+        }
+    }
     
     val useDemoPhoto: (() -> Unit)? = if (demoMode) {
         {
@@ -218,7 +240,17 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     Icon(Icons.Filled.CameraAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(58.dp))
     Text(stringResource(R.string.lot_photo_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_photo_detail), style = MaterialTheme.typography.bodyLarge)
-    s.photoPath?.let { path -> val bitmap = remember(path) { decodeSampledBitmap(path) }; if (bitmap != null) Image(bitmap, null, Modifier.fillMaxWidth().height(220.dp), contentScale = ContentScale.Crop) }
+    if (s.photoPaths.isNotEmpty()) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            items(s.photoPaths, key = { it }) { path ->
+                androidx.compose.foundation.layout.Box(Modifier.size(112.dp)) {
+                    decodeSampledBitmap(path)?.let { bitmap -> Image(bitmap, "Scrap photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                    IconButton(onClick = { vm.removePhoto(path) }, modifier = Modifier.align(Alignment.TopEnd).size(38.dp)) { Icon(Icons.Filled.Close, "Remove photo") }
+                }
+            }
+        }
+        Text("${s.photoPaths.size} of 6 photos added", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     s.photoError?.let { Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error) }
     s.photoWarning?.let { warning ->
         Text(
@@ -233,10 +265,10 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             style = MaterialTheme.typography.bodyMedium
         )
     }
-    KcPrimaryButton(stringResource(if (s.photoPath == null) R.string.lot_take_photo else R.string.lot_retake), take, icon = Icons.Filled.CameraAlt, testTag = "lot_take_photo")
+    KcPrimaryButton(if (s.photoPaths.isEmpty()) "Take a photo" else "Add another angle", take, icon = Icons.Filled.CameraAlt, testTag = "lot_take_photo")
     OutlinedButton(onClick = select, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_choose_photo")) { Icon(Icons.Filled.CropSquare, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_choose_photo)) }
-    if (useDemoPhoto != null && s.photoPath == null) OutlinedButton(onClick = useDemoPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_demo_photo")) { Icon(Icons.Filled.Recycling, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_demo_photo)) }
-    if (s.photoPath != null) OutlinedButton(onClick = { vm.photoCaptured(s.photoPath) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_confirm_photo")) { Text(stringResource(R.string.lot_confirm_photo)) }
+    if (useDemoPhoto != null && s.photoPaths.isEmpty()) OutlinedButton(onClick = useDemoPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_demo_photo")) { Icon(Icons.Filled.Recycling, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_demo_photo)) }
+    if (s.photoPaths.isNotEmpty()) OutlinedButton(onClick = vm::confirmPhotos, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_confirm_photo")) { Text("Continue with ${s.photoPaths.size} photo${if (s.photoPaths.size == 1) "" else "s"}") }
     OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("lot_cancel_to_home")) { Text(stringResource(R.string.lot_cancel)) }
 }
 @Composable private fun MaterialStep(s: LotDraftState, vm: LotManagementViewModel, onSafety: () -> Unit) {
@@ -264,30 +296,20 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             }
             s.materialSuggestion?.let { suggestion ->
                 val confidence = (suggestion.confidence.coerceIn(0.0, 1.0) * 100).toInt()
-                val isFallback = suggestion.source.equals("TEMPLATE", ignoreCase = true) && suggestion.confidence <= 0.0
-                val suggestedLabel = when (suggestion.materialCategory.uppercase()) {
-                    "CRT" -> stringResource(R.string.lot_material_crt)
-                    "LCD_PANEL", "LCD" -> stringResource(R.string.lot_material_lcd)
-                    "PCB" -> stringResource(R.string.lot_material_pcb)
-                    "CABLE" -> stringResource(R.string.lot_material_cables)
-                    "COPPER" -> stringResource(R.string.lot_material_copper)
-                    "BATTERY" -> stringResource(R.string.lot_material_battery)
-                    "MOTOR" -> stringResource(R.string.lot_material_motor)
-                    "MAGNET" -> stringResource(R.string.lot_material_magnet)
-                    "PLASTIC" -> stringResource(R.string.lot_material_plastic)
-                    else -> stringResource(R.string.lot_material_other)
-                }
-                if (isFallback) {
-                    Text(stringResource(R.string.lot_material_suggest_unavailable), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Text(stringResource(R.string.lot_material_suggested, suggestedLabel, confidence), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    if (suggestion.rationale.isNotBlank()) Text(suggestion.rationale, style = MaterialTheme.typography.bodySmall)
-                    if (suggestion.confidence > 0.0 || !suggestion.materialCategory.equals("OTHER", ignoreCase = true)) {
-                        OutlinedButton(onClick = vm::applyMaterialSuggestion, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.lot_material_use_suggestion)) }
-                    }
+                val suggestedLabel = friendlyMaterial(suggestion.materialCategory.uppercase().let { if (it == "LCD") "LCD_PANEL" else it }).title
+                Text(stringResource(R.string.lot_material_suggested, suggestedLabel, confidence), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                if (suggestion.rationale.isNotBlank()) Text(suggestion.rationale, style = MaterialTheme.typography.bodySmall)
+                if (s.materialDetectionStatus == MaterialDetectionStatus.SUCCESS) {
+                    OutlinedButton(onClick = vm::applyMaterialSuggestion, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.lot_material_use_suggestion)) }
                 }
             }
-            if (s.materialSuggestionError) Text(stringResource(R.string.lot_material_suggest_unavailable), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+            when (s.materialDetectionStatus) {
+                MaterialDetectionStatus.LOW_CONFIDENCE -> Text(stringResource(R.string.lot_material_low_confidence), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.UNSUPPORTED_IMAGE -> Text(stringResource(R.string.lot_material_unsupported_image), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.NETWORK_ERROR -> Text(stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.SERVICE_ERROR -> Text(stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                else -> Unit
+            }
         }
     }
     s.photoWarning?.let { warning ->
@@ -319,9 +341,10 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
                     )
                 ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(materialIcon(material), contentDescription = stringResource(materialLabelRes(material)), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(30.dp))
-                        Text(stringResource(materialLabelRes(material)), style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold)
-                        Text(if (material.hazardous) stringResource(R.string.lot_hazard) else stringResource(R.string.lot_non_hazard), style = MaterialTheme.typography.labelSmall)
+                        val friendly = friendlyMaterial(materialCatalogKey(material))
+                        Icon(materialIcon(material), contentDescription = friendly.title, tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(30.dp))
+                        Text(friendly.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold)
+                        Text(friendly.examples, style = MaterialTheme.typography.labelSmall, maxLines = 2)
                     }
                 }
             }
@@ -381,6 +404,13 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     Text(stringResource(R.string.lot_location_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_location_detail), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(s.location, { vm.setLocation(it) }, label = { Text(stringResource(R.string.lot_area_label)) }, leadingIcon = { Icon(Icons.Filled.EditLocation, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("lot_location"))
+    when (s.locationStatus) {
+        LotLocationStatus.REQUESTING -> Text(stringResource(R.string.lot_gps_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LotLocationStatus.SAVED -> Text(stringResource(R.string.lot_gps_saved), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        LotLocationStatus.NEEDS_AREA -> Text(stringResource(R.string.lot_gps_area_required), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        LotLocationStatus.ERROR -> Text(stringResource(R.string.lot_gps_error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        LotLocationStatus.IDLE -> Unit
+    }
     OutlinedButton(onClick = gps, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_gps)) }
     KcPrimaryButton(stringResource(R.string.lot_confirm_location), vm::confirmLocation, icon = Icons.Filled.CheckCircle, enabled = s.location.isNotBlank(), testTag = "lot_location_next")
 }
@@ -557,6 +587,7 @@ private fun decodeSampledBitmap(path: String, maxDimension: Int = 1200): ImageBi
 }
 
 private fun materialLabelRes(material: Material) = when (material) { Material.CRT -> R.string.lot_material_crt; Material.LCD -> R.string.lot_material_lcd; Material.PCB -> R.string.lot_material_pcb; Material.CABLES -> R.string.lot_material_cables; Material.COPPER -> R.string.lot_material_copper; Material.BATTERY -> R.string.lot_material_battery; Material.MOTOR -> R.string.lot_material_motor; Material.MAGNET -> R.string.lot_material_magnet; Material.PLASTIC -> R.string.lot_material_plastic; Material.OTHER -> R.string.lot_material_other }
+private fun materialCatalogKey(material: Material) = when (material) { Material.CRT -> "CRT"; Material.LCD -> "LCD_PANEL"; Material.PCB -> "PCB"; Material.CABLES -> "CABLE"; Material.COPPER -> "COPPER"; Material.BATTERY -> "BATTERY"; Material.MOTOR -> "MOTOR"; Material.MAGNET -> "MAGNET"; Material.PLASTIC -> "PLASTIC"; Material.OTHER -> "OTHER" }
 private fun conditionLabelRes(condition: LotCondition) = when (condition) { LotCondition.INTACT -> R.string.lot_condition_intact; LotCondition.DAMAGED -> R.string.lot_condition_damaged; LotCondition.PARTIAL -> R.string.lot_condition_partial }
 private fun materialIcon(material: Material) = when (material) { Material.BATTERY -> Icons.Filled.BatteryAlert; Material.CABLES, Material.COPPER -> Icons.Filled.Cable; Material.PCB -> Icons.Filled.Memory; Material.MOTOR -> Icons.Filled.Motorcycle; Material.CRT, Material.LCD -> Icons.Filled.CropSquare; Material.MAGNET, Material.PLASTIC, Material.OTHER -> Icons.Filled.Category }
 private fun materialSafetyAudioRes(material: Material) = when (material) {

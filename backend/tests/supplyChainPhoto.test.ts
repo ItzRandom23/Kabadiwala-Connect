@@ -68,6 +68,43 @@ describe('household listing photo contract', () => {
     expect(storage.putImage).toHaveBeenCalledWith(validPhoto, 'household-listings/household-1/listing-1.jpg');
     expect(tx.auditEvent.create).toHaveBeenCalled();
     expect(tx.materialPassportEvent.create).toHaveBeenCalled();
-    expect(accepted.body.data.photoReference).toBe('household-listings/household-1/listing-1.jpg');
+    expect(accepted.body.data).toMatchObject({ photoAttached: true, photoCount: 1 });
+    expect(accepted.body.data).not.toHaveProperty('photoReference');
+  });
+
+  it('accepts multiple angle photos and persists stable indexed references', async () => {
+    const storage = {
+      putImage: vi.fn(async (_buffer: Buffer, key: string) => ({ key, url: key })),
+      getImage: vi.fn(),
+      delete: vi.fn().mockResolvedValue(undefined)
+    };
+    const { app, tx } = photoApp({ storage });
+    const frontPhoto = await sharp({ create: { width: 400, height: 300, channels: 3, background: 'red' } }).jpeg().toBuffer();
+    const sidePhoto = await sharp({ create: { width: 300, height: 400, channels: 3, background: 'blue' } }).png().toBuffer();
+
+    const accepted = await request(app)
+      .post('/api/v1/household/listings/listing-1/photo')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photos', frontPhoto, { filename: 'front.jpg', contentType: 'image/jpeg' })
+      .attach('photos', sidePhoto, { filename: 'side.png', contentType: 'image/png' });
+
+    expect(accepted.status).toBe(200);
+    expect(storage.putImage).toHaveBeenCalledTimes(2);
+    expect(storage.putImage.mock.calls.map(([, key]) => key)).toEqual([
+      'household-listings/household-1/listing-1.jpg',
+      'household-listings/household-1/listing-1-1.jpg'
+    ]);
+    expect(tx.householdListing.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        photoReference: 'household-listings/household-1/listing-1.jpg',
+        photoReferences: [
+          'household-listings/household-1/listing-1.jpg',
+          'household-listings/household-1/listing-1-1.jpg'
+        ]
+      }
+    }));
+    expect(tx.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ metadata: expect.objectContaining({ photoCount: 2 }) })
+    }));
   });
 });

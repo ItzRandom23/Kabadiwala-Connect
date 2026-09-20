@@ -27,5 +27,9 @@ export const lotController = (service: LotService) => ({
   getPhoto: async (req: Request, res: Response) => { const photo = await service.photo(parseId(String(req.params.lotId)), req.identity!.collectorId); res.setHeader('Content-Type', photo.contentType); res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('X-Content-Type-Options', 'nosniff'); return res.send(photo.body); },
   update: async (req: Request, res: Response) => { const parsed = updateSchema.safeParse(req.body); if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Invalid lot update', 400, { code: 'INVALID_LOT_UPDATE' }); const { version, ...data } = parsed.data; res.json({ success: true, data: await service.update(parseId(String(req.params.lotId)), req.identity!.collectorId, version, data), message: 'Lot updated' }); },
   cancel: async (req: Request, res: Response) => res.json({ success: true, data: await service.cancel(parseId(String(req.params.lotId)), req.identity!.collectorId), message: 'Lot cancelled' }),
-  photo: async (req: Request, res: Response) => res.json({ success: true, data: await service.uploadPhoto(parseId(String(req.params.lotId)), req.identity!.collectorId, (req as any).file), message: 'Photo uploaded' })
+  photo: async (req: Request, res: Response) => {
+    const files = (req as any).files as Record<string, Array<{ buffer: Buffer; mimetype: string }>> | undefined;
+    const photos = [...(files?.photos ?? []), ...(files?.photo ?? [])].slice(0, 6);
+    res.json({ success: true, data: await service.uploadPhoto(parseId(String(req.params.lotId)), req.identity!.collectorId, photos), message: 'Photos uploaded' });
+  }
 });

@@ -137,11 +137,19 @@ interface SessionRepository {
     fun clear()
 }
 
-class SecureSessionRepository(private val storage: SecureStorage) : SessionRepository {
+class SecureSessionRepository(
+    private val storage: SecureStorage,
+    /**
+     * Real backend access tokens are JWTs. The debug placeholder backend uses
+     * opaque mock tokens, so the app injects that exception only for the
+     * placeholder environment instead of weakening production validation.
+     */
+    private val tokenValidator: (String) -> Boolean = { true }
+) : SessionRepository {
     override fun isSessionValid(nowEpochMs: Long): Boolean {
         val token = storage.get(SecureStorage.AUTH_TOKEN)
         val expiry = storage.get(SecureStorage.SESSION_EXPIRY)?.toLongOrNull()
-        return !token.isNullOrBlank() && expiry != null && expiry > nowEpochMs
+        return !token.isNullOrBlank() && tokenValidator(token) && expiry != null && expiry > nowEpochMs
     }
 
     override fun save(token: String, expiresAtEpochMs: Long, refreshToken: String?) {

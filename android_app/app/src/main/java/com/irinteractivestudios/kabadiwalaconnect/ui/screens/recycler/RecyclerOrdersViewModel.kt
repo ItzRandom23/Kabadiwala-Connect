@@ -15,6 +15,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
+import com.irinteractivestudios.kabadiwalaconnect.util.SingleFlightGate
 import com.google.gson.JsonObject
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,8 +37,6 @@ class RecyclerOrdersViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerOrdersState())
     val state: StateFlow<RecyclerOrdersState> = _state.asStateFlow()
-
-    init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
@@ -78,65 +77,78 @@ class RecyclerScanViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerScanState())
     val state: StateFlow<RecyclerScanState> = _state.asStateFlow()
+    private val verifyGate = SingleFlightGate()
+    private val confirmGate = SingleFlightGate()
 
     fun verify(qrCodeData: String) {
-        if (qrCodeData.isBlank() || _state.value.checking) return
+        if (qrCodeData.isBlank() || !verifyGate.tryEnter()) return
+        _state.value = RecyclerScanState(checking = true)
         viewModelScope.launch {
-            _state.value = RecyclerScanState(checking = true)
-            val value = qrCodeData.trim()
-            if (value.startsWith("kc-supply-handover-v1.")) {
-                val cachedItems = cache?.load(accountIdProvider())?.handovers.orEmpty()
-                val items = runCatching { api.getSupplyHandovers().requireData() }.getOrElse { cachedItems }
-                val match = items.firstOrNull { it.qrCodeData == value }
-                if (match != null) _state.value = RecyclerScanState(supplyVerified = match, supplyFromCache = items === cachedItems && cachedItems.isNotEmpty())
-                else _state.value = RecyclerScanState(error = true)
-            } else {
-                runCatching { api.verifyHandover(VerifyHandoverRequestDto(value)).requireData() }
-                    .onSuccess { result -> _state.value = RecyclerScanState(verified = result) }
-                    .onFailure { _state.value = RecyclerScanState(error = true) }
+            try {
+                val value = qrCodeData.trim()
+                if (value.startsWith("kc-supply-handover-v1.")) {
+                    val cachedItems = cache?.load(accountIdProvider())?.handovers.orEmpty()
+                    val items = runCatching { api.getSupplyHandovers().requireData() }.getOrElse { cachedItems }
+                    val match = items.firstOrNull { it.qrCodeData == value }
+                    if (match != null) _state.value = RecyclerScanState(supplyVerified = match, supplyFromCache = items === cachedItems && cachedItems.isNotEmpty())
+                    else _state.value = RecyclerScanState(error = true)
+                } else {
+                    runCatching { api.verifyHandover(VerifyHandoverRequestDto(value)).requireData() }
+                        .onSuccess { result -> _state.value = RecyclerScanState(verified = result) }
+                        .onFailure { _state.value = RecyclerScanState(error = true) }
+                }
+            } finally {
+                verifyGate.exit()
             }
         }
     }
 
     fun confirm(actualWeight: Double, materialMatch: Boolean, notes: String?) {
+        if (actualWeight <= 0 || !confirmGate.tryEnter()) return
         val supply = _state.value.supplyVerified
         if (supply != null) {
-            if (actualWeight <= 0 || _state.value.confirming) return
+            _state.value = _state.value.copy(confirming = true, error = false)
             viewModelScope.launch {
-                _state.value = _state.value.copy(confirming = true, error = false)
-                val request = SupplyHandoverConfirmRequestDto(supply.qrCodeData.orEmpty(), actualWeightKg = actualWeight, acceptedWeightKg = actualWeight, materialMatch = materialMatch, reasonCode = notes?.trim()?.takeIf(String::isNotEmpty))
-                val operation = "recycler-handover-${supply.id}"
-                val key = idempotencyKeys?.getOrCreate(operation) ?: operation
-                runCatching { api.confirmSupplyHandover(request, key).requireData() }
-                    .onSuccess { result -> idempotencyKeys?.clear(operation); _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false) }
-                    .onFailure { error ->
-                        val transient = error is java.io.IOException || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode ?: 0) >= 500
-                        if (transient && queue != null) {
-                            val payload = JsonObject().apply { addProperty("handoverId", supply.id); addProperty("qrCodeData", supply.qrCodeData.orEmpty()); addProperty("actualWeightKg", actualWeight); addProperty("acceptedWeightKg", actualWeight); addProperty("materialMatch", materialMatch); addProperty("idempotencyKey", key); notes?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("reasonCode", it) } }
-                            queue.enqueue(SyncQueueItemEntity(operation = "CONFIRM_SUPPLY_HANDOVER", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountIdProvider()))
-                            requestSync?.invoke()
-                            _state.value = _state.value.copy(confirming = false, supplyQueued = true, supplyVerified = supply.copy(status = "SYNC_PENDING", finalAcceptedKg = actualWeight, finalValue = actualWeight * supply.quotedRatePerKg))
-                        } else _state.value = _state.value.copy(confirming = false, error = true)
+                try {
+                    val request = SupplyHandoverConfirmRequestDto(supply.qrCodeData.orEmpty(), actualWeightKg = actualWeight, acceptedWeightKg = actualWeight, materialMatch = materialMatch, reasonCode = notes?.trim()?.takeIf(String::isNotEmpty))
+                    val operation = "recycler-handover-${supply.id}"
+                    val key = idempotencyKeys?.getOrCreate(operation) ?: operation
+                    runCatching { api.confirmSupplyHandover(request, key).requireData() }
+                        .onSuccess { result -> idempotencyKeys?.clear(operation); _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false) }
+                        .onFailure { error ->
+                            val transient = error is java.io.IOException || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode == 408) || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode == 429) || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode ?: 0) >= 500
+                            if (transient && queue != null) {
+                                val payload = JsonObject().apply { addProperty("handoverId", supply.id); addProperty("qrCodeData", supply.qrCodeData.orEmpty()); addProperty("actualWeightKg", actualWeight); addProperty("acceptedWeightKg", actualWeight); addProperty("materialMatch", materialMatch); addProperty("idempotencyKey", key); addProperty("idempotencyOperation", operation); notes?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("reasonCode", it) } }
+                                queue.enqueue(SyncQueueItemEntity(operation = "CONFIRM_SUPPLY_HANDOVER", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountIdProvider()))
+                                requestSync?.invoke()
+                                _state.value = _state.value.copy(confirming = false, supplyQueued = true, supplyVerified = supply.copy(status = "SYNC_PENDING", finalAcceptedKg = actualWeight, finalValue = actualWeight * supply.quotedRatePerKg))
+                            } else _state.value = _state.value.copy(confirming = false, error = true)
+                        }
+                } finally {
+                    confirmGate.exit()
                     }
             }
             return
         }
-        val handover = _state.value.verified ?: return
-        if (actualWeight <= 0 || _state.value.confirming) return
+        val handover = _state.value.verified ?: run { confirmGate.exit(); return }
+        _state.value = _state.value.copy(confirming = true, error = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(confirming = true, error = false)
-            runCatching {
-                api.confirmRecyclerHandover(
-                    handover.handoverId,
-                    RecyclerHandoverConfirmRequestDto(actualWeight, materialMatch, notes = notes?.trim()?.takeIf(String::isNotEmpty))
-                ).requireData()
-            }.onSuccess { result ->
-                _state.value = _state.value.copy(confirming = false, confirmed = true, confirmation = result)
-            }.onFailure {
-                _state.value = _state.value.copy(confirming = false, error = true)
+            try {
+                runCatching {
+                    api.confirmRecyclerHandover(
+                        handover.handoverId,
+                        RecyclerHandoverConfirmRequestDto(actualWeight, materialMatch, notes = notes?.trim()?.takeIf(String::isNotEmpty))
+                    ).requireData()
+                }.onSuccess { result ->
+                    _state.value = _state.value.copy(confirming = false, confirmed = true, confirmation = result)
+                }.onFailure {
+                    _state.value = _state.value.copy(confirming = false, error = true)
+                }
+            } finally {
+                confirmGate.exit()
             }
         }
     }
 
-    fun reset() { _state.value = RecyclerScanState() }
+    fun reset() { verifyGate.exit(); confirmGate.exit(); _state.value = RecyclerScanState() }
 }

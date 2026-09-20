@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import type { MaterialCategory, LotCondition, LocationPrecision, PrismaClient, WeightUnit, ImageProvenance, WasteRegime } from '@prisma/client';
 import type { LotRepository } from '../repositories/lotRepository.js';
 import { AppError } from '../utils/errors.js';
@@ -22,9 +22,13 @@ export class LotService {
   constructor(private readonly repo: LotRepository, private readonly storage: StorageService, private readonly db?: PrismaClient) {}
 
   async create(collectorId: string, input: LotInput, operationId?: string, allowDuplicate = false) {
+    const operationHash = operationId ? createHash('sha256').update(JSON.stringify({ action: 'CREATE_LOT', input })).digest('hex') : undefined;
     if (this.db && operationId) {
       const prior = await this.db.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: collectorId, operationId } } });
-      if (prior) return prior.response as any;
+      if (prior) {
+        if (prior.requestHash && prior.requestHash !== operationHash) throw new AppError('CONFLICT', 'Idempotency key was already used for a different lot', 409, { code: 'IDEMPOTENCY_KEY_REUSED' });
+        return prior.response as any;
+      }
     }
     const weightKg = canonicalWeight(input.weight, input.weightUnit ?? 'KILOGRAM');
     if (this.db && !allowDuplicate) {
@@ -33,7 +37,7 @@ export class LotService {
     }
     const now = Date.now();
     const lot = await this.repo.create({ id: `LOT-${now}-${randomInt(100000, 999999)}`, collectorId, materialCategory: input.materialCategory, materialSubcategory: input.materialSubcategory, sourceType: input.sourceType, wasteRegime: input.wasteRegime ?? (input.materialCategory === 'BATTERY' ? 'BATTERY_WASTE' : 'E_WASTE'), condition: input.condition, weight: weightKg, weightUnit: 'KILOGRAM', originalWeight: input.weight, originalWeightUnit: input.weightUnit ?? 'KILOGRAM', imageProvenance: input.imageProvenance, collectionLatitude: input.collectionLocation.latitude, collectionLongitude: input.collectionLocation.longitude, collectionAreaName: input.collectionLocation.areaName, collectionLocationPrecision: input.collectionLocation.precision, notes: input.notes, status: 'CREATED', estimatedValue: null, quotedPrice: null, finalPrice: null });
-    if (this.db && operationId) await this.db.idempotencyRecord.create({ data: { actorId: collectorId, operationId, action: 'CREATE_LOT', entityId: lot.id, response: JSON.parse(JSON.stringify(lot)) } });
+    if (this.db && operationId) await this.db.idempotencyRecord.create({ data: { actorId: collectorId, operationId, action: 'CREATE_LOT', entityId: lot.id, requestHash: operationHash, response: JSON.parse(JSON.stringify(lot)) } });
     return lot;
   }
 
@@ -48,5 +52,27 @@ export class LotService {
 
   async cancel(id: string, collectorId: string) { const result = await this.repo.cancel(id, collectorId); if (!result.count) { const current = await this.repo.findOwned(id, collectorId); if (!current) throw new AppError('NOT_FOUND', 'Lot not found', 404, { code: 'LOT_NOT_FOUND' }); throw new AppError('CONFLICT', 'Lot cannot be cancelled in its current state', 409, { code: 'LOT_LOCKED' }); } return this.get(id, collectorId); }
 
-  async uploadPhoto(id: string, collectorId: string, file: { buffer: Buffer; mimetype: string }) { if (!file) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' }); if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 400, { code: 'INVALID_PHOTO' }); let metadata; try { metadata = await sharp(file.buffer).metadata(); } catch { throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' }); } if (!metadata.width || !metadata.height || metadata.width < 300 || metadata.height < 300) throw new AppError('VALIDATION_ERROR', 'Photo must be at least 300 x 300 pixels', 400, { code: 'INVALID_PHOTO' }); const lot = await this.get(id, collectorId); if (lot.status !== 'CREATED') throw new AppError('CONFLICT', 'Lot is locked and cannot accept a photo', 409, { code: 'LOT_LOCKED' }); const key = `lots/${collectorId}/${id}-${Date.now()}.jpg`; const stored = await this.storage.putImage(file.buffer, key); const updated = await this.repo.updatePhoto(id, collectorId, stored.key, `/api/v1/lots/${id}/photo`, lot.imageProvenance ?? 'CAMERA'); if (!updated.count) { await this.storage.delete(stored.key).catch(() => undefined); throw new AppError('CONFLICT', 'Lot changed while uploading photo', 409, { code: 'LOT_UPDATE_CONFLICT' }); } return this.get(id, collectorId); }
+  async uploadPhoto(id: string, collectorId: string, input: { buffer: Buffer; mimetype: string } | Array<{ buffer: Buffer; mimetype: string }>) {
+    const files = Array.isArray(input) ? input : [input];
+    if (!files.length || files.length > 6 || files.some(file => !file)) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
+    const lot = await this.get(id, collectorId);
+    if (lot.status !== 'CREATED') throw new AppError('CONFLICT', 'Lot is locked and cannot accept a photo', 409, { code: 'LOT_LOCKED' });
+    const keys: string[] = [];
+    try {
+      for (const [index, file] of files.entries()) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 400, { code: 'INVALID_PHOTO' });
+        let metadata;
+        try { metadata = await sharp(file.buffer).metadata(); } catch { throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' }); }
+        if (!metadata.width || !metadata.height || metadata.width < 300 || metadata.height < 300) throw new AppError('VALIDATION_ERROR', 'Photo must be at least 300 x 300 pixels', 400, { code: 'INVALID_PHOTO' });
+        const key = `lots/${collectorId}/${id}${index ? `-${index}` : ''}.jpg`;
+        keys.push((await this.storage.putImage(file.buffer, key)).key);
+      }
+      const updated = await this.repo.updatePhoto(id, collectorId, keys[0], `/api/v1/lots/${id}/photo`, lot.imageProvenance ?? 'CAMERA', keys);
+      if (!updated.count) throw new AppError('CONFLICT', 'Lot changed while uploading photo', 409, { code: 'LOT_UPDATE_CONFLICT' });
+      return this.get(id, collectorId);
+    } catch (error) {
+      await Promise.all(keys.map(key => this.storage.delete(key).catch(() => undefined)));
+      throw error;
+    }
+  }
 }

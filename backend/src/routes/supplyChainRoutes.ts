@@ -18,13 +18,13 @@ const condition = z.enum(['INTACT', 'DAMAGED', 'PARTIAL']);
 const positive = z.number().finite().positive();
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/);
 const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().finite().min(-90).max(90).optional(), longitude: z.number().finite().min(-180).max(180).optional(), estimatedPriceMin: positive.max(100000000).optional(), estimatedPriceMax: positive.max(100000000).optional(), dataBearingDevice: z.boolean().default(false), ownerPreparationCompleted: z.boolean().default(false), dataDestructionRequested: z.boolean().default(false) }).refine(value => value.estimatedPriceMin == null || value.estimatedPriceMax == null || value.estimatedPriceMin <= value.estimatedPriceMax, { message: 'Estimated minimum cannot exceed estimated maximum', path: ['estimatedPriceMax'] }).refine(value => !value.ownerPreparationCompleted || value.dataBearingDevice, { message: 'Owner preparation only applies to data-bearing devices', path: ['ownerPreparationCompleted'] }).refine(value => !value.dataDestructionRequested || value.dataBearingDevice, { message: 'Destruction requests only apply to data-bearing devices', path: ['dataDestructionRequested'] });
-const pickupRequest = z.object({ kabadiwalaId: id, requestedSlot: z.string().datetime().optional() });
+const pickupRequest = z.object({ kabadiwalaId: id.optional(), requestedSlot: z.string().datetime().optional() });
 const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
-const activePickupStatuses = ['REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
+const activePickupStatuses = ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
 const sourceListingIdsInput = z.array(id).max(100).default([]);
 const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional(), sourceListingIds: sourceListingIdsInput }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
 const settlementDecision = z.object({ decision: z.enum(['ACCEPT', 'RAISE_ISSUE']), reasonCode: z.string().trim().min(2).max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), notes: z.string().trim().max(1000).optional() }).superRefine((value, ctx) => { if (value.decision === 'RAISE_ISSUE' && !value.reasonCode) ctx.addIssue({ code: 'custom', path: ['reasonCode'], message: 'A reason code is required when raising an issue' }); });
-const listingPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+const listingPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 6 } });
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
@@ -74,6 +74,42 @@ async function sendPrivateListingPhoto(storage: StorageService | undefined, phot
   res.set({ 'Content-Type': image.contentType, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff' }).status(200).send(image.body);
 }
 
+function uploadedPhotos(req: any): Array<{ buffer?: Buffer; mimetype?: string }> {
+  const files = req.files as Record<string, Array<{ buffer?: Buffer; mimetype?: string }>> | undefined;
+  return [...(files?.photos ?? []), ...(files?.photo ?? [])].slice(0, 6);
+}
+
+/** Keep storage keys private while giving Android a stable, non-null photo contract. */
+function householdListingDto(listing: any) {
+  const { photoReference, photoReferences, ...safeListing } = listing ?? {};
+  const references = Array.isArray(photoReferences) ? photoReferences : [];
+  return {
+    ...safeListing,
+    photoAttached: Boolean(photoReference || references.length),
+    photoCount: references.length || (photoReference ? 1 : 0)
+  };
+}
+
+async function validateAndStorePhotos(storage: StorageService, files: Array<{ buffer?: Buffer; mimetype?: string }>, keyPrefix: string) {
+  if (!files.length) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
+  const stored: string[] = [];
+  try {
+    for (const [index, file] of files.entries()) {
+      if (!file.buffer || !file.mimetype) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 400, { code: 'INVALID_PHOTO' });
+      let metadata;
+      try { metadata = await sharp(file.buffer).metadata(); } catch { throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' }); }
+      if (!metadata.width || !metadata.height || metadata.width < 300 || metadata.height < 300) throw new AppError('VALIDATION_ERROR', 'Photo must be at least 300 x 300 pixels', 400, { code: 'INVALID_PHOTO' });
+      const key = `${keyPrefix}${index ? `-${index}` : ''}.jpg`;
+      stored.push((await storage.putImage(file.buffer, key)).key);
+    }
+    return stored;
+  } catch (error) {
+    await Promise.all(stored.map(key => storage.delete(key).catch(() => undefined)));
+    throw error;
+  }
+}
+
 /** The closed-loop marketplace. Every endpoint is role-gated here, rather than
  * trusting the Android navigation layer. */
 export function supplyChainRoutes(jwt: JwtService, collectors: CollectorRepository, db: PrismaClient, storage?: StorageService) {
@@ -106,39 +142,28 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'CREATE_HOUSEHOLD_LISTING', entityId: created.id, requestHash: operationHash, response: jsonValue(created) } });
       return { listing: created, replayed: false };
     });
-    res.status(result.replayed ? 200 : 201).json({ success: true, data: result.listing, ...(result.replayed ? { message: 'Listing already created' } : {}) });
+    res.status(result.replayed ? 200 : 201).json({ success: true, data: householdListingDto(result.listing), ...(result.replayed ? { message: 'Listing already created' } : {}) });
   });
-  router.post('/household/listings/:listingId/photo', requireHousehold(jwt, collectors), listingPhotoUpload.single('photo'), async (req, res) => {
+  router.post('/household/listings/:listingId/photo', requireHousehold(jwt, collectors), listingPhotoUpload.fields([{ name: 'photos', maxCount: 6 }, { name: 'photo', maxCount: 1 }]), async (req, res) => {
     if (!storage) throw new AppError('INTERNAL_SERVER_ERROR', 'Photo storage is not configured', 503, { code: 'PHOTO_STORAGE_UNAVAILABLE' });
     const listingId = parse(id, req.params.listingId);
-    const file = (req as any).file as { buffer?: Buffer; mimetype?: string } | undefined;
-    if (!file?.buffer || !file.mimetype) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 400, { code: 'INVALID_PHOTO' });
-    let metadata;
-    try {
-      metadata = await sharp(file.buffer).metadata();
-    } catch {
-      throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' });
-    }
-    if (!metadata.width || !metadata.height || metadata.width < 300 || metadata.height < 300) {
-      throw new AppError('VALIDATION_ERROR', 'Photo must be at least 300 x 300 pixels', 400, { code: 'INVALID_PHOTO' });
-    }
+    const files = uploadedPhotos(req);
     const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } } });
     if (!listing) throw new AppError('CONFLICT', 'Only an open listing can accept a photo', 409, { code: 'LISTING_NOT_EDITABLE' });
-    // A stable key makes retries converge on the same object instead of
-    // creating a new unreferenced upload for every network retry.
-    const stored = await storage.putImage(file.buffer, `household-listings/${req.identity!.collectorId}/${listingId}.jpg`);
+    // Stable indexed keys make retries converge on the same objects instead of
+    // creating unreferenced uploads for every network retry.
+    const keys = await validateAndStorePhotos(storage, files, `household-listings/${req.identity!.collectorId}/${listingId}`);
     try {
       const updated = await store.$transaction(async (tx: any) => {
-        const changed = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } }, data: { photoReference: stored.key } });
+        const changed = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } }, data: { photoReference: keys[0], photoReferences: keys } });
         if (!changed.count) throw new AppError('CONFLICT', 'Listing changed while uploading photo', 409, { code: 'LISTING_UPDATE_CONFLICT' });
         const row = await tx.householdListing.findUnique({ where: { id: listingId } });
-        await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_PHOTO_ATTACHED', 'HOUSEHOLD_LISTING', listingId, { contentType: 'image/jpeg', source: 'authenticated-upload' });
+        await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_PHOTO_ATTACHED', 'HOUSEHOLD_LISTING', listingId, { contentType: 'image/jpeg', source: 'authenticated-upload', photoCount: keys.length });
         return row;
       });
-      res.json({ success: true, data: updated });
+      res.json({ success: true, data: householdListingDto(updated) });
     } catch (error) {
-      await storage.delete(stored.key).catch(() => undefined);
+      await Promise.all(keys.map(key => storage.delete(key).catch(() => undefined)));
       throw error;
     }
   });
@@ -149,14 +174,15 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     await sendPrivateListingPhoto(storage, listing.photoReference, res);
   });
   router.get('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
-    res.json({ success: true, data: await store.householdListing.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+    const listings = await store.householdListing.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
+    res.json({ success: true, data: listings.map(householdListingDto) });
   });
   router.get('/household/listings/:listingId', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
     const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId } });
     if (!listing) throw new AppError('NOT_FOUND', 'Listing not found', 404, { code: 'LISTING_NOT_FOUND' });
     const pickups = await store.pickupRequest.findMany({ where: { listingId, householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
-    res.json({ success: true, data: { ...listing, pickups } });
+    res.json({ success: true, data: { ...householdListingDto(listing), pickups } });
   });
   router.patch('/household/listings/:listingId', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -177,7 +203,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_UPDATED', 'HOUSEHOLD_LISTING', listingId, { dataBearingDevice: row.dataBearingDevice, dataDestructionRequested: row.dataDestructionRequested });
       return row;
     });
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: householdListingDto(updated) });
   });
   router.get('/household/kabadiwalas', requireHousehold(jwt, collectors), async (req, res) => {
     const locationQuery = parse(z.object({ latitude: z.coerce.number().finite().min(-90).max(90).optional(), longitude: z.coerce.number().finite().min(-180).max(180).optional(), radiusKm: z.coerce.number().finite().positive().max(200).default(25) }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
@@ -253,6 +279,42 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const requestedSlot = input.requestedSlot ? validatePickupSlot(input.requestedSlot) : null;
     const operationId = operationKey(req);
     const operationHash = requestHash({ action: 'REQUEST_PICKUP', listingId, input });
+    if (!input.kabadiwalaId) {
+      const result = await store.$transaction(async (tx: any) => {
+        if (operationId) {
+          const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
+          if (replay) {
+            if (replay.requestHash && replay.requestHash !== operationHash) throw new AppError('CONFLICT', 'Idempotency key was already used for a different pickup request', 409, { code: 'IDEMPOTENCY_KEY_REUSED' });
+            return { pickup: replay.response, created: false, replayed: true };
+          }
+        }
+        const existing = await tx.pickupRequest.findFirst({ where: { listingId, householdId: req.identity!.collectorId, status: { in: activePickupStatuses } }, orderBy: { createdAt: 'desc' } });
+        if (existing) {
+          if (existing.status !== 'WAITING_FOR_PICKUP') throw new AppError('CONFLICT', 'A pickup request is already active for this listing', 409);
+          if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: existing.id, requestHash: operationHash, response: jsonValue(existing) } });
+          return { pickup: existing, created: false, replayed: false };
+        }
+        const claimedListing = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: 'POSTED' }, data: { status: 'MATCHED' } });
+        if (!claimedListing.count) throw new AppError('CONFLICT', 'This listing is no longer available for a pickup request', 409);
+        const pickup = await tx.pickupRequest.create({ data: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP', requestedSlot } });
+        await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_WAITING_FOR_PICKUP', 'PICKUP_REQUEST', pickup.id, { listingId, requestedSlot: requestedSlot?.toISOString() ?? null });
+        if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: pickup.id, requestHash: operationHash, response: jsonValue(pickup) } });
+        return { pickup, created: true, replayed: false };
+      });
+      if (result.created && !result.replayed) {
+        const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } });
+        const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
+        const ids = users.map((row: { collectorProfileId: string | null }) => row.collectorProfileId).filter((value: string | null): value is string => Boolean(value));
+        const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+        const matching = profiles.filter((profile: any) => {
+          const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
+          const sameArea = Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase());
+          return sameArea || (distance != null && distance <= 25) || (listing?.latitude == null && listing?.longitude == null);
+        });
+        await Promise.allSettled(matching.map((profile: any) => emitNotification(store, { accountId: profile.id, type: 'PICKUP_WAITING_FOR_PICKUP', title: 'Pickup needed nearby', body: 'A household is waiting for a Kabadiwala. Open pickups to claim it.', route: `kabadiwala/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_WAITING_FOR_PICKUP:${result.pickup.id}:${profile.id}` })));
+      }
+      return res.status(result.created ? 201 : 200).json({ success: true, data: result.pickup, ...(result.replayed ? { message: 'Pickup request already processed' } : {}) });
+    }
     const kabadiwala = await store.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' } });
     if (!kabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404);
     // Claim the listing and create the request in one transaction. The
@@ -390,8 +452,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await tx.householdListing.update({ where: { id: listingId }, data: { status: 'CANCELLED' } });
       const now = new Date();
       const activePickups = await tx.pickupRequest.findMany({ where: { listingId, householdId: req.identity!.collectorId, status: { in: activePickupStatuses } }, select: { id: true, kabadiwalaId: true, scheduledSlot: true } });
-      await Promise.all(activePickups.map(async (pickup: { id: string; kabadiwalaId: string; scheduledSlot: Date | null }) => {
-        await releasePickupDay(tx, pickup.kabadiwalaId, pickup.scheduledSlot);
+      await Promise.all(activePickups.map(async (pickup: { id: string; kabadiwalaId: string | null; scheduledSlot: Date | null }) => {
+        if (pickup.kabadiwalaId) await releasePickupDay(tx, pickup.kabadiwalaId, pickup.scheduledSlot);
         return tx.pickupRequest.update({ where: { id: pickup.id }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: input.reason ?? null, cancelledAt: now, lateCancellation: Boolean(pickup.scheduledSlot && pickup.scheduledSlot.getTime() - now.getTime() < 24 * 60 * 60 * 1000) } });
       }));
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'LISTING_CANCELLED', 'HOUSEHOLD_LISTING', listingId, { reason: input.reason ?? null, cancelledPickupCount: activePickups.length });
@@ -401,11 +463,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/household/pickups/:pickupId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId); const input = parse(cancellationInput, req.body ?? {});
     await store.$transaction(async (tx: any) => {
-      const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['REQUESTED', 'ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } } });
+      const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } } });
       if (!pickup) throw new AppError('CONFLICT', 'This pickup can no longer be cancelled', 409);
-      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['REQUESTED', 'ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: input.reason ?? null, cancelledAt: new Date(), lateCancellation: Boolean(pickup.scheduledSlot && pickup.scheduledSlot.getTime() - Date.now() < 24 * 60 * 60 * 1000) } });
+      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, householdId: req.identity!.collectorId, status: { in: ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: input.reason ?? null, cancelledAt: new Date(), lateCancellation: Boolean(pickup.scheduledSlot && pickup.scheduledSlot.getTime() - Date.now() < 24 * 60 * 60 * 1000) } });
       if (!updated.count) throw new AppError('CONFLICT', 'This pickup was already updated', 409);
-      await releasePickupDay(tx, pickup.kabadiwalaId, pickup.scheduledSlot);
+      if (pickup.kabadiwalaId) await releasePickupDay(tx, pickup.kabadiwalaId, pickup.scheduledSlot);
       const remaining = await tx.pickupRequest.count({ where: { listingId: pickup.listingId, status: { in: activePickupStatuses } } });
       if (!remaining) await tx.householdListing.updateMany({ where: { id: pickup.listingId, householdId: req.identity!.collectorId, status: 'MATCHED' }, data: { status: 'POSTED' } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_CANCELLED', 'PICKUP_REQUEST', pickupId, { reason: input.reason ?? null });
@@ -415,14 +477,22 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
 
   router.get('/kabadiwala/listings', requireAuth(jwt, collectors), async (req, res) => {
     const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { listingId: true } });
-    const assignedIds = [...new Set(assigned.map((pickup: { listingId: string }) => pickup.listingId))];
+    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
+    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { listingId: true } }) : [];
+    const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: { listingId: string }) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const visibleWaitingIds = waitingListings.filter((listing: any) => {
+      const distance = distanceKm(own?.latitude, own?.longitude, listing.latitude, listing.longitude);
+      const sameArea = Boolean(own?.areaName && listing.areaName && own.areaName.toLowerCase() === listing.areaName.toLowerCase());
+      return sameArea || (distance != null && distance <= 25) || (own?.latitude == null && own?.longitude == null);
+    }).map((listing: any) => listing.id);
+    const assignedIds = [...new Set([...assigned.map((pickup: { listingId: string }) => pickup.listingId), ...visibleWaitingIds])];
     const listings = assignedIds.length
-      ? await store.householdListing.findMany({ where: { id: { in: assignedIds } }, select: { id: true, materialCategory: true, estimatedWeight: true, condition: true, notes: true, photoReference: true, areaName: true, estimatedPriceMin: true, estimatedPriceMax: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+      ? await store.householdListing.findMany({ where: { id: { in: assignedIds } }, select: { id: true, materialCategory: true, estimatedWeight: true, condition: true, notes: true, photoReference: true, photoReferences: true, areaName: true, latitude: true, longitude: true, estimatedPriceMin: true, estimatedPriceMax: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' }, take: 100 })
       : [];
     // Photo references are private storage keys. The collector receives only a
     // presence flag; the image itself remains behind the assigned-pickup photo
     // endpoint below.
-    res.json({ success: true, data: listings.map(({ photoReference, ...listing }: { photoReference?: string | null; [key: string]: unknown }) => ({ ...listing, photoAttached: Boolean(photoReference) })) });
+    res.json({ success: true, data: listings.map(({ photoReference, photoReferences, ...listing }: { photoReference?: string | null; photoReferences?: string[]; [key: string]: unknown }) => ({ ...listing, photoAttached: Boolean(photoReference || photoReferences?.length), photoCount: photoReferences?.length || (photoReference ? 1 : 0) })) });
   });
   router.get('/kabadiwala/listings/:listingId/photo', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -432,12 +502,27 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     await sendPrivateListingPhoto(storage, listing?.photoReference, res);
   });
   router.get('/kabadiwala/pickups', requireAuth(jwt, collectors), async (req, res) => {
-    res.json({ success: true, data: await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) });
+    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
+    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
+    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
+    const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: any) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const listingById = new Map<string, any>(waitingListings.map((listing: any) => [listing.id, listing] as [string, any]));
+    const visibleWaiting = waiting.filter((pickup: any) => {
+      const listing = listingById.get(pickup.listingId);
+      if (!listing) return false;
+      const distance = distanceKm(own?.latitude, own?.longitude, listing.latitude, listing.longitude);
+      const sameArea = Boolean(own?.areaName && listing.areaName && own.areaName.toLowerCase() === listing.areaName.toLowerCase());
+      return sameArea || (distance != null && distance <= 25) || (own?.latitude == null && own?.longitude == null);
+    });
+    res.json({ success: true, data: [...assigned, ...visibleWaiting] });
   });
   router.post('/kabadiwala/listings/:listingId/accept', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
     await store.$transaction(async (tx: any) => {
-      const updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
+      let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
+      if (!updated.count) {
+        updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }, data: { kabadiwalaId: req.identity!.collectorId, status: 'ACCEPTED', acceptedAt: new Date() } });
+      }
       if (!updated.count) throw new AppError('CONFLICT', 'Pickup is not available to accept', 409);
       await tx.householdListing.updateMany({ where: { id: listingId, status: 'POSTED' }, data: { status: 'MATCHED' } });
       const pickup = await tx.pickupRequest.findFirstOrThrow({ where: { listingId, kabadiwalaId: req.identity!.collectorId } });

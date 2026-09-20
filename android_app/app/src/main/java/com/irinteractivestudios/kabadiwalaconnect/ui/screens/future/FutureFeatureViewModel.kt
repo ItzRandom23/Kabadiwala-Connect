@@ -104,7 +104,7 @@ class FutureFeatureViewModel(
 
     fun loadMessages(conversationId: String) {
         viewModelScope.launch {
-            val cached = cache?.messages(conversationId).orEmpty()
+            val cached = cache?.messages(conversationId, accountId()).orEmpty()
             val result = runCatching { api.getMessages(conversationId).requireData().also { cache?.saveMessages(it) } }
                 .getOrElse { cached }
                 .mergePending(cached)

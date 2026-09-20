@@ -23,7 +23,8 @@ data class PendingPhotoUploadEntity(
     @PrimaryKey val listingId: String,
     val accountId: String,
     val localPath: String,
-    val createdAtEpochMs: Long
+    val createdAtEpochMs: Long,
+    val localPathsJson: String? = null
 )
 
 @Dao
@@ -36,4 +37,7 @@ interface PendingPhotoUploadDao {
 
     @Query("DELETE FROM pending_photo_uploads WHERE accountId = :accountId AND listingId = :listingId")
     suspend fun remove(accountId: String, listingId: String)
+
+    @Query("DELETE FROM pending_photo_uploads")
+    suspend fun clearAll()
 }

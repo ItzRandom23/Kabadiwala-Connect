@@ -98,7 +98,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->
             RecyclerOrdersViewModel(container.apiService, FormalisationCacheStore(app), { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
-            RecyclerScanViewModel(container.apiService, container.database.syncQueueDao(), FormalisationCacheStore(app), { container.currentAccount()?.profileId }, { container.syncScheduler.requestSync() }, IdempotencyKeyStore(app))
+            RecyclerScanViewModel(container.apiService, container.database.syncQueueDao(), FormalisationCacheStore(app), { container.currentAccount()?.profileId }, { container.syncScheduler.requestSync() }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerProfileViewModel::class.java) ->
             RecyclerProfileViewModel(container.apiService)
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
@@ -106,7 +106,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app), container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao())
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() })
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

@@ -4,7 +4,10 @@ import android.content.Context
 import java.util.UUID
 
 /** Process-death safe keys for mutations that support backend replay. */
-class IdempotencyKeyStore(context: Context) {
+class IdempotencyKeyStore(
+    context: Context,
+    private val accountId: () -> String? = { null }
+) {
     private val prefs = context.applicationContext.getSharedPreferences("idempotency_keys", Context.MODE_PRIVATE)
 
     fun getOrCreate(operation: String): String = prefs.getString(key(operation), null)
@@ -12,5 +15,13 @@ class IdempotencyKeyStore(context: Context) {
 
     fun clear(operation: String) = prefs.edit().remove(key(operation)).apply()
 
-    private fun key(operation: String) = "operation:${operation.take(120)}"
+    /** Removes only one account's keys at the logout/account-switch boundary. */
+    fun clearAccount(account: String?) {
+        val prefix = "account:${account.orEmpty().ifBlank { "anonymous" }}:"
+        prefs.edit().apply {
+            prefs.all.keys.filter { it.startsWith(prefix) }.forEach(::remove)
+        }.apply()
+    }
+
+    private fun key(operation: String) = "account:${accountId().orEmpty().ifBlank { "anonymous" }}:operation:${operation.take(120)}"
 }

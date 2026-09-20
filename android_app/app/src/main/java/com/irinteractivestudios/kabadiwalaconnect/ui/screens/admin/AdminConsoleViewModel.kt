@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,8 +38,6 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
     private val _state = MutableStateFlow(AdminConsoleState())
     val state: StateFlow<AdminConsoleState> = _state.asStateFlow()
 
-    init { refresh() }
-
     fun selectSection(section: AdminSection) {
         _state.update { it.copy(section = section, items = emptyList(), selected = null, error = null, message = null) }
         if (section != AdminSection.TOOLS) refresh()
@@ -60,7 +59,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
             }.onSuccess { data ->
                 _state.update { it.copy(loading = false, items = data) }
             }.onFailure { error ->
-                _state.update { it.copy(loading = false, error = error.message ?: "Could not load operator data") }
+                _state.update { it.copy(loading = false, error = userFacingError(error, "Could not load operator data")) }
             }
         }
     }
@@ -170,7 +169,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
                     _state.update { it.copy(actionBusy = false, message = "Operation completed") }
                     refresh()
                 }
-                .onFailure { error -> _state.update { it.copy(actionBusy = false, error = error.message ?: "Operation failed") } }
+                .onFailure { error -> _state.update { it.copy(actionBusy = false, error = userFacingError(error, "Operation failed")) } }
         }
     }
 

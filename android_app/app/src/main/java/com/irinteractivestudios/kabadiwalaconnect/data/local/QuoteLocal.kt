@@ -9,6 +9,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepositor
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteExpiry
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.util.UUID
@@ -18,14 +19,17 @@ import com.google.gson.JsonObject
 data class QuoteEntity(@PrimaryKey val id: String, val recyclerId: String, val lotId: String, val amountRupees: Double, val recyclerName: String, val pricePerKg: Double, val marketRatePerKg: Double, val distanceKm: Double, val pickupAvailable: Boolean, val createdAtEpochMs: Long, val expiresAtEpochMs: Long, val status: String, val deliveryState: String)
 @Dao interface QuoteDao {
     @Query("SELECT * FROM quotes WHERE lotId = :lotId ORDER BY pricePerKg DESC") fun observeForLot(lotId: String): Flow<List<QuoteEntity>>
+    @Query("SELECT q.* FROM quotes q INNER JOIN lots l ON q.lotId = l.id WHERE q.lotId = :lotId AND (l.collectorId = :accountId OR q.recyclerId = :accountId) ORDER BY q.pricePerKg DESC") fun observeForLotForAccount(lotId: String, accountId: String): Flow<List<QuoteEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(items: List<QuoteEntity>)
     @Query("UPDATE quotes SET status = :status WHERE id = :id") suspend fun updateStatus(id: String, status: String): Int
+    @Query("UPDATE quotes SET status = :status WHERE id = :id AND EXISTS (SELECT 1 FROM lots WHERE lots.id = quotes.lotId AND (lots.collectorId = :accountId OR quotes.recyclerId = :accountId))") suspend fun updateStatusForAccount(id: String, status: String, accountId: String): Int
     @Query("DELETE FROM quotes WHERE id = :id") suspend fun delete(id: String)
+    @Query("DELETE FROM quotes WHERE id = :id AND EXISTS (SELECT 1 FROM lots WHERE lots.id = quotes.lotId AND (lots.collectorId = :accountId OR quotes.recyclerId = :accountId))") suspend fun deleteForAccount(id: String, accountId: String): Int
     @Query("DELETE FROM quotes") suspend fun clearAll()
 }
 
-class RoomQuoteRepository(private val dao: QuoteDao) : QuoteRepository {
-    override fun observeForLot(lotId: String): Flow<List<Quote>> = dao.observeForLot(lotId).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
+class RoomQuoteRepository(private val dao: QuoteDao, private val accountId: () -> String? = { null }) : QuoteRepository {
+    override fun observeForLot(lotId: String): Flow<List<Quote>> = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForLotForAccount(lotId, it) } ?: flowOf(emptyList())).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
     override suspend fun submitRequest(lot: Lot, recycler: Recycler, nowEpochMs: Long): List<Quote> {
         val base = recycler.offeredRatePerKg
         val prices = listOf(base, base * 0.94, base * 1.06)
@@ -33,8 +37,8 @@ class RoomQuoteRepository(private val dao: QuoteDao) : QuoteRepository {
         dao.insertAll(result.map { it.toEntity() })
         return result
     }
-    override suspend fun accept(quoteId: String) = dao.updateStatus(quoteId, QuoteStatus.ACCEPTED.name) > 0
-    override suspend fun reject(quoteId: String) = dao.updateStatus(quoteId, QuoteStatus.REJECTED.name) > 0
+    override suspend fun accept(quoteId: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.ACCEPTED.name, it) > 0 } ?: false
+    override suspend fun reject(quoteId: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.REJECTED.name, it) > 0 } ?: false
 }
 
 /** Live quote integration used outside the debug preview. Room remains the
@@ -47,7 +51,7 @@ class RemoteQuoteRepository(
     private val requestSync: () -> Unit = {},
     private val accountId: () -> String? = { null }
 ) : QuoteRepository {
-    override fun observeForLot(lotId: String): Flow<List<Quote>> = dao.observeForLot(lotId).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
+    override fun observeForLot(lotId: String): Flow<List<Quote>> = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForLotForAccount(lotId, it) } ?: flowOf(emptyList())).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
 
     override suspend fun refresh(lot: Lot, recycler: Recycler?): List<Quote> {
         val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
@@ -93,9 +97,9 @@ class RemoteQuoteRepository(
     override suspend fun accept(quoteId: String): Boolean {
         return try {
             val quote = api.acceptQuote(quoteId).requireData()
-            dao.updateStatus(quote.id, QuoteStatus.ACCEPTED.name) > 0
+            (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
         } catch (_: IOException) {
-            val updated = dao.updateStatus(quoteId, QuoteStatus.ACCEPTED.name) > 0
+            val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
             if (updated) enqueue("ACCEPT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
             updated
         }
@@ -104,9 +108,9 @@ class RemoteQuoteRepository(
     override suspend fun reject(quoteId: String): Boolean {
         return try {
             val quote = api.rejectQuote(quoteId).requireData()
-            dao.updateStatus(quote.id, QuoteStatus.REJECTED.name) > 0
+            (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
         } catch (_: IOException) {
-            val updated = dao.updateStatus(quoteId, QuoteStatus.REJECTED.name) > 0
+            val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
             if (updated) enqueue("REJECT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
             updated
         }

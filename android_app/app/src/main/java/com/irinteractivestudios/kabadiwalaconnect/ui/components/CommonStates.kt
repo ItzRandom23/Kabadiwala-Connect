@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -39,10 +40,9 @@ import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcError
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcInfo
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcRadius
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSuccess
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcWarning
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcViolet
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcVioletStrong
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 
 /** Minimum touch-target height for primary actions (low-literacy friendly). */
@@ -101,15 +101,16 @@ fun DemoDataBanner(modifier: Modifier = Modifier) {
 fun TestingEnvironmentIndicator(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Surface(
-            color = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            shape = MaterialTheme.shapes.extraSmall
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = MaterialTheme.shapes.extraSmall,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Science, contentDescription = null, modifier = Modifier.size(15.dp))
+                Icon(Icons.Filled.Science, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.testing_mode_banner), style = MaterialTheme.typography.labelSmall)
             }
@@ -131,11 +132,12 @@ fun KcPrimaryButton(
         onClick = onClick,
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
-            containerColor = KcVioletStrong,
-            contentColor = androidx.compose.ui.graphics.Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
         ),
+        shape = KcRadius.pill,
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = KcMinTouchHeight)
@@ -198,7 +200,7 @@ fun LoadingContent(modifier: Modifier = Modifier) {
             .padding(20.dp)
             .testTag("state_loading")
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(48.dp), color = KcViolet)
+        CircularProgressIndicator(modifier = Modifier.size(48.dp), color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.titleMedium)
     }
@@ -294,7 +296,7 @@ fun KcMetric(
     emphasis: Boolean = false
 ) {
     Surface(
-        color = if (emphasis) KcViolet.copy(alpha = .16f) else MaterialTheme.colorScheme.surface,
+        color = if (emphasis) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else MaterialTheme.colorScheme.surface,
         contentColor = if (emphasis) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
@@ -339,4 +341,21 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, content: @Composab
             content()
         }
     }
+}
+
+/**
+ * Lightweight loading placeholder for list/detail surfaces. It intentionally
+ * stays static so low-end devices and reduced-motion users do not pay for a
+ * shimmer animation while data is loading.
+ */
+@Composable
+fun KcSkeleton(
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.small
+) {
+    Box(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape)
+            .testTag("state_skeleton")
+    )
 }

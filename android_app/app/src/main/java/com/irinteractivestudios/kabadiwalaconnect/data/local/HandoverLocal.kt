@@ -11,6 +11,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.firstOrNull
 import java.text.SimpleDateFormat
@@ -55,22 +56,33 @@ data class HandoverEntity(
 )
 @Dao interface HandoverDao {
     @Query("SELECT * FROM handovers ORDER BY timestampEpochMs DESC") fun observeAll(): kotlinx.coroutines.flow.Flow<List<HandoverEntity>>
+    @Query("SELECT * FROM handovers WHERE collectorId = :accountId OR recyclerId = :accountId ORDER BY timestampEpochMs DESC") fun observeForAccount(accountId: String): kotlinx.coroutines.flow.Flow<List<HandoverEntity>>
     @Query("SELECT * FROM handovers WHERE id = :id LIMIT 1") fun observe(id: String): kotlinx.coroutines.flow.Flow<HandoverEntity?>
+    @Query("SELECT * FROM handovers WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId) LIMIT 1") fun observeForAccount(id: String, accountId: String): kotlinx.coroutines.flow.Flow<HandoverEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(item: HandoverEntity)
     @Query("SELECT * FROM handovers WHERE id = :id LIMIT 1") suspend fun get(id: String): HandoverEntity?
+    @Query("SELECT * FROM handovers WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId) LIMIT 1") suspend fun getForAccount(id: String, accountId: String): HandoverEntity?
     @Query("UPDATE handovers SET status = 'HANDED_OVER' WHERE id = :id") suspend fun markHandedOver(id: String): Int
+    @Query("UPDATE handovers SET status = 'HANDED_OVER' WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId)") suspend fun markHandedOverForAccount(id: String, accountId: String): Int
     @Query("UPDATE handovers SET actualWeightKg = :actualWeightKg, materialConfirmed = :materialConfirmed, collectorConfirmed = :collectorConfirmed, scalePhotoPath = :scalePhotoPath, evidenceUpdatedAtEpochMs = :updatedAt WHERE id = :id") suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?, updatedAt: Long): Int
+    @Query("UPDATE handovers SET actualWeightKg = :actualWeightKg, materialConfirmed = :materialConfirmed, collectorConfirmed = :collectorConfirmed, scalePhotoPath = :scalePhotoPath, evidenceUpdatedAtEpochMs = :updatedAt WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId)") suspend fun updateEvidenceForAccount(id: String, accountId: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?, updatedAt: Long): Int
     @Query("DELETE FROM handovers") suspend fun clearAll()
 }
-class RoomHandoverRepository(private val dao: HandoverDao) : HandoverRepository {
-    override fun observeAll() = dao.observeAll().map { it.map(HandoverEntity::toDomain) }
-    override fun observe(id: String) = dao.observe(id).map { it?.toDomain() }
+class RoomHandoverRepository(
+    private val dao: HandoverDao,
+    private val accountId: () -> String? = { null }
+) : HandoverRepository {
+    override fun observeAll() = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(it) }?.map { it.map(HandoverEntity::toDomain) }
+        ?: flowOf(emptyList())
+    override fun observe(id: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(id, it) }?.map { it?.toDomain() }
+        ?: flowOf(null)
     override suspend fun create(lot: Lot, quote: Quote, collectorId: String, locationType: HandoverLocationType, location: String, timestampEpochMs: Long): Handover {
+        check(accountId()?.takeIf { it.isNotBlank() } == collectorId) { "Authenticated account required for handover changes" }
         val item = Handover("HOV-${UUID.randomUUID()}", lot.id, quote.recyclerId, collectorId, quote.recyclerName, lot.materialLabel, lot.weightKg, quote.amountRupees, lot.location, location, locationType, timestampEpochMs, timestampEpochMs, quote.id)
         dao.insert(item.toEntity()); return item
     }
-    override suspend fun markHandedOver(id: String) = dao.markHandedOver(id) > 0
-    override suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?): Boolean = dao.updateEvidence(id, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath, System.currentTimeMillis()) > 0
+    override suspend fun markHandedOver(id: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.markHandedOverForAccount(id, it) > 0 } ?: false
+    override suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?): Boolean = accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateEvidenceForAccount(id, it, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath, System.currentTimeMillis()) > 0 } ?: false
 }
 
 /**
@@ -79,10 +91,13 @@ class RoomHandoverRepository(private val dao: HandoverDao) : HandoverRepository 
  */
 class RemoteHandoverRepository(
     private val dao: HandoverDao,
-    private val api: ApiService
+    private val api: ApiService,
+    private val accountId: () -> String? = { null }
 ) : HandoverRepository {
-    override fun observeAll() = dao.observeAll().map { rows -> rows.map(HandoverEntity::toDomain) }
-    override fun observe(id: String) = dao.observe(id).map { it?.toDomain() }
+    override fun observeAll() = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(it) }?.map { rows -> rows.map(HandoverEntity::toDomain) }
+        ?: flowOf(emptyList())
+    override fun observe(id: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(id, it) }?.map { it?.toDomain() }
+        ?: flowOf(null)
 
     override suspend fun create(
         lot: Lot,
@@ -92,6 +107,7 @@ class RemoteHandoverRepository(
         location: String,
         timestampEpochMs: Long
     ): Handover {
+        check(accountId()?.takeIf { it.isNotBlank() } == collectorId) { "Authenticated account required for handover changes" }
         val dto = api.createHandover(
             CreateHandoverRequestDto(
                 lotId = lot.id,
@@ -107,7 +123,7 @@ class RemoteHandoverRepository(
     }
 
     override suspend fun markHandedOver(id: String): Boolean {
-        val local = dao.observe(id).firstOrNullValue() ?: return false
+        val local = scopedObservation(id).firstOrNullValue() ?: return false
         val dto = api.markHandover(id).requireData()
         dao.insert(dto.toDomain(local.toDomain()).toEntity())
         return true
@@ -120,7 +136,7 @@ class RemoteHandoverRepository(
         collectorConfirmed: Boolean,
         scalePhotoPath: String?
     ): Boolean {
-        val local = dao.observe(id).firstOrNullValue() ?: return false
+        val local = scopedObservation(id).firstOrNullValue() ?: return false
         var dto = api.updateHandoverEvidence(
             id,
             HandoverEvidenceRequestDto(
@@ -151,6 +167,8 @@ class RemoteHandoverRepository(
         dao.insert(updated.toEntity())
         return true
     }
+
+    private fun scopedObservation(id: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(id, it) } ?: flowOf(null)
 }
 
 /** Network-first repository with durable local fallback for field connectivity. */

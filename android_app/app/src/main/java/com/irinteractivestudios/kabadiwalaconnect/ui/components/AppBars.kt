@@ -1,10 +1,11 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,11 +37,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irinteractivestudios.kabadiwalaconnect.R
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcViolet
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcMagenta
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSpacing
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.HOUSEHOLD_BOTTOM_TABS
@@ -58,23 +59,22 @@ fun KcTopBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.fillMaxWidth().statusBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .background(
-                    androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(MaterialTheme.colorScheme.background, KcViolet.copy(alpha = .08f), KcMagenta.copy(alpha = .04f))
-                    )
-                )
-                .padding(horizontal = 12.dp),
+                .heightIn(min = 64.dp)
+                .padding(horizontal = KcSpacing.md, vertical = KcSpacing.xs),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
             if (showBack) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.common_back))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back)
+                    )
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -106,30 +106,34 @@ fun KcBottomBar(
     }
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
-        shadowElevation = 10.dp,
+        shadowElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.Start
+                .padding(horizontal = KcSpacing.xs, vertical = KcSpacing.xs),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
         tabs.forEach { tab ->
             val isSelected = currentRoute == tab.route
             val selectedColor = MaterialTheme.colorScheme.primary
             val itemColor = animateColorAsState(
-                    if (isSelected) KcViolet else MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = tween(140),
                 label = "bottomNavColor"
             ).value
             val indicatorWidth = animateDpAsState(
-                if (isSelected) 28.dp else 6.dp,
+                if (isSelected) 24.dp else 4.dp,
+                animationSpec = tween(140),
                 label = "bottomNavIndicator"
             ).value
             val iconScale = animateFloatAsState(
-                if (isSelected) 1.08f else 1f,
+                if (isSelected) 1.04f else 1f,
+                animationSpec = tween(140),
                 label = "bottomNavIconScale"
             ).value
             Column(
@@ -137,14 +141,15 @@ fun KcBottomBar(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(tab.testTag)
-                    .height(68.dp)
+                    .heightIn(min = 64.dp)
+                    .padding(horizontal = 2.dp)
                     .clickable { onNavigate(tab.route) }
                     .background(
                         if (isSelected) selectedColor.copy(alpha = .10f) else androidx.compose.ui.graphics.Color.Transparent,
-                        RoundedCornerShape(18.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .semantics(mergeDescendants = true) { this.role = Role.Tab; selected = isSelected }
-                    .padding(horizontal = 2.dp, vertical = 4.dp)
+                    .padding(vertical = 4.dp)
             )
             {
                 androidx.compose.foundation.layout.Box(
@@ -159,17 +164,18 @@ fun KcBottomBar(
                 Spacer(Modifier.height(7.dp))
                 if (tab.route == com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations.SETTINGS && unreadNotifications > 0) {
                     BadgedBox(badge = { Badge { Text(unreadNotifications.coerceAtMost(99).toString()) } }) {
-                        Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                        Icon(tab.icon, contentDescription = stringResource(tab.labelRes), tint = itemColor, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                     }
                 } else {
-                    Icon(tab.icon, contentDescription = null, tint = itemColor, modifier = Modifier.size(23.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
+                    Icon(tab.icon, contentDescription = stringResource(tab.labelRes), tint = itemColor, modifier = Modifier.size(22.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
                 }
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(tab.labelRes),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
                     color = itemColor,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

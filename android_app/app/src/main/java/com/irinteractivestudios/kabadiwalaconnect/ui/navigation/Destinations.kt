@@ -21,6 +21,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 object Destinations {
     const val AUTH = "auth"
     const val CREATE_LOT = "lots/create"
+    const val CREATE_HOUSEHOLD_LISTING = "household/listings/create"
     const val MY_LOTS = "lots"
     const val LOT_DETAIL = "lots/detail/{lotId}"
     const val LOT_EDIT = "lots/edit/{lotId}"

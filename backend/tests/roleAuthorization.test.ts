@@ -16,9 +16,9 @@ function protectedApp() {
   return app;
 }
 
-function linkedAccountApp(role: 'COLLECTOR' | 'HOUSEHOLD') {
+function linkedAccountApp(role: 'COLLECTOR' | 'HOUSEHOLD', userOverride: any = { role, accountStatus: 'ACTIVE' }) {
   const app = express();
-  const db = { user: { findFirst: vi.fn().mockResolvedValue({ role, accountStatus: 'ACTIVE' }) }, collector: { findUnique: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } } as any;
+  const db = { user: { findFirst: vi.fn().mockResolvedValue(userOverride) }, collector: { findUnique: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } } as any;
   app.get('/kabadiwala', requireAuth(jwt, profiles, db), (_req, res) => res.json({ ok: true }));
   app.get('/household', requireHousehold(jwt, profiles, db), (_req, res) => res.json({ ok: true }));
   app.get('/account', requireAccount(jwt, db, false), (_req, res) => res.json({ ok: true }));
@@ -47,5 +47,17 @@ describe('role boundaries', () => {
     await request(linkedAccountApp('HOUSEHOLD')).get('/kabadiwala').set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`).expect(403);
     await request(linkedAccountApp('COLLECTOR')).get('/household').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-a')}`).expect(403);
     await request(linkedAccountApp('HOUSEHOLD')).get('/account').set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`).expect(403);
+  });
+
+  it('rejects profile tokens when the database linkage is missing', async () => {
+    await request(linkedAccountApp('COLLECTOR', null)).get('/kabadiwala')
+      .set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`)
+      .expect(403);
+    await request(linkedAccountApp('HOUSEHOLD', null)).get('/household')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-a')}`)
+      .expect(403);
+    await request(linkedAccountApp('COLLECTOR', null)).get('/account')
+      .set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`)
+      .expect(403);
   });
 });

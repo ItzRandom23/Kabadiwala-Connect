@@ -8,6 +8,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.Material
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.WeightUnit
 import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidator
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -113,6 +114,28 @@ class LotManagementTest {
         vm.save()
         advanceUntilIdle()
         assertEquals(1250.0, saved.single().quoteRupees!!, 0.0001)
+    }
+
+    @Test fun gpsLocation_keepsCoordinatesWhenAreaLabelIsEdited() = runTest {
+        val saved = mutableListOf<Lot>()
+        val vm = LotManagementViewModel(writer(saved), "collector-gps", now = { 777L })
+        vm.chooseMaterial(Material.COPPER)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeight("4")
+        vm.confirmWeight()
+        vm.setGpsLocation(CurrentLocation(latitude = 18.5204, longitude = 73.8567, areaName = "Pune"))
+        vm.setLocation("Shivajinagar")
+        assertEquals("Shivajinagar", vm.state.value.location)
+        assertEquals("gps", vm.state.value.locationSource)
+        assertEquals(18.5204, vm.state.value.locationLatitude!!, 0.000001)
+        assertEquals(73.8567, vm.state.value.locationLongitude!!, 0.000001)
+        vm.confirmLocation()
+        vm.save()
+        advanceUntilIdle()
+        assertEquals("GPS", saved.single().locationPrecision)
+        assertEquals(18.5204, saved.single().locationLatitude!!, 0.000001)
+        assertEquals(73.8567, saved.single().locationLongitude!!, 0.000001)
+        assertEquals("Shivajinagar", saved.single().location)
     }
 
     @Test fun saveFailure_keepsReviewStepAndExposesRetryableError() = runTest {

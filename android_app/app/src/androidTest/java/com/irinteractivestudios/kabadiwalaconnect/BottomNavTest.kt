@@ -2,12 +2,13 @@ package com.irinteractivestudios.kabadiwalaconnect
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.irinteractivestudios.kabadiwalaconnect.KabadiwalaApp
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.runBlocking
@@ -26,7 +27,18 @@ import org.junit.runner.RunWith
 class BottomNavTest {
 
     @get:Rule
-    val composeTestRule = createAndroidComposeRule<MainActivity>()
+    val composeTestRule: AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity> = AndroidComposeTestRule(
+        ActivityScenarioRule<MainActivity>(
+            android.content.Intent(
+                ApplicationProvider.getApplicationContext(),
+                MainActivity::class.java
+            ).apply { putExtra("demoRole", "COLLECTOR") }
+        )
+    ) { rule ->
+        var activity: MainActivity? = null
+        rule.scenario.onActivity { activity = it }
+        checkNotNull(activity)
+    }
 
     @Before
     fun enterHomeWhenUnauthenticated() {
@@ -36,8 +48,20 @@ class BottomNavTest {
             app.container.clearAccount()
         }
         LocaleManager.persistTag(app, LocaleManager.ENGLISH)
+        // The activity rule starts the app through its explicit debug-only
+        // preview entry point, so navigation assertions do not depend on a
+        // scroll position or onboarding timing.
         composeTestRule.activityRule.scenario.recreate()
         composeTestRule.waitForIdle()
+        // A fresh test process can render the first-run language gate before
+        // the synchronous preference change is observed by Activity recreation.
+        // Complete it explicitly so the rest of this class always starts from
+        // the same welcome surface.
+        if (composeTestRule.onAllNodesWithTag("first_language_en").fetchSemanticsNodes().isNotEmpty()) {
+            composeTestRule.onNodeWithTag("first_language_en").performClick()
+            composeTestRule.onNodeWithTag("first_language_continue").performClick()
+            composeTestRule.waitForIdle()
+        }
         if (composeTestRule.onAllNodesWithTag("auth_start_over").fetchSemanticsNodes().isNotEmpty()) {
             composeTestRule.onNodeWithTag("auth_start_over").performClick()
             composeTestRule.waitForIdle()
@@ -57,7 +81,7 @@ class BottomNavTest {
 
     @Test
     fun allBottomTabsOpen() {
-        val tabs = listOf("nav_prices", "nav_recyclers", "nav_earnings", "nav_settings")
+        val tabs = listOf("nav_inventory", "nav_pickups", "nav_bulk_lots", "nav_settings")
         tabs.forEach { tag ->
             composeTestRule.onNodeWithTag(tag)
                 .assertIsDisplayed()
