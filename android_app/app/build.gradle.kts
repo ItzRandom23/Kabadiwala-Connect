@@ -30,22 +30,27 @@ android {
         ?.trim()
         ?.takeIf { it.isNotBlank() }
         ?.let { if (it.endsWith('/')) it else "$it/" }
-    // Gradle configures every build type even when only a debug task is run.
-    // Validate the production endpoint when a release-capable task is
-    // requested, without blocking local unit tests and IDE sync.
-    val releaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
-        val task = taskName.substringAfterLast(':').lowercase()
-        task == "build" || task == "assemble" || task == "bundle" || task.contains("release")
+    // Gradle configures every build type during IDE sync. Only generic builds
+    // (which include every flavor) and production variants need a production
+    // endpoint. An envTestingRelease artifact is a legitimate testing build
+    // and must continue to use testingApiBaseUrl.
+    val requestedTasks = gradle.startParameter.taskNames.map { it.substringAfterLast(':').lowercase() }
+    val genericReleaseBuildRequested = requestedTasks.any { task ->
+        task == "build" || task == "assemble" || task == "bundle" ||
+            task == "assemblerelease" || task == "bundlerelease"
     }
     val productionVariantRequested = gradle.startParameter.taskNames.any { taskName ->
         taskName.substringAfterLast(':').contains("production", ignoreCase = true)
     }
     if (productionVariantRequested) {
-        requireNotNull(configuredProductionApiBaseUrl) {
+        val productionUrl = requireNotNull(configuredProductionApiBaseUrl) {
             "Missing -PproductionApiBaseUrl. Production variants must target an explicitly configured HTTPS API."
         }
+        require(productionUrl.startsWith("https://")) {
+            "productionApiBaseUrl must use HTTPS"
+        }
     }
-    if (releaseBuildRequested) {
+    if (genericReleaseBuildRequested) {
         val releaseApiBaseUrl = requireNotNull(configuredProductionApiBaseUrl) {
             "Missing -PproductionApiBaseUrl. Release builds must target an explicitly configured HTTPS production API."
         }
@@ -73,8 +78,8 @@ android {
         productionSigningKeyAlias,
         productionSigningKeyPassword
     ).all { it != null }
-    val productionSigningRequired = providers.gradleProperty("requireProductionSigning").orNull?.toBooleanStrictOrNull() ?: releaseBuildRequested
-    if (releaseBuildRequested && productionSigningRequired) {
+    val productionSigningRequired = providers.gradleProperty("requireProductionSigning").orNull?.toBooleanStrictOrNull() ?: genericReleaseBuildRequested
+    if (genericReleaseBuildRequested && productionSigningRequired) {
         require(productionSigningConfigured) {
             "Production signing is required. Supply productionSigningStoreFile, productionSigningStorePassword, productionSigningKeyAlias, and productionSigningKeyPassword through CI secrets or -P properties."
         }
