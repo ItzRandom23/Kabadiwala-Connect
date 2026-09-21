@@ -896,6 +896,21 @@ was available.
 
 ## Release recommendation
 
+### Latest backend upload gate — 2026-09-21
+
+- Backend revision `9adf95a` plus the Gemini configuration correction is
+  upload-ready as source: `npm test` passed 39/39 files and 118/118 tests,
+  `npm run build` passed, and `npm run lint` passed.
+- The tracked testing/default examples now use the stable multimodal
+  `gemini-2.5-flash-lite` model. The local untracked `.env` still contains
+  `gemini-3.5-flash-lite`, and its configured Gemini key returned HTTP 401
+  during a metadata-only provider check. Do not upload that `.env`; set a
+  valid server-side `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-2.5-flash-lite`
+  (or another provider-approved `generateContent` model) on the VPS.
+- This provider check was read-only and did not mutate Gemini, the VPS, or
+  application data. Until the VPS key/model is corrected, the app is expected
+  to show the manual material-selection fallback rather than a false AI result.
+
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
 GPS, environment, and false-Gemini-success risks, and the disposable testing
