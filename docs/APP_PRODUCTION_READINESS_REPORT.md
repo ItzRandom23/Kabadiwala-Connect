@@ -1046,6 +1046,10 @@ was available.
   41, not the source release `0.0.41-beta`/versionCode 42. The updated backend
   and OTA manifest therefore remain a deployment gate, not a completed release
   fact.
+- The rebuilt version-42 testing APK was installed on the connected ADB
+  emulator, app data was cleared, and `MainActivity` was cold-launched again.
+  The process stayed alive; the targeted logcat window contained no protected
+  route, bearer-token/401, fatal-exception, or ANR signature before login.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
