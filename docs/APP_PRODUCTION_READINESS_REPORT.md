@@ -774,6 +774,11 @@ multi-account process-death run remain open.
   Picker selection, removable previews, and low-confidence/manual fallback all
   completed. This closes the previously missing live Household image-flow
   evidence, but not the complete Household pickup-to-settlement UI journey.
+- Current revision clean-start recheck on `emulator-5554` after installing the
+  testing debug APK and clearing app data: the unauthenticated surface launched
+  cold, and app-process logcat contained
+  `PASS_NO_APP_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` (no 401, bearer-token,
+  Retrofit/OkHttp, protected-route, FATAL, or ANR signature before login).
 
 ## Performance observations
 
