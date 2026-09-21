@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request } from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
 import type { AccountRole as AccountRoleType, PrismaClient } from '@prisma/client';
 import prismaPackage from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
@@ -315,10 +316,16 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     // classifier. Ownership-sensitive lot/listing mutations remain guarded by
     // their dedicated route handlers.
     requireRole(req, 'COLLECTOR', 'HOUSEHOLD');
-    const language = typeof req.body?.language === 'string' ? req.body.language.slice(0, 24) : 'English';
-    const photo = req.file;
-    if (!photo) throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422);
-    const fallback = { materialCategory: 'OTHER', confidence: 0, alternatives: [], rationale: 'The photo could not be identified with enough confidence. Choose the material yourself.', source: 'TEMPLATE', model: null };
+  const language = typeof req.body?.language === 'string' ? req.body.language.slice(0, 24) : 'English';
+  const photo = req.file;
+  if (!photo) throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422);
+  try {
+    const metadata = await sharp(photo.buffer).metadata();
+    if (!metadata.format || !['jpeg', 'png', 'webp'].includes(metadata.format)) throw new Error('unsupported_image_format');
+  } catch {
+    throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422, { code: 'INVALID_PHOTO' });
+  }
+  const fallback = { materialCategory: 'OTHER', confidence: 0, alternatives: [], rationale: 'The photo could not be identified with enough confidence. Choose the material yourself.', source: 'TEMPLATE', model: null };
     const result = await callGemini([
       { text: [
         'Identify the most likely recyclable material in this photo for a collector. This is only a suggestion; never invent certainty.',

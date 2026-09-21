@@ -6,6 +6,7 @@ import { futureRoutes } from '../src/routes/futureRoutes.js';
 import { errorHandler } from '../src/middleware/errors.js';
 
 const jwt = new JwtService({ JWT_SECRET: 'material-suggestion-test-secret', JWT_EXPIRES_IN: '1h' } as never);
+const validPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 function materialSuggestionApp() {
   const aiInference = { create: vi.fn().mockResolvedValue({ id: 'inference-1' }) };
@@ -49,7 +50,7 @@ describe('material suggestion photo contract', () => {
     const response = await request(app)
       .post('/future/lots/material-suggestion')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
-      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(503);
     expect(response.body.error).toMatchObject({
@@ -67,8 +68,8 @@ describe('material suggestion photo contract', () => {
       expect(String(input)).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-test-model:generateContent');
       expect((init?.headers as Record<string, string>)['x-goog-api-key']).toBe('gemini-test-key');
       const body = JSON.parse(String(init?.body)) as { contents: Array<{ parts: Array<{ inline_data: { mime_type: string; data: string } }> }> };
-      expect(body.contents[0].parts[1].inline_data.mime_type).toBe('image/jpeg');
-      expect(body.contents[0].parts[1].inline_data.data).toBe(Buffer.from('normalized-image-bytes').toString('base64'));
+      expect(body.contents[0].parts[1].inline_data.mime_type).toBe('image/png');
+      expect(body.contents[0].parts[1].inline_data.data).toBe(validPng.toString('base64'));
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ materialCategory: 'COPPER', confidence: 0.91, alternatives: ['CABLE', 'OTHER'], rationale: 'Visible copper wiring.' }) }] } }] }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -78,7 +79,7 @@ describe('material suggestion photo contract', () => {
       .post('/future/lots/material-suggestion')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
       .field('language', 'English')
-      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({
@@ -94,7 +95,7 @@ describe('material suggestion photo contract', () => {
       data: expect.objectContaining({
         feature: 'MATERIAL_CLASSIFICATION',
         modelProvider: 'GOOGLE_GEMINI',
-        inputProvenance: expect.objectContaining({ mimeType: 'image/jpeg', bytes: Buffer.byteLength('normalized-image-bytes') })
+        inputProvenance: expect.objectContaining({ mimeType: 'image/png', bytes: validPng.length })
       })
     }));
   });
@@ -108,7 +109,7 @@ describe('material suggestion photo contract', () => {
     const response = await request(app)
       .post('/future/lots/material-suggestion')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
-      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({ materialCategory: 'LCD_PANEL', alternatives: ['PLASTIC'] });
@@ -123,7 +124,7 @@ describe('material suggestion photo contract', () => {
     const response = await request(app)
       .post('/future/lots/material-suggestion')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
-      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(503);
     expect(response.body.error).toMatchObject({
@@ -144,7 +145,7 @@ describe('material suggestion photo contract', () => {
     const response = await request(app)
       .post('/future/lots/material-suggestion')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
-      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(503);
     const providerLog = warning.mock.calls
@@ -156,5 +157,22 @@ describe('material suggestion photo contract', () => {
     expect(providerLog).not.toContain('do-not-log-this-key');
     expect(providerLog).not.toContain('provider body must not be logged');
     warning.mockRestore();
+  });
+
+  it('rejects bytes that are not a real supported image even when MIME is spoofed', async () => {
+    const { app, aiInference } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', Buffer.from('not-an-image'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'A JPEG, PNG, or WebP photo is required',
+      details: { code: 'INVALID_PHOTO' }
+    });
+    expect(aiInference.create).not.toHaveBeenCalled();
   });
 });

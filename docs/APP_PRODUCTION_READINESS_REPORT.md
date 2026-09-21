@@ -1040,7 +1040,7 @@ was available.
   localization checker still reports the pre-existing incomplete translation
   matrix (220 missing localized entries); no new resource keys were introduced
   by this change.
-- A fresh backend source gate on 2026-09-21 passed all 39 test files and 121
+- A fresh backend source gate on 2026-09-21 passed all 39 test files and 122
   tests, followed by `npm run build` and `npm run lint`. A live VPS probe at
   the same point still reported backend/OTA version `0.0.40-beta`/versionCode
   41, not the source release `0.0.41-beta`/versionCode 42. The updated backend
@@ -1050,6 +1050,11 @@ was available.
   emulator, app data was cleared, and `MainActivity` was cold-launched again.
   The process stayed alive; the targeted logcat window contained no protected
   route, bearer-token/401, fatal-exception, or ANR signature before login.
+- The Gemini material-suggestion endpoint now decodes the uploaded bytes with
+  the image library before calling the provider, rather than trusting only the
+  multipart MIME label. A spoofed JPEG label containing non-image bytes returns
+  the typed 422 `INVALID_PHOTO` response and does not create an AI inference;
+  the focused backend contract suite passes 7/7, with build and lint green.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
