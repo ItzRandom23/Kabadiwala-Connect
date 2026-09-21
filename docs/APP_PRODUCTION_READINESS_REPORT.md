@@ -842,6 +842,11 @@ multi-account process-death run remain open.
   `:app:assembleEnvTestingRelease` passed and produced unsigned
   `versionCode 41 / 0.0.40-beta` output. Production release signing remains
   intentionally deployment-owned and was not fabricated in the repository.
+- Fresh ADB install verification after the latest source change installed
+  `versionCode 41 / 0.0.40-beta` on `emulator-5554` (Android 17), cleared app
+  data, launched the package, and confirmed the unauthenticated language
+  selection surface. PID-scoped logcat contained no protected route, bearer
+  token, 401, fatal-exception, or ANR signature before authentication.
 
 ## Performance observations
 
