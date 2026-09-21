@@ -1,6 +1,6 @@
 # Kabadiwala Connect — Production Readiness Report
 
-Date: 2026-09-20
+Date: 2026-09-21
 Scope: Android `envTesting` build, backend TypeScript/Prisma application, local static audit, and emulator smoke/regression checks.
 
 ## Final verdict
@@ -485,6 +485,15 @@ multi-account process-death run remain open.
 - Testing health endpoint — HTTP 200, database connected.
 - Testing readiness endpoint — HTTP 200; database, storage, OTP provider, and
   rate-limit store reported ready.
+- Current source-state rerun on 2026-09-21 — `npm test` passed 38 test files
+  and 110 tests; `npm run lint` and `npm run build` also passed. The backend
+  test stderr contains intentional negative-case validation logs only (for
+  example missing-photo 422 and unavailable-Gemini 503 coverage).
+- Current VPS post-reset probe on 2026-09-21 — `/api/v1/health` and
+  `/api/v1/ready` returned HTTP 200 with the database connected and all
+  readiness checks true. The VPS reports `0.0.38-beta`; its update manifest
+  still reports versionCode 39, so the latest repository release (versionCode
+  40 / `0.0.39-beta`) is not yet deployed there.
 - Current VPS smoke checks for the previously uploaded build — `/api/v1/health`
   and `/api/v1/ready` returned HTTP 200; unauthenticated
   `/api/v1/kabadiwala/listings` returned 401; Collector login/profile returned
@@ -543,6 +552,16 @@ multi-account process-death run remain open.
   `AUTHENTICATION_REQUIRED`, FATAL, or ANR signature before authentication.
 - After the shared user-facing error-mapping change, the instrumentation suite
   completed 9/9 on `Pixel_10_Pro(AVD) - 17` again.
+- Current source-state rerun on 2026-09-21 —
+  `:app:testEnvTestingDebugUnitTest` passed, and
+  `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on
+  `Pixel_10_Pro(AVD) - 17`. `:app:assembleEnvTestingRelease` and
+  `:app:assembleEnvTestingDebug` both passed after the release-variant guard
+  fix. A fresh APK install through the SDK `adb` executable, `pm clear`, and
+  cold launch produced an app-process-only
+  `PASS_NO_APP_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` result; no protected
+  route, bearer token, 401, Retrofit/OkHttp, FATAL, or ANR signature appeared
+  before authentication.
 - After the OTP limiter, retry-window, and rapid-tap guard change, the Android
   unit suite completed with 86 tests and `:app:assembleEnvTestingDebug`
   passed. The rebuilt APK was installed on `emulator-5554`, application data
@@ -677,6 +696,16 @@ was available.
   VPS, followed by a fresh offline listing reconnect/replay check. Confirmed
   current state: the VPS still returns the older nullable/raw photo fields
   observed during diagnosis.
+- The VPS is currently running the older `0.0.38-beta` deployment and update
+  manifest versionCode 39, while the repository contains the versionCode 40
+  `0.0.39-beta` release. The latest backend contract and Android release APK
+  therefore require a deliberate VPS/app-update upload and restart before
+  live deployment evidence can be refreshed.
+- The recent VPS database reset completed runtime index preparation, but the
+  development seed was correctly refused because the server `.env` is in
+  production mode. No testing fixtures should be inserted into that database;
+  a separate `APP_ENV=testing` database is required for seeded disposable
+  accounts and destructive live testing.
 - Deployment/restart of the latest OTP limiter contract is also pending on the
   VPS. Until that upload is active, VPS logs may still show `otp_requested`
   before a rejected request; the local source now logs `otp_sent` only after
@@ -702,6 +731,10 @@ was available.
 - A stale refresh-token replay is now handled safely by returning to auth, but
   multi-device refresh-rotation behavior and the post-deployment offline
   listing replay still require live verification.
+- After the database reset, all former users, sessions, lots, pickups,
+  inventory, and history are gone unless restored from backup. The production
+  VPS must not be seeded with the development fixtures; testing requires a
+  separately isolated database and fresh disposable accounts.
 - Production release signing and provider configuration are intentionally
   absent from source control.
 - The testing Gemini provider now responds with structured low-confidence
