@@ -597,6 +597,11 @@ multi-account process-death run remain open.
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
   successful plain `npm test` run is the authoritative result.
+- Dependency audit on 2026-09-21: `npm audit --omit=dev` reports zero
+  production vulnerabilities. The full audit reports two moderate Vitest
+  development-tool advisories (`@vitest/mocker`, fixed only by the major
+  Vitest 5 upgrade); this remains a test-tool maintenance item and does not
+  affect the runtime dependency graph.
 - Latest rerun after the offline pickup outbox dedupe fix:
   `:app:testEnvTestingDebugUnitTest` and `:app:assembleEnvTestingDebug`
   passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on
