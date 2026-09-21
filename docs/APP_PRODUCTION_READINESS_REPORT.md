@@ -1028,6 +1028,18 @@ was available.
   fatal-exception, or ANR signature. The previously observed 422 was reproduced
   only with a malformed PowerShell multipart helper; the Android Retrofit
   multipart request succeeded end-to-end against the VPS.
+- The recycler trust wording was tightened in the current Android source and
+  Hindi/Marathi resources: “Authorized”/“Verified by” now communicates that
+  authorization evidence was reviewed by the platform, identifies the evidence
+  source, and explicitly says the trust passport is not government certification.
+  This is copy/accessibility hardening only; it does not grant or infer an
+  external certification.
+- After that UI/resource change, `:app:testEnvTestingDebugUnitTest` passed and
+  `:app:connectedEnvTestingDebugAndroidTest` passed all 12 tests on
+  `Pixel_10_Pro(AVD) - 17`; `:app:assembleEnvTestingDebug` also passed. The
+  localization checker still reports the pre-existing incomplete translation
+  matrix (220 missing localized entries); no new resource keys were introduced
+  by this change.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

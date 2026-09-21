@@ -64,7 +64,7 @@
 
     <!-- Recyclers -->
     <string name="recyclers_title">रिसायकलर</string>
-    <string name="recyclers_authorized">अधिकृत</string>
+    <string name="recyclers_authorized">प्लॅटफॉर्मने अधिकृततेच्या पुराव्याचे पुनरावलोकन केले</string>
     <string name="recyclers_distance_km">%1$s किमी दूर</string>
 
     <string name="quote_request_button">भाव मागा</string><string name="quote_request_title">भाव मागा</string><string name="quote_request_detail">तुमचा लॉट आणि रिसायकलर निवडा. विनंती या फोनमध्ये जतन होईल.</string><string name="quote_choose_lot">लॉट निवडा</string><string name="quote_choose_recycler">रिसायकलर निवडा</string><string name="quote_summary">विनंतीचा सारांश</string><string name="quote_lot_summary">%1$s • %2$.1f किलो</string><string name="quote_recycler_summary">रिसायकलर: %1$s</string><string name="quote_estimated">अंदाजे किंमत: ₹%1$.0f</string><string name="quote_confirmation">ही विनंती पाठवायची?</string><string name="quote_submit">विनंती पाठवा</string><string name="quote_saved">फोनमध्ये जतन केले</string><string name="quote_compare_title">भावांची तुलना</string><string name="quote_delivery_state">विनंती स्थिती: %1$s</string><string name="quote_best">सर्वोत्तम भाव</string><string name="quote_price">₹%1$.0f / किलो</string><string name="quote_total">एकूण: ₹%1$.0f</string><string name="quote_market_compare">बाजार भाव: ₹%1$.0f / किलो</string><string name="quote_distance">अंतर: %1$.1f किमी</string><string name="quote_validity">२४ तासांसाठी वैध</string><string name="quote_status">स्थिती: %1$s</string><string name="quote_accept">स्वीकारा</string><string name="quote_reject">नकार द्या</string>
@@ -186,11 +186,11 @@
     <string name="lot_photo_too_bright">फोटोवर खूप तेजस्वी प्रकाश आहे. चकाकीपासून दूर जाऊन पुन्हा फोटो घ्या.</string>
     <string name="lot_photo_low_detail">सामान जवळ ठेवा, म्हणजे त्याचे तपशील स्पष्ट दिसतील.</string>
     <string name="recycler_trust_passport">विश्वास प्रोफाइल</string>
-    <string name="recycler_verified_by">पडताळणी: %1$s</string>
-    <string name="recycler_valid_until">अधिकृतता %1$s पर्यंत वैध</string>
+    <string name="recycler_verified_by">पुराव्याचा स्रोत: %1$s</string>
+    <string name="recycler_valid_until">नोंदवलेली वैधता तारीख: %1$s</string>
     <string name="recycler_rating">रेटिंग %1$.1f · %2$d अभिप्राय</string>
-    <string name="recycler_completed_handovers">%1$d पडताळलेले हँडओव्हर पूर्ण</string>
-    <string name="recycler_trust_explainer">हे संकेत रिसायकलर प्रोफाइल आणि पूर्ण झालेल्या नोंदींवर आधारित आहेत. हा लपवलेला स्कोअर नाही.</string>
+    <string name="recycler_completed_handovers">%1$d प्लॅटफॉर्म हँडओव्हर पूर्ण</string>
+    <string name="recycler_trust_explainer">ही माहिती सादर केलेल्या प्रोफाइल पुराव्यावर आणि प्लॅटफॉर्म नोंदींवर आधारित आहे. हे सरकारी प्रमाणपत्र नाही.</string>
     <string name="deal_sheet_title">पारदर्शक व्यवहार तपशील</string>
     <string name="deal_market_reference">बाजार संदर्भ</string>
     <string name="deal_offered_rate">रिसायकलरचा दर</string>
