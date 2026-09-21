@@ -313,6 +313,12 @@ Gemini response or HTTP error shown.
   correctly titles the route `Sell scrap`; a fresh ADB screenshot confirmed the
   single-arrow hierarchy. The testing marker remains visible only in the
   testing flavor.
+- Latest light-mode pass: the light palette now uses a contrast-safe tertiary
+  green for inline status text and icons instead of the pale mint used by the
+  dark palette. System status and navigation bars now switch their icon
+  appearance with the selected theme. Unit contrast coverage was extended for
+  the tertiary token, and an ADB emulator check confirmed readable Settings
+  content, selected Light state, navigation labels, and the testing marker.
 - Preserved the existing role-specific navigation boundaries and manual/error
   states while avoiding new fake content. A dedicated physical-device,
   TalkBack, large-font, and low-end performance pass remains a release gate.

@@ -5,6 +5,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightPrimary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSurface
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightError
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSuccess
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightTertiary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightWarning
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLime
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLimeOn
@@ -33,6 +34,10 @@ class ThemeContrastTest {
 
     @Test
     fun lightSemanticTextIsReadableOnLightSurface() {
+        assertTrue(
+            "Light tertiary text/icon color must remain readable on light surfaces",
+            contrastRatio(KcLightTertiary, KcLightSurface) >= 4.5
+        )
         assertTrue(
             "Light warning text must remain readable on light surfaces",
             contrastRatio(KcLightWarning, KcLightSurface) >= 4.5

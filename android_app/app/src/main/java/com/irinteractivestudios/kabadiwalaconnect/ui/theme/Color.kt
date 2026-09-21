@@ -51,6 +51,10 @@ val KcLightOutline = Color(0xFF748276)
 // light canvas. This readable green keeps the same hue family at 7:1+ against
 // white while leaving KcLime available for high-emphasis action surfaces.
 val KcLightPrimary = Color(0xFF315B00)
+// Tertiary is also used directly for icons and inline status text. The mint
+// tertiary used by the dark palette is intentionally not reused on a white
+// canvas because it fails contrast as text there.
+val KcLightTertiary = Color(0xFF2F6B47)
 // Semantic text/icon colors need their own light-theme values. The dark-theme
 // amber, mint, and coral are intentionally brighter and lose contrast on a
 // light canvas, especially in compact status labels.

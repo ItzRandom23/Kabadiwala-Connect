@@ -27,8 +27,8 @@ private val LightColorScheme = lightColorScheme(
     onSecondary = KcWhite,
     secondaryContainer = KcLightRaised,
     onSecondaryContainer = KcLightText,
-    tertiary = KcCyan,
-    onTertiary = KcLightText,
+    tertiary = KcLightTertiary,
+    onTertiary = KcWhite,
     background = KcLightBackground,
     onBackground = KcLightText,
     surface = KcLightSurface,
@@ -160,7 +160,10 @@ fun KabadiwalaConnectTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                !effectiveDark
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars =
                 !effectiveDark
         }
     }
