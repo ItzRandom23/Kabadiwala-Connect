@@ -992,6 +992,13 @@ was available.
   storage, OTP, and rate-limit checks all true. Unauthenticated requests to
   `/api/v1/kabadiwala/listings`, `/api/v1/household/listings`, and
   `/api/v1/future/preferences` all returned HTTP 401 as expected.
+- A live authenticated testing smoke on 2026-09-21 used disposable Collector
+  accounts: development-OTP verification returned a bearer token, the
+  authenticated `/api/v1/kabadiwala/listings` request returned HTTP 200, logout
+  returned HTTP 200, and reusing the revoked refresh token returned
+  `TOKEN_INVALID` as expected. All three disposable accounts were then removed
+  through the account-deletion API; no production account or production data
+  was involved.
 - A current authenticated Gemini smoke attempt using the documented disposable
   Household seed (`household-a@kabadiwala.example` / testing password) was
   rejected with HTTP 401 at `/api/v1/auth/login`. No image was uploaded and no
