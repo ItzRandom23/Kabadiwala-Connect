@@ -1005,6 +1005,13 @@ was available.
   endpoints; Recycler tokens were rejected with HTTP 403 by Kabadiwala inventory
   and listings endpoints. Both accounts were deleted through the account
   deletion API after the probes.
+- A real version-42 Android flow on `emulator-5554` (Android 17) cleared app
+  data, selected English, entered the email sign-in path, authenticated against
+  the testing VPS with a disposable Collector account, handled the Android
+  notification permission prompt, and reached the live Collector Home with
+  account-scoped navigation/data. The app log contained no fatal exception,
+  ANR, bearer-token, or HTTP-401 signature during the flow. The disposable
+  account was deleted through the API and app data was cleared afterward.
 - A current authenticated Gemini smoke attempt using the documented disposable
   Household seed (`household-a@kabadiwala.example` / testing password) was
   rejected with HTTP 401 at `/api/v1/auth/login`. No image was uploaded and no
