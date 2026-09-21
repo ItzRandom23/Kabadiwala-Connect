@@ -17,6 +17,8 @@ android_app/.gradle/
 android_app/.kotlin/
 android_app/build/
 android_app/app/build/
+# Android Studio's generated bundle destination when exporting a flavor.
+android_app/app/envTesting/
 android_app/local.properties
 android_app/app/google-services.json
 
