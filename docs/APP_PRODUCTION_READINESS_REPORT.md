@@ -1012,12 +1012,22 @@ was available.
   account-scoped navigation/data. The app log contained no fatal exception,
   ANR, bearer-token, or HTTP-401 signature during the flow. The disposable
   account was deleted through the API and app data was cleared afterward.
-- A current authenticated Gemini smoke attempt using the documented disposable
-  Household seed (`household-a@kabadiwala.example` / testing password) was
-  rejected with HTTP 401 at `/api/v1/auth/login`. No image was uploaded and no
-  data was mutated by this attempt. The VPS database therefore does not
-  currently expose the documented seed account, so live Gemini success remains
-  unverified until an isolated testing account/database is provisioned again.
+- A live authenticated Gemini multipart smoke on 2026-09-21 used a disposable
+  Collector email account and a valid PNG. The VPS returned HTTP 200 with the
+  typed result `OTHER`, confidence `0.10`, source `AI`, and model
+  `gemini-3.5-flash-lite`; no raw provider JSON or secret was exposed to the
+  client. The disposable account was deleted afterward. A prior documented
+  Household-seed login attempt was rejected with HTTP 401, so the older seed
+  observation remains historical rather than evidence of a provider failure.
+- The same Gemini path was verified from the real version-42 Android app on
+  `emulator-5554`: the dedicated seven-step `Record lot` screen opened the
+  Photo Picker, accepted the selected image, submitted `Identify from photo`,
+  and rendered the typed low-confidence result plus understandable manual
+  material categories. The UI showed the manual fallback copy instead of raw
+  Gemini/API JSON. Targeted logcat contained no 401, 422, service-error,
+  fatal-exception, or ANR signature. The previously observed 422 was reproduced
+  only with a malformed PowerShell multipart helper; the Android Retrofit
+  multipart request succeeded end-to-end against the VPS.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
