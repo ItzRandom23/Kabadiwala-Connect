@@ -60,4 +60,15 @@ describe('role boundaries', () => {
       .set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-a')}`)
       .expect(403);
   });
+
+  it('rejects suspended and deleted linked user accounts from generic account routes', async () => {
+    await request(linkedAccountApp('COLLECTOR', { role: 'COLLECTOR', accountStatus: 'SUSPENDED' }))
+      .get('/account')
+      .set('Authorization', `Bearer ${jwt.generateToken('kabadiwala-suspended')}`)
+      .expect(403, { code: 'ACCOUNT_SUSPENDED' });
+    await request(linkedAccountApp('HOUSEHOLD', { role: 'HOUSEHOLD', accountStatus: 'DELETED' }))
+      .get('/account')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-deleted')}`)
+      .expect(403, { code: 'ACCOUNT_DELETED' });
+  });
 });

@@ -338,6 +338,8 @@ guards for important mutations. Existing authorization tests cover cross-role
 and ownership boundaries; the full backend suite passed. Legacy collector and
 household middleware now also rejects a token whose profile has no matching
 User linkage, rather than treating the missing linkage as acceptable.
+The generic account middleware now also rechecks the linked User account status,
+so a stale active profile cannot keep a suspended or deleted account authorized.
 
 The Android cache boundary was tightened during the final pass: cached
 handovers are now filtered by the current account as collector or recycler,
@@ -498,14 +500,14 @@ multi-account process-death run remain open.
 - The current backend gate passes 38 test files and 114 tests after adding
   legacy lot idempotency-mismatch and OTP limiter coverage. `npm run build` and `npm run lint`
   also pass after the hardening change.
-- The latest backend run passed 39 test files and 116 tests, including explicit
+- The latest backend run passed 39 test files and 117 tests, including explicit
   missing-linkage rejection for collector, household, and account middleware,
   plus the no-registration-details Household phone-login regression.
 - Testing health endpoint — HTTP 200, database connected.
 - Testing readiness endpoint — HTTP 200; database, storage, OTP provider, and
   rate-limit store reported ready.
 - Current source-state rerun on 2026-09-21 — `npm test` passed 39 test files
-  and 116 tests; `npm run lint` and `npm run build` also passed. The backend
+  and 117 tests; `npm run lint` and `npm run build` also passed. The backend
   test stderr contains intentional negative-case validation logs only (for
   example missing-photo 422 and unavailable-Gemini 503 coverage), and 5xx
   diagnostics are now redacted structured events.

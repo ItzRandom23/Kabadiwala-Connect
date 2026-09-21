@@ -51,13 +51,15 @@ export const requireAccount = (jwtService: JwtService, db?: PrismaClient, requir
       if (identity.role === 'COLLECTOR' || identity.role === 'HOUSEHOLD') {
         const [collector, user] = await Promise.all([
           db.collector.findUnique({ where: { id: identity.collectorId }, select: { accountStatus: true } }),
-          db.user.findFirst({ where: { collectorProfileId: identity.collectorId }, select: { role: true } })
+          db.user.findFirst({ where: { collectorProfileId: identity.collectorId }, select: { role: true, accountStatus: true } })
         ]);
         if (!collector) return next(new AppError('COLLECTOR_NOT_FOUND', 'Collector not found', 404));
         if (!user) return next(new AppError('AUTHORIZATION_ERROR', 'Account role linkage is missing', 403));
         if (user.role !== identity.role) return next(new AppError('AUTHORIZATION_ERROR', 'Account role linkage is invalid', 403));
         if (collector.accountStatus === 'SUSPENDED') return next(new AppError('ACCOUNT_SUSPENDED', 'Account is suspended', 403));
         if (collector.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
+        if (user.accountStatus === 'SUSPENDED') return next(new AppError('ACCOUNT_SUSPENDED', 'Account is suspended', 403));
+        if (user.accountStatus === 'DELETED') return next(new AppError('ACCOUNT_DELETED', 'Account is deleted', 403));
       } else {
         const user = await db.user.findFirst({ where: { recyclerProfileId: identity.collectorId }, select: { role: true, accountStatus: true } });
         const recycler = await db.recycler.findUnique({ where: { id: identity.collectorId }, select: { authorizationStatus: true, authorizationValidUntil: true } });
