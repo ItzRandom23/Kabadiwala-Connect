@@ -822,6 +822,10 @@ multi-account process-death run remain open.
   `:app:testEnvTestingDebugUnitTest` and
   `:app:connectedEnvTestingDebugAndroidTest` passed again on
   `Pixel_10_Pro(AVD) - 17`; all 12 connected tests completed successfully.
+- The release-flavored testing artifact also builds successfully with R8:
+  `:app:assembleEnvTestingRelease` passed and produced unsigned
+  `versionCode 41 / 0.0.40-beta` output. Production release signing remains
+  intentionally deployment-owned and was not fabricated in the repository.
 
 ## Performance observations
 
