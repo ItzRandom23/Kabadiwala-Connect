@@ -919,6 +919,11 @@ was available.
 - This provider check was read-only and did not mutate Gemini, the VPS, or
   application data. Until the VPS key/model is corrected, the app is expected
   to show the manual material-selection fallback rather than a false AI result.
+- The material-suggestion contract now requests JSON output, normalizes safe
+  category aliases such as `lcd`/`plastic`, and rejects malformed or incomplete
+  provider output as `GEMINI_INVALID_RESPONSE` without recording an AI
+  inference. Backend coverage is now 39 files / 120 tests, with build and lint
+  still passing.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

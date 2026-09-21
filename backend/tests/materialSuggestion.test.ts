@@ -98,4 +98,39 @@ describe('material suggestion photo contract', () => {
       })
     }));
   });
+
+  it('normalizes provider category casing and LCD aliases', async () => {
+    process.env.GEMINI_API_KEY = 'gemini-test-key';
+    process.env.GEMINI_MODEL = 'gemini-test-model';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ materialCategory: 'lcd', confidence: 0.84, alternatives: ['plastic', 'LCD_PANEL'], rationale: 'A flat display panel is visible.' }) }] } }] }), { status: 200 })));
+    const { app } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ materialCategory: 'LCD_PANEL', alternatives: ['PLASTIC'] });
+  });
+
+  it('does not record malformed provider output as an AI result', async () => {
+    process.env.GEMINI_API_KEY = 'gemini-test-key';
+    process.env.GEMINI_MODEL = 'gemini-test-model';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'not-json' }] } }] }), { status: 200 })));
+    const { app, aiInference } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Material detection is temporarily unavailable. Choose the material manually.',
+      details: { code: 'GEMINI_INVALID_RESPONSE' }
+    });
+    expect(aiInference.create).not.toHaveBeenCalled();
+  });
 });

@@ -19,6 +19,7 @@ const materialUpload = multer({
   fileFilter: (_req, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
 });
 const materialCategories = ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'] as const;
+type MaterialCategory = typeof materialCategories[number];
 
 function indiaMonthKey(date: Date) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).formatToParts(date);
@@ -123,7 +124,7 @@ function geminiModelName() {
   return (process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-2.5-flash-lite';
 }
 
-async function callGemini(parts: unknown[], maxOutputTokens = 220) {
+async function callGemini(parts: unknown[], maxOutputTokens = 220, responseMimeType?: 'application/json') {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) return null;
   const model = geminiModelName();
@@ -133,7 +134,7 @@ async function callGemini(parts: unknown[], maxOutputTokens = 220) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.1, maxOutputTokens } }),
+      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.1, maxOutputTokens, ...(responseMimeType ? { responseMimeType } : {}) } }),
       signal: controller.signal
     });
     if (!response.ok) return null;
@@ -154,6 +155,17 @@ function parseJsonObject(text: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeMaterialCategory(value: unknown): MaterialCategory | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'LCD') return 'LCD_PANEL';
+  return materialCategories.includes(normalized as MaterialCategory) ? normalized as MaterialCategory : 'OTHER';
+}
+
+function materialSuggestionServiceError(code: 'GEMINI_UNAVAILABLE' | 'GEMINI_INVALID_RESPONSE') {
+  return new AppError('SERVICE_UNAVAILABLE', 'Material detection is temporarily unavailable. Choose the material manually.', 503, { code });
 }
 
 export async function maybeAiDescription(input: { material?: string; condition?: string; weight?: number; notes?: string; language?: string }) {
@@ -293,14 +305,17 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
         'Do not identify brands, people, addresses, or safety compliance. Do not make pricing claims.'
       ].join('\n') },
       { inline_data: { mime_type: photo.mimetype, data: photo.buffer.toString('base64') } }
-    ], 220);
+    ], 220, 'application/json');
     if (!result) {
-      throw new AppError('SERVICE_UNAVAILABLE', 'Material detection is temporarily unavailable. Choose the material manually.', 503, { code: 'GEMINI_UNAVAILABLE' });
+      throw materialSuggestionServiceError('GEMINI_UNAVAILABLE');
     }
     const parsed = parseJsonObject(result.text);
-    const category = typeof parsed?.materialCategory === 'string' && materialCategories.includes(parsed.materialCategory as typeof materialCategories[number]) ? parsed.materialCategory : 'OTHER';
-    const confidence = typeof parsed?.confidence === 'number' && Number.isFinite(parsed.confidence) ? Math.max(0, Math.min(1, parsed.confidence)) : 0;
-    const alternatives = Array.isArray(parsed?.alternatives) ? parsed.alternatives.filter((item): item is string => typeof item === 'string' && materialCategories.includes(item as typeof materialCategories[number])).slice(0, 2) : [];
+    const category = normalizeMaterialCategory(parsed?.materialCategory);
+    const confidence = typeof parsed?.confidence === 'number' && Number.isFinite(parsed.confidence) ? Math.max(0, Math.min(1, parsed.confidence)) : null;
+    if (!parsed || category == null || confidence == null) throw materialSuggestionServiceError('GEMINI_INVALID_RESPONSE');
+    const alternatives = Array.isArray(parsed.alternatives)
+      ? parsed.alternatives.map(normalizeMaterialCategory).filter((item): item is MaterialCategory => item != null && item !== category).slice(0, 2)
+      : [];
     const rationale = typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
     const data = { materialCategory: category, confidence, alternatives, rationale, source: 'AI', model: result.model };
     await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: 'GOOGLE_GEMINI', modelVersion: result.model, inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
