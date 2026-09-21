@@ -10,7 +10,9 @@ const schema = z.object({
   REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   TRACEABILITY_SIGNING_SECRET: z.string().min(32),
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
-  APP_VERSION: z.string().min(1).default('1.0.0'),
+  // Keep the health/readiness version aligned with the Android release unless
+  // a deployment explicitly supplies a different backend build identifier.
+  APP_VERSION: z.string().min(1).default('0.0.40-beta'),
   OTP_PROVIDER: z.enum(['development', 'twilio', 'twofactor']).default('development'),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
