@@ -50,7 +50,13 @@ val KcLightOutline = Color(0xFF748276)
 // Lime is the brand action fill, but it is too bright to use as text on a
 // light canvas. This readable green keeps the same hue family at 7:1+ against
 // white while leaving KcLime available for high-emphasis action surfaces.
-val KcLightPrimary = Color(0xFF3A6200)
+val KcLightPrimary = Color(0xFF315B00)
+// Semantic text/icon colors need their own light-theme values. The dark-theme
+// amber, mint, and coral are intentionally brighter and lose contrast on a
+// light canvas, especially in compact status labels.
+val KcLightWarning = Color(0xFF704900)
+val KcLightSuccess = Color(0xFF006B45)
+val KcLightError = Color(0xFFB3261E)
 
 // Semantic aliases retained for existing screens and tests.
 val KcGreenPrimary = KcLime

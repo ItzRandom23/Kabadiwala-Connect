@@ -38,11 +38,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcError
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcInfo
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcRadius
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSuccess
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcWarning
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 
 /** Minimum touch-target height for primary actions (low-literacy friendly). */
@@ -221,7 +218,7 @@ fun EmptyContent(modifier: Modifier = Modifier) {
 fun ErrorContent(onRetry: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     StateColumn(
         icon = Icons.Filled.ErrorOutline,
-        tint = KcError,
+        tint = MaterialTheme.colorScheme.error,
         title = stringResource(R.string.common_error_title),
         detail = null,
         modifier = modifier.testTag("state_error")
@@ -232,7 +229,7 @@ fun ErrorContent(onRetry: (() -> Unit)? = null, modifier: Modifier = Modifier) {
 fun OfflineContent(modifier: Modifier = Modifier) {
     StateColumn(
         icon = Icons.Filled.CloudOff,
-        tint = KcWarning,
+        tint = KcTheme.extended.warning,
         title = stringResource(R.string.common_offline_title),
         detail = stringResource(R.string.common_offline_detail),
         modifier = modifier.testTag("state_offline")
@@ -243,7 +240,7 @@ fun OfflineContent(modifier: Modifier = Modifier) {
 fun SuccessContent(text: String, modifier: Modifier = Modifier) {
     StateColumn(
         icon = Icons.Filled.CheckCircle,
-        tint = KcSuccess,
+        tint = KcTheme.extended.success,
         title = text,
         detail = null,
         modifier = modifier.testTag("state_success")
@@ -254,7 +251,7 @@ fun SuccessContent(text: String, modifier: Modifier = Modifier) {
 fun SyncingContent(modifier: Modifier = Modifier) {
     StateColumn(
         icon = Icons.Filled.Sync,
-        tint = KcInfo,
+        tint = MaterialTheme.colorScheme.tertiary,
         title = stringResource(R.string.common_syncing),
         detail = null,
         modifier = modifier.testTag("state_syncing")

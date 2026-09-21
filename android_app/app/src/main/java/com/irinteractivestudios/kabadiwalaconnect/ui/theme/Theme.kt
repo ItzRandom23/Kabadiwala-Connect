@@ -40,7 +40,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerHigh = KcLightRaised,
     onSurfaceVariant = KcLightMuted,
     outline = KcLightOutline,
-    error = KcError,
+    error = KcLightError,
     onError = KcOnError,
     errorContainer = KcErrorContainer,
     onErrorContainer = KcOnErrorContainer
@@ -149,10 +149,10 @@ fun KabadiwalaConnectTheme(
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
         value = if (effectiveDark) KcLime else KcLightPrimary,
-        success = if (effectiveDark) KcMint else KcSuccess,
-        warning = if (effectiveDark) KcAmber else KcWarning,
+        success = if (effectiveDark) KcMint else KcLightSuccess,
+        warning = if (effectiveDark) KcAmber else KcLightWarning,
         logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,
-        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcLime.copy(alpha = .22f),
+        logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcLightPrimary.copy(alpha = .55f),
         isOperations = role == AccountRole.RECYCLER
     )
     val view = LocalView.current

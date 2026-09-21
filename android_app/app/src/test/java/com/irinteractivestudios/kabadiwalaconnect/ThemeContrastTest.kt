@@ -3,9 +3,11 @@ package com.irinteractivestudios.kabadiwalaconnect
 import androidx.compose.ui.graphics.Color
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightPrimary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSurface
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightError
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSuccess
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightWarning
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLime
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLimeOn
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcWarning
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.pow
@@ -30,10 +32,18 @@ class ThemeContrastTest {
     }
 
     @Test
-    fun lightWarningTextIsReadableOnLightSurface() {
+    fun lightSemanticTextIsReadableOnLightSurface() {
         assertTrue(
             "Light warning text must remain readable on light surfaces",
-            contrastRatio(KcWarning, KcLightSurface) >= 4.5
+            contrastRatio(KcLightWarning, KcLightSurface) >= 4.5
+        )
+        assertTrue(
+            "Light success text must remain readable on light surfaces",
+            contrastRatio(KcLightSuccess, KcLightSurface) >= 4.5
+        )
+        assertTrue(
+            "Light error text must remain readable on light surfaces",
+            contrastRatio(KcLightError, KcLightSurface) >= 4.5
         )
     }
 

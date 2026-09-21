@@ -583,10 +583,15 @@ multi-account process-death run remain open.
   route, bearer token, 401, Retrofit/OkHttp, FATAL, or ANR signature appeared
   before authentication.
 - The current Android unit suite contains 90 passing tests across 20 suites;
-  `ThemeContrastTest` enforces WCAG-AA contrast for light primary and warning
-  text plus the lime action label/fill pair, so the light-mode fix cannot
-  regress. Recycler warning labels now use the theme-aware warning token rather
-  than a low-contrast amber text constant.
+  The latest theme patch also passed the full `:app:connectedEnvTestingDebugAndroidTest`
+  suite 11/11 on `Pixel_10_Pro(AVD) - 17`.
+  `ThemeContrastTest` enforces WCAG-AA contrast for light primary, warning,
+  success, and error text plus the lime action label/fill pair, so the
+  light-mode fix cannot regress. Reusable offline/success/error/sync states
+  and Recycler warning labels now use theme-aware semantic tokens rather than
+  static dark-theme accent constants. The latest
+  `:app:connectedEnvTestingDebugAndroidTest` run passed 11/11 on
+  `Pixel_10_Pro(AVD) - 17` after this patch.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android
