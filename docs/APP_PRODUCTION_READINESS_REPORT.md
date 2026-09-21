@@ -609,6 +609,11 @@ multi-account process-death run remain open.
   `emulator-5554`. PID `10419` produced
   `FINAL_PUSHED_REVISION_CLEAN_START_PASS` with no protected request,
   bearer-token/401, Retrofit/OkHttp, crash, or ANR signature before login.
+- The final continuation also added a process-local account boundary to the
+  SupplyChain ViewModel: retained navigation state now resets when the
+  authenticated profile changes, including listing photos, photo errors,
+  listings, and radius. The Android unit/build gate and connected emulator
+  suite passed 11/11 after this change.
 - The current source also passed `:app:assembleEnvTestingRelease`, including
   release resource processing, lint-vital, R8 shrinking, and packaging. The
   only compiler note was the existing Android deprecation warning for direct

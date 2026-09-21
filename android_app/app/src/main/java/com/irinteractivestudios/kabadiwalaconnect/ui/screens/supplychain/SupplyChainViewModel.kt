@@ -88,6 +88,7 @@ class SupplyChainViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(SupplyChainState())
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
+    private var stateAccountId: String? = null
 
     private fun friendly(error: Throwable) = when ((error as? RemoteApiException)?.code) {
         "HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED" -> "Your session expired. Please sign in again."
@@ -103,6 +104,16 @@ class SupplyChainViewModel(
     private fun protectedSessionReady(): Boolean = authenticatedSessionReady()
 
     private fun accountId() = accountIdProvider()
+
+    /** A ViewModel can outlive a logout/account switch while its nav entry is
+     * still retained. Never let account-scoped photos, errors, or lists bleed
+     * into the next authenticated identity. */
+    private fun resetForAccountChange() {
+        val current = accountId()?.takeIf { it.isNotBlank() }
+        if (current == stateAccountId) return
+        stateAccountId = current
+        _state.value = SupplyChainState()
+    }
 
     private suspend fun cachedHouseholdListings(): List<HouseholdListingDto> {
         val account = accountId()?.takeIf { it.isNotBlank() } ?: return emptyList()
@@ -169,8 +180,10 @@ class SupplyChainViewModel(
         ))
     }
 
-    fun refreshHousehold(radiusKm: Int = _state.value.kabadiwalaRadiusKm) {
+    fun refreshHousehold(radiusKm: Int? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        resetForAccountChange()
+        val requestedRadiusKm = radiusKm ?: _state.value.kabadiwalaRadiusKm
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null, notice = null)
             val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
@@ -182,8 +195,8 @@ class SupplyChainViewModel(
                 val listings = mergeHouseholdListings(api.getHouseholdListings().requireData())
                 val pickups = api.getHouseholdPickups().requireData()
                 val anchor = listings.firstOrNull { it.latitude != null && it.longitude != null }
-                val kabadiwalas = api.getHouseholdKabadiwalas(anchor?.latitude, anchor?.longitude, radiusKm).requireData()
-                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = kabadiwalas, kabadiwalaRadiusKm = radiusKm, error = null)
+                val kabadiwalas = api.getHouseholdKabadiwalas(anchor?.latitude, anchor?.longitude, requestedRadiusKm).requireData()
+                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = kabadiwalas, kabadiwalaRadiusKm = requestedRadiusKm, error = null)
             }.onFailure { error ->
                 // Keep the durable account-scoped cache visible when the
                 // request fails after process death or during an offline
@@ -203,6 +216,7 @@ class SupplyChainViewModel(
     }
     fun refreshKabadiwala() {
         if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
+        resetForAccountChange()
         cache?.load(accountId())?.let(::applyCached)
         load {
         var partialFailure = false
@@ -228,6 +242,7 @@ class SupplyChainViewModel(
     }
     fun refreshRecycler() {
         if (!allowed(AccountRole.RECYCLER) || !protectedSessionReady()) return
+        resetForAccountChange()
         cache?.load(accountId())?.let(::applyCached)
         load {
         var partialFailure = false
@@ -250,6 +265,7 @@ class SupplyChainViewModel(
     }
     private fun action(key: String, requiredRole: AccountRole? = null, block: suspend () -> String = { "Done" }) {
         if (!protectedSessionReady() || (requiredRole != null && !allowed(requiredRole))) return
+        resetForAccountChange()
         if (key in _state.value.busy) return
         _state.value = _state.value.copy(busy = _state.value.busy + key, error = null, notice = null)
         viewModelScope.launch {
