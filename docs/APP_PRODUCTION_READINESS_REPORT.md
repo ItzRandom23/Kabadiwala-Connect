@@ -508,6 +508,10 @@ multi-account process-death run remain open.
   readiness checks true. The VPS reports `0.0.38-beta`; its update manifest
   still reports versionCode 39, so the latest repository release (versionCode
   40 / `0.0.39-beta`) is not yet deployed there.
+- A fresh probe after the latest Android push still reports VPS version
+  `0.0.38-beta`, update manifest versionCode 39, HTTP 200 health/readiness, and
+  therefore confirms deployment remains the release blocker rather than a
+  client build failure.
 - Current VPS smoke checks for the previously uploaded build — `/api/v1/health`
   and `/api/v1/ready` returned HTTP 200; unauthenticated
   `/api/v1/kabadiwala/listings` returned 401; Collector login/profile returned
@@ -588,6 +592,9 @@ multi-account process-death run remain open.
   consistently uses its safe localized unsupported-image/manual-fallback copy;
   the unit/build gate and emulator suite passed again (89 unit tests, 9/9
   instrumentation tests).
+- Fresh post-push install/clear/cold-launch on `emulator-5554` was checked with
+  app-process-only logcat filtering and again produced
+  `CLEAN_START_PASS_NO_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` before login.
 - After the OTP limiter, retry-window, and rapid-tap guard change, the Android
   unit suite completed with 86 tests and `:app:assembleEnvTestingDebug`
   passed. The rebuilt APK was installed on `emulator-5554`, application data
