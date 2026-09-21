@@ -568,6 +568,9 @@ multi-account process-death run remain open.
   `PASS_NO_APP_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` result; no protected
   route, bearer token, 401, Retrofit/OkHttp, FATAL, or ANR signature appeared
   before authentication.
+- The current Android unit suite contains 89 passing tests across 20 suites;
+  the new `ThemeContrastTest` enforces WCAG-AA contrast for light primary text
+  and the lime action label/fill pair so the light-mode fix cannot regress.
 - After the OTP limiter, retry-window, and rapid-tap guard change, the Android
   unit suite completed with 86 tests and `:app:assembleEnvTestingDebug`
   passed. The rebuilt APK was installed on `emulator-5554`, application data
