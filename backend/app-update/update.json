@@ -1,8 +1,8 @@
 {
-  "versionCode": 41,
-  "versionName": "0.0.40-beta",
-  "apkUrl": "kabadiwala-connect-0.0.40-beta-debug.apk",
-  "sha256": "44EA8B1570F52DB79D577B083C6EE979714AEAA7148C630F05B611E4FFDE25E3",
-  "sizeBytes": 27246976,
-  "releaseNotes": "Production-readiness hardening, safer authentication, multi-photo scrap capture, GPS lot locations, offline reliability, and a refined Graphite Neon welcome experience."
+  "versionCode": 42,
+  "versionName": "0.0.41-beta",
+  "apkUrl": "kabadiwala-connect-0.0.41-beta-debug.apk",
+  "sha256": "583D277B143DFDFC1FEB04ED59979AC396DF0798C828846CBE417EC11AB75E95",
+  "sizeBytes": 27230579,
+  "releaseNotes": "Selected-language Gemini rationale, localized photo states, safer authentication, multi-photo scrap capture, GPS lot locations, offline reliability, and Graphite Neon UI polish."
 }

@@ -852,6 +852,12 @@ multi-account process-death run remain open.
   data, launched the package, and confirmed the unauthenticated language
   selection surface. PID-scoped logcat contained no protected route, bearer
   token, 401, fatal-exception, or ANR signature before authentication.
+- The final local OTA package is now `versionCode 42 / 0.0.41-beta`; the
+  rebuilt testing APK and `backend/app-update/update.json` agree on SHA-256
+  `583D277B143DFDFC1FEB04ED59979AC396DF0798C828846CBE417EC11AB75E95` and
+  size `27,230,579` bytes. The exact version-42 APK was installed on the
+  emulator and the connected suite again completed 12/12. The VPS update
+  channel remains at version 41 until this package is deliberately uploaded.
 
 ## Performance observations
 
