@@ -820,6 +820,11 @@ was available.
   `0.0.39-beta` release. The latest backend contract and Android release APK
   therefore require a deliberate VPS/app-update upload and restart before
   live deployment evidence can be refreshed.
+- A read-only health probe still returned HTTP 200 with the old version. A
+  read-only SSH connectivity check from this workspace was refused with
+  `publickey`, so no VPS files, database, or process state were changed during
+  this pass; deployment still requires the operator's configured VPS key or
+  upload path.
 - The recent VPS database reset completed runtime index preparation, but the
   development seed was correctly refused because the server `.env` is in
   production mode. No testing fixtures should be inserted into that database;
