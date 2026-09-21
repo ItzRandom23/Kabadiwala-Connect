@@ -592,6 +592,8 @@ multi-account process-death run remain open.
   static dark-theme accent constants. The latest
   `:app:connectedEnvTestingDebugAndroidTest` run passed 11/11 on
   `Pixel_10_Pro(AVD) - 17` after this patch.
+- Current post-light-theme Android release gate on 2026-09-21:
+  `:app:assembleEnvTestingRelease` passed with R8 and release lint checks.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android
