@@ -358,11 +358,13 @@ payments, disputes, conversations, messages, and notifications: with no
 authenticated account these repositories now return empty/null or reject the
 mutation rather than reading or changing arbitrary local rows.
 
-A requested deep repository security scan could not run because the security
-tool refused to start without its managed filesystem permission profile. A
-second start attempt in this continuation returned the same blocker. The
-result here is a targeted code audit plus the existing authorization test
-suite, not a replacement for an independent release scan.
+A repository-wide Codex Security Standard scan was launched against the
+earlier repository snapshot `7fa2773`, but its authoritative status remains
+`running` in `threat_model` with zero completed coverage and no reportable
+findings. It has not produced a sealed report, and later commits are outside
+that scan's snapshot. The targeted code audit and authorization suite are
+useful evidence, but not a replacement for an independent scan of the final
+revision.
 
 ## Offline and data integrity
 
