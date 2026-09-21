@@ -941,8 +941,8 @@ was available.
   `/api/v1/health` and `/api/v1/ready`, and the update manifest returned
   versionCode 41 / `0.0.40-beta` with the expected 27,246,976-byte APK. However,
   both health responses still report backend version `0.0.38-beta`; the running
-  backend deployment or its `APP_VERSION` environment value is therefore not
-  yet aligned with the repository revision and must be checked before release.
+  backend deployment or its `APP_VERSION` environment value was therefore not
+  aligned at that observation point.
 - The backend configuration default and all tracked environment examples now
   use `APP_VERSION=0.0.40-beta`, so a fresh deployment cannot silently fall back
   to the old generic `1.0.0` identifier. The VPS still needs its actual `.env`
@@ -951,6 +951,11 @@ was available.
   cleared, and the app was cold-launched. The app process remained alive and a
   PID-scoped logcat check found no protected API request, 401/Bearer-token
   message, fatal exception, or ANR signature before authentication.
+- A subsequent live VPS check after the backend redeploy now reports
+  `0.0.40-beta` from both `/api/v1/health` and `/api/v1/ready`, with database,
+  storage, OTP, and rate-limit checks all true. Unauthenticated requests to
+  `/api/v1/kabadiwala/listings`, `/api/v1/household/listings`, and
+  `/api/v1/future/preferences` all returned HTTP 401 as expected.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
