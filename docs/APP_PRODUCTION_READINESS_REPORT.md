@@ -488,21 +488,21 @@ multi-account process-death run remain open.
   dependency-owner review.
 - `npm run build` — passed.
 - `npm run lint` — passed.
-- `npm test` — passed: 38 test files, 110 tests, including the material
+- `npm test` — passed: 38 test files, 114 tests, including the material
   suggestion multipart/provider regression, waiting-pickup
   creation/notification, atomic collector-claim, malformed-database-URL
   configuration regression coverage, and returning-phone role preservation.
-- The current backend gate passes 38 test files and 110 tests after adding
+- The current backend gate passes 38 test files and 114 tests after adding
   legacy lot idempotency-mismatch and OTP limiter coverage. `npm run build` and `npm run lint`
   also pass after the hardening change.
-- The latest backend run passed 38 test files and 110 tests, including explicit
+- The latest backend run passed 38 test files and 114 tests, including explicit
   missing-linkage rejection for collector, household, and account middleware,
   plus the no-registration-details Household phone-login regression.
 - Testing health endpoint — HTTP 200, database connected.
 - Testing readiness endpoint — HTTP 200; database, storage, OTP provider, and
   rate-limit store reported ready.
 - Current source-state rerun on 2026-09-21 — `npm test` passed 38 test files
-  and 110 tests; `npm run lint` and `npm run build` also passed. The backend
+  and 114 tests; `npm run lint` and `npm run build` also passed. The backend
   test stderr contains intentional negative-case validation logs only (for
   example missing-photo 422 and unavailable-Gemini 503 coverage).
 - Current VPS post-reset probe on 2026-09-21 — `/api/v1/health` and
@@ -641,7 +641,7 @@ multi-account process-death run remain open.
   message. The new endpoint still needs deployment to the VPS before live
   verification.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
-  110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
+  114 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
   successful plain `npm test` run is the authoritative result.
 - Dependency audit on 2026-09-21: `npm audit --omit=dev` reports zero
