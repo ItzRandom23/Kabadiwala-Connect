@@ -46,6 +46,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.toSyncEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toDomain
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentRecordState
@@ -585,7 +586,9 @@ class AppContainer(context: Context) {
     suspend fun clearAccount() {
         revokeAuthenticatedBackgroundWork()
         sessionCoordinator.unauthenticated()
-        IdempotencyKeyStore(appContext).clearAccount(currentAccount()?.profileId)
+        val accountId = currentAccount()?.profileId
+        IdempotencyKeyStore(appContext).clearAccount(accountId)
+        FormalisationCacheStore(appContext).clear(accountId)
         database.withTransaction {
             database.syncQueueDao().clear()
             database.collectorProfileDao().clear()

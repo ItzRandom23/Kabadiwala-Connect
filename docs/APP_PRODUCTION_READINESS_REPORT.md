@@ -585,6 +585,15 @@ multi-account process-death run remain open.
   text plus the lime action label/fill pair, so the light-mode fix cannot
   regress. Recycler warning labels now use the theme-aware warning token rather
   than a low-contrast amber text constant.
+- The account-boundary pass now also removes the account-keyed formalisation
+  dashboard cache during explicit logout, alongside Room rows, outbox items,
+  pending photos, idempotency keys, and app-private evidence files. Android
+  unit/build gates passed and the emulator instrumentation suite passed 9/9
+  after this change.
+- Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
+  110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
+  `npm test -- --runInBand` command is not a supported Vitest option; the
+  successful plain `npm test` run is the authoritative result.
 - Latest rerun after the offline pickup outbox dedupe fix:
   `:app:testEnvTestingDebugUnitTest` and `:app:assembleEnvTestingDebug`
   passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on
@@ -776,11 +785,12 @@ was available.
   results after the VPS upload. Production still requires separately managed
   Gemini key/model/quota configuration and a representative scrap-photo
   accuracy smoke test; low confidence must continue to offer manual selection.
-- The repository-wide Codex Security Deep Scan could not start because the
-  security service requires a managed filesystem permission profile that is
-  unavailable in this workspace; both attempts returned that blocker. Existing
-  role-boundary tests and targeted authorization review remain evidence, not a
-  replacement for that scan.
+- A repository-wide Codex Security Standard scan was launched against the
+  current source snapshot, but its authoritative status remains `running` in
+  `threat_model` with zero completed coverage and no reportable findings. It
+  has not produced a sealed report, so this is not a clean security result;
+  existing role-boundary tests and targeted authorization review remain
+  evidence, not a replacement for an independent scan.
 
 ## Release recommendation
 
