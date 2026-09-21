@@ -613,6 +613,13 @@ multi-account process-death run remain open.
   preventing stale alerts after reconnect without touching another account.
   The Android suite passed 11/11 on `Pixel_10_Pro(AVD) - 17` and
   `:app:assembleEnvTestingRelease` passed again after this fix.
+- Multi-angle listing viewing is now implemented behind authenticated indexed
+  photo endpoints. Household owners can request any stored angle, and a
+  Kabadiwala can request them only after an active pickup assignment; storage
+  keys never enter the response. The backend photo suite passed 7/7, the
+  Android unit/build gate passed, the emulator suite passed 11/11, and
+  `:app:assembleEnvTestingRelease` passed with the Compose viewer included.
+  The new endpoint still needs deployment to the VPS before live verification.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
@@ -800,11 +807,10 @@ was available.
   exercised against the deployed testing API. The core role/IDOR and
   cross-role supply-chain checks have passed against the testing API, but not
   every path has been driven through Android UI.
-- Household multi-photo selection, local preprocessing, upload, and server
-  persistence support up to six images. Partner APIs currently expose the
-  primary private photo for viewing; a secondary-photo carousel/detail surface
-  for Kabadiwala users remains a product follow-up before claiming the full
-  multi-angle experience is complete.
+- Household multi-photo selection, local preprocessing, upload, server
+  persistence, and authenticated indexed viewing now support up to six images.
+  The secondary-angle viewer is implemented locally but remains unverified
+  against the VPS until the backend deployment is updated.
 - A stale refresh-token replay is now handled safely by returning to auth, but
   multi-device refresh-rotation behavior and the post-deployment offline
   listing replay still require live verification.

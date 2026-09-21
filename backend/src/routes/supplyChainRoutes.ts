@@ -67,12 +67,18 @@ async function auditSupplyEvent(tx: any, actorId: string, actorRole: string, eve
   await tx.materialPassportEvent.create({ data: { entityType, entityId, eventType: event, actorId, actorRole, metadata, occurredAt: new Date() } });
 }
 
-async function sendPrivateListingPhoto(storage: StorageService | undefined, photoReference: string | null | undefined, res: any) {
+async function sendPrivateListingPhoto(storage: StorageService | undefined, listing: { photoReference?: string | null; photoReferences?: string[] | null } | null | undefined, photoIndex: number, res: any) {
   if (!storage) throw new AppError('INTERNAL_SERVER_ERROR', 'Photo storage is not configured', 503, { code: 'PHOTO_STORAGE_UNAVAILABLE' });
-  if (!photoReference) throw new AppError('NOT_FOUND', 'Listing has no photo', 404, { code: 'PHOTO_NOT_FOUND' });
+  const references = Array.isArray(listing?.photoReferences) && listing.photoReferences.length
+    ? listing.photoReferences
+    : [listing?.photoReference].filter((reference): reference is string => Boolean(reference));
+  const photoReference = references[photoIndex];
+  if (!photoReference) throw new AppError('NOT_FOUND', 'Listing photo is not available', 404, { code: 'PHOTO_NOT_FOUND' });
   const image = await storage.getImage(photoReference);
   res.set({ 'Content-Type': image.contentType, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff' }).status(200).send(image.body);
 }
+
+const listingPhotoIndex = z.coerce.number().int().min(0).max(5);
 
 function uploadedPhotos(req: any): Array<{ buffer?: Buffer; mimetype?: string }> {
   const files = req.files as Record<string, Array<{ buffer?: Buffer; mimetype?: string }>> | undefined;
@@ -169,9 +175,16 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/household/listings/:listingId/photo', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
-    const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { photoReference: true } });
+    const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { photoReference: true, photoReferences: true } });
     if (!listing) throw new AppError('NOT_FOUND', 'Listing not found', 404, { code: 'LISTING_NOT_FOUND' });
-    await sendPrivateListingPhoto(storage, listing.photoReference, res);
+    await sendPrivateListingPhoto(storage, listing, 0, res);
+  });
+  router.get('/household/listings/:listingId/photo/:photoIndex', requireHousehold(jwt, collectors), async (req, res) => {
+    const listingId = parse(id, req.params.listingId);
+    const photoIndex = parse(listingPhotoIndex, req.params.photoIndex);
+    const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { photoReference: true, photoReferences: true } });
+    if (!listing) throw new AppError('NOT_FOUND', 'Listing not found', 404, { code: 'LISTING_NOT_FOUND' });
+    await sendPrivateListingPhoto(storage, listing, photoIndex, res);
   });
   router.get('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
     const listings = await store.householdListing.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
@@ -498,8 +511,16 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const listingId = parse(id, req.params.listingId);
     const pickup = await store.pickupRequest.findFirst({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: { notIn: ['CANCELLED', 'REJECTED'] } }, select: { id: true } });
     if (!pickup) throw new AppError('NOT_FOUND', 'Listing photo is not available to this Kabadiwala', 404, { code: 'PHOTO_NOT_FOUND' });
-    const listing = await store.householdListing.findUnique({ where: { id: listingId }, select: { photoReference: true } });
-    await sendPrivateListingPhoto(storage, listing?.photoReference, res);
+    const listing = await store.householdListing.findUnique({ where: { id: listingId }, select: { photoReference: true, photoReferences: true } });
+    await sendPrivateListingPhoto(storage, listing, 0, res);
+  });
+  router.get('/kabadiwala/listings/:listingId/photo/:photoIndex', requireAuth(jwt, collectors), async (req, res) => {
+    const listingId = parse(id, req.params.listingId);
+    const photoIndex = parse(listingPhotoIndex, req.params.photoIndex);
+    const pickup = await store.pickupRequest.findFirst({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: { notIn: ['CANCELLED', 'REJECTED'] } }, select: { id: true } });
+    if (!pickup) throw new AppError('NOT_FOUND', 'Listing photo is not available to this Kabadiwala', 404, { code: 'PHOTO_NOT_FOUND' });
+    const listing = await store.householdListing.findUnique({ where: { id: listingId }, select: { photoReference: true, photoReferences: true } });
+    await sendPrivateListingPhoto(storage, listing, photoIndex, res);
   });
   router.get('/kabadiwala/pickups', requireAuth(jwt, collectors), async (req, res) => {
     const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;

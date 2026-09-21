@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -396,7 +397,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }) {
     var showBulk by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader(when (section) { KabadiwalaSection.HOME -> "Collection desk"; KabadiwalaSection.INVENTORY -> "Scrap inventory"; KabadiwalaSection.PICKUPS -> "Household pickups"; KabadiwalaSection.LOTS -> "Recycler sales" }, "Households → inventory → verified recyclers", Icons.Filled.Inventory2, onRefresh, state.loading) }
@@ -432,7 +433,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" }} requests", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled") }
                 item { Text("Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup) }
+                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup) }
             }
             KabadiwalaSection.INVENTORY -> {
                 item { InventoryTotals(state.inventory) }
@@ -523,17 +524,27 @@ private fun ProductFeatureRow(feature: ProductFeature) {
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showAvailability by remember { mutableStateOf(false) }
     var showReject by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showReassign by remember { mutableStateOf(false) }
+    var showPhotos by remember(pickup.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(listing?.materialCategory ?: "OTHER"), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup.status)) }
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · ${listing?.areaName ?: "Area unavailable"}")
+            val photoCount = listing?.photoCount ?: 0
+            if (photoCount > 0 && pickup.status != "WAITING_FOR_PICKUP") {
+                OutlinedButton(onClick = { showPhotos = true; onLoadPhotos(pickup.listingId, photoCount) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "View scrap photos")
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (photoCount == 1) "View scrap photo" else "View $photoCount scrap angles")
+                }
+                if (showPhotos) ListingPhotoStrip(loadedPhotos, photoCount)
+            }
             when (pickup.status) {
                 "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Claim pickup") }
                 "REQUESTED" -> {
@@ -567,6 +578,29 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     if (showReject) ReasonDialog(title = "Decline pickup", confirmLabel = "Decline", onDismiss = { showReject = false }, onSubmit = { onReject(pickup.id, it); showReject = false })
     if (showCancel) ReasonDialog(title = "Cancel pickup", confirmLabel = "Cancel", onDismiss = { showCancel = false }, onSubmit = { onCancel(pickup.id, it); showCancel = false })
     if (showReassign) ReassignDialog(onDismiss = { showReassign = false }, onSubmit = { reason, noShow -> onReassign(pickup.id, reason, noShow); showReassign = false })
+}
+
+@Composable
+private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (photos.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                MaterialText("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                itemsIndexed(photos) { index, bytes ->
+                    val bitmap = remember(bytes) { runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() }
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(width = 144.dp, height = 112.dp)) {
+                        if (bitmap != null) Image(bitmap, "Scrap angle ${index + 1}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    }
+                }
+            }
+            if (photos.size < expectedCount) MaterialText("Some additional angles could not be loaded. Retry to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            else MaterialText("${photos.size} angle${if (photos.size == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable

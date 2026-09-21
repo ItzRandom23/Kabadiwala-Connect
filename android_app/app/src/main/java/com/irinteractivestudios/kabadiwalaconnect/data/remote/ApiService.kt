@@ -37,6 +37,8 @@ interface ApiService {
     suspend fun uploadHouseholdListingPhotos(@Path("listingId") listingId: String, @Part photos: List<MultipartBody.Part>): Response<ApiEnvelope<HouseholdListingDto>>
     @GET("household/listings/{listingId}/photo")
     suspend fun getHouseholdListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
+    @GET("household/listings/{listingId}/photo/{photoIndex}")
+    suspend fun getHouseholdListingPhotoAtIndex(@Path("listingId") listingId: String, @Path("photoIndex") photoIndex: Int): Response<ResponseBody>
     @GET("household/listings")
     suspend fun getHouseholdListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("household/listings/{listingId}")
@@ -67,6 +69,8 @@ interface ApiService {
     suspend fun getKabadiwalaListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("kabadiwala/listings/{listingId}/photo")
     suspend fun getKabadiwalaListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
+    @GET("kabadiwala/listings/{listingId}/photo/{photoIndex}")
+    suspend fun getKabadiwalaListingPhotoAtIndex(@Path("listingId") listingId: String, @Path("photoIndex") photoIndex: Int): Response<ResponseBody>
     @GET("kabadiwala/pickups")
     suspend fun getKabadiwalaPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
     @POST("kabadiwala/listings/{listingId}/accept")
@@ -469,4 +473,13 @@ fun <T> Response<ApiEnvelope<T>>.requireData(): T {
         throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: raw.ifBlank { "Request failed" }, code(), headers()["Retry-After"]?.toLongOrNull())
     }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
+}
+
+fun <T> Response<T>.requireBody(): T {
+    if (!isSuccessful) {
+        val raw = errorBody()?.string().orEmpty()
+        val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
+    }
+    return body() ?: throw RemoteApiException("EMPTY_RESPONSE", "The server returned no photo", code())
 }

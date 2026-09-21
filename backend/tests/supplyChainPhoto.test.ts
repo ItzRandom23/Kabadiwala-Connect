@@ -8,7 +8,9 @@ import { supplyChainRoutes } from '../src/routes/supplyChainRoutes.js';
 const config = { JWT_SECRET: 'supply-chain-photo-test-secret', JWT_EXPIRES_IN: '1h' } as any;
 const jwt = new JwtService(config);
 
-function photoApp(overrides: { listing?: any; storage?: any } = {}) {
+function photoApp(overrides: { listing?: any; storage?: any; role?: 'HOUSEHOLD' | 'COLLECTOR'; pickup?: any } = {}) {
+  const role = overrides.role ?? 'HOUSEHOLD';
+  const accountId = role === 'COLLECTOR' ? 'collector-1' : 'household-1';
   const listing = overrides.listing ?? { id: 'listing-1', householdId: 'household-1', status: 'POSTED', photoReference: null };
   const storage = overrides.storage ?? {
     putImage: vi.fn().mockResolvedValue({ key: 'household-listings/household-1/listing-1.jpg', url: 'private-key' }),
@@ -24,11 +26,12 @@ function photoApp(overrides: { listing?: any; storage?: any } = {}) {
     materialPassportEvent: { create: vi.fn().mockResolvedValue(undefined) }
   };
   const db = {
-    user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
-    householdListing: { findFirst: vi.fn().mockResolvedValue(listing) },
+    user: { findFirst: vi.fn().mockResolvedValue({ role, accountStatus: 'ACTIVE' }) },
+    pickupRequest: { findFirst: vi.fn().mockResolvedValue('pickup' in overrides ? overrides.pickup : { id: 'pickup-1' }) },
+    householdListing: { findFirst: vi.fn().mockResolvedValue(listing), findUnique: vi.fn().mockResolvedValue(listing) },
     $transaction: vi.fn(async (callback: (transaction: any) => unknown) => callback(tx))
   } as any;
-  const collectors = { findById: vi.fn().mockResolvedValue({ id: 'household-1', accountStatus: 'ACTIVE' }) } as any;
+  const collectors = { findById: vi.fn().mockResolvedValue({ id: accountId, accountStatus: 'ACTIVE' }) } as any;
   const app = express();
   app.use('/api/v1', supplyChainRoutes(jwt, collectors, db, storage));
   app.use((error: any, _req: any, res: any, _next: any) => res.status(error.status ?? 500).json({ code: error.code, details: error.details }));
@@ -106,5 +109,105 @@ describe('household listing photo contract', () => {
     expect(tx.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ metadata: expect.objectContaining({ photoCount: 2 }) })
     }));
+  });
+
+  it('serves an indexed private photo to the listing owner without exposing the storage key', async () => {
+    const storage = {
+      putImage: vi.fn(),
+      getImage: vi.fn().mockResolvedValue({ body: Buffer.from('side-photo'), contentType: 'image/jpeg' }),
+      delete: vi.fn().mockResolvedValue(undefined)
+    };
+    const { app } = photoApp({
+      storage,
+      listing: {
+        id: 'listing-1',
+        householdId: 'household-1',
+        status: 'POSTED',
+        photoReference: 'household-listings/household-1/listing-1.jpg',
+        photoReferences: [
+          'household-listings/household-1/listing-1.jpg',
+          'household-listings/household-1/listing-1-1.jpg'
+        ]
+      }
+    });
+
+    const response = await request(app)
+      .get('/api/v1/household/listings/listing-1/photo/1')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(response.body.toString()).toBe('side-photo');
+    expect(storage.getImage).toHaveBeenCalledWith('household-listings/household-1/listing-1-1.jpg');
+  });
+
+  it('does not turn an out-of-range photo index into a storage lookup', async () => {
+    const storage = {
+      putImage: vi.fn(),
+      getImage: vi.fn(),
+      delete: vi.fn().mockResolvedValue(undefined)
+    };
+    const { app } = photoApp({
+      storage,
+      listing: {
+        id: 'listing-1',
+        householdId: 'household-1',
+        status: 'POSTED',
+        photoReference: 'household-listings/household-1/listing-1.jpg',
+        photoReferences: ['household-listings/household-1/listing-1.jpg']
+      }
+    });
+
+    const response = await request(app)
+      .get('/api/v1/household/listings/listing-1/photo/2')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.details.code).toBe('PHOTO_NOT_FOUND');
+    expect(storage.getImage).not.toHaveBeenCalled();
+  });
+
+  it('serves indexed photos to an assigned Kabadiwala only', async () => {
+    const storage = {
+      putImage: vi.fn(),
+      getImage: vi.fn().mockResolvedValue({ body: Buffer.from('collector-side-photo'), contentType: 'image/jpeg' }),
+      delete: vi.fn().mockResolvedValue(undefined)
+    };
+    const listing = {
+      id: 'listing-1',
+      householdId: 'household-1',
+      status: 'MATCHED',
+      photoReference: 'household-listings/household-1/listing-1.jpg',
+      photoReferences: [
+        'household-listings/household-1/listing-1.jpg',
+        'household-listings/household-1/listing-1-1.jpg'
+      ]
+    };
+    const { app } = photoApp({ storage, listing, role: 'COLLECTOR' });
+
+    const allowed = await request(app)
+      .get('/api/v1/kabadiwala/listings/listing-1/photo/1')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-1')}`);
+
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.toString()).toBe('collector-side-photo');
+    expect(storage.getImage).toHaveBeenCalledWith('household-listings/household-1/listing-1-1.jpg');
+  });
+
+  it('does not serve indexed photos to an unassigned Kabadiwala', async () => {
+    const storage = {
+      putImage: vi.fn(),
+      getImage: vi.fn(),
+      delete: vi.fn().mockResolvedValue(undefined)
+    };
+    const { app } = photoApp({ storage, role: 'COLLECTOR', pickup: null });
+
+    const response = await request(app)
+      .get('/api/v1/kabadiwala/listings/listing-1/photo/1')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-1')}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.details.code).toBe('PHOTO_NOT_FOUND');
+    expect(storage.getImage).not.toHaveBeenCalled();
   });
 });
