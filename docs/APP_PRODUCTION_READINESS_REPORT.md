@@ -617,8 +617,9 @@ multi-account process-death run remain open.
   photo endpoints. Household owners can request any stored angle, and a
   Kabadiwala can request them only after an active pickup assignment; storage
   keys never enter the response. The backend photo suite passed 7/7, the
-  Android unit/build gate passed, and the emulator suite passed 11/11 again
-  after the partial-failure retry hardening. The viewer preserves successfully
+  Android unit/build gate passed, the emulator suite passed 11/11 again, and
+  `:app:assembleEnvTestingRelease` passed after the partial-failure retry
+  hardening. The viewer preserves successfully
   loaded angles when a later image is unavailable and gives an actionable retry
   message. The new endpoint still needs deployment to the VPS before live
   verification.
