@@ -470,7 +470,7 @@ fun <T> Response<ApiEnvelope<T>>.requireData(): T {
     if (!isSuccessful) {
         val raw = errorBody()?.string().orEmpty()
         val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
-        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: raw.ifBlank { "Request failed" }, code(), headers()["Retry-After"]?.toLongOrNull())
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
     }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
 }

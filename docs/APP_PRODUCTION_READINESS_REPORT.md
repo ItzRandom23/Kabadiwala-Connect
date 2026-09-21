@@ -598,6 +598,12 @@ multi-account process-death run remain open.
   `Pixel_10_Pro(AVD) - 17` after this patch.
 - Current post-light-theme Android release gate on 2026-09-21:
   `:app:assembleEnvTestingRelease` passed with R8 and release lint checks.
+- Current Android transport-error boundary rerun on 2026-09-21:
+  `:app:testEnvTestingDebugUnitTest` passed 91 tests across 21 suites,
+  `:app:assembleEnvTestingDebug` passed, and
+  `:app:connectedEnvTestingDebugAndroidTest` passed 11/11 on
+  `Pixel_10_Pro(AVD) - 17`. Malformed 5xx response bodies now become a
+  generic client exception instead of carrying raw backend/provider content.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android
