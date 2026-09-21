@@ -600,6 +600,10 @@ multi-account process-death run remain open.
   or ANR signature before authentication. The UI dump was attempted during the
   splash transition and was unavailable, so no screen assertion is inferred
   from that command.
+- The current source also passed `:app:assembleEnvTestingRelease`, including
+  release resource processing, lint-vital, R8 shrinking, and packaging. The
+  only compiler note was the existing Android deprecation warning for direct
+  `statusBarColor` assignment in the shared theme.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
