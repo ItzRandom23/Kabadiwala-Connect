@@ -1040,6 +1040,12 @@ was available.
   localization checker still reports the pre-existing incomplete translation
   matrix (220 missing localized entries); no new resource keys were introduced
   by this change.
+- A fresh backend source gate on 2026-09-21 passed all 39 test files and 121
+  tests, followed by `npm run build` and `npm run lint`. A live VPS probe at
+  the same point still reported backend/OTA version `0.0.40-beta`/versionCode
+  41, not the source release `0.0.41-beta`/versionCode 42. The updated backend
+  and OTA manifest therefore remain a deployment gate, not a completed release
+  fact.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
