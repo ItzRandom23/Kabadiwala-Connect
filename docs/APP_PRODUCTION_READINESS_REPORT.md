@@ -590,6 +590,9 @@ multi-account process-death run remain open.
   pending photos, idempotency keys, and app-private evidence files. Android
   unit/build gates passed and the emulator instrumentation suite passed 9/9
   after this change.
+- The added account-cache regression then ran on `Pixel_10_Pro(AVD) - 17` with
+  the full instrumentation suite at 10/10, proving that clearing one account's
+  formalisation snapshot leaves another account's snapshot intact.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the

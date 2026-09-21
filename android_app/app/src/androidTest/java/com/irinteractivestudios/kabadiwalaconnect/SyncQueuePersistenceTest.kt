@@ -5,11 +5,15 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.irinteractivestudios.kabadiwalaconnect.data.local.AppDatabase
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -79,6 +83,23 @@ class SyncQueuePersistenceTest {
                 "pickup-key-b"
             )
         )
+    }
+
+    @Test
+    fun clearingOneAccountFormalisationCacheDoesNotTouchAnotherAccount() {
+        val cache = FormalisationCacheStore(context)
+        try {
+            cache.save("account-a", FormalisationSnapshot())
+            cache.save("account-b", FormalisationSnapshot())
+
+            cache.clear("account-a")
+
+            assertNull(cache.load("account-a"))
+            assertNotNull(cache.load("account-b"))
+        } finally {
+            cache.clear("account-a")
+            cache.clear("account-b")
+        }
     }
 
     private fun openDatabase(): AppDatabase = Room.databaseBuilder(
