@@ -64,7 +64,7 @@ class FutureFeatureViewModel(
             val conversations = runCatching { api.getConversations().requireData().also { cache?.saveConversations(it) } }.onFailure { failures++ }.getOrDefault(_state.value.conversations.ifEmpty { cachedConversations() })
             val analytics = runCatching { api.getDisputeAnalytics().requireData() }.onFailure { failures++ }.getOrNull() ?: _state.value.analytics
             val cachedNotifications = cache?.notifications(accountId()).orEmpty()
-            val notifications = runCatching { api.getNotifications(limit = 100).requireData().also { cache?.saveNotifications(it) } }.onFailure { failures++ }
+            val notifications = runCatching { api.getNotifications(limit = 100).requireData().also { cache?.saveNotifications(it, accountId()) } }.onFailure { failures++ }
                 .getOrDefault(_state.value.notifications.ifEmpty { cachedNotifications })
             val unread = runCatching { api.getNotificationUnreadCount().requireData().count }.onFailure { failures++ }.getOrDefault(notifications.count { it.readAt.isNullOrBlank() })
             _state.value = _state.value.copy(loading = false, error = if (failures > 0) "Some information could not be refreshed. Cached data is shown." else null, schemes = schemes, activities = activities, rewards = rewards, conversations = conversations, analytics = analytics, notifications = notifications, unreadNotifications = unread)
@@ -81,7 +81,7 @@ class FutureFeatureViewModel(
             }
             if (_state.value.notifications.any { it.id == id }) {
                 val updated = _state.value.notifications.map { if (it.id == id) it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) else it }
-                cache?.saveNotifications(updated)
+                cache?.saveNotifications(updated, accountId())
                 _state.value = _state.value.copy(notifications = updated, unreadNotifications = if (wasUnread) (_state.value.unreadNotifications - 1).coerceAtLeast(0) else _state.value.unreadNotifications)
             }
         }
@@ -96,7 +96,7 @@ class FutureFeatureViewModel(
             }
             if (result != null || _state.value.notifications.isNotEmpty()) {
                 val updated = _state.value.notifications.map { it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) }
-                cache?.saveNotifications(updated)
+                cache?.saveNotifications(updated, accountId())
                 _state.value = _state.value.copy(notifications = updated, unreadNotifications = 0)
             }
         }

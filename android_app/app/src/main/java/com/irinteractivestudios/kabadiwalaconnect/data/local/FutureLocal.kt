@@ -139,10 +139,12 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
     suspend fun saveMessages(items: List<ChatMessageDto>) { dao.saveMessages(items.map { MessageCacheEntity(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }) }
     suspend fun deleteMessage(id: String) { dao.deleteMessage(id) }
     suspend fun notifications(accountId: String? = null): List<NotificationDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.notificationsForAccount(it) } ?: emptyList()).map { NotificationDto(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) }
-    suspend fun saveNotifications(items: List<NotificationDto>) {
-        for (accountId in items.map { it.accountId }.filter { it.isNotBlank() }.distinct()) {
-            dao.clearNotificationsForAccount(accountId)
+    suspend fun saveNotifications(items: List<NotificationDto>, accountId: String? = null) {
+        val accounts = buildSet {
+            accountId?.takeIf { it.isNotBlank() }?.let(::add)
+            items.map { it.accountId }.filter { it.isNotBlank() }.forEach(::add)
         }
+        for (activeAccount in accounts) dao.clearNotificationsForAccount(activeAccount)
         dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
     }
     suspend fun appendNotifications(items: List<NotificationDto>) {

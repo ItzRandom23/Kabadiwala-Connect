@@ -7,7 +7,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.irinteractivestudios.kabadiwalaconnect.data.local.AppDatabase
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
+import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -100,6 +102,19 @@ class SyncQueuePersistenceTest {
             cache.clear("account-a")
             cache.clear("account-b")
         }
+    }
+
+    @Test
+    fun emptyNotificationSnapshotClearsOnlyTheActiveAccount() = runBlocking {
+        database = openDatabase()
+        val cache = FutureCacheStore(database!!.futureCacheDao())
+        cache.saveNotifications(
+            listOf(NotificationDto(id = "note-a", accountId = "account-a", title = "Old alert")),
+            accountId = "account-a"
+        )
+        cache.saveNotifications(emptyList(), accountId = "account-a")
+
+        assertTrue(cache.notifications("account-a").isEmpty())
     }
 
     private fun openDatabase(): AppDatabase = Room.databaseBuilder(

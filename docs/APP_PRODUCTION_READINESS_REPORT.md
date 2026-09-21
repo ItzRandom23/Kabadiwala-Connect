@@ -604,6 +604,11 @@ multi-account process-death run remain open.
   release resource processing, lint-vital, R8 shrinking, and packaging. The
   only compiler note was the existing Android deprecation warning for direct
   `statusBarColor` assignment in the shared theme.
+- The offline/cache audit also fixed authoritative empty notification
+  responses: they now clear only the active account's cached notifications,
+  preventing stale alerts after reconnect without touching another account.
+  The Android suite passed 11/11 on `Pixel_10_Pro(AVD) - 17` and
+  `:app:assembleEnvTestingRelease` passed again after this fix.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
