@@ -60,7 +60,8 @@ data class SupplyChainState(
     val materialSuggestion: MaterialSuggestionDto? = null,
     val materialDetectionStatus: HouseholdMaterialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE,
     val materialDetectionMessage: String? = null,
-    val listingPhotos: Map<String, List<ByteArray>> = emptyMap()
+    val listingPhotos: Map<String, List<ByteArray>> = emptyMap(),
+    val listingPhotoErrors: Map<String, String> = emptyMap()
 )
 
 enum class HouseholdMaterialDetectionStatus { IDLE, PROCESSING, SUCCESS, LOW_CONFIDENCE, UNSUPPORTED_IMAGE, NETWORK_ERROR, SERVICE_ERROR }
@@ -436,16 +437,33 @@ class SupplyChainViewModel(
 
     fun loadKabadiwalaListingPhotos(listingId: String, photoCount: Int) = action("photos-$listingId", AccountRole.COLLECTOR, {
         val count = photoCount.coerceIn(1, 6)
-        val photos = (0 until count).map { index ->
-            val response = if (index == 0) {
-                api.getKabadiwalaListingPhoto(listingId)
-            } else {
-                api.getKabadiwalaListingPhotoAtIndex(listingId, index)
+        val photos = mutableListOf<ByteArray>()
+        var partialFailure = false
+        var firstFailure: Throwable? = null
+        for (index in 0 until count) {
+            try {
+                val response = if (index == 0) {
+                    api.getKabadiwalaListingPhoto(listingId)
+                } else {
+                    api.getKabadiwalaListingPhotoAtIndex(listingId, index)
+                }
+                photos += response.requireBody().bytes()
+            } catch (error: Throwable) {
+                partialFailure = true
+                firstFailure = firstFailure ?: error
+                break
             }
-            response.requireBody().bytes()
         }
-        _state.value = _state.value.copy(listingPhotos = _state.value.listingPhotos + (listingId to photos))
-        "${photos.size} scrap photo${if (photos.size == 1) "" else "s"} loaded."
+        if (photos.isEmpty()) throw (firstFailure ?: IllegalStateException("No listing photos available"))
+        _state.value = _state.value.copy(
+            listingPhotos = _state.value.listingPhotos + (listingId to photos),
+            listingPhotoErrors = if (partialFailure) {
+                _state.value.listingPhotoErrors + (listingId to "Some angles are unavailable right now. You can retry.")
+            } else {
+                _state.value.listingPhotoErrors - listingId
+            }
+        )
+        if (partialFailure) "Loaded ${photos.size} of $count scrap photos. You can retry for the remaining angles." else "${photos.size} scrap photo${if (photos.size == 1) "" else "s"} loaded."
     })
     fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", AccountRole.HOUSEHOLD, { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Listing cancelled." })
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Pickup cancelled." })

@@ -617,9 +617,11 @@ multi-account process-death run remain open.
   photo endpoints. Household owners can request any stored angle, and a
   Kabadiwala can request them only after an active pickup assignment; storage
   keys never enter the response. The backend photo suite passed 7/7, the
-  Android unit/build gate passed, the emulator suite passed 11/11, and
-  `:app:assembleEnvTestingRelease` passed with the Compose viewer included.
-  The new endpoint still needs deployment to the VPS before live verification.
+  Android unit/build gate passed, and the emulator suite passed 11/11 again
+  after the partial-failure retry hardening. The viewer preserves successfully
+  loaded angles when a later image is unavailable and gives an actionable retry
+  message. The new endpoint still needs deployment to the VPS before live
+  verification.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
