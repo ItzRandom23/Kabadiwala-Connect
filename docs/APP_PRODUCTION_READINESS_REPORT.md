@@ -604,6 +604,11 @@ multi-account process-death run remain open.
   data clear, cold launch, and app-process-only logcat filter on `emulator-5554`:
   PID `8779` reached the unauthenticated surface with no protected request,
   bearer-token/401, Retrofit/OkHttp, crash, or ANR signature before login.
+- Final pushed-revision smoke verification for commit `8526331` repeated
+  `adb install -r`, `pm clear`, logcat reset, and cold launch on
+  `emulator-5554`. PID `10419` produced
+  `FINAL_PUSHED_REVISION_CLEAN_START_PASS` with no protected request,
+  bearer-token/401, Retrofit/OkHttp, crash, or ANR signature before login.
 - The current source also passed `:app:assembleEnvTestingRelease`, including
   release resource processing, lint-vital, R8 shrinking, and packaging. The
   only compiler note was the existing Android deprecation warning for direct
