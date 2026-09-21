@@ -929,6 +929,12 @@ was available.
   Keys, image bytes, prompts, and provider response bodies are never logged;
   this makes VPS diagnosis of 401/404/429/timeout failures possible without
   leaking sensitive data.
+- Live VPS verification after the reported backend update returned HTTP 200 for
+  `/api/v1/health` and `/api/v1/ready`, and the update manifest returned
+  versionCode 41 / `0.0.40-beta` with the expected 27,246,976-byte APK. However,
+  both health responses still report backend version `0.0.38-beta`; the running
+  backend deployment or its `APP_VERSION` environment value is therefore not
+  yet aligned with the repository revision and must be checked before release.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
