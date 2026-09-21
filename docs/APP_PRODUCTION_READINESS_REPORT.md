@@ -603,7 +603,8 @@ multi-account process-death run remain open.
   `:app:assembleEnvTestingDebug` passed, and
   `:app:connectedEnvTestingDebugAndroidTest` passed 11/11 on
   `Pixel_10_Pro(AVD) - 17`. Malformed 5xx response bodies now become a
-  generic client exception instead of carrying raw backend/provider content.
+  generic client exception instead of carrying raw backend/provider content;
+  `:app:assembleEnvTestingRelease` also passed with R8 and release lint.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android
