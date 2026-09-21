@@ -910,12 +910,12 @@ was available.
 - Backend revision `d20f519` plus safe Gemini provider diagnostics is
   upload-ready as source: `npm test` passed 39/39 files and 121/121 tests,
   `npm run build` passed, and `npm run lint` passed.
-- The tracked testing/default examples now use the stable multimodal
-  `gemini-2.5-flash-lite` model. The local untracked `.env` still contains
-  `gemini-3.5-flash-lite`, and its configured Gemini key returned HTTP 401
-  during a metadata-only provider check. Do not upload that `.env`; set a
-  valid server-side `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-2.5-flash-lite`
-  (or another provider-approved `generateContent` model) on the VPS.
+- The tracked testing/default examples now use the requested stable multimodal
+  `gemini-3.5-flash-lite` model. The local untracked `.env` also contains that
+  model, but its configured Gemini key returned HTTP 401 during a metadata-only
+  provider check. Do not upload that `.env`; set a valid server-side
+  `GEMINI_API_KEY` with access to `GEMINI_MODEL=gemini-3.5-flash-lite` on the
+  VPS.
 - This provider check was read-only and did not mutate Gemini, the VPS, or
   application data. Until the VPS key/model is corrected, the app is expected
   to show the manual material-selection fallback rather than a false AI result.

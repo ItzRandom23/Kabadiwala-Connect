@@ -121,7 +121,7 @@ function geminiText(body: unknown): string | null {
 }
 
 function geminiModelName() {
-  return (process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-2.5-flash-lite';
+  return (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-3.5-flash-lite';
 }
 
 async function callGemini(
