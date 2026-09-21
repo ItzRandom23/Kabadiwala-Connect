@@ -613,6 +613,12 @@ multi-account process-death run remain open.
   `Pixel_10_Pro(AVD) - 17`. Malformed 5xx response bodies now become a
   generic client exception instead of carrying raw backend/provider content;
   `:app:assembleEnvTestingRelease` also passed with R8 and release lint.
+- Latest offline account-boundary rerun on 2026-09-21:
+  sync-queue removal, retry, attempt-increment, and failure mutations now
+  require both the queue UID and the current account ID. The Android unit/build
+  gate passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 12/12 on
+  `Pixel_10_Pro(AVD) - 17`, including a Room persistence regression proving
+  account A cannot mutate account B's queued operation.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android

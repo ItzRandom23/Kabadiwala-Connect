@@ -105,7 +105,7 @@ class SyncWorker(
                 // permanent auth gate for this run. Keep the local payload,
                 // surface it in Sync Center, and avoid an endless retry loop.
                 queue.observePendingForAccount(accountId).first().forEach { item ->
-                    queue.markFailed(item.uid, "AUTH_REQUIRED", Long.MAX_VALUE)
+                    queue.markFailed(item.uid, accountId, "AUTH_REQUIRED", Long.MAX_VALUE)
                 }
                 return Result.failure()
             }
@@ -155,7 +155,7 @@ class SyncWorker(
                     // Cancellation removes an unsent lot's create operation;
                     // its dependent quote request must not be resurrected.
                     localLot?.status == "CANCELLED" -> {
-                        queue.remove(item.uid)
+                        queue.remove(item.uid, accountId)
                         continue
                     }
                 }
@@ -163,11 +163,11 @@ class SyncWorker(
             when (processExtended(app, item)) {
                 QueueResult.APPLIED -> {
                     clearQueuedIdempotencyKey(app, item)
-                    queue.remove(item.uid)
+                    queue.remove(item.uid, accountId)
                 }
-                QueueResult.RETRY -> { queue.incrementAttempts(item.uid, retryAt(item.attempts)); return Result.retry() }
+                QueueResult.RETRY -> { queue.incrementAttempts(item.uid, accountId, retryAt(item.attempts)); return Result.retry() }
                 QueueResult.REJECTED -> {
-                    queue.markFailed(item.uid, "EXTENDED_OPERATION_REJECTED", retryAt(item.attempts))
+                    queue.markFailed(item.uid, accountId, "EXTENDED_OPERATION_REJECTED", retryAt(item.attempts))
                     return Result.failure()
                 }
             }
@@ -178,7 +178,7 @@ class SyncWorker(
         }
         val operationPairs = batchPending.mapNotNull { item -> item.toOperationOrNull()?.let { item to it } }
         val invalidItems = batchPending.filter { item -> operationPairs.none { (queued, _) -> queued.uid == item.uid } }
-        invalidItems.forEach { item -> queue.markFailed(item.uid, "INVALID_SYNC_OPERATION", Long.MAX_VALUE) }
+        invalidItems.forEach { item -> queue.markFailed(item.uid, accountId, "INVALID_SYNC_OPERATION", Long.MAX_VALUE) }
         val operations = operationPairs.map { it.second }
         if (operations.isEmpty()) return if (deferredOperation) Result.retry() else pullChanges(app)
 
@@ -195,7 +195,7 @@ class SyncWorker(
                 val errorCode = response.errorBody()?.string()?.let(::syncErrorCode)
                     ?: "SYNC_HTTP_${response.code()}"
                 batchPending.forEach { item ->
-                    queue.markFailed(item.uid, errorCode, Long.MAX_VALUE)
+                    queue.markFailed(item.uid, accountId, errorCode, Long.MAX_VALUE)
                 }
                 return Result.failure()
             }
@@ -225,7 +225,7 @@ class SyncWorker(
                                     } else {
                                         app.container.database.lotDao().markSyncedForCollector(operation.entityId, accountId)
                                     }
-                                    queue.markFailed(item.uid, "LOT_PHOTO_UPLOAD_REJECTED", Long.MAX_VALUE)
+                                    queue.markFailed(item.uid, accountId, "LOT_PHOTO_UPLOAD_REJECTED", Long.MAX_VALUE)
                                     return Result.failure()
                                 }
                                 if (operation.operationType == "UPDATE") {
@@ -237,12 +237,12 @@ class SyncWorker(
                             }
                             "PAYMENT" -> app.container.database.paymentDao().markSyncedForAccount(operation.entityId, accountId)
                         }
-                        queue.remove(item.uid)
+                        queue.remove(item.uid, accountId)
                     } else {
                         // Keep rejected/conflicting work visible locally instead of
                         // silently dropping the user's action. The pending query
                         // stops automatic retries after three attempts.
-                        queue.markFailed(item.uid, result.errorCode ?: "SYNC_${result.status}", retryAt(item.attempts))
+                        queue.markFailed(item.uid, accountId, result.errorCode ?: "SYNC_${result.status}", retryAt(item.attempts))
                     }
                 }
             }

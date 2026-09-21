@@ -88,6 +88,45 @@ class SyncQueuePersistenceTest {
     }
 
     @Test
+    fun queueMutationsCannotTouchAnotherAccountsRow() = runBlocking {
+        database = openDatabase()
+        val queue = database!!.syncQueueDao()
+        val accountAUid = queue.enqueue(
+            SyncQueueItemEntity(
+                operation = "CREATE_LOT",
+                payloadJson = "{\"id\":\"lot-a\"}",
+                createdAtEpochMs = 1L,
+                accountId = "account-a"
+            )
+        )
+        val accountBUid = queue.enqueue(
+            SyncQueueItemEntity(
+                operation = "CREATE_LOT",
+                payloadJson = "{\"id\":\"lot-b\"}",
+                createdAtEpochMs = 2L,
+                attempts = 2,
+                lastErrorCode = "RETRY_LATER",
+                nextAttemptAtEpochMs = Long.MAX_VALUE,
+                accountId = "account-b"
+            )
+        )
+
+        assertEquals(0, queue.remove(accountBUid, "account-a"))
+        assertEquals(0, queue.resetForRetry(accountBUid, "account-a"))
+        assertEquals(0, queue.incrementAttempts(accountBUid, "account-a", 3L))
+        assertEquals(0, queue.markFailed(accountBUid, "account-a", "SHOULD_NOT_WRITE", 4L))
+
+        val untouched = queue.observeForAccount("account-b").first().single()
+        assertEquals(2, untouched.attempts)
+        assertEquals("RETRY_LATER", untouched.lastErrorCode)
+        assertEquals(Long.MAX_VALUE, untouched.nextAttemptAtEpochMs)
+
+        assertEquals(1, queue.resetForRetry(accountBUid, "account-b"))
+        assertEquals(1, queue.remove(accountAUid, "account-a"))
+        assertTrue(queue.observeForAccount("account-b").first().isNotEmpty())
+    }
+
+    @Test
     fun clearingOneAccountFormalisationCacheDoesNotTouchAnotherAccount() {
         val cache = FormalisationCacheStore(context)
         try {

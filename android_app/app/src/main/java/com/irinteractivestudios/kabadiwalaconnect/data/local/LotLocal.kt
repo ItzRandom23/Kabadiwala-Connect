@@ -167,7 +167,7 @@ class RoomLotRepository(
                 val queued = syncQueue?.observeForAccount(account)?.first()
                 queued.orEmpty().filter { item ->
                     item.operation == "CREATE_LOT" && JsonParser.parseString(item.payloadJson).asJsonObject.get("id")?.asString == id
-                }.forEach { syncQueue?.remove(it.uid) }
+                }.forEach { syncQueue?.remove(it.uid, account) }
             }
         }
         return true

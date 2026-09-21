@@ -63,18 +63,19 @@ interface SyncQueueDao {
     @Query("SELECT COUNT(*) FROM sync_queue")
     suspend fun count(): Int
 
-    @Query("DELETE FROM sync_queue WHERE uid = :uid")
-    suspend fun remove(uid: Long)
+    /** Mutations are account-scoped even when a caller only has a local UID. */
+    @Query("DELETE FROM sync_queue WHERE uid = :uid AND accountId = :accountId")
+    suspend fun remove(uid: Long, accountId: String): Int
 
     /** Explicit user retry: clear the permanent-error gate for one item. */
-    @Query("UPDATE sync_queue SET attempts = 0, lastErrorCode = NULL, nextAttemptAtEpochMs = 0 WHERE uid = :uid")
-    suspend fun resetForRetry(uid: Long)
+    @Query("UPDATE sync_queue SET attempts = 0, lastErrorCode = NULL, nextAttemptAtEpochMs = 0 WHERE uid = :uid AND accountId = :accountId")
+    suspend fun resetForRetry(uid: Long, accountId: String): Int
 
-    @Query("UPDATE sync_queue SET attempts = attempts + 1, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid")
-    suspend fun incrementAttempts(uid: Long, nextAttemptAtEpochMs: Long)
+    @Query("UPDATE sync_queue SET attempts = attempts + 1, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid AND accountId = :accountId")
+    suspend fun incrementAttempts(uid: Long, accountId: String, nextAttemptAtEpochMs: Long): Int
 
-    @Query("UPDATE sync_queue SET attempts = attempts + 1, lastErrorCode = :errorCode, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid")
-    suspend fun markFailed(uid: Long, errorCode: String, nextAttemptAtEpochMs: Long)
+    @Query("UPDATE sync_queue SET attempts = attempts + 1, lastErrorCode = :errorCode, nextAttemptAtEpochMs = :nextAttemptAtEpochMs WHERE uid = :uid AND accountId = :accountId")
+    suspend fun markFailed(uid: Long, accountId: String, errorCode: String, nextAttemptAtEpochMs: Long): Int
 
     @Query("DELETE FROM sync_queue")
     suspend fun clear()
