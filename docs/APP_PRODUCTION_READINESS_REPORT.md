@@ -858,6 +858,14 @@ multi-account process-death run remain open.
   size `27,230,579` bytes. The exact version-42 APK was installed on the
   emulator and the connected suite again completed 12/12. The VPS update
   channel remains at version 41 until this package is deliberately uploaded.
+- A fresh post-backend-update clean-start check on 2026-09-21 reinstalled the
+  exact version-42 testing APK, cleared app data, cold-launched on
+  `emulator-5554`, and again found no protected API route, bearer-token/401,
+  fatal-exception, or ANR signature before authentication. The live VPS
+  `/api/v1/health` and `/api/v1/ready` checks remain HTTP 200, but still report
+  backend `0.0.40-beta`; `/app/update.json` still advertises versionCode 41 /
+  `0.0.40-beta`. The local version-42 artifact is therefore not yet deployed
+  to the VPS OTA channel.
 
 ## Performance observations
 
