@@ -907,8 +907,8 @@ was available.
 
 ### Latest backend upload gate — 2026-09-21
 
-- Backend revision `9adf95a` plus the Gemini configuration correction is
-  upload-ready as source: `npm test` passed 39/39 files and 118/118 tests,
+- Backend revision `d20f519` plus safe Gemini provider diagnostics is
+  upload-ready as source: `npm test` passed 39/39 files and 121/121 tests,
   `npm run build` passed, and `npm run lint` passed.
 - The tracked testing/default examples now use the stable multimodal
   `gemini-2.5-flash-lite` model. The local untracked `.env` still contains
@@ -922,8 +922,13 @@ was available.
 - The material-suggestion contract now requests JSON output, normalizes safe
   category aliases such as `lcd`/`plastic`, and rejects malformed or incomplete
   provider output as `GEMINI_INVALID_RESPONSE` without recording an AI
-  inference. Backend coverage is now 39 files / 120 tests, with build and lint
+  inference. Backend coverage is now 39 files / 121 tests, with build and lint
   still passing.
+- Material detection provider failures now emit only a structured event with
+  request ID, operation, model, HTTP status, or a coarse timeout/network reason.
+  Keys, image bytes, prompts, and provider response bodies are never logged;
+  this makes VPS diagnosis of 401/404/429/timeout failures possible without
+  leaking sensitive data.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

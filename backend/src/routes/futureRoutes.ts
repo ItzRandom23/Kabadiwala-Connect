@@ -124,7 +124,12 @@ function geminiModelName() {
   return (process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-2.5-flash-lite';
 }
 
-async function callGemini(parts: unknown[], maxOutputTokens = 220, responseMimeType?: 'application/json') {
+async function callGemini(
+  parts: unknown[],
+  maxOutputTokens = 220,
+  responseMimeType?: 'application/json',
+  diagnostics?: { requestId?: string; operation: string }
+) {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) return null;
   const model = geminiModelName();
@@ -137,10 +142,28 @@ async function callGemini(parts: unknown[], maxOutputTokens = 220, responseMimeT
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.1, maxOutputTokens, ...(responseMimeType ? { responseMimeType } : {}) } }),
       signal: controller.signal
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // Keep provider failures actionable in server logs without ever logging
+      // the API key, image bytes, prompt, or provider response body.
+      console.warn(JSON.stringify({
+        event: 'gemini_provider_unavailable',
+        requestId: diagnostics?.requestId,
+        operation: diagnostics?.operation ?? 'unknown',
+        model,
+        status: response.status
+      }));
+      return null;
+    }
     const text = geminiText(await response.json());
     return text ? { text, model } : null;
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: 'gemini_provider_unavailable',
+      requestId: diagnostics?.requestId,
+      operation: diagnostics?.operation ?? 'unknown',
+      model,
+      reason: error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network_error'
+    }));
     return null;
   } finally {
     clearTimeout(timeout);
@@ -305,7 +328,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
         'Do not identify brands, people, addresses, or safety compliance. Do not make pricing claims.'
       ].join('\n') },
       { inline_data: { mime_type: photo.mimetype, data: photo.buffer.toString('base64') } }
-    ], 220, 'application/json');
+    ], 220, 'application/json', { requestId: req.requestId, operation: 'material_suggestion' });
     if (!result) {
       throw materialSuggestionServiceError('GEMINI_UNAVAILABLE');
     }

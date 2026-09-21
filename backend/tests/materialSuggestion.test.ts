@@ -133,4 +133,28 @@ describe('material suggestion photo contract', () => {
     });
     expect(aiInference.create).not.toHaveBeenCalled();
   });
+
+  it('logs only safe provider status metadata for an unauthorized Gemini key', async () => {
+    process.env.GEMINI_API_KEY = 'do-not-log-this-key';
+    process.env.GEMINI_MODEL = 'gemini-test-model';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('provider body must not be logged', { status: 401 })));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { app } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', Buffer.from('normalized-image-bytes'), { filename: 'photo.jpg', contentType: 'image/jpeg' });
+
+    expect(response.status).toBe(503);
+    const providerLog = warning.mock.calls
+      .map(([value]) => String(value))
+      .find(value => value.includes('gemini_provider_unavailable'));
+    expect(providerLog).toBeDefined();
+    expect(providerLog).toContain('"status":401');
+    expect(providerLog).toContain('"operation":"material_suggestion"');
+    expect(providerLog).not.toContain('do-not-log-this-key');
+    expect(providerLog).not.toContain('provider body must not be logged');
+    warning.mockRestore();
+  });
 });
