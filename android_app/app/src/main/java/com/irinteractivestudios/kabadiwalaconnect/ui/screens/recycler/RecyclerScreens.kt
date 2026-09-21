@@ -61,7 +61,6 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.EmptyContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
-import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcAmberSecondary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 
 data class MarketplaceLot(val id: String, val material: String, val weight: String, val range: String, val area: String, val distance: String, val requestId: String = id)
@@ -176,14 +175,14 @@ fun RecyclerVerificationScreen(
                         if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
                         Text(stringResource(if (saving) R.string.recycler_verification_submitting else R.string.recycler_verification_submit))
                     }
-                    if (saved) Text(stringResource(R.string.recycler_verification_submitted), color = KcAmberSecondary, style = MaterialTheme.typography.labelLarge)
+                    if (saved) Text(stringResource(R.string.recycler_verification_submitted), color = KcTheme.extended.warning, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = onRefresh, enabled = !loading && !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.recycler_verification_refresh)) }
-            if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcAmberSecondary, style = MaterialTheme.typography.labelLarge)
+            if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcTheme.extended.warning, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -377,7 +376,7 @@ fun RecyclerMarketplaceScreen(
                                     style = MaterialTheme.typography.headlineSmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
-                                Text("  ·  ${lot.range}", style = MaterialTheme.typography.bodyLarge, color = KcAmberSecondary)
+                                Text("  ·  ${lot.range}", style = MaterialTheme.typography.bodyLarge, color = KcTheme.extended.warning)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.LocationOn, null, modifier = Modifier.padding(end = 5.dp))
@@ -415,7 +414,7 @@ private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, submitt
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Text(lot.material, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(lot.weight, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
             Text("${lot.area}${lot.distance.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodyMedium)
-            Text(lot.range, style = MaterialTheme.typography.bodyMedium, color = KcAmberSecondary)
+            Text(lot.range, style = MaterialTheme.typography.bodyMedium, color = KcTheme.extended.warning)
             if (submitted) Text(stringResource(R.string.recycler_offer_sent), color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
             else {
                 OutlinedTextField(rateText, { rateText = it.filter { char -> char.isDigit() || char == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -657,7 +656,7 @@ fun RecyclerRatesScreen(
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         error?.let { Text(stringResource(R.string.recycler_rates_load_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         categories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
-        if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcAmberSecondary, style = MaterialTheme.typography.bodyMedium)
+        if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcTheme.extended.warning, style = MaterialTheme.typography.bodyMedium)
         if (error != null) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
         Button(onClick = {
             onSave(values.mapNotNull { (category, value) -> value.toDoubleOrNull()?.takeIf { it > 0 }?.let { RecyclerRateUpdateDto(category, it) } })

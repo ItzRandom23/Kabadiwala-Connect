@@ -580,9 +580,11 @@ multi-account process-death run remain open.
   `PASS_NO_APP_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` result; no protected
   route, bearer token, 401, Retrofit/OkHttp, FATAL, or ANR signature appeared
   before authentication.
-- The current Android unit suite contains 89 passing tests across 20 suites;
-  the new `ThemeContrastTest` enforces WCAG-AA contrast for light primary text
-  and the lime action label/fill pair so the light-mode fix cannot regress.
+- The current Android unit suite contains 90 passing tests across 20 suites;
+  `ThemeContrastTest` enforces WCAG-AA contrast for light primary and warning
+  text plus the lime action label/fill pair, so the light-mode fix cannot
+  regress. Recycler warning labels now use the theme-aware warning token rather
+  than a low-contrast amber text constant.
 - Latest rerun after the offline pickup outbox dedupe fix:
   `:app:testEnvTestingDebugUnitTest` and `:app:assembleEnvTestingDebug`
   passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on

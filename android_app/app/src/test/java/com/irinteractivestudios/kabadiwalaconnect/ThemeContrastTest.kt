@@ -5,6 +5,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightPrimary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSurface
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLime
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLimeOn
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcWarning
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.pow
@@ -25,6 +26,14 @@ class ThemeContrastTest {
         assertTrue(
             "Lime action text must remain readable on lime buttons",
             contrastRatio(KcLimeOn, KcLime) >= 4.5
+        )
+    }
+
+    @Test
+    fun lightWarningTextIsReadableOnLightSurface() {
+        assertTrue(
+            "Light warning text must remain readable on light surfaces",
+            contrastRatio(KcWarning, KcLightSurface) >= 4.5
         )
     }
 
