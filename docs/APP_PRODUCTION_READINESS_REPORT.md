@@ -818,6 +818,10 @@ multi-account process-death run remain open.
   process log. Household text fields, checkboxes, and selected photo paths now
   use saveable state across Activity recreation; both image-detection surfaces
   expose a retry action while preserving the manual fallback.
+- After the version 41 bump and backend version-configuration change,
+  `:app:testEnvTestingDebugUnitTest` and
+  `:app:connectedEnvTestingDebugAndroidTest` passed again on
+  `Pixel_10_Pro(AVD) - 17`; all 12 connected tests completed successfully.
 
 ## Performance observations
 
