@@ -999,6 +999,12 @@ was available.
   `TOKEN_INVALID` as expected. All three disposable accounts were then removed
   through the account-deletion API; no production account or production data
   was involved.
+- A live cross-role authorization smoke on 2026-09-21 created disposable
+  email-authenticated Collector and Recycler accounts. Collector tokens were
+  rejected with HTTP 403 by Recycler bulk-lot and procurement-requirement
+  endpoints; Recycler tokens were rejected with HTTP 403 by Kabadiwala inventory
+  and listings endpoints. Both accounts were deleted through the account
+  deletion API after the probes.
 - A current authenticated Gemini smoke attempt using the documented disposable
   Household seed (`household-a@kabadiwala.example` / testing password) was
   rejected with HTTP 401 at `/api/v1/auth/login`. No image was uploaded and no
