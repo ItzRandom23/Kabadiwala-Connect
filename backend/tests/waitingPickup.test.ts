@@ -61,7 +61,11 @@ describe('waiting pickup lifecycle', () => {
           .mockResolvedValueOnce({ count: 1 }),
         findFirstOrThrow: vi.fn().mockResolvedValue(claimed)
       },
-      householdListing: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }
+      householdListing: {
+        findUnique: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: null, longitude: null }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 })
+      },
+      collector: { findUnique: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: null, longitude: null }) }
     };
     const db: any = {
       user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
@@ -77,5 +81,27 @@ describe('waiting pickup lifecycle', () => {
       where: { listingId: 'listing-2', kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' },
       data: { kabadiwalaId: 'collector-2', status: 'ACCEPTED', acceptedAt: expect.any(Date) }
     });
+  });
+
+  it('rejects a guessed waiting-pickup ID outside the collector service area', async () => {
+    const tx = {
+      ...auditMocks(),
+      pickupRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      collector: { findUnique: vi.fn().mockResolvedValue({ areaName: 'North', latitude: 19.2, longitude: 73.1 }) },
+      householdListing: { findUnique: vi.fn().mockResolvedValue({ areaName: 'South', latitude: 21.2, longitude: 75.1 }), updateMany: vi.fn() }
+    };
+    const db: any = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
+      $transaction: vi.fn(async (callback: (value: any) => unknown) => callback(tx))
+    };
+    const jwt = new JwtService(config);
+    const response = await request(appFor(db, jwt))
+      .post('/api/v1/kabadiwala/listings/guessed-listing/accept')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-2')}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('AUTHORIZATION_ERROR');
+    expect(response.body.error.details).toMatchObject({ code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
+    expect(tx.pickupRequest.updateMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -619,6 +619,11 @@ multi-account process-death run remain open.
   gate passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 12/12 on
   `Pixel_10_Pro(AVD) - 17`, including a Room persistence regression proving
   account A cannot mutate account B's queued operation.
+- Latest waiting-pickup authorization hardening on 2026-09-21: the
+  `WAITING_FOR_PICKUP` accept path now repeats the same area/25 km service
+  boundary used by collector feeds, so a Kabadiwala cannot bypass discovery by
+  guessing a listing ID. The route has a regression test for this IDOR/business
+  logic case; backend gates pass with 39 files and 118 tests.
 - The account-boundary pass now also removes the account-keyed formalisation
   dashboard cache during explicit logout, alongside Room rows, outbox items,
   pending photos, idempotency keys, and app-private evidence files. Android

@@ -49,6 +49,22 @@ function distanceKm(aLat?: number | null, aLng?: number | null, bLat?: number | 
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Waiting pickups are discoverable only inside the same service boundary used
+ * by the collector feed. The accept endpoint must repeat this check because a
+ * caller can otherwise bypass the feed by guessing a listing ID.
+ */
+function collectorCanSeeWaitingPickup(collector: any, listing: any, maxDistanceKm = 25): boolean {
+  if (!collector || !listing) return false;
+  const distance = distanceKm(collector.latitude, collector.longitude, listing.latitude, listing.longitude);
+  const sameArea = Boolean(
+    collector.areaName &&
+      listing.areaName &&
+      String(collector.areaName).toLowerCase() === String(listing.areaName).toLowerCase()
+  );
+  return sameArea || (distance != null && distance <= maxDistanceKm) || (collector.latitude == null && collector.longitude == null);
+}
+
 async function validateSourceListings(store: any, collectorId: string, sourceListingIds: string[], materialCategory: string) {
   if (!sourceListingIds.length) return;
   const uniqueIds = [...new Set(sourceListingIds)];
@@ -494,9 +510,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { listingId: true } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: { listingId: string }) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
     const visibleWaitingIds = waitingListings.filter((listing: any) => {
-      const distance = distanceKm(own?.latitude, own?.longitude, listing.latitude, listing.longitude);
-      const sameArea = Boolean(own?.areaName && listing.areaName && own.areaName.toLowerCase() === listing.areaName.toLowerCase());
-      return sameArea || (distance != null && distance <= 25) || (own?.latitude == null && own?.longitude == null);
+      return collectorCanSeeWaitingPickup(own, listing);
     }).map((listing: any) => listing.id);
     const assignedIds = [...new Set([...assigned.map((pickup: { listingId: string }) => pickup.listingId), ...visibleWaitingIds])];
     const listings = assignedIds.length
@@ -530,10 +544,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const listingById = new Map<string, any>(waitingListings.map((listing: any) => [listing.id, listing] as [string, any]));
     const visibleWaiting = waiting.filter((pickup: any) => {
       const listing = listingById.get(pickup.listingId);
-      if (!listing) return false;
-      const distance = distanceKm(own?.latitude, own?.longitude, listing.latitude, listing.longitude);
-      const sameArea = Boolean(own?.areaName && listing.areaName && own.areaName.toLowerCase() === listing.areaName.toLowerCase());
-      return sameArea || (distance != null && distance <= 25) || (own?.latitude == null && own?.longitude == null);
+      return collectorCanSeeWaitingPickup(own, listing);
     });
     res.json({ success: true, data: [...assigned, ...visibleWaiting] });
   });
@@ -542,6 +553,13 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     await store.$transaction(async (tx: any) => {
       let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
       if (!updated.count) {
+        const [collector, listing] = await Promise.all([
+          tx.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }),
+          tx.householdListing.findUnique({ where: { id: listingId }, select: { areaName: true, latitude: true, longitude: true } })
+        ]);
+        if (!collectorCanSeeWaitingPickup(collector, listing)) {
+          throw new AppError('AUTHORIZATION_ERROR', 'This waiting pickup is outside your service area', 403, { code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
+        }
         updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }, data: { kabadiwalaId: req.identity!.collectorId, status: 'ACCEPTED', acceptedAt: new Date() } });
       }
       if (!updated.count) throw new AppError('CONFLICT', 'Pickup is not available to accept', 409);
