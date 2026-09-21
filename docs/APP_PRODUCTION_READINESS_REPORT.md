@@ -809,6 +809,15 @@ multi-account process-death run remain open.
   cold, and app-process logcat contained
   `PASS_NO_APP_PROTECTED_REQUEST_OR_CRASH_SIGNATURES` (no 401, bearer-token,
   Retrofit/OkHttp, protected-route, FATAL, or ANR signature before login).
+- After the Household form draft-preservation and Gemini retry changes,
+  `:app:testEnvTestingDebugUnitTest` and
+  `:app:assembleEnvTestingDebug` passed, and the connected suite passed 12/12
+  on `Pixel_10_Pro(AVD) - 17`. The exact rebuilt APK was installed on
+  `emulator-5554`, app data was cleared, and a fresh cold launch again produced
+  no protected-request, 401, bearer-token, crash, or ANR signature in the app
+  process log. Household text fields, checkboxes, and selected photo paths now
+  use saveable state across Activity recreation; both image-detection surfaces
+  expose a retry action while preserving the manual fallback.
 
 ## Performance observations
 

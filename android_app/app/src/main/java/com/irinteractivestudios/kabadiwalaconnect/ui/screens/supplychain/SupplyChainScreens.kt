@@ -64,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -287,17 +288,20 @@ fun HouseholdListingCreateScreen(
     onCreateListing: (HouseholdListingCreateDto, List<String>) -> Unit,
     busy: Set<String> = emptySet()
 ) {
-    var material by remember { mutableStateOf(friendlyMaterials.first().key) }
-    var weight by remember { mutableStateOf("") }
-    var area by remember(initialArea) { mutableStateOf(initialArea) }
-    var notes by remember { mutableStateOf("") }
-    var condition by remember { mutableStateOf("INTACT") }
-    var safetyAcknowledged by remember { mutableStateOf(false) }
-    var dataBearingDevice by remember { mutableStateOf(false) }
-    var ownerPreparationCompleted by remember { mutableStateOf(false) }
-    var dataDestructionRequested by remember { mutableStateOf(false) }
-    var photoPaths by remember { mutableStateOf(emptyList<String>()) }
-    var photoError by remember { mutableStateOf(false) }
+    // This is a multi-step, network-backed form. Save the draft through
+    // Activity recreation so rotation, permission prompts, and keyboard
+    // changes do not discard the user's photos or typed details.
+    var material by rememberSaveable { mutableStateOf(friendlyMaterials.first().key) }
+    var weight by rememberSaveable { mutableStateOf("") }
+    var area by rememberSaveable(initialArea) { mutableStateOf(initialArea) }
+    var notes by rememberSaveable { mutableStateOf("") }
+    var condition by rememberSaveable { mutableStateOf("INTACT") }
+    var safetyAcknowledged by rememberSaveable { mutableStateOf(false) }
+    var dataBearingDevice by rememberSaveable { mutableStateOf(false) }
+    var ownerPreparationCompleted by rememberSaveable { mutableStateOf(false) }
+    var dataDestructionRequested by rememberSaveable { mutableStateOf(false) }
+    var photoPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var photoError by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val ioScope = rememberCoroutineScope()
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
@@ -369,6 +373,16 @@ fun HouseholdListingCreateScreen(
                     HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text("Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     HouseholdMaterialDetectionStatus.IDLE -> Unit
+                }
+                if (state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) && photoPaths.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { photoPaths.firstOrNull()?.let(onSuggestMaterial) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
+                        Spacer(Modifier.width(8.dp))
+                        MaterialText("Try detection again")
+                    }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     friendlyMaterials.forEach { option ->

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Motorcycle
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Recycling
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Card
@@ -309,6 +310,13 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                 MaterialDetectionStatus.NETWORK_ERROR -> Text(stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.SERVICE_ERROR -> Text(stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 else -> Unit
+            }
+            if (s.materialDetectionStatus in setOf(MaterialDetectionStatus.UNSUPPORTED_IMAGE, MaterialDetectionStatus.NETWORK_ERROR, MaterialDetectionStatus.SERVICE_ERROR)) {
+                OutlinedButton(onClick = vm::suggestMaterial, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Try detection again")
+                }
             }
         }
     }
