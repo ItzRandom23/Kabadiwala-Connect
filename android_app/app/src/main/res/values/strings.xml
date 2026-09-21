@@ -418,7 +418,7 @@
     <string name="auth_role_collector">I collect scrap</string>
     <string name="auth_role_collector_detail">Kabadiwala / Collector</string>
     <string name="auth_role_recycler">I buy or process scrap</string>
-    <string name="auth_role_recycler_detail">Authorized Recycler / Aggregator</string>
+    <string name="auth_role_recycler_detail">Recycler / Aggregator</string>
     <string name="auth_recycler_details_title">Tell us about your facility</string>
     <string name="auth_recycler_details_detail">Your verification stays pending until the details are reviewed.</string>
     <string name="auth_business_name">Business or facility name</string>
