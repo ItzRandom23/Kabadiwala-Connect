@@ -600,6 +600,10 @@ multi-account process-death run remain open.
   or ANR signature before authentication. The UI dump was attempted during the
   splash transition and was unavailable, so no screen assertion is inferred
   from that command.
+- Post-push verification for commit `4ff9c19` repeated the same clean install,
+  data clear, cold launch, and app-process-only logcat filter on `emulator-5554`:
+  PID `8779` reached the unauthenticated surface with no protected request,
+  bearer-token/401, Retrofit/OkHttp, crash, or ANR signature before login.
 - The current source also passed `:app:assembleEnvTestingRelease`, including
   release resource processing, lint-vital, R8 shrinking, and packaging. The
   only compiler note was the existing Android deprecation warning for direct
@@ -796,6 +800,11 @@ was available.
   exercised against the deployed testing API. The core role/IDOR and
   cross-role supply-chain checks have passed against the testing API, but not
   every path has been driven through Android UI.
+- Household multi-photo selection, local preprocessing, upload, and server
+  persistence support up to six images. Partner APIs currently expose the
+  primary private photo for viewing; a secondary-photo carousel/detail surface
+  for Kabadiwala users remains a product follow-up before claiming the full
+  multi-angle experience is complete.
 - A stale refresh-token replay is now handled safely by returning to auth, but
   multi-device refresh-rotation behavior and the post-deployment offline
   listing replay still require live verification.
