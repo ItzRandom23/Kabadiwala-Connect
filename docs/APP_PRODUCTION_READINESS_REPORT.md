@@ -364,7 +364,10 @@ earlier repository snapshot `7fa2773`, but its authoritative status remains
 findings. It has not produced a sealed report, and later commits are outside
 that scan's snapshot. The targeted code audit and authorization suite are
 useful evidence, but not a replacement for an independent scan of the final
-revision.
+revision. The backend error boundary now emits structured 5xx events without
+serialising arbitrary thrown objects in production; development diagnostics
+redact bearer tokens, passwords, OTPs, API keys, and circular metadata before
+logging. This is covered by `safeErrorLog.test.ts`.
 
 ## Offline and data integrity
 
@@ -495,16 +498,17 @@ multi-account process-death run remain open.
 - The current backend gate passes 38 test files and 114 tests after adding
   legacy lot idempotency-mismatch and OTP limiter coverage. `npm run build` and `npm run lint`
   also pass after the hardening change.
-- The latest backend run passed 38 test files and 114 tests, including explicit
+- The latest backend run passed 39 test files and 116 tests, including explicit
   missing-linkage rejection for collector, household, and account middleware,
   plus the no-registration-details Household phone-login regression.
 - Testing health endpoint — HTTP 200, database connected.
 - Testing readiness endpoint — HTTP 200; database, storage, OTP provider, and
   rate-limit store reported ready.
-- Current source-state rerun on 2026-09-21 — `npm test` passed 38 test files
-  and 114 tests; `npm run lint` and `npm run build` also passed. The backend
+- Current source-state rerun on 2026-09-21 — `npm test` passed 39 test files
+  and 116 tests; `npm run lint` and `npm run build` also passed. The backend
   test stderr contains intentional negative-case validation logs only (for
-  example missing-photo 422 and unavailable-Gemini 503 coverage).
+  example missing-photo 422 and unavailable-Gemini 503 coverage), and 5xx
+  diagnostics are now redacted structured events.
 - Current VPS post-reset probe on 2026-09-21 — `/api/v1/health` and
   `/api/v1/ready` returned HTTP 200 with the database connected and all
   readiness checks true. The VPS reports `0.0.38-beta`; its update manifest
