@@ -593,6 +593,13 @@ multi-account process-death run remain open.
 - The added account-cache regression then ran on `Pixel_10_Pro(AVD) - 17` with
   the full instrumentation suite at 10/10, proving that clearing one account's
   formalisation snapshot leaves another account's snapshot intact.
+- A fresh current-APK install, `pm clear`, logcat reset, force-stop, and cold
+  launch on `emulator-5554` again produced
+  `CLEAN_START_PASS_NO_PROTECTED_REQUEST_OR_CRASH_SIGNATURES`; app-process
+  logcat contained no protected route, bearer-token, Retrofit/OkHttp, fatal,
+  or ANR signature before authentication. The UI dump was attempted during the
+  splash transition and was unavailable, so no screen assertion is inferred
+  from that command.
 - Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   110 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
