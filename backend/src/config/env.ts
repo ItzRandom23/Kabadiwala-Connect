@@ -12,7 +12,7 @@ const schema = z.object({
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   // Keep the health/readiness version aligned with the Android release unless
   // a deployment explicitly supplies a different backend build identifier.
-  APP_VERSION: z.string().min(1).default('0.0.40-beta'),
+  APP_VERSION: z.string().min(1).default('0.0.41-beta'),
   OTP_PROVIDER: z.enum(['development', 'twilio', 'twofactor']).default('development'),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),

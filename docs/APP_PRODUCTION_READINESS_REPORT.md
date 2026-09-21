@@ -866,6 +866,10 @@ multi-account process-death run remain open.
   backend `0.0.40-beta`; `/app/update.json` still advertises versionCode 41 /
   `0.0.40-beta`. The local version-42 artifact is therefore not yet deployed
   to the VPS OTA channel.
+- The backend release identifier was aligned in source defaults and all tracked
+  environment templates to `APP_VERSION=0.0.41-beta`; backend tests (39 files,
+  121 tests), build, and lint pass after this change. The VPS `.env` remains an
+  external deployment setting and must be updated explicitly before restart.
 
 ## Performance observations
 
