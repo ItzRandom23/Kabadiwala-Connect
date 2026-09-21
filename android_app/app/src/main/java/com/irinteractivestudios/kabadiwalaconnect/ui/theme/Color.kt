@@ -47,6 +47,10 @@ val KcLightRaised = Color(0xFFE9F0E7)
 val KcLightText = Color(0xFF11150E)
 val KcLightMuted = Color(0xFF4F5D52)
 val KcLightOutline = Color(0xFF748276)
+// Lime is the brand action fill, but it is too bright to use as text on a
+// light canvas. This readable green keeps the same hue family at 7:1+ against
+// white while leaving KcLime available for high-emphasis action surfaces.
+val KcLightPrimary = Color(0xFF3A6200)
 
 // Semantic aliases retained for existing screens and tests.
 val KcGreenPrimary = KcLime

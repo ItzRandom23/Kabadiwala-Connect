@@ -19,8 +19,8 @@ import androidx.core.view.WindowCompat
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
 private val LightColorScheme = lightColorScheme(
-    primary = KcLime,
-    onPrimary = KcLimeOn,
+    primary = KcLightPrimary,
+    onPrimary = KcWhite,
     primaryContainer = KcGreenPrimaryContainer,
     onPrimaryContainer = KcGreenOnPrimaryContainer,
     secondary = KcLightMuted,
@@ -148,7 +148,7 @@ fun KabadiwalaConnectTheme(
     val effectiveDark = darkTheme
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
-        value = KcLime,
+        value = if (effectiveDark) KcLime else KcLightPrimary,
         success = if (effectiveDark) KcMint else KcSuccess,
         warning = if (effectiveDark) KcAmber else KcWarning,
         logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,

@@ -277,6 +277,12 @@ Gemini response or HTTP error shown.
 - Confirmed dark mode remains the default while persisted Dark/Light/System
   selection remains available under Settings → Display. Testing labels remain
   confined to the debug/testing build.
+- Light-mode contrast was corrected on 2026-09-21. The neon lime token is no
+  longer reused as Material 3 `primary` text on a white canvas; light mode now
+  uses an accessible dark-green primary token (measured at approximately 7:1
+  against white), while dark mode keeps the lime action treatment. ADB visual
+  QA on `Pixel_10_Pro(AVD) - 17` confirmed readable light onboarding,
+  selected-state accents, and primary/secondary actions.
 - Removed the visible operator sign-in, Pune demo, and role-demo controls from
   the onboarding welcome surface. Debug/instrumentation preview remains
   available only through the explicit test intent, so the customer path no
