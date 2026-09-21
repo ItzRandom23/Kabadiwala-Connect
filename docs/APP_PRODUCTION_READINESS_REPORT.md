@@ -935,6 +935,10 @@ was available.
   both health responses still report backend version `0.0.38-beta`; the running
   backend deployment or its `APP_VERSION` environment value is therefore not
   yet aligned with the repository revision and must be checked before release.
+- The rebuilt versionCode 41 APK was installed on `emulator-5554`, app data was
+  cleared, and the app was cold-launched. The app process remained alive and a
+  PID-scoped logcat check found no protected API request, 401/Bearer-token
+  message, fatal exception, or ANR signature before authentication.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
