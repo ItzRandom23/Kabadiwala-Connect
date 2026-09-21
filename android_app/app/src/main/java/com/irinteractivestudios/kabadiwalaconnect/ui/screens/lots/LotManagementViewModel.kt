@@ -180,8 +180,11 @@ class LotManagementViewModel(
                     materialDetectionStatus = if (confident) MaterialDetectionStatus.SUCCESS else MaterialDetectionStatus.LOW_CONFIDENCE,
                     materialDetectionMessage = null
                 )
-            } catch (error: IllegalArgumentException) {
-                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = error.message)
+            } catch (_: IllegalArgumentException) {
+                // Keep provider/file-validation details out of UI state. The
+                // screen renders the localized manual-fallback message for
+                // this typed status.
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = null)
             } catch (error: RemoteApiException) {
                 val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "GEMINI_UNAVAILABLE" || error.code == "SERVICE_UNAVAILABLE"
                 val unsupported = error.httpCode == 422 || error.code == "VALIDATION_ERROR"

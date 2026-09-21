@@ -583,6 +583,11 @@ multi-account process-death run remain open.
   `:app:testEnvTestingDebugUnitTest` and `:app:assembleEnvTestingDebug`
   passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on
   `Pixel_10_Pro(AVD) - 17`, including the Room queue persistence assertion.
+- A follow-up error-surface audit removed the internal `unsupported_image`
+  exception value from Kabadiwala material-detection UI state. The screen now
+  consistently uses its safe localized unsupported-image/manual-fallback copy;
+  the unit/build gate and emulator suite passed again (89 unit tests, 9/9
+  instrumentation tests).
 - After the OTP limiter, retry-window, and rapid-tap guard change, the Android
   unit suite completed with 86 tests and `:app:assembleEnvTestingDebug`
   passed. The rebuilt APK was installed on `emulator-5554`, application data
