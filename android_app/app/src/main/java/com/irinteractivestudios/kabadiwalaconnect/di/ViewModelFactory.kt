@@ -95,7 +95,7 @@ class KcViewModelFactory(
                 locationProvider = AndroidLocationProvider(app)
             )
         modelClass.isAssignableFrom(LotManagementViewModel::class.java) ->
-            LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService, priceCatalog)
+            LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService, priceCatalog, languageProvider = { LocaleManager.persistedTag(app) })
         modelClass.isAssignableFrom(RecyclerMarketplaceViewModel::class.java) ->
             RecyclerMarketplaceViewModel(container.apiService)
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->
@@ -109,7 +109,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() })
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() }, { LocaleManager.persistedTag(app) })
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

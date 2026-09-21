@@ -32,4 +32,11 @@ class LocaleManagerTest {
         assertEquals("en", LocaleManager.normalizeTag(""))
         assertEquals("en", LocaleManager.normalizeTag(null))
     }
+
+    @Test
+    fun toBackendName_preservesSupportedDetectionLanguages() {
+        assertEquals("ENGLISH", LocaleManager.toBackendName("en"))
+        assertEquals("HINDI", LocaleManager.toBackendName("hi"))
+        assertEquals("MARATHI", LocaleManager.toBackendName("mr"))
+    }
 }

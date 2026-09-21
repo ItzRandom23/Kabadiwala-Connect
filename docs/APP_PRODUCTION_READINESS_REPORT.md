@@ -308,6 +308,10 @@ Gemini response or HTTP error shown.
   `Circuit boards & computer parts`. `Other scrap / not sure` remains an
   explicit safe fallback, and the AI suggestion is always presented as a
   suggestion that the user can change.
+- Image-detection requests now carry the persisted app language for both
+  Household and Kabadiwala flows instead of always sending English. The
+  backend still receives stable enum category names, while Gemini rationale can
+  follow the selected Hindi, Marathi, or other supported language.
 - Follow-up emulator visual QA removed the duplicate inline `Back` action from
   the Household form. The shared app bar now owns the only back affordance and
   correctly titles the route `Sell scrap`; a fresh ADB screenshot confirmed the
@@ -830,6 +834,10 @@ multi-account process-death run remain open.
 - After removing the duplicate Home “field tools” block, the same Android unit
   and connected regression gates passed again; all 12 connected tests on
   `Pixel_10_Pro(AVD) - 17` completed successfully.
+- The follow-up language propagation change passed the same Android unit and
+  connected gates, and `:app:assembleEnvTestingRelease` completed successfully
+  with R8. Backend verification also passed `npm test` (39 files / 121 tests),
+  `npm run build`, and `npm run lint`.
 - The release-flavored testing artifact also builds successfully with R8:
   `:app:assembleEnvTestingRelease` passed and produced unsigned
   `versionCode 41 / 0.0.40-beta` output. Production release signing remains

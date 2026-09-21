@@ -16,6 +16,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
+import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import okhttp3.MultipartBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -84,7 +85,8 @@ class SupplyChainViewModel(
      * the final network gate in the ViewModel as well as in navigation so a
      * stale collector screen cannot issue an unauthenticated request.
      */
-    private val authenticatedSessionReady: () -> Boolean = { true }
+    private val authenticatedSessionReady: () -> Boolean = { true },
+    private val languageProvider: () -> String = { LocaleManager.ENGLISH }
 ) : ViewModel() {
     private val _state = MutableStateFlow(SupplyChainState())
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
@@ -431,7 +433,7 @@ class SupplyChainViewModel(
                 val prepared = ImagePipeline.prepareForUpload(source, source.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
                 val suggestion = try {
                     val body = prepared.asRequestBody(prepared.imageMimeType().toMediaTypeOrNull())
-                    val language = "English".toRequestBody("text/plain".toMediaTypeOrNull())
+                    val language = LocaleManager.toBackendName(languageProvider()).toRequestBody("text/plain".toMediaTypeOrNull())
                     api.suggestLotMaterial(MultipartBody.Part.createFormData("photo", prepared.name, body), language).requireData()
                 } finally {
                     prepared.delete()

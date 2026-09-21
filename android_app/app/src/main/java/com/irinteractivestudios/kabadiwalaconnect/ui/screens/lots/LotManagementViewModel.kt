@@ -13,6 +13,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.ConditionMultiplier
 import com.irinteractivestudios.kabadiwalaconnect.util.Valuation
 import com.irinteractivestudios.kabadiwalaconnect.util.ValuationCalculator
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
+import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DescriptionSuggestionRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.MaterialSuggestionDto
@@ -76,7 +77,8 @@ class LotManagementViewModel(
     private val collectorId: String,
     private val api: ApiService? = null,
     private val priceCatalog: PriceCatalogRepository? = null,
-    private val now: () -> Long = { System.currentTimeMillis() }
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val languageProvider: () -> String = { LocaleManager.ENGLISH }
 ) : ViewModel() {
     private val _state = MutableStateFlow(LotDraftState())
     val state: StateFlow<LotDraftState> = _state.asStateFlow()
@@ -164,7 +166,7 @@ class LotManagementViewModel(
                 val prepared = ImagePipeline.prepareForUpload(file, file.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
                 val suggestion = try {
                     val body = prepared.asRequestBody(prepared.imageMimeType().toMediaTypeOrNull())
-                    val language = "English".toRequestBody("text/plain".toMediaType())
+                    val language = LocaleManager.toBackendName(languageProvider()).toRequestBody("text/plain".toMediaType())
                     service.suggestLotMaterial(
                         okhttp3.MultipartBody.Part.createFormData("photo", prepared.name, body),
                         language
