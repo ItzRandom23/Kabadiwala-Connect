@@ -1054,7 +1054,8 @@ was available.
   the image library before calling the provider, rather than trusting only the
   multipart MIME label. A spoofed JPEG label containing non-image bytes returns
   the typed 422 `INVALID_PHOTO` response and does not create an AI inference;
-  the focused backend contract suite passes 7/7, with build and lint green.
+  decoded images are also bounded to 25 megapixels before provider work. The
+  focused backend contract suite passes 7/7, with build and lint green.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

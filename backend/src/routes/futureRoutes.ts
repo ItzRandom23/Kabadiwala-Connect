@@ -14,6 +14,7 @@ const { AccountRole, DescriptionSource, MessageStatus, PreferredLanguage, Reward
 
 const languageSchema = z.nativeEnum(PreferredLanguage);
 const appearanceSchema = z.enum(['SYSTEM', 'LIGHT', 'DARK']);
+const MAX_MATERIAL_IMAGE_PIXELS = 25_000_000;
 const materialUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -322,6 +323,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   try {
     const metadata = await sharp(photo.buffer).metadata();
     if (!metadata.format || !['jpeg', 'png', 'webp'].includes(metadata.format)) throw new Error('unsupported_image_format');
+    if (!metadata.width || !metadata.height || metadata.width * metadata.height > MAX_MATERIAL_IMAGE_PIXELS) throw new Error('image_dimensions_unsupported');
   } catch {
     throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422, { code: 'INVALID_PHOTO' });
   }
