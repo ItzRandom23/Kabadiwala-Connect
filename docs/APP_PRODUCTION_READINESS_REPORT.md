@@ -828,11 +828,12 @@ was available.
   Gemini key/model/quota configuration and a representative scrap-photo
   accuracy smoke test; low confidence must continue to offer manual selection.
 - A repository-wide Codex Security Standard scan was launched against the
-  current source snapshot, but its authoritative status remains `running` in
-  `threat_model` with zero completed coverage and no reportable findings. It
-  has not produced a sealed report, so this is not a clean security result;
-  existing role-boundary tests and targeted authorization review remain
-  evidence, not a replacement for an independent scan.
+  earlier repository snapshot `7fa2773`, but its authoritative status remains
+  `running` in `threat_model` with zero completed coverage and no reportable
+  findings. It has not produced a sealed report, and later commits are outside
+  that scan's snapshot, so this is not a clean security result; existing
+  role-boundary tests and targeted authorization review remain evidence, not a
+  replacement for an independent scan of the final revision.
 
 ## Release recommendation
 
