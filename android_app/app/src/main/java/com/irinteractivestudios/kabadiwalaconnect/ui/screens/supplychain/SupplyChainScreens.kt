@@ -381,7 +381,7 @@ fun HouseholdListingCreateScreen(
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
                         Spacer(Modifier.width(8.dp))
-                        MaterialText("Try detection again")
+                        Text("Try detection again")
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -600,7 +600,7 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
         if (photos.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                MaterialText("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -612,9 +612,9 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
                 }
             }
             if (photoError != null) {
-                MaterialText(photoError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(photoError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             } else {
-                MaterialText("${photos.size} angle${if (photos.size == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${photos.size} angle${if (photos.size == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

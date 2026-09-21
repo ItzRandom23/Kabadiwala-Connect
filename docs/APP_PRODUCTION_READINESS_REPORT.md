@@ -838,6 +838,11 @@ multi-account process-death run remain open.
   connected gates, and `:app:assembleEnvTestingRelease` completed successfully
   with R8. Backend verification also passed `npm test` (39 files / 121 tests),
   `npm run build`, and `npm run lint`.
+- The photo-state localization pass routes detection retry, loading, invalid
+  image, and angle-count copy through the Hindi/Marathi supply-chain
+  localization wrapper; dedicated unit coverage passed for both languages.
+  The connected suite remained 12/12 green after the change, and the testing
+  release artifact was rebuilt successfully with R8.
 - The release-flavored testing artifact also builds successfully with R8:
   `:app:assembleEnvTestingRelease` passed and produced unsigned
   `versionCode 41 / 0.0.40-beta` output. Production release signing remains
