@@ -365,15 +365,39 @@ class SupplyChainViewModel(
         } catch (error: Throwable) {
             val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
             if (!transient || syncQueue == null) throw error
+            val queueAccount = accountId()?.takeIf { it.isNotBlank() }
+                ?: throw error
             val payload = com.google.gson.JsonObject().apply {
                 addProperty("listingId", listingId)
                 kabadiwalaId?.let { addProperty("kabadiwalaId", it) }
                 addProperty("idempotencyKey", key)
                 addProperty("idempotencyOperation", operation)
             }
-            syncQueue.enqueue(SyncQueueItemEntity(operation = "REQUEST_HOUSEHOLD_PICKUP", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
+            // The UI can be resumed and tapped again while the device is
+            // offline. The stable idempotency key protects the server, but
+            // the local outbox must also contain only one row for that
+            // account/key pair so the worker does not replay duplicate work.
+            val alreadyQueued = syncQueue.findUidByOperationAndIdempotencyKey(
+                "REQUEST_HOUSEHOLD_PICKUP",
+                queueAccount,
+                key
+            )
+            if (alreadyQueued == null) {
+                syncQueue.enqueue(
+                    SyncQueueItemEntity(
+                        operation = "REQUEST_HOUSEHOLD_PICKUP",
+                        payloadJson = Gson().toJson(payload),
+                        createdAtEpochMs = System.currentTimeMillis(),
+                        accountId = queueAccount
+                    )
+                )
+            }
             requestSync?.invoke()
-            "Pickup saved offline and will sync when connected."
+            if (alreadyQueued == null) {
+                "Pickup saved offline and will sync when connected."
+            } else {
+                "Pickup is already saved offline and will sync when connected."
+            }
         }
     })
     fun clearHouseholdMaterialSuggestion() {

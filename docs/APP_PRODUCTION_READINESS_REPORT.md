@@ -389,6 +389,14 @@ the same key until the worker applies them, which closes the duplicate-action
 window. This closes the earlier mismatch where pickup creation was
 offline-capable but listing creation was online-only.
 
+The latest Android audit also fixed a client-side pickup outbox gap: repeated
+offline pickup taps now look up the existing `REQUEST_HOUSEHOLD_PICKUP` row by
+account and idempotency key before enqueueing. The queue remains account-
+scoped, and a repeated tap reports that the pickup is already saved instead of
+creating another local replay row. The emulator Room persistence test now
+asserts that this lookup survives database close/reopen and cannot cross the
+account boundary.
+
 The final continuation added Room migration 24→25 and an account-scoped
 `household_listings` cache. An authenticated ADB run created a 5.2 kg Plastic
 listing in airplane mode, showed the offline banner, force-stopped and
@@ -571,6 +579,10 @@ multi-account process-death run remain open.
 - The current Android unit suite contains 89 passing tests across 20 suites;
   the new `ThemeContrastTest` enforces WCAG-AA contrast for light primary text
   and the lime action label/fill pair so the light-mode fix cannot regress.
+- Latest rerun after the offline pickup outbox dedupe fix:
+  `:app:testEnvTestingDebugUnitTest` and `:app:assembleEnvTestingDebug`
+  passed, and `:app:connectedEnvTestingDebugAndroidTest` passed 9/9 on
+  `Pixel_10_Pro(AVD) - 17`, including the Room queue persistence assertion.
 - After the OTP limiter, retry-window, and rapid-tap guard change, the Android
   unit suite completed with 86 tests and `:app:assembleEnvTestingDebug`
   passed. The rebuilt APK was installed on `emulator-5554`, application data

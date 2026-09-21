@@ -54,7 +54,7 @@ class SyncQueuePersistenceTest {
         queue.enqueue(
             SyncQueueItemEntity(
                 operation = "REQUEST_HOUSEHOLD_PICKUP",
-                payloadJson = "{\"id\":\"pickup-b\"}",
+                payloadJson = "{\"id\":\"pickup-b\",\"idempotencyKey\":\"pickup-key-b\"}",
                 createdAtEpochMs = 2L,
                 accountId = "account-b"
             )
@@ -71,6 +71,14 @@ class SyncQueuePersistenceTest {
         assertEquals(accountAItems, accountAPending)
         assertEquals(1, accountBItems.size)
         assertTrue(accountBItems.single().payloadJson.contains("pickup-b"))
+        assertEquals(
+            accountBItems.single().uid,
+            database!!.syncQueueDao().findUidByOperationAndIdempotencyKey(
+                "REQUEST_HOUSEHOLD_PICKUP",
+                "account-b",
+                "pickup-key-b"
+            )
+        )
     }
 
     private fun openDatabase(): AppDatabase = Room.databaseBuilder(
