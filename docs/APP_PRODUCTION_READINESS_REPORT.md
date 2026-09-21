@@ -319,6 +319,11 @@ Gemini response or HTTP error shown.
   appearance with the selected theme. Unit contrast coverage was extended for
   the tertiary token, and an ADB emulator check confirmed readable Settings
   content, selected Light state, navigation labels, and the testing marker.
+- Removed the duplicate “field tools” block from the legacy Home dashboard.
+  Rewards, schemes, DIY, messages, and disputes remain available from Settings,
+  while Home now stays focused on lots, prices, recycler discovery, and the
+  next operational action. The UI regression test now asserts the primary
+  actions remain visible and the duplicate rewards shortcut is absent.
 - Preserved the existing role-specific navigation boundaries and manual/error
   states while avoiding new fake content. A dedicated physical-device,
   TalkBack, large-font, and low-end performance pass remains a release gate.
@@ -822,6 +827,9 @@ multi-account process-death run remain open.
   `:app:testEnvTestingDebugUnitTest` and
   `:app:connectedEnvTestingDebugAndroidTest` passed again on
   `Pixel_10_Pro(AVD) - 17`; all 12 connected tests completed successfully.
+- After removing the duplicate Home “field tools” block, the same Android unit
+  and connected regression gates passed again; all 12 connected tests on
+  `Pixel_10_Pro(AVD) - 17` completed successfully.
 - The release-flavored testing artifact also builds successfully with R8:
   `:app:assembleEnvTestingRelease` passed and produced unsigned
   `versionCode 41 / 0.0.40-beta` output. Production release signing remains
@@ -846,19 +854,11 @@ was available.
   configuration.
 - Production signing keystore and CI secret injection.
 - Deployment of the latest backend Household photo-response contract to the
-  VPS, followed by a fresh offline listing reconnect/replay check. Confirmed
-  current state: the VPS still returns the older nullable/raw photo fields
-  observed during diagnosis.
-- The VPS is currently running the older `0.0.38-beta` deployment and update
-  manifest versionCode 39, while the repository contains the versionCode 40
-  `0.0.39-beta` release. The latest backend contract and Android release APK
-  therefore require a deliberate VPS/app-update upload and restart before
-  live deployment evidence can be refreshed.
-- A read-only health probe still returned HTTP 200 with the old version. A
-  read-only SSH connectivity check from this workspace was refused with
-  `publickey`, so no VPS files, database, or process state were changed during
-  this pass; deployment still requires the operator's configured VPS key or
-  upload path.
+  VPS, followed by a fresh offline listing reconnect/replay check, remains an
+  external gate. The latest read-only health probe now reports backend
+  `0.0.40-beta`; the update manifest reports versionCode 41 and the matching
+  testing APK. Photo-response compatibility and offline replay still need live
+  verification after the final backend contract upload.
 - The recent VPS database reset completed runtime index preparation, but the
   development seed was correctly refused because the server `.env` is in
   production mode. No testing fixtures should be inserted into that database;

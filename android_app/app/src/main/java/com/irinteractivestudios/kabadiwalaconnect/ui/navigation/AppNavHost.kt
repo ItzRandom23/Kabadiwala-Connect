@@ -378,12 +378,7 @@ fun AppNavHost(
                 onRetry = null,
                 onCreateLot = { navController.navigate(Destinations.CREATE_LOT) },
                 onMyLots = { navController.navigate(Destinations.MY_LOTS) },
-                onOpenRewards = { navController.navigate(Destinations.REWARDS) },
-                onOpenSchemes = { navController.navigate(Destinations.SCHEMES) },
-                onOpenActivities = { navController.navigate(Destinations.ACTIVITIES) },
-                onOpenChat = { navController.navigate(Destinations.CHAT) },
-                onOpenDisputes = { navController.navigate(Destinations.DISPUTE_ANALYTICS) }
-                ,onNextAction = { action, lotId ->
+                onNextAction = { action, lotId ->
                     when (action) {
                         HomeNextAction.CREATE_LOT -> navController.navigate(Destinations.CREATE_LOT)
                         HomeNextAction.FIND_RECYCLERS -> navController.navigate(lotId?.let(Destinations::recyclersForLot) ?: Destinations.RECYCLERS)

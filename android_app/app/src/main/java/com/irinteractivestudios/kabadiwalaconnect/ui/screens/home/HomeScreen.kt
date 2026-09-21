@@ -20,18 +20,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CurrencyRupee
-import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Recycling
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,11 +60,6 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onCreateLot: () -> Unit = {},
     onMyLots: () -> Unit = {},
-    onOpenRewards: () -> Unit = {},
-    onOpenSchemes: () -> Unit = {},
-    onOpenActivities: () -> Unit = {},
-    onOpenChat: () -> Unit = {},
-    onOpenDisputes: () -> Unit = {},
     onNextAction: (HomeNextAction, String?) -> Unit = { _, _ -> },
     onRetry: (() -> Unit)? = null,
     demoMode: Boolean = false,
@@ -141,25 +132,6 @@ fun HomeScreen(
                     }
                     Text("${scenario.copper.ratePerKg.formatted()} / kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
                 }
-            }
-        }
-        SectionLabel(stringResource(R.string.home_field_tools))
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.large,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                ToolShortcut(stringResource(R.string.settings_rewards), Icons.Filled.AutoAwesome, stringResource(R.string.home_tool_rewards_detail), onOpenRewards, "home_rewards")
-                ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_schemes), Icons.Filled.School, stringResource(R.string.home_tool_schemes_detail), onOpenSchemes, "home_schemes")
-                ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_diy), Icons.Filled.Recycling, stringResource(R.string.home_tool_activities_detail), onOpenActivities, "home_activities")
-                ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_messages), Icons.AutoMirrored.Filled.Chat, stringResource(R.string.home_tool_messages_detail), onOpenChat, "home_messages")
-                ToolDivider()
-                ToolShortcut(stringResource(R.string.settings_disputes), Icons.Filled.Gavel, stringResource(R.string.home_tool_disputes_detail), onOpenDisputes, "home_disputes")
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -261,19 +233,6 @@ private fun CompactAction(label: String, icon: ImageVector, onClick: () -> Unit,
 }
 
 @Composable
-private fun ToolShortcut(title: String, icon: ImageVector, detail: String, onClick: () -> Unit, tag: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp).testTag(tag).clickable(onClick = onClick)) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
 private fun SnapshotPanel(lotCount: Int, currentPrice: String) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -318,14 +277,6 @@ private fun SnapshotPanel(lotCount: Int, currentPrice: String) {
             }
         }
     }
-}
-
-@Composable
-private fun ToolDivider() {
-    HorizontalDivider(
-        color = MaterialTheme.colorScheme.outline.copy(alpha = .18f),
-        modifier = Modifier.padding(start = 36.dp)
-    )
 }
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
