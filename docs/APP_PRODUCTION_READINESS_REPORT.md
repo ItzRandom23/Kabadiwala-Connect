@@ -646,7 +646,7 @@ multi-account process-death run remain open.
   loaded angles when a later image is unavailable and gives an actionable retry
   message. The new endpoint still needs deployment to the VPS before live
   verification.
-- Backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
+- Earlier backend verification rerun on 2026-09-21: `npm test` passed 38 test files and
   114 tests, `npm run build` passed, and `npm run lint` passed. The attempted
   `npm test -- --runInBand` command is not a supported Vitest option; the
   successful plain `npm test` run is the authoritative result.
