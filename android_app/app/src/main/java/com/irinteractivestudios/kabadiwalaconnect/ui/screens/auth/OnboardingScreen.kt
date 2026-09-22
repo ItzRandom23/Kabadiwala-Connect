@@ -98,20 +98,29 @@ fun OnboardingScreen(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         vm.locationPermissionResult(granted)
     }
+    val isOperatorSignIn = state.returningUser && state.role == AccountRole.ADMIN
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) {
-            Progress(state)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (isOperatorSignIn) {
                 OutlinedButton(
                     onClick = vm::goBack,
                     enabled = !state.isBusy,
-                    modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_back")
+                    modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_back")
                 ) { Text(stringResource(R.string.common_back)) }
-                OutlinedButton(
-                    onClick = vm::startOver,
-                    enabled = !state.isBusy,
-                    modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_start_over")
-                ) { Text(stringResource(R.string.auth_start_over)) }
+            } else {
+                Progress(state)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = vm::goBack,
+                        enabled = !state.isBusy,
+                        modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_back")
+                    ) { Text(stringResource(R.string.common_back)) }
+                    OutlinedButton(
+                        onClick = vm::startOver,
+                        enabled = !state.isBusy,
+                        modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_start_over")
+                    ) { Text(stringResource(R.string.auth_start_over)) }
+                }
             }
         }
         when (state.step) {
@@ -185,6 +194,21 @@ private fun Welcome(
         shape = KcRadius.pill,
         modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)
     ) { Text(stringResource(R.string.auth_existing_account)) }
+    TextButton(
+        onClick = vm::useAdminSignIn,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = KcMinTouchHeight)
+            .testTag("auth_operator_sign_in")
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = stringResource(R.string.demo_operator_role),
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text("${stringResource(R.string.demo_operator_role)} ${stringResource(R.string.auth_sign_in)}")
+    }
 }
 
 @Composable
@@ -201,8 +225,40 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 }
 
 @Composable private fun EmailEntry(state: OnboardingState, vm: OnboardingViewModel) {
-    Text(if (state.returningUser) stringResource(R.string.auth_sign_in_title) else stringResource(R.string.auth_email_title), style = MaterialTheme.typography.headlineMedium)
-    Text(stringResource(R.string.auth_email_detail), style = MaterialTheme.typography.bodyLarge)
+    val isOperatorSignIn = state.returningUser && state.role == AccountRole.ADMIN
+    if (isOperatorSignIn) {
+        Text(stringResource(R.string.demo_operator_role), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.auth_sign_in_title), style = MaterialTheme.typography.titleLarge)
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .55f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(stringResource(R.string.auth_sign_in), style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        stringResource(R.string.auth_email_detail),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    } else {
+        Text(if (state.returningUser) stringResource(R.string.auth_sign_in_title) else stringResource(R.string.auth_email_title), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.auth_email_detail), style = MaterialTheme.typography.bodyLarge)
+    }
     OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_label)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email"))
     OutlinedTextField(state.password, vm::setPassword, label = { Text(stringResource(R.string.auth_password_label)) }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), singleLine = true, isError = state.passwordError, supportingText = { if (state.passwordError) Text(stringResource(R.string.auth_password_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_password"))
     state.authError?.let { error ->

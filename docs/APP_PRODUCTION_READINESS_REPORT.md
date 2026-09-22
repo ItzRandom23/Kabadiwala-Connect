@@ -32,6 +32,10 @@ dependencies, not reasons to hide failures in the client.
 - Email authentication mapped a backend `401 Email or password is incorrect`
   response to the generic connectivity message, misleading users and making a
   credential failure look like an outage.
+- The backend already had a protected `/auth/admin-login` contract and the
+  Android repository already implemented it, but the customer onboarding UI
+  had no real operator/admin entry. An operator could therefore not reach the
+  existing console login from a fresh install.
 - The persisted-session check accepted any non-empty token with a future local
   expiry. A corrupted opaque value could therefore be treated as authenticated
   on a real-backend build until the server rejected it.
@@ -287,10 +291,12 @@ Gemini response or HTTP error shown.
   against white), while dark mode keeps the lime action treatment. ADB visual
   QA on `Pixel_10_Pro(AVD) - 17` confirmed readable light onboarding,
   selected-state accents, and primary/secondary actions.
-- Removed the visible operator sign-in, Pune demo, and role-demo controls from
-  the onboarding welcome surface. Debug/instrumentation preview remains
-  available only through the explicit test intent, so the customer path no
-  longer presents internal tooling as onboarding choices.
+- Removed the Pune demo and role-demo controls from the onboarding welcome
+  surface. Debug/instrumentation preview remains available only through the
+  explicit test intent, while the real operator sign-in is now exposed as a
+  separate restricted access action. It calls `/auth/admin-login`, never adds
+  ADMIN to public signup, and opens the operator console only after the server
+  returns an ADMIN profile.
 - Removed synthetic Recycler catalog seeding from real `envTesting` builds;
   bundled facilities are now limited to the explicit `.invalid` offline
   preview backend. A clean rebuilt testing APK authenticated against the VPS

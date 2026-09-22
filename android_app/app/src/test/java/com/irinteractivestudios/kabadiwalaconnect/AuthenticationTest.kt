@@ -3,6 +3,7 @@ package com.irinteractivestudios.kabadiwalaconnect
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.IndianPhoneValidator
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticationRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailAuthentication
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockOtpService
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpChallenge
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
@@ -30,6 +31,54 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthenticationTest {
+    @Test fun operatorSignInUsesDedicatedAdminAuthenticationPath() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var adminLoginCalled = false
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String): OtpChallenge = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication {
+                    adminLoginCalled = true
+                    return EmailAuthentication.Success(
+                        token = "header.payload.signature",
+                        expiresAtEpochMs = Long.MAX_VALUE,
+                        profile = AccountProfile(
+                            id = "admin-1",
+                            email = email,
+                            role = AccountRole.ADMIN,
+                            preferredLanguage = "en",
+                            profileId = "admin-1"
+                        )
+                    )
+                }
+
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            })
+
+            vm.useAdminSignIn()
+            assertEquals(OnboardingStep.EMAIL, vm.state.value.step)
+            assertEquals(AccountRole.ADMIN, vm.state.value.role)
+            vm.setEmail("admin@example.com")
+            vm.setPassword("password123")
+            vm.signIn()
+            advanceUntilIdle()
+
+            assertTrue(adminLoginCalled)
+            assertTrue(vm.state.value.completed)
+            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun onboarding_rapidOtpTapsLaunchOnlyOneRequest() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)
