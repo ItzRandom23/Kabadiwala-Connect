@@ -4,11 +4,15 @@ import androidx.compose.ui.graphics.Color
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightPrimary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSurface
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightError
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightBackground
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightContainerHigh
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightRaised
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightSuccess
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightTertiary
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLightWarning
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLime
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcLimeOn
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSurfaceSunken
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.pow
@@ -50,6 +54,20 @@ class ThemeContrastTest {
             "Light error text must remain readable on light surfaces",
             contrastRatio(KcLightError, KcLightSurface) >= 4.5
         )
+    }
+
+    @Test
+    fun lightSurfaceRolesHaveAnOrderedTonalLadder() {
+        val surface = relativeLuminance(KcLightSurface)
+        val background = relativeLuminance(KcLightBackground)
+        val low = relativeLuminance(KcSurfaceSunken)
+        val container = relativeLuminance(KcLightRaised)
+        val high = relativeLuminance(KcLightContainerHigh)
+
+        assertTrue("Light surface should be brighter than the canvas", surface > background)
+        assertTrue("The light surface ladder should step down at low", background > low)
+        assertTrue("The light surface ladder should step down at container", low > container)
+        assertTrue("The light surface ladder should step down at high", container > high)
     }
 
     private fun contrastRatio(first: Color, second: Color): Double {

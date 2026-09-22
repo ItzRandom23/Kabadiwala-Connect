@@ -43,10 +43,14 @@ val KcOutline = KcGraphiteBorder
 // comfortable contrast. The same lime remains reserved for primary actions.
 val KcLightBackground = Color(0xFFF5F8F3)
 val KcLightSurface = Color(0xFFFFFFFF)
-val KcLightRaised = Color(0xFFE9F0E7)
+// Light surfaces form a deliberate ladder: background < low < container < high.
+// Keeping these steps ordered prevents cards from looking like unrelated colors.
+val KcLightRaised = Color(0xFFE8EFE8)
+val KcLightContainerHigh = Color(0xFFDDE7DF)
 val KcLightText = Color(0xFF11150E)
 val KcLightMuted = Color(0xFF4F5D52)
 val KcLightOutline = Color(0xFF748276)
+val KcLightOutlineVariant = Color(0xFFC5D0C6)
 // Lime is the brand action fill, but it is too bright to use as text on a
 // light canvas. This readable green keeps the same hue family at 7:1+ against
 // white while leaving KcLime available for high-emphasis action surfaces.
@@ -65,8 +69,9 @@ val KcLightError = Color(0xFFB3261E)
 // Semantic aliases retained for existing screens and tests.
 val KcGreenPrimary = KcLime
 val KcGreenOnPrimary = KcLimeOn
-val KcGreenPrimaryContainer = Color(0xFFE7FFAA)
-val KcGreenOnPrimaryContainer = KcLimeOn
+// A calm sage container keeps the brand family without turning light mode neon.
+val KcGreenPrimaryContainer = Color(0xFFDCECC3)
+val KcGreenOnPrimaryContainer = Color(0xFF183300)
 val KcAmberSecondary = Color(0xFFB87500)
 val KcAmberOnSecondary = Color(0xFF241400)
 val KcAmberSecondaryContainer = Color(0xFFFFE3A8)
@@ -77,7 +82,7 @@ val KcBackground = KcLightBackground
 val KcOnBackground = KcLightText
 val KcOnSurface = KcLightText
 val KcSurfaceVariant = KcLightRaised
-val KcSurfaceSunken = Color(0xFFEDF3EF)
+val KcSurfaceSunken = Color(0xFFF0F4EF)
 val KcOnSurfaceVariant = KcLightMuted
 val KcSuccess = Color(0xFF078A59)
 val KcOnSuccess = Color.White

@@ -323,6 +323,13 @@ Gemini response or HTTP error shown.
   appearance with the selected theme. Unit contrast coverage was extended for
   the tertiary token, and an ADB emulator check confirmed readable Settings
   content, selected Light state, navigation labels, and the testing marker.
+- Follow-up light-mode consistency pass on 2026-09-22: corrected the Material 3
+  surface ladder so `surfaceContainerLow`, `surfaceContainer`, and
+  `surfaceContainerHigh` step through deliberate sage tones instead of
+  repeating/inverting values. The light primary container was softened from
+  neon yellow-green to a restrained sage highlight, and tertiary containers and
+  outline variants now use the same graphite-green family. A unit test now
+  protects the tonal ordering as well as text contrast.
 - Removed the duplicate “field tools” block from the legacy Home dashboard.
   Rewards, schemes, DIY, messages, and disputes remain available from Settings,
   while Home now stays focused on lots, prices, recycler discovery, and the
