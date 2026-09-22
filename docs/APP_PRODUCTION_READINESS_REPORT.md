@@ -1201,6 +1201,13 @@ was available.
   workspace, preventing a Collector screen or refresh from flashing for a
   Household account. The role-specific demo screens were also confirmed
   distinct by ADB UI inspection.
+- Recycler pending-verification navigation was fixed after on-device review.
+  Unverified Recycler accounts now get a limited top-level shell with
+  Verification, Profile, and Settings tabs; the role guard allows those shared
+  account routes instead of bouncing them back to verification. The screen now
+  has a prominent logout icon and keeps the existing confirmation/privacy
+  boundary. ADB verified the pending shell, Settings/Profile navigation, logout
+  confirmation, and return to the signed-out onboarding screen.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

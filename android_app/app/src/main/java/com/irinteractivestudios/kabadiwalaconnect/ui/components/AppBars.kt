@@ -46,6 +46,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.HOUSEHOLD_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.RECYCLER_BOTTOM_TABS
+import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.RECYCLER_PENDING_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
 /**
@@ -96,10 +97,11 @@ fun KcBottomBar(
     role: AccountRole = AccountRole.COLLECTOR,
     unreadNotifications: Int = 0,
     demoMode: Boolean = false,
-    kabadiwalaDemo: Boolean = false
+    kabadiwalaDemo: Boolean = false,
+    recyclerPending: Boolean = false
 ) {
     val tabs = when (role) {
-        AccountRole.RECYCLER -> RECYCLER_BOTTOM_TABS
+        AccountRole.RECYCLER -> if (recyclerPending) RECYCLER_PENDING_BOTTOM_TABS else RECYCLER_BOTTOM_TABS
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS
         AccountRole.COLLECTOR -> if (demoMode && !kabadiwalaDemo) BOTTOM_TABS else KABADIWALA_BOTTOM_TABS
         AccountRole.ADMIN -> emptyList()

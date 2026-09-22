@@ -93,12 +93,17 @@ class MainActivity : ComponentActivity() {
         // so UI/API error states can be inspected on a clean emulator.
         val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
         val householdLivePreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHouseholdLive", false)
+        val recyclerPendingPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewRecyclerPending", false)
         val forcedDemoRole = if (BuildConfig.DEBUG) {
             when (intent.getStringExtra("demoRole")?.uppercase()) {
                 "HOUSEHOLD" -> AccountRole.HOUSEHOLD
                 "KABADIWALA", "COLLECTOR" -> AccountRole.COLLECTOR
                 "RECYCLER" -> AccountRole.RECYCLER
-                else -> if (householdPreview) AccountRole.HOUSEHOLD else null
+                else -> when {
+                    householdPreview -> AccountRole.HOUSEHOLD
+                    recyclerPendingPreview -> AccountRole.RECYCLER
+                    else -> null
+                }
             }
         } else {
             null
@@ -171,11 +176,16 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val initialRoute = if (householdLivePreview) Destinations.HOME else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val kabadiwalaDemo = demoMode && renderedRole == AccountRole.COLLECTOR && demoRoleName == AccountRole.COLLECTOR.name
-                val isTopLevel = route in Destinations.topLevelFor(renderedRole, newNavigation = !demoMode || kabadiwalaDemo)
+                val recyclerPendingRoute = route in setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_PROFILE, Destinations.SETTINGS)
+                val recyclerPendingShell = renderedRole == AccountRole.RECYCLER &&
+                    recyclerPendingRoute &&
+                    (recyclerPendingPreview || (!demoMode && cachedAccount?.verificationStatus != RecyclerVerificationStatus.VERIFIED))
+                val isTopLevel = route in Destinations.topLevelFor(renderedRole, newNavigation = !demoMode || kabadiwalaDemo) ||
+                    (recyclerPendingShell && route in setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_PROFILE, Destinations.SETTINGS))
                 val languageSelected = languageWasSelected
                 var navGuardReady by remember { mutableStateOf(false) }
 
@@ -340,7 +350,7 @@ class MainActivity : ComponentActivity() {
                         },
                         bottomBar = {
                             if (isTopLevel) {
-                                KcBottomBar(currentRoute = route, role = renderedRole, unreadNotifications = unreadNotifications, demoMode = demoMode, kabadiwalaDemo = kabadiwalaDemo, onNavigate = { target ->
+                                KcBottomBar(currentRoute = route, role = renderedRole, unreadNotifications = unreadNotifications, demoMode = demoMode, kabadiwalaDemo = kabadiwalaDemo, recyclerPending = recyclerPendingShell, onNavigate = { target ->
                                     navController.navigate(target) {
                                         popUpTo(Destinations.START) { saveState = true }
                                         launchSingleTop = true

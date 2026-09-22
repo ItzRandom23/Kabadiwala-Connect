@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -117,11 +118,30 @@ fun RecyclerVerificationScreen(
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_status_rejected
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary)
-            TextButton(onClick = { showLogoutConfirm = true }, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.settings_logout), modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.large,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = .12f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp))
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(stringResource(R.string.recycler_verification_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(recyclerProfile?.name ?: profile?.displayName ?: stringResource(R.string.nav_profile), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                }
+                androidx.compose.material3.IconButton(onClick = { showLogoutConfirm = true }) {
+                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.settings_logout))
+                }
             }
         }
         Text(
@@ -136,7 +156,6 @@ fun RecyclerVerificationScreen(
         )
         Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
         StatusCard(stringResource(statusLabelRes), stringResource(R.string.recycler_verification_status_detail), statusColor)
-        recyclerProfile?.name?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
         Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (status == RecyclerVerificationStatus.VERIFIED) {

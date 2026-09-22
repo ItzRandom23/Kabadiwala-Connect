@@ -150,6 +150,8 @@ fun AppNavHost(
     val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
     val demoCollectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
     val liveCollectorRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
+    val sharedAccountRoutes = setOf(Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
+    val recyclerProtectedRoutes = setOf(Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_SCAN)
     val kabadiwalaDemoRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS, Destinations.ACTIVITIES)
     val kabadiwalaDemo = demoMode && role == AccountRole.COLLECTOR && demoRole == AccountRole.COLLECTOR
     val collectorRoutes = when {
@@ -167,11 +169,16 @@ fun AppNavHost(
             }
         }
     }
-    LaunchedEffect(currentRoute, role) {
-        val collectorRoute = currentRoute in collectorRoutes || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
+    LaunchedEffect(currentRoute, role, factory.currentAccount?.verificationStatus) {
+        val collectorRoute = (currentRoute in collectorRoutes && currentRoute !in sharedAccountRoutes) || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
         val recyclerRoute = currentRoute in recyclerRoutes
         if (role == AccountRole.RECYCLER && collectorRoute) {
             navController.navigate(if (demoMode || factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
+        } else if (role == AccountRole.RECYCLER && !demoMode && factory.currentAccount?.verificationStatus?.name != "VERIFIED" && currentRoute in recyclerProtectedRoutes) {
+            // Pending Recycler accounts may manage their account and submit
+            // evidence, but marketplace operations remain closed until the
+            // server marks the facility as verified.
+            navController.navigate(Destinations.RECYCLER_VERIFY) { popUpTo(0) }
         } else if ((role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD) && recyclerRoute) {
             navController.navigate(Destinations.HOME) { popUpTo(0) }
         } else if (role == AccountRole.COLLECTOR && !demoMode && currentRoute != Destinations.AUTH && currentRoute !in liveCollectorRoutes) {

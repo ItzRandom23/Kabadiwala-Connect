@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.PriceChange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
@@ -130,4 +131,15 @@ val RECYCLER_BOTTOM_TABS = listOf(
     BottomTab(Destinations.RECYCLER_PICKUPS, R.string.nav_pickups, Icons.Filled.LocalShipping, "nav_pickups"),
     BottomTab(Destinations.RECYCLER_RATES, R.string.nav_rates, Icons.Filled.PriceChange, "nav_rates"),
     BottomTab(Destinations.RECYCLER_PROFILE, R.string.nav_profile, Icons.Filled.Person, "nav_profile")
+)
+
+/**
+ * A limited workspace for Recycler accounts while authorization is pending.
+ * Verification remains the primary destination, but account settings and
+ * logout must remain reachable before marketplace access is approved.
+ */
+val RECYCLER_PENDING_BOTTOM_TABS = listOf(
+    BottomTab(Destinations.RECYCLER_VERIFY, R.string.recycler_verification_title, Icons.Filled.Verified, "nav_verification"),
+    BottomTab(Destinations.RECYCLER_PROFILE, R.string.nav_profile, Icons.Filled.Person, "nav_profile"),
+    BottomTab(Destinations.SETTINGS, R.string.nav_settings, Icons.Filled.Settings, "nav_settings")
 )
