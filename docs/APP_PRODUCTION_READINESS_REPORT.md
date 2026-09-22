@@ -1208,6 +1208,13 @@ was available.
   has a prominent logout icon and keeps the existing confirmation/privacy
   boundary. ADB verified the pending shell, Settings/Profile navigation, logout
   confirmation, and return to the signed-out onboarding screen.
+- Lot camera capture was hardened after an on-device crash report. The output
+  path now survives camera Activity recreation, canceled or denied captures
+  clean up their temporary file, and camera/provider launch failures become a
+  recoverable photo error instead of crashing the Activity. ADB verified the
+  testing flow end to end: permission prompt, camera launch, shutter, camera
+  confirmation, return to lot Step 2, and a 25 KB JPEG persisted in the
+  app-private lot photo directory with no fatal exception or ANR signature.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

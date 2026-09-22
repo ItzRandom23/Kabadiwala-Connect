@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
         val householdPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHousehold", false)
         val householdLivePreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewHouseholdLive", false)
         val recyclerPendingPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewRecyclerPending", false)
+        val lotCameraPreview = BuildConfig.DEBUG && intent.getBooleanExtra("previewLotCamera", false)
         val forcedDemoRole = if (BuildConfig.DEBUG) {
             when (intent.getStringExtra("demoRole")?.uppercase()) {
                 "HOUSEHOLD" -> AccountRole.HOUSEHOLD
@@ -102,6 +103,7 @@ class MainActivity : ComponentActivity() {
                 else -> when {
                     householdPreview -> AccountRole.HOUSEHOLD
                     recyclerPendingPreview -> AccountRole.RECYCLER
+                    lotCameraPreview -> AccountRole.COLLECTOR
                     else -> null
                 }
             }
@@ -176,7 +178,7 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val initialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val initialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val kabadiwalaDemo = demoMode && renderedRole == AccountRole.COLLECTOR && demoRoleName == AccountRole.COLLECTOR.name

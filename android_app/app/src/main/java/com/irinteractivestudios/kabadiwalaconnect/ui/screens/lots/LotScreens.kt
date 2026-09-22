@@ -63,6 +63,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,10 +114,14 @@ fun LotRoute(
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val locationProvider = remember(context) { AndroidLocationProvider(context) }
-    var pendingPath by remember { mutableStateOf<String?>(null) }
+    // The camera runs in another Activity. Keep the destination path across
+    // configuration/process recreation so the result is never detached from
+    // the file handed to the camera app.
+    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
     val ioScope = androidx.compose.runtime.rememberCoroutineScope()
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val capturedPath = pendingPath
+        pendingPath = null
         if (ok && capturedPath != null) {
             ioScope.launch(Dispatchers.IO) {
                 val normalized = runCatching {
@@ -127,17 +132,30 @@ fun LotRoute(
                     if (normalized != null) vm.addPhoto(normalized.absolutePath) else vm.setPhotoError()
                 }
             }
+        } else {
+            capturedPath?.let { File(it).delete() }
         }
     }
-    val launchCamera = {
+    val launchCamera: () -> Unit = {
         val dir = File(context.filesDir, "lot_photos").apply { mkdirs() }
         val file = File(dir, "lot_${System.currentTimeMillis()}.jpg")
-        pendingPath = file.absolutePath
-        camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+        runCatching {
+            pendingPath = file.absolutePath
+            camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+        }.onFailure {
+            // A device may not expose a camera activity, or its provider may
+            // reject the output URI. Convert that into a recoverable UI error
+            // instead of letting the Activity crash.
+            pendingPath = null
+            file.delete()
+            vm.setPhotoError()
+        }
+        Unit
     }
     var showCameraRationale by remember { mutableStateOf(false) }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) launchCamera()
+        else vm.setPhotoError()
     }
     val requestCamera = {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
