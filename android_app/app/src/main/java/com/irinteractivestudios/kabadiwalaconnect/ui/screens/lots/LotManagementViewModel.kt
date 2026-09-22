@@ -6,6 +6,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidator
+import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidation
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
@@ -78,7 +79,8 @@ class LotManagementViewModel(
     private val api: ApiService? = null,
     private val priceCatalog: PriceCatalogRepository? = null,
     private val now: () -> Long = { System.currentTimeMillis() },
-    private val languageProvider: () -> String = { LocaleManager.ENGLISH }
+    private val languageProvider: () -> String = { LocaleManager.ENGLISH },
+    private val photoValidator: (String) -> PhotoValidation = PhotoValidator::validate
 ) : ViewModel() {
     private val _state = MutableStateFlow(LotDraftState())
     val state: StateFlow<LotDraftState> = _state.asStateFlow()
@@ -95,11 +97,11 @@ class LotManagementViewModel(
         }
     }
     fun photoCaptured(path: String) {
-        val result = PhotoValidator.validate(path)
+        val result = photoValidator(path)
         _state.value = if (result.valid) _state.value.copy(photoPath = path, photoPaths = listOf(path), photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
     }
     fun addPhoto(path: String) {
-        val result = PhotoValidator.validate(path)
+        val result = photoValidator(path)
         if (!result.valid) { _state.value = _state.value.copy(photoError = "invalid", photoWarning = null); return }
         val paths = (_state.value.photoPaths + path).distinct().take(6)
         _state.value = _state.value.copy(photoPath = paths.firstOrNull(), photoPaths = paths, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL)
@@ -276,6 +278,10 @@ class LotManagementViewModel(
         val s = _state.value
         if (s.isSaving) return
         val weight = s.weightKgOrNull()
+        if (s.photoPaths.isEmpty()) {
+            _state.value = s.copy(saveError = true, photoError = "required")
+            return
+        }
         if (weight == null || s.material == null || s.condition == null || s.location.isBlank()) {
             _state.value = s.copy(saveError = true)
             return

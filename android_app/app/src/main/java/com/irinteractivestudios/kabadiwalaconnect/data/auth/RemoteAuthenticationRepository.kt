@@ -310,7 +310,7 @@ class RemoteAuthenticationRepository(
     companion object {
         private const val TAG = "KcAuthentication"
         private const val OTP_TTL_MS = 10 * 60 * 1000L
-        private const val RESEND_COOLDOWN_MS = 30 * 1000L
+        private const val RESEND_COOLDOWN_MS = 2 * 60 * 1000L
         private const val SESSION_FALLBACK_MS = 30L * 24L * 60L * 60L * 1000L
         private const val DEVELOPMENT_OTP_CODE = "123456"
     }

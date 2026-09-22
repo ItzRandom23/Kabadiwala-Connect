@@ -163,7 +163,7 @@ authenticated recovery. The app does not bypass refresh-token replay
 protection. OTP `429 OTP_RATE_LIMITED` and `OTP_COOLDOWN` responses now render a
 specific wait-and-retry message instead of the generic connectivity error.
 The backend logs `otp_sent` only after the provider succeeds, returns a safe
-`Retry-After` value, and applies the 30-second resend cooldown in both memory
+`Retry-After` value, and applies the two-minute resend cooldown in both memory
 and shared-database limiter modes. Android claims the busy state
 synchronously, so rapid taps cannot launch duplicate OTP requests.
 
@@ -1138,6 +1138,36 @@ was available.
   this disposable run, so camera-to-camera scanning and final settlement still
   require one device-level cross-role rehearsal against the deployed testing
   backend. This is an evidence limitation, not a claimed QR success.
+
+### Latest continuation — 2026-09-22
+
+- The OTP resend cooldown is now two minutes in the Android remote/mock
+  clients and both backend in-memory and database-backed limiters. The existing
+  backend rate-limit suite passes and returns a bounded `Retry-After` value.
+- Legacy Kabadiwala lot creation now refuses to save or sync a lot without at
+  least one validated photo. The review screen shows the localized photo
+  requirement, and malformed legacy `CREATE_LOT` queue rows are terminally
+  marked `PHOTO_REQUIRED` without being relabelled as generic invalid work.
+  Unit coverage verifies that a photo-less lot never reaches the writer, while
+  GPS coordinate persistence, manual-label editing, grams conversion, quoted
+  price, and retryable save failure remain green.
+- Logout from the Recycler pending-verification route is no longer blocked by
+  push-token revocation or a slow/offline backend. Local token/account cleanup
+  and navigation begin immediately; remote device-token revocation remains
+  best effort.
+- Verification gates passed locally after this continuation: backend lint,
+  build, and 39 test files / 125 tests; Android
+  `:app:testEnvTestingDebugUnitTest`; and
+  `:app:assembleEnvTestingDebug`. The rebuilt testing APK was installed on
+  `emulator-5554`, app data was cleared, and a cold unauthenticated launch
+  produced no app-owned protected-request, bearer-token/401, fatal-exception,
+  or ANR signature before authentication.
+- The connected Android instrumentation gate also completed successfully on
+  `Pixel_10_Pro(AVD) - 17`: all 12 tests passed after the rebuilt testing APK
+  and test APK were installed.
+- This continuation was verified against the checked-out source and local
+  testing APK. The VPS must still be redeployed with the backend rate-limit
+  change before the two-minute policy is active there.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

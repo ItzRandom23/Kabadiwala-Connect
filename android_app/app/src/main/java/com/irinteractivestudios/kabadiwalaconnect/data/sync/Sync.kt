@@ -176,8 +176,22 @@ class SyncWorker(
         val batchPending = pending.filter {
             it.operation == "CREATE_LOT" || it.operation == "UPDATE_LOT" || it.operation == "RECORD_PAYMENT"
         }
-        val operationPairs = batchPending.mapNotNull { item -> item.toOperationOrNull()?.let { item to it } }
-        val invalidItems = batchPending.filter { item -> operationPairs.none { (queued, _) -> queued.uid == item.uid } }
+        // New lots must carry at least one evidence photo. Reject malformed
+        // legacy queue rows before the server creates an evidence-free lot.
+        val photoMissingLots = batchPending.filter { item ->
+            item.operation == "CREATE_LOT" && runCatching {
+                val payload = JsonParser.parseString(item.payloadJson).asJsonObject
+                val paths = payload.getAsJsonArray("photoPaths")?.count { it.asString.isNotBlank() } ?: 0
+                paths == 0 && payload.get("photoPath")?.asString.isNullOrBlank()
+            }.getOrDefault(true)
+        }
+        photoMissingLots.forEach { item -> queue.markFailed(item.uid, accountId, "PHOTO_REQUIRED", Long.MAX_VALUE) }
+        val operationPairs = batchPending
+            .filterNot { item -> photoMissingLots.any { it.uid == item.uid } }
+            .mapNotNull { item -> item.toOperationOrNull()?.let { item to it } }
+        val invalidItems = batchPending
+            .filterNot { item -> photoMissingLots.any { it.uid == item.uid } }
+            .filter { item -> operationPairs.none { (queued, _) -> queued.uid == item.uid } }
         invalidItems.forEach { item -> queue.markFailed(item.uid, accountId, "INVALID_SYNC_OPERATION", Long.MAX_VALUE) }
         val operations = operationPairs.map { it.second }
         if (operations.isEmpty()) return if (deferredOperation) Result.retry() else pullChanges(app)

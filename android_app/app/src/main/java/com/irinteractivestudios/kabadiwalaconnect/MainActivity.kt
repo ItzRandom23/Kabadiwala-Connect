@@ -368,8 +368,15 @@ class MainActivity : ComponentActivity() {
                                 },
                                 startDestination = initialRoute,
                                 onLogout = {
-                                    uiScope.launch {
+                                    // Push-token revocation is best effort. It
+                                    // must never block the local logout flow
+                                    // behind a slow/offline network request
+                                    // (especially on the Recycler pending-
+                                    // verification screen).
+                                    uiScope.launch(Dispatchers.IO) {
                                         app.container.unregisterCurrentPushToken()
+                                    }
+                                    uiScope.launch {
                                         app.container.authenticationRepository.logout()
                                         app.container.clearAccount()
                                         sessionBootstrap = app.container.sessionCoordinator.snapshot.value

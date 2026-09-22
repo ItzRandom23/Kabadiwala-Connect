@@ -112,7 +112,7 @@ sealed interface OtpVerification {
 class MockOtpService(
     private val code: String = "123456",
     private val ttlMs: Long = 60_000L,
-    private val resendCooldownMs: Long = 30_000L,
+    private val resendCooldownMs: Long = 2 * 60_000L,
     private val maxAttempts: Int = 3
 ) : OtpService {
     private data class Pending(val phone: String, val expiresAt: Long, val resendAt: Long, var attempts: Int)

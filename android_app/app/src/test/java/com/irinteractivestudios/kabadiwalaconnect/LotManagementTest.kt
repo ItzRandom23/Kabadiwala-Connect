@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.irinteractivestudios.kabadiwalaconnect.util.PhotoValidation
 
 class LotManagementTest {
     private val dispatcher = StandardTestDispatcher()
@@ -69,7 +70,8 @@ class LotManagementTest {
 
     @Test fun save_createsExpectedOfflineLotIdAndFields() = runTest {
         val saved = mutableListOf<Lot>()
-        val vm = LotManagementViewModel(writer(saved), "collector-1", now = { 1234L })
+        val vm = LotManagementViewModel(writer(saved), "collector-1", now = { 1234L }, photoValidator = { PhotoValidation(true) })
+        vm.photoCaptured("test-photo.webp")
         vm.chooseMaterial(Material.PCB)
         vm.chooseCondition(LotCondition.DAMAGED)
         vm.setWeight("3.5")
@@ -84,9 +86,29 @@ class LotManagementTest {
         assertEquals(LotStep.SAVED, vm.state.value.step)
     }
 
+    @Test fun save_rejectsPhotoLessLotBeforeWriting() = runTest {
+        val saved = mutableListOf<Lot>()
+        val vm = LotManagementViewModel(writer(saved), "collector-no-photo", now = { 2222L })
+        vm.chooseMaterial(Material.PCB)
+        vm.chooseCondition(LotCondition.INTACT)
+        vm.setWeight("2")
+        vm.confirmWeight()
+        vm.setLocation("Pune")
+        vm.confirmLocation()
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(saved.isEmpty())
+        assertTrue(vm.state.value.saveError)
+        assertEquals("required", vm.state.value.photoError)
+        assertEquals(LotStep.REVIEW, vm.state.value.step)
+    }
+
     @Test fun grams_areConvertedToKgWhenLotIsSaved() = runTest {
         val saved = mutableListOf<Lot>()
-        val vm = LotManagementViewModel(writer(saved), "collector-grams", now = { 5678L })
+        val vm = LotManagementViewModel(writer(saved), "collector-grams", now = { 5678L }, photoValidator = { PhotoValidation(true) })
+        vm.photoCaptured("test-photo.webp")
         vm.chooseMaterial(Material.COPPER)
         vm.chooseCondition(LotCondition.INTACT)
         vm.setWeightUnit(WeightUnit.GRAMS)
@@ -103,7 +125,8 @@ class LotManagementTest {
 
     @Test fun save_keepsCollectorQuotedPriceWithLot() = runTest {
         val saved = mutableListOf<Lot>()
-        val vm = LotManagementViewModel(writer(saved), "collector-quote", now = { 6789L })
+        val vm = LotManagementViewModel(writer(saved), "collector-quote", now = { 6789L }, photoValidator = { PhotoValidation(true) })
+        vm.photoCaptured("test-photo.webp")
         vm.chooseMaterial(Material.COPPER)
         vm.chooseCondition(LotCondition.INTACT)
         vm.setWeight("2")
@@ -118,7 +141,8 @@ class LotManagementTest {
 
     @Test fun gpsLocation_keepsCoordinatesWhenAreaLabelIsEdited() = runTest {
         val saved = mutableListOf<Lot>()
-        val vm = LotManagementViewModel(writer(saved), "collector-gps", now = { 777L })
+        val vm = LotManagementViewModel(writer(saved), "collector-gps", now = { 777L }, photoValidator = { PhotoValidation(true) })
+        vm.photoCaptured("test-photo.webp")
         vm.chooseMaterial(Material.COPPER)
         vm.chooseCondition(LotCondition.INTACT)
         vm.setWeight("4")
@@ -144,7 +168,8 @@ class LotManagementTest {
             override suspend fun save(lot: Lot) { error("database unavailable") }
             override suspend fun cancel(id: String, updatedAt: Long) = true
         }
-        val vm = LotManagementViewModel(failingWriter, "collector", now = { 9L })
+        val vm = LotManagementViewModel(failingWriter, "collector", now = { 9L }, photoValidator = { PhotoValidation(true) })
+        vm.photoCaptured("test-photo.webp")
         vm.chooseMaterial(Material.CABLES)
         vm.chooseCondition(LotCondition.INTACT)
         vm.setWeight("1")
@@ -163,4 +188,5 @@ class LotManagementTest {
         override suspend fun save(lot: Lot) { saved += lot }
         override suspend fun cancel(id: String, updatedAt: Long) = true
     }
+
 }

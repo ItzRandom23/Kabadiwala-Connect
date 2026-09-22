@@ -424,6 +424,9 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 }
 @Composable private fun ReviewStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_review_title), style = MaterialTheme.typography.headlineMedium)
+    if (s.photoPaths.isEmpty()) {
+        Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    }
     s.photoPath?.let { path -> decodeSampledBitmap(path)?.let { Image(it, null, Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Crop) } }
     EvidenceSection(title = stringResource(R.string.lot_details)) {
         ProofRow(stringResource(R.string.lot_material_label), s.material?.key.orEmpty())

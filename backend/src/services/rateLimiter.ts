@@ -14,7 +14,10 @@ const retryAfterSeconds = (until: number, now = Date.now()) => Math.max(1, Math.
 const rateLimitError = (code: 'OTP_COOLDOWN' | 'OTP_RATE_LIMITED', message: string, until: number, now = Date.now()) =>
   new AppError(code, message, 429, { retryAfterSeconds: retryAfterSeconds(until, now) });
 const DEFAULT_REQUEST_WINDOW_MS = 2 * 60_000;
-const DEFAULT_REQUEST_COOLDOWN_MS = 30_000;
+// OTP requests are intentionally limited to one attempt every two minutes.
+// The previous 30-second cooldown allowed repeated provider traffic and made
+// the client appear to be randomly rate-limited when users tapped retry.
+const DEFAULT_REQUEST_COOLDOWN_MS = 2 * 60_000;
 
 export class OtpRateLimiter implements AuthenticationRateLimiter {
   private readonly identifiers = new Map<string, Entry>();
