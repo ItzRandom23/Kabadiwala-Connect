@@ -62,7 +62,7 @@ data class OnboardingState(
     val completed: Boolean = false
 )
 
-enum class OtpError { INCORRECT, EXPIRED, ATTEMPTS_EXCEEDED, ACCOUNT_CONFLICT, SERVER, NETWORK }
+enum class OtpError { INCORRECT, EXPIRED, ATTEMPTS_EXCEEDED, ACCOUNT_CONFLICT, MISSING_DETAILS, SERVER, NETWORK }
 enum class AuthError { INVALID_CREDENTIALS, OTP_RATE_LIMITED, NETWORK }
 
 class OnboardingViewModel(
@@ -217,7 +217,13 @@ class OnboardingViewModel(
         val current = _state.value
         if (current.otp.length != 6) return
         val useLegacyPhoneOnlyVerification = current.isPhoneOnlyVerification()
-        if (!useLegacyPhoneOnlyVerification && !current.hasRequiredRegistrationFields()) return
+        if (!useLegacyPhoneOnlyVerification && !current.hasRequiredRegistrationFields()) {
+            // Never leave a valid-looking Verify button with no visible result.
+            // This can happen after process recreation or when a signup step was
+            // skipped by a deep link/back-stack restore.
+            _state.value = current.copy(otpError = OtpError.MISSING_DETAILS)
+            return
+        }
         if (current.challenge == null) {
             _state.value = current.copy(otpError = OtpError.EXPIRED)
             return

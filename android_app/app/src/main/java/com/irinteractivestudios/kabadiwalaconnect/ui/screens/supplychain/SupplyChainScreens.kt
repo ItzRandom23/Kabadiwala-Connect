@@ -1,9 +1,12 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -85,6 +88,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
+import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
@@ -312,6 +316,9 @@ fun HouseholdListingCreateScreen(
     var photoPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var photoError by rememberSaveable { mutableStateOf(false) }
     var cameraError by rememberSaveable { mutableStateOf(false) }
+    var showCameraPermissionDialog by rememberSaveable { mutableStateOf(false) }
+    var cameraPermissionRequested by rememberSaveable { mutableStateOf(false) }
+    var cameraPermissionBlocked by rememberSaveable { mutableStateOf(false) }
     var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val ioScope = rememberCoroutineScope()
@@ -356,14 +363,26 @@ fun HouseholdListingCreateScreen(
         Unit
     }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) launchCamera() else cameraError = true
+        cameraPermissionRequested = true
+        if (granted) {
+            cameraError = false
+            launchCamera()
+        } else {
+            val activity = context as? android.app.Activity
+            cameraPermissionBlocked = activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+            cameraError = true
+        }
     }
     val requestCamera = {
         if (photoPaths.size < 6) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 launchCamera()
+            } else if (cameraPermissionRequested && (context as? android.app.Activity)?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.CAMERA) } == true) {
+                cameraPermissionBlocked = true
+                showCameraPermissionDialog = true
             } else {
-                cameraPermission.launch(Manifest.permission.CAMERA)
+                cameraPermissionBlocked = false
+                showCameraPermissionDialog = true
             }
         }
     }
@@ -448,7 +467,12 @@ fun HouseholdListingCreateScreen(
                         }
                         if (photoPaths.isEmpty()) Text("Add at least one clear photo to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (photoError) Text("Some photos could not be processed. Please choose a JPEG, PNG, or WebP image.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        if (cameraError) Text("Camera could not be opened. Allow camera access or choose a photo from your gallery.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (cameraError) Text(
+                            if (cameraPermissionBlocked) "Camera access is blocked. Allow it in Settings, or choose a photo from your gallery."
+                            else "Camera couldn't be opened. Allow camera access or choose a photo from your gallery.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
@@ -493,9 +517,36 @@ fun HouseholdListingCreateScreen(
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
-        Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = area.trim(), dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
-    }
-}
+         Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = area.trim(), dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
+     }
+     if (showCameraPermissionDialog) {
+         AlertDialog(
+             onDismissRequest = { showCameraPermissionDialog = false },
+             title = { MaterialText(if (cameraPermissionBlocked) "Camera access is blocked" else "Allow camera access") },
+             text = {
+                 MaterialText(
+                     if (cameraPermissionBlocked) "Camera permission was denied earlier. Open Settings and allow Camera for Kabadiwala Connect, or choose a photo from your gallery."
+                     else "Take a clear photo of the scrap from different angles. You can also choose photos from your gallery."
+                 )
+             },
+             confirmButton = {
+                 TextButton(onClick = {
+                     showCameraPermissionDialog = false
+                     if (cameraPermissionBlocked) {
+                         context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                             data = Uri.parse("package:${context.packageName}")
+                         })
+                     } else {
+                         cameraPermission.launch(Manifest.permission.CAMERA)
+                     }
+                 }) { MaterialText(if (cameraPermissionBlocked) "Open Settings" else "Allow") }
+             },
+             dismissButton = {
+                 TextButton(onClick = { showCameraPermissionDialog = false }) { MaterialText("Not now") }
+             }
+         )
+     }
+ }
 
 
 @Composable

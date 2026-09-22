@@ -445,6 +445,7 @@
     <string name="auth_otp_expired">This code expired. Send a new code.</string>
     <string name="auth_otp_attempts">Too many tries. Send a new code.</string>
     <string name="auth_otp_account_conflict">This phone or email is already registered. Use the existing-account option or another account.</string>
+    <string name="auth_otp_missing_details">Please go back and complete the required account details before verifying.</string>
     <string name="auth_server_error">The server could not complete registration. Try again.</string>
     <string name="auth_dev_otp">Development OTP: %1$s</string>
     <string name="auth_verify">Verify</string>
