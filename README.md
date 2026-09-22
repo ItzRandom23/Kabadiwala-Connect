@@ -2,6 +2,18 @@
 
 Kabadiwala Connect is one Android-first product connecting informal e-waste collectors with authorized recyclers and aggregators. There is no user-facing website in this repository.
 
+## Current release
+
+- Android testing release: `0.0.42-beta` (`versionCode 43`)
+- Environments: `envTesting` and `production`
+- OTA manifest: `backend/app-update/update.json`
+- Backend update path: `/app/update.json`
+
+The current beta includes GPS-aware lot locations, multi-photo scrap capture,
+Gemini-assisted material suggestions with manual fallback, account-scoped
+offline sync, role-aware navigation, QR handover, and crash-safe camera and
+external-activity handling.
+
 ## Product
 
 The Android APK contains three role-routed experiences:
@@ -28,12 +40,17 @@ Requirements: Node.js 20+, npm, and MongoDB/Atlas.
 
 ```text
 cd backend
-copy .env.example .env
-npm install
-npm run db:push
-npm run db:seed
+copy .env.testing.example .env
+npm ci
+npm run db:generate
+npm run db:prepare
 npm run dev
 ```
+
+For PowerShell, use `Copy-Item .env.testing.example .env`. `db:prepare`
+creates the runtime MongoDB indexes while preserving intentional partial unique
+indexes; do not replace it with a direct `prisma db push` on a deployment
+database. Development seed data is restricted to `APP_ENV=testing`.
 
 The backend owns role, recycler authorization, ownership, lot/offer/handover transitions, price ranges, valuation, payment records, and traceability-related audit data. MongoDB indexes cover account lookup, roles, authorization, material, lot status, timestamps, and transaction references. Secrets remain environment-only.
 
@@ -80,11 +97,19 @@ also require signing properties supplied by CI or local secret configuration.
 Never put production credentials, Gemini keys, storage credentials, or signing
 secrets in this repository.
 
+The testing build is the safe target for intensive ADB work. Production builds
+must use the production flavor, a legitimate HTTPS API, and the production
+signing key; do not point a testing build at production data.
+
 The backend uses the matching centralized environment contract. Start from
 `backend/.env.testing.example` or `backend/.env.production.example`, copy the
 selected file to an untracked `.env`, and set `APP_ENV=testing` or
 `APP_ENV=production`. Production startup rejects development mode, insecure
 CORS, placeholder secrets, and incomplete provider configuration.
+
+Production secrets, Gemini keys, storage credentials, OTP provider keys, and
+JWT/traceability secrets remain backend-only and must be supplied through the
+VPS or CI environment.
 
 ## Offline and AI integration boundaries
 
@@ -106,9 +131,29 @@ npm run lint
 
 cd ../android_app
 ./gradlew.bat :app:testEnvTestingDebugUnitTest
+./gradlew.bat :app:lintEnvTestingDebug
+./gradlew.bat :app:assembleEnvTestingDebug
+./gradlew.bat :app:connectedEnvTestingDebugAndroidTest
 ```
 
-The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote rematching/idempotency, handover recovery, notification isolation, Room-backed state, and ViewModel transitions. Device validation is still required for CameraX permissions, QR camera scanning, TalkBack, GPS, and real network loss/recovery.
+The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote rematching/idempotency, handover recovery, notification isolation, Room-backed state, and ViewModel transitions. Device validation remains important for camera permissions, QR scanning, TalkBack, GPS, and real network loss/recovery.
+
+The latest testing pass also verified a 1,200-event rapid-tap run and camera
+recovery after deliberately killing the app while the external camera Activity
+was open. The crash buffer remained empty. Camera, gallery, QR, share, and
+handover photo failures are surfaced as recoverable UI states.
+
+## OTA Android updates
+
+The app checks the backend-hosted `/app/update.json` and compares its
+`versionCode` with the installed version. Each published entry must reference
+an APK signed with the same key as the installed app and include a matching
+SHA-256 and byte size. The current manifest publishes `0.0.42-beta` with
+`versionCode 43`.
+
+The user confirms the download and Android separately confirms installation;
+updates are never installed silently. After changing the manifest or APK,
+redeploy the backend `app-update` directory to the VPS.
 
 ## Submission evidence
 
@@ -116,7 +161,7 @@ See `docs/REQUIREMENTS_EVIDENCE.md`, `docs/DEMO_RUNBOOK.md`, `docs/FIELD_RESEARC
 
 ## Known limitations
 
-- Production email delivery, FCM push delivery, and ML Kit camera QR scanning still need environment wiring; the durable in-app notification inbox and Android photo capture flows work without those providers.
+- Production email delivery and FCM push delivery still need provider wiring; QR scanning depends on the device camera/activity, while the durable in-app notification inbox and Android photo capture flows work without those providers.
 - The backend verification/admin seed path is intentionally backend-only; no admin website is provided.
 - Live MongoDB, object storage, payment provider, and signed-release credentials must be supplied by deployment.
 - Development demo fixtures are not real government-verified companies or live market claims.
