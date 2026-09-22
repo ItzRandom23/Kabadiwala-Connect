@@ -10,6 +10,11 @@ const production = {
 };
 
 describe('production configuration boundary', () => {
+  it('defaults OTP request rate-limit recovery to two minutes and rejects longer windows', () => {
+    expect(loadConfig(production).OTP_REQUEST_WINDOW_MINUTES).toBe(2);
+    expect(() => loadConfig({ ...production, OTP_REQUEST_WINDOW_MINUTES: '3' })).toThrow();
+  });
+
   it('accepts explicit HTTPS/private/shared-store configuration', () => expect(loadConfig(production).NODE_ENV).toBe('production'));
   it('accepts 2Factor credentials for production OTP', () => expect(loadConfig({ ...production, OTP_PROVIDER:'twofactor', TWILIO_ACCOUNT_SID:undefined, TWILIO_AUTH_TOKEN:undefined, TWILIO_VERIFY_SERVICE_SID:undefined, TWOFACTOR_API_KEY:'test-key' }).OTP_PROVIDER).toBe('twofactor'));
   it('requires a 2Factor API key when selected', () => expect(() => loadConfig({ ...production, OTP_PROVIDER:'twofactor', TWILIO_ACCOUNT_SID:undefined, TWILIO_AUTH_TOKEN:undefined, TWILIO_VERIFY_SERVICE_SID:undefined })).toThrow(/TWOFACTOR_API_KEY/));

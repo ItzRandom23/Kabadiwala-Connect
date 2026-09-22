@@ -52,7 +52,10 @@ try {
 }
 
 const paymentService = new PaymentService(prisma);
-const authenticationRateLimiter = config.RATE_LIMIT_STORE === 'database' ? new DatabaseAuthenticationRateLimiter(prisma) : new OtpRateLimiter();
+const rateLimiterOptions = { requestWindowMs: config.OTP_REQUEST_WINDOW_MINUTES * 60_000 };
+const authenticationRateLimiter = config.RATE_LIMIT_STORE === 'database'
+  ? new DatabaseAuthenticationRateLimiter(prisma, rateLimiterOptions)
+  : new OtpRateLimiter(rateLimiterOptions);
 const sessionService = new SessionService(prisma, jwt, config);
 const notificationDelivery = createNotificationDeliveryService(prisma, config);
 const app = createApp(

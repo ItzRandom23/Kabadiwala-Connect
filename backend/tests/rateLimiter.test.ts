@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { DatabaseAuthenticationRateLimiter, OtpRateLimiter } from '../src/services/rateLimiter.js';
 
 describe('OTP rate limiting', () => {
+  it('caps the repeated-request recovery window at two minutes by default', async () => {
+    const limiter = new OtpRateLimiter({ requestCooldownMs: 0 });
+    for (let attempt = 0; attempt < 5; attempt++) await limiter.check('9876543210', 'test-ip', 'request');
+
+    const error = await limiter.check('9876543210', 'test-ip', 'request').then(() => null).catch((value: any) => value);
+    expect(error).toMatchObject({
+      code: 'OTP_RATE_LIMITED',
+      status: 429,
+      details: { retryAfterSeconds: expect.any(Number) }
+    });
+    expect(error.details.retryAfterSeconds).toBeLessThanOrEqual(120);
+  });
+
   it('returns a retry window for repeated in-memory requests', async () => {
     const limiter = new OtpRateLimiter();
     await limiter.check('9876543210', 'test-ip', 'request');

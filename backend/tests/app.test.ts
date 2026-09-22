@@ -23,6 +23,7 @@ const config = {
   LOCAL_UPLOAD_PUBLIC: true,
   S3_REGION: 'ap-south-1'
   ,RATE_LIMIT_STORE: 'memory' as const
+  ,OTP_REQUEST_WINDOW_MINUTES: 2
 };
 const db = { $runCommandRaw: async () => ({ ok: 1 }) } as never;
 const service = { getMe: async (id: string) => ({ id, phone: '9876543210', preferredLanguage: 'HINDI', areaName: 'Test', accountStatus: 'ACTIVE' }) } as unknown as CollectorService;

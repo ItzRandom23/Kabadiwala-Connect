@@ -541,6 +541,13 @@ multi-account process-death run remain open.
   test stderr contains intentional negative-case validation logs only (for
   example missing-photo 422 and unavailable-Gemini 503 coverage), and 5xx
   diagnostics are now redacted structured events.
+- OTP request throttling was shortened on 2026-09-22 after testing showed the
+  previous five-request/hour bucket produced an unnecessarily long recovery
+  wait. `OTP_REQUEST_WINDOW_MINUTES` is centrally configured and capped at 2;
+  the default is 2 minutes for both memory and shared database limiters. The
+  short per-request resend cooldown remains separate. Backend coverage now
+  includes the two-minute recovery bound. The VPS must be restarted with the
+  updated backend build for this behavior to take effect there.
 - Current VPS post-reset probe on 2026-09-21 — `/api/v1/health` and
   `/api/v1/ready` returned HTTP 200 with the database connected and all
   readiness checks true. The VPS reports `0.0.38-beta`; its update manifest

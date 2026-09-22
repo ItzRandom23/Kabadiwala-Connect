@@ -42,7 +42,9 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_PUBLIC_BASE_URL: z.string().url().optional().or(z.literal('')),
-  RATE_LIMIT_STORE: z.enum(['memory', 'database']).default('memory')
+  RATE_LIMIT_STORE: z.enum(['memory', 'database']).default('memory'),
+  // Keep OTP request recovery short while retaining a burst limit.
+  OTP_REQUEST_WINDOW_MINUTES: z.coerce.number().int().min(1).max(2).default(2)
 }).superRefine((value, ctx) => {
   const production = value.APP_ENV === 'production' || value.NODE_ENV === 'production';
   const placeholder = /^(replace-with|generate-a-random|change-me|your[-_])/i;

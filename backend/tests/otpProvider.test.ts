@@ -21,7 +21,8 @@ const config: AppConfig = {
   LOCAL_UPLOAD_BASE_URL: '',
   LOCAL_UPLOAD_PUBLIC: true,
   S3_REGION: 'ap-south-1',
-  RATE_LIMIT_STORE: 'memory'
+  RATE_LIMIT_STORE: 'memory',
+  OTP_REQUEST_WINDOW_MINUTES: 2
 };
 
 describe('2Factor OTP provider', () => {
