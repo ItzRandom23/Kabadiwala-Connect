@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,9 +60,11 @@ fun HandoverDocumentScreen(
     onRate: () -> Unit = {},
     actionInFlight: Boolean = false,
     actionError: Boolean = false,
+    evidenceError: Boolean = false,
     onMark: () -> Unit
 ) {
     val context = LocalContext.current
+    val externalActionUnavailable = stringResource(R.string.external_action_unavailable)
     val publicReference = handover.referenceId ?: handover.id
     val shareText = stringResource(R.string.handover_share_text, publicReference, handover.materialLabel, handover.quotedPriceRupees)
     // An offline handover has no server signature yet. Never render a local
@@ -90,13 +93,42 @@ fun HandoverDocumentScreen(
                     }
                     handover.scalePhotoPath?.let { path -> android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap()?.let { Image(it, stringResource(R.string.handover_scale_photo), Modifier.fillMaxWidth().height(150.dp)) } }
                     OutlinedButton(onClick = onCaptureScalePhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(if (handover.scalePhotoPath == null) R.string.handover_add_scale_photo else R.string.handover_retake_scale_photo)) }
+                    if (evidenceError) Text(stringResource(R.string.handover_scale_photo_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     diff?.takeIf { it > .05 }?.let { Text(stringResource(R.string.handover_weight_difference), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Button(onClick = { onUpdateEvidence(actualWeight!!, materialConfirmed, handover.scalePhotoPath) }, enabled = evidenceReady, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.handover_save_proof)) }
                     if (handover.evidenceUpdatedAtEpochMs != null) Text(stringResource(R.string.handover_proof_saved), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
             }
         }
         item { qr?.let { Image(it.asImageBitmap(), stringResource(R.string.handover_qr), Modifier.size(180.dp)) } ?: Text(stringResource(R.string.handover_status_saved), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(stringResource(R.string.handover_expiry), style = MaterialTheme.typography.bodyMedium) }
-        item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }, null)) }) { Text(stringResource(R.string.handover_share)) }; OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_SENDTO).apply { data = android.net.Uri.parse("smsto:"); putExtra("sms_body", shareText) }) }) { Text(stringResource(R.string.handover_sms)) } } }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                },
+                                null
+                            )
+                        )
+                    }.onFailure {
+                        Toast.makeText(context, externalActionUnavailable, Toast.LENGTH_LONG).show()
+                    }
+                }) { Text(stringResource(R.string.handover_share)) }
+                OutlinedButton(onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_SENDTO).apply {
+                            data = android.net.Uri.parse("smsto:")
+                            putExtra("sms_body", shareText)
+                        })
+                    }.onFailure {
+                        Toast.makeText(context, externalActionUnavailable, Toast.LENGTH_LONG).show()
+                    }
+                }) { Text(stringResource(R.string.handover_sms)) }
+            }
+        }
         item { OutlinedButton(onClick = onOpenDispute, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_report_problem)) } }
         if (handover.status == HandoverStatus.HANDED_OVER) item { OutlinedButton(onClick = onRate, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.handover_rate_recycler)) } }
         if (actionError) item { Text(stringResource(R.string.handover_mark_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }

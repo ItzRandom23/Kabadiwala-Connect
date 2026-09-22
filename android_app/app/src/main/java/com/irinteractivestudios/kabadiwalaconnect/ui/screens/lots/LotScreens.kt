@@ -194,11 +194,31 @@ fun LotRoute(
             vm.demoPhotoCaptured(file.absolutePath)
         }
     } else null
-    LotScreen(state, vm, onTakePhoto = requestCamera, onSelectPhoto = { gallery.launch("image/*") }, onRequestLocation = { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }, onSafety = onSafety, onHome = onHome, onViewSaved = onViewSaved, onUseDemoPhoto = useDemoPhoto)
+    LotScreen(
+        state,
+        vm,
+        onTakePhoto = requestCamera,
+        onSelectPhoto = {
+            runCatching { gallery.launch("image/*") }
+                .onFailure { vm.setPhotoError() }
+        },
+        onRequestLocation = {
+            runCatching { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
+                .onFailure { vm.setLocationError() }
+        },
+        onSafety = onSafety,
+        onHome = onHome,
+        onViewSaved = onViewSaved,
+        onUseDemoPhoto = useDemoPhoto
+    )
     if (showCameraRationale) {
         PermissionRationaleDialog(
             permission = FeaturePermission.CAMERA,
-            onAllow = { showCameraRationale = false; cameraPermission.launch(Manifest.permission.CAMERA) },
+            onAllow = {
+                showCameraRationale = false
+                runCatching { cameraPermission.launch(Manifest.permission.CAMERA) }
+                    .onFailure { vm.setPhotoError() }
+            },
             onDismiss = { showCameraRationale = false }
         )
     }

@@ -1215,6 +1215,15 @@ was available.
   testing flow end to end: permission prompt, camera launch, shutter, camera
   confirmation, return to lot Step 2, and a 25 KB JPEG persisted in the
   app-private lot photo directory with no fatal exception or ANR signature.
+- A follow-up crash-resilience sweep applied the same boundary handling to
+  Household listing photos, handover scale-proof photos, the QR scanner,
+  gallery selection, sharing/SMS, and account export. Handover camera output is
+  normalized before display and its pending path survives Activity recreation.
+  Core-library desugaring was enabled after lint found an API 23–25 crash risk
+  in `java.time.Instant` timestamp parsing. Android lint, unit tests, assembly,
+  and all 12 connected tests passed. ADB also completed a 1,200-event rapid-tap
+  stress run and a deliberate process kill while the camera was open; capture
+  returned to lot Step 2 with the photo intact and an empty crash buffer.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

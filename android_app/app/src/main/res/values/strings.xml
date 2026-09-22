@@ -882,4 +882,6 @@
     <string name="demo_pune">Pune</string>
     <string name="demo_household_message">Namaste! I can collect your lot today at 5:30 PM.</string>
     <string name="demo_recycler_message">Your lot is matched to our verified facility.</string>
+    <string name="handover_scale_photo_failed">The scale photo could not be captured or saved. Try again or continue without replacing it.</string>
+    <string name="external_action_unavailable">No compatible app is available for this action.</string>
 </resources>

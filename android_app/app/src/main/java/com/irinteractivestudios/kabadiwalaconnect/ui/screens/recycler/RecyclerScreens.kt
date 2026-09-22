@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -581,9 +582,11 @@ fun RecyclerScanScreen(
     }
     var materialMatch by remember(state.verified?.handoverId) { mutableStateOf(true) }
     var notes by remember(state.verified?.handoverId) { mutableStateOf("") }
+    var scannerLaunchError by rememberSaveable { mutableStateOf(false) }
     val scannerPrompt = stringResource(R.string.recycler_scan_title)
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.takeIf(String::isNotBlank)?.let { value ->
+            scannerLaunchError = false
             reference = value
             onVerify(value)
         }
@@ -593,7 +596,17 @@ fun RecyclerScanScreen(
         Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.recycler_scan_explanation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
-            onClick = { scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false).setPrompt(scannerPrompt)) },
+            onClick = {
+                scannerLaunchError = false
+                runCatching {
+                    scanner.launch(
+                        ScanOptions()
+                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            .setBeepEnabled(false)
+                            .setPrompt(scannerPrompt)
+                    )
+                }.onFailure { scannerLaunchError = true }
+            },
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
         ) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_scan_camera)) }
         OutlinedTextField(reference, { reference = it }, label = { Text(stringResource(R.string.recycler_scan_reference)) }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
@@ -601,7 +614,7 @@ fun RecyclerScanScreen(
             if (state.checking) CircularProgressIndicator(Modifier.padding(end = 8.dp))
             Text(stringResource(R.string.recycler_scan_validate))
         }
-        if (state.error) Text(stringResource(R.string.recycler_scan_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+        if (state.error || scannerLaunchError) Text(stringResource(R.string.recycler_scan_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
         state.supplyVerified?.let { handover ->
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

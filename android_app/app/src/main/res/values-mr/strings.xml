@@ -779,4 +779,6 @@
     <string name="quote_choose_recyclers">रीसायकलर निवडा</string>
     <string name="quote_selected_recyclers">निवडलेले रीसायकलर</string>
     <string name="home_area_not_set">जवळच्या किंमती आणि रीसायकलर पाहण्यासाठी तुमचे क्षेत्र सेट करा</string>
+    <string name="handover_scale_photo_failed">काट्याचा फोटो घेता किंवा जतन करता आला नाही. पुन्हा प्रयत्न करा किंवा जुना फोटो ठेवून पुढे जा.</string>
+    <string name="external_action_unavailable">या कृतीसाठी योग्य अॅप उपलब्ध नाही.</string>
 </resources>

@@ -340,13 +340,20 @@ fun HouseholdListingCreateScreen(
             capturedPath?.let { File(it).delete() }
         }
     }
-    val launchCamera = {
+    val launchCamera: () -> Unit = {
         if (photoPaths.size < 6) {
             val directory = File(context.filesDir, "household_photos").apply { mkdirs() }
             val file = File(directory, "camera_${System.currentTimeMillis()}.jpg")
-            pendingCameraPath = file.absolutePath
-            camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+            runCatching {
+                pendingCameraPath = file.absolutePath
+                camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+            }.onFailure {
+                pendingCameraPath = null
+                file.delete()
+                cameraError = true
+            }
         }
+        Unit
     }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) launchCamera() else cameraError = true
@@ -427,7 +434,10 @@ fun HouseholdListingCreateScreen(
                                 Text("Camera")
                             }
                             OutlinedButton(
-                                onClick = { gallery.launch("image/*") },
+                                onClick = {
+                                    runCatching { gallery.launch("image/*") }
+                                        .onFailure { photoError = true }
+                                },
                                 enabled = photoPaths.size < 6,
                                 modifier = Modifier.weight(1f).heightIn(min = 52.dp)
                             ) {

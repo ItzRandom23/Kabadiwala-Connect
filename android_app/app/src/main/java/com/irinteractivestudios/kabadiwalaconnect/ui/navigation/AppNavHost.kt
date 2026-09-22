@@ -1,7 +1,9 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.navigation
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,6 +29,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.composable
 import com.irinteractivestudios.kabadiwalaconnect.di.KcViewModelFactory
 import com.irinteractivestudios.kabadiwalaconnect.R
@@ -62,6 +66,8 @@ import androidx.navigation.navArgument
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteRequestScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteComparisonScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers.HandoverCreateScreen
@@ -88,6 +94,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.DisputeAnaly
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.VerifiedRatingScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.NotificationsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineScreen
+import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.transactions.TransactionTimelineViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.*
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin.AdminConsoleScreen
@@ -556,8 +563,74 @@ fun AppNavHost(
             } }
         }
         composable(Destinations.HANDOVER_DOCUMENT, arguments = listOf(navArgument("handoverId") { type = NavType.StringType })) { entry ->
-            val id = entry.arguments?.getString("handoverId").orEmpty(); val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null); val lot by factory.lotWriter.observeLot(handover?.lotId.orEmpty()).collectAsStateWithLifecycle(initialValue = null); val prices by factory.priceCatalog.observePrices().collectAsStateWithLifecycle(initialValue = emptyList()); val scope = rememberCoroutineScope(); val context = LocalContext.current; var pendingScalePhoto by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-            val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> val path = pendingScalePhoto; if (ok && path != null) { handover?.let { item -> scope.launch { factory.handoverRepository.updateEvidence(id, item.actualWeightKg ?: item.weightKg, item.materialConfirmed, item.collectorConfirmed, path) } } } }
+            val id = entry.arguments?.getString("handoverId").orEmpty()
+            val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null)
+            val lot by factory.lotWriter.observeLot(handover?.lotId.orEmpty()).collectAsStateWithLifecycle(initialValue = null)
+            val prices by factory.priceCatalog.observePrices().collectAsStateWithLifecycle(initialValue = emptyList())
+            val scope = rememberCoroutineScope()
+            val context = LocalContext.current
+            var pendingScalePhoto by rememberSaveable(id) { mutableStateOf<String?>(null) }
+            var evidenceError by rememberSaveable(id) { mutableStateOf(false) }
+            val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+                val path = pendingScalePhoto
+                pendingScalePhoto = null
+                if (ok && path != null) {
+                    handover?.let { item ->
+                        scope.launch {
+                            val normalized = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    ImagePipeline.prepareForUpload(
+                                        File(path),
+                                        File(context.filesDir, "handover_photos")
+                                    )
+                                }.getOrNull()
+                            }
+                            File(path).delete()
+                            if (normalized == null) {
+                                evidenceError = true
+                            } else {
+                                runCatching {
+                                    factory.handoverRepository.updateEvidence(
+                                        id,
+                                        item.actualWeightKg ?: item.weightKg,
+                                        item.materialConfirmed,
+                                        item.collectorConfirmed,
+                                        normalized.absolutePath
+                                    )
+                                }.onSuccess {
+                                    evidenceError = false
+                                }.onFailure {
+                                    evidenceError = true
+                                }
+                            }
+                        }
+                    } ?: File(path).delete()
+                } else {
+                    path?.let { File(it).delete() }
+                }
+            }
+            val launchScaleCamera: () -> Unit = {
+                val directory = File(context.filesDir, "handover_photos").apply { mkdirs() }
+                val file = File(directory, "scale_${System.currentTimeMillis()}.jpg")
+                runCatching {
+                    pendingScalePhoto = file.absolutePath
+                    camera.launch(
+                        FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            file
+                        )
+                    )
+                }.onFailure {
+                    pendingScalePhoto = null
+                    file.delete()
+                    evidenceError = true
+                }
+                Unit
+            }
+            val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) launchScaleCamera() else evidenceError = true
+            }
             var marking by remember(id) { mutableStateOf(false) }
             var markError by remember(id) { mutableStateOf(false) }
             handover?.let { item ->
@@ -565,12 +638,31 @@ fun AppNavHost(
                     handover = item,
                     photoPath = lot?.localPhotoPath,
                     referencePrice = prices.firstOrNull { it.materialLabel == item.materialLabel },
-                    onUpdateEvidence = { weight, materialMatch, photo -> scope.launch { factory.handoverRepository.updateEvidence(id, weight, materialMatch, true, photo) } },
-                    onCaptureScalePhoto = { val dir = File(context.filesDir, "handover_photos").apply { mkdirs() }; val file = File(dir, "scale_${System.currentTimeMillis()}.jpg"); pendingScalePhoto = file.absolutePath; camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)) },
+                    onUpdateEvidence = { weight, materialMatch, photo ->
+                        scope.launch {
+                            runCatching {
+                                factory.handoverRepository.updateEvidence(id, weight, materialMatch, true, photo)
+                            }.onSuccess {
+                                evidenceError = false
+                            }.onFailure {
+                                evidenceError = true
+                            }
+                        }
+                    },
+                    onCaptureScalePhoto = {
+                        evidenceError = false
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            launchScaleCamera()
+                        } else {
+                            runCatching { cameraPermission.launch(Manifest.permission.CAMERA) }
+                                .onFailure { evidenceError = true }
+                        }
+                    },
                     onOpenDispute = { navController.navigate(Destinations.handoverDispute(id)) },
                     onRate = { navController.navigate(Destinations.rateHandover(id)) },
                     actionInFlight = marking,
                     actionError = markError,
+                    evidenceError = evidenceError,
                     onMark = {
                         if (!marking) scope.launch {
                             marking = true
@@ -666,6 +758,7 @@ fun AppNavHost(
             val context = LocalContext.current
             val language by vm.language.collectAsStateWithLifecycle()
             val appearance by vm.appearance.collectAsStateWithLifecycle()
+            val exportShareTitle = stringResource(R.string.settings_export_share_title)
             val accountId = factory.currentAccount?.profileId
             var smsNotificationsEnabled by remember(accountId) { mutableStateOf(true) }
             var pushNotificationsEnabled by remember(accountId) { mutableStateOf(true) }
@@ -729,10 +822,14 @@ fun AppNavHost(
                                 if (export == null) {
                                     Toast.makeText(context, R.string.settings_export_unavailable, Toast.LENGTH_LONG).show()
                                 } else {
-                                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_TEXT, export.toString())
-                                    }, context.getString(R.string.settings_export_share_title)))
+                                    runCatching {
+                                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, export.toString())
+                                        }, exportShareTitle))
+                                    }.onFailure {
+                                        Toast.makeText(context, R.string.external_action_unavailable, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                             .onFailure { Toast.makeText(context, R.string.settings_export_failed, Toast.LENGTH_LONG).show() }

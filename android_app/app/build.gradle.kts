@@ -154,6 +154,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // The app supports API 23 while repositories parse java.time values.
+        // Desugar those APIs so the same code is safe on Android 6 and 7.
+        isCoreLibraryDesugaringEnabled = true
     }
     // No kotlinOptions block: with AGP built-in Kotlin, jvmTarget defaults
     // to compileOptions.targetCompatibility (Java 11) automatically.
@@ -175,6 +178,8 @@ ksp {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     // Compose + Material 3 UI.
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
