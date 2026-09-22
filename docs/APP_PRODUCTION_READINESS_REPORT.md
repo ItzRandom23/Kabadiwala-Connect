@@ -1192,6 +1192,15 @@ was available.
   `YYYY-MM-DD`, and impossible calendar dates are rejected locally. The
   Android testing unit suite and `assembleEnvTestingDebug` both pass after the
   fix.
+- Household and Collector workspace routing was rechecked on the Android
+  emulator. They use separate live composables and separate refresh methods
+  (`HouseholdSupplyScreen`/`refreshHousehold` versus
+  `KabadiwalaSupplyScreen`/`refreshKabadiwala`). A debug live-Household preview
+  could retain the default Collector role during startup and was corrected;
+  restored sessions now use the server-issued role before composing the
+  workspace, preventing a Collector screen or refresh from flashing for a
+  Household account. The role-specific demo screens were also confirmed
+  distinct by ADB UI inspection.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
