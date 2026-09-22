@@ -1,8 +1,8 @@
 {
-  "versionCode": 43,
-  "versionName": "0.0.42-beta",
-  "apkUrl": "kabadiwala-connect-0.0.42-beta-debug.apk",
-  "sha256": "FF2401C2830E2235330203D287AFE2EB962F11C6594A1C8D01961E6254B9545E",
-  "sizeBytes": 28445524,
-  "releaseNotes": "Crash-safe camera, gallery, QR scanner, sharing, and handover photos; process-death recovery; safer Android 6/7 compatibility; and improved error handling across core flows."
+  "versionCode": 44,
+  "versionName": "0.0.43-beta",
+  "apkUrl": "kabadiwala-connect-0.0.43-beta-debug.apk",
+  "sha256": "572AAA10775D5A2D9EB0FDD6501FB2444928647D01EAF1784DB16BD370F48898",
+  "sizeBytes": 28462483,
+  "releaseNotes": "Improved OTP verification feedback, recoverable camera permissions with Settings guidance, and clearer Recycler expiry-date validation."
 }
