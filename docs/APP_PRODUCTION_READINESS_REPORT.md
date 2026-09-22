@@ -1168,6 +1168,15 @@ was available.
 - This continuation was verified against the checked-out source and local
   testing APK. The VPS must still be redeployed with the backend rate-limit
   change before the two-minute policy is active there.
+- A live read-only probe of `http://140.245.232.208:4000` on 2026-09-22
+  returned HTTP 200 for `/api/v1/health` and `/api/v1/ready`, with database,
+  storage, OTP, and rate-limit checks healthy, but both responses still report
+  backend version `0.0.40-beta`. The source templates require
+  `APP_VERSION=0.0.41-beta`, so the running process is not yet demonstrably
+  the latest deployment. Unauthenticated GET requests to listings, pickups,
+  inventory, inventory movements, and procurement requirements all returned
+  HTTP 401, confirming protected-route enforcement rather than an anonymous
+  data leak.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
