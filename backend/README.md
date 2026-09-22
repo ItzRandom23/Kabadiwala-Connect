@@ -103,6 +103,17 @@ Recycler applicants can read their own pending profile through `GET /api/v1/recy
 
 Admin-only management endpoints are `GET /api/v1/admin/recyclers`, `GET /api/v1/admin/recyclers/{recyclerId}`, and `PUT /api/v1/admin/recyclers/{recyclerId}/authorization`; authorization changes create audit records. Development seed recyclers are clearly test fixtures, not real facilities or licenses.
 
+If a production database is recreated, the development seed remains blocked by design. Provision the operator account explicitly instead:
+
+```bash
+ADMIN_BOOTSTRAP_EMAIL=operator@example.com \
+ADMIN_BOOTSTRAP_PASSWORD='use-a-new-secret-password' \
+ADMIN_BOOTSTRAP_CONFIRM=I_UNDERSTAND_ADMIN_BOOTSTRAP \
+npm run admin:provision
+```
+
+The command creates or resets only the named admin account, grants the standard operator permissions, and never creates demo users or test marketplace data. Remove the bootstrap variables after it completes. Never commit the password.
+
 Moving a recycler to `VERIFIED` requires authority, registration number, authorization type, evidence reference, verification source and validity date. Admin data operations are `POST /api/v1/admin/datasets/prices/import` and `GET /api/v1/admin/datasets/export`.
 
 ## Quote API (Phase 6)
