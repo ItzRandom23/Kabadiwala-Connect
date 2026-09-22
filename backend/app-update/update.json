@@ -1,8 +1,8 @@
 {
-  "versionCode": 44,
-  "versionName": "0.0.43-beta",
-  "apkUrl": "kabadiwala-connect-0.0.43-beta-debug.apk",
-  "sha256": "572AAA10775D5A2D9EB0FDD6501FB2444928647D01EAF1784DB16BD370F48898",
-  "sizeBytes": 28462483,
+  "versionCode": 45,
+  "versionName": "0.0.44-beta",
+  "apkUrl": "kabadiwala-connect-0.0.44-beta-debug.apk",
+  "sha256": "24F41B253F40506D015EB2D3B98B3908E140C12A9E47DD0D32E8293F21802B98",
+  "sizeBytes": 28462494,
   "releaseNotes": "Improved OTP verification feedback, recoverable camera permissions with Settings guidance, and clearer Recycler expiry-date validation."
 }
