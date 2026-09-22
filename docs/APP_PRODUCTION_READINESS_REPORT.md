@@ -328,6 +328,14 @@ Gemini response or HTTP error shown.
   while Home now stays focused on lots, prices, recycler discovery, and the
   next operational action. The UI regression test now asserts the primary
   actions remain visible and the duplicate rewards shortcut is absent.
+- Refined the Collector/Kabadiwala workspace on 2026-09-22. The Home route now
+  leads with a compact “Today at a glance” summary and one primary “Record
+  collected scrap” action; the 9-row feature matrix no longer competes with the
+  pickup queue. Formal routes, pooling, safety, QR handovers, passport evidence,
+  and settlement review remain available behind the clearly labelled
+  “Supply-chain tools” entry. Pickup cancellation/reassignment stays available
+  from each card’s accessible overflow menu, and the Buyers route now switches
+  between Lots, Offers, and Records instead of stacking all three lists.
 - Preserved the existing role-specific navigation boundaries and manual/error
   states while avoiding new fake content. A dedicated physical-device,
   TalkBack, large-font, and low-end performance pass remains a release gate.
