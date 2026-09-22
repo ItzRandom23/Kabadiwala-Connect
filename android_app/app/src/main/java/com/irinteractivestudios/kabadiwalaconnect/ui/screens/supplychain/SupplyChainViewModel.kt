@@ -287,6 +287,7 @@ class SupplyChainViewModel(
     }
     fun createListing(input: HouseholdListingCreateDto, localPhotoPath: String? = null) = createListing(input, listOfNotNull(localPhotoPath))
     fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>) = action("create-listing", AccountRole.HOUSEHOLD, {
+        require(localPhotoPaths.any { it.isNotBlank() && File(it).isFile }) { "Add at least one photo before posting." }
         val operation = "listing-${input.materialCategory}-${input.areaName}-${input.estimatedWeight}"
         val operationKey = idempotencyKeys?.getOrCreate(operation)
         val created = try {

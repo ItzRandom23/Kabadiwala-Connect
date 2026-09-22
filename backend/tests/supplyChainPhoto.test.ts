@@ -19,6 +19,7 @@ function photoApp(overrides: { listing?: any; storage?: any; role?: 'HOUSEHOLD' 
   };
   const tx = {
     householdListing: {
+      create: vi.fn(({ data }: { data: any }) => ({ id: 'listing-created', ...data })),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       findUnique: vi.fn().mockResolvedValue({ ...listing, photoReference: 'household-listings/household-1/listing-1.jpg' })
     },
@@ -33,12 +34,32 @@ function photoApp(overrides: { listing?: any; storage?: any; role?: 'HOUSEHOLD' 
   } as any;
   const collectors = { findById: vi.fn().mockResolvedValue({ id: accountId, accountStatus: 'ACTIVE' }) } as any;
   const app = express();
+  app.use(express.json());
   app.use('/api/v1', supplyChainRoutes(jwt, collectors, db, storage));
   app.use((error: any, _req: any, res: any, _next: any) => res.status(error.status ?? 500).json({ code: error.code, details: error.details }));
   return { app, storage, tx };
 }
 
 describe('household listing photo contract', () => {
+  it('keeps a JSON-only listing as a draft until a photo is uploaded', async () => {
+    const { app, tx } = photoApp();
+    const response = await request(app)
+      .post('/api/v1/household/listings')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .send({
+        materialCategory: 'PLASTIC',
+        estimatedWeight: 4,
+        condition: 'INTACT',
+        areaName: 'Pune'
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.status).toBe('DRAFT');
+    expect(tx.householdListing.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'DRAFT', photoReference: null, photoReferences: [] })
+    }));
+  });
+
   it('rejects a collector token before touching the upload', async () => {
     const { app, storage } = photoApp();
     const response = await request(app)
@@ -103,7 +124,8 @@ describe('household listing photo contract', () => {
         photoReferences: [
           'household-listings/household-1/listing-1.jpg',
           'household-listings/household-1/listing-1-1.jpg'
-        ]
+        ],
+        status: 'POSTED'
       }
     }));
     expect(tx.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({

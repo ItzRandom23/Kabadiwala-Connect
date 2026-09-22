@@ -112,6 +112,10 @@ function householdListingDto(listing: any) {
   };
 }
 
+function hasListingPhoto(listing: any): boolean {
+  return Boolean(listing?.photoReference || (Array.isArray(listing?.photoReferences) && listing.photoReferences.length));
+}
+
 async function validateAndStorePhotos(storage: StorageService, files: Array<{ buffer?: Buffer; mimetype?: string }>, keyPrefix: string) {
   if (!files.length) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
   const stored: string[] = [];
@@ -159,8 +163,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
           return { listing: replay.response, replayed: true };
         }
       }
-      const created = await tx.householdListing.create({ data: { ...input, destructionEvidenceStatus, householdId: req.identity!.collectorId, status: 'POSTED' } });
-      await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTED', 'HOUSEHOLD_LISTING', created.id, { materialCategory: created.materialCategory, estimatedWeight: created.estimatedWeight, areaName: created.areaName, dataBearingDevice: created.dataBearingDevice, dataDestructionRequested: created.dataDestructionRequested });
+      // Photo upload is a separate authenticated multipart mutation. Keep the
+      // record as a draft until that mutation succeeds so a caller cannot
+      // publish an image-less listing by calling this JSON endpoint directly.
+      const created = await tx.householdListing.create({ data: { ...input, photoReference: null, photoReferences: [], destructionEvidenceStatus, householdId: req.identity!.collectorId, status: 'DRAFT' } });
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_DRAFTED', 'HOUSEHOLD_LISTING', created.id, { materialCategory: created.materialCategory, estimatedWeight: created.estimatedWeight, areaName: created.areaName, dataBearingDevice: created.dataBearingDevice, dataDestructionRequested: created.dataDestructionRequested });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'CREATE_HOUSEHOLD_LISTING', entityId: created.id, requestHash: operationHash, response: jsonValue(created) } });
       return { listing: created, replayed: false };
     });
@@ -177,10 +184,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const keys = await validateAndStorePhotos(storage, files, `household-listings/${req.identity!.collectorId}/${listingId}`);
     try {
       const updated = await store.$transaction(async (tx: any) => {
-        const changed = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } }, data: { photoReference: keys[0], photoReferences: keys } });
+        const changed = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } }, data: { photoReference: keys[0], photoReferences: keys, status: 'POSTED' } });
         if (!changed.count) throw new AppError('CONFLICT', 'Listing changed while uploading photo', 409, { code: 'LISTING_UPDATE_CONFLICT' });
         const row = await tx.householdListing.findUnique({ where: { id: listingId } });
         await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_PHOTO_ATTACHED', 'HOUSEHOLD_LISTING', listingId, { contentType: 'image/jpeg', source: 'authenticated-upload', photoCount: keys.length });
+        await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTED', 'HOUSEHOLD_LISTING', listingId, { photoCount: keys.length });
         return row;
       });
       res.json({ success: true, data: householdListingDto(updated) });
@@ -308,6 +316,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const requestedSlot = input.requestedSlot ? validatePickupSlot(input.requestedSlot) : null;
     const operationId = operationKey(req);
     const operationHash = requestHash({ action: 'REQUEST_PICKUP', listingId, input });
+    const listingForPickup = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { photoReference: true, photoReferences: true } });
+    if (!listingForPickup) throw new AppError('NOT_FOUND', 'Listing not found', 404, { code: 'LISTING_NOT_FOUND' });
+    if (!hasListingPhoto(listingForPickup)) throw new AppError('CONFLICT', 'Add at least one photo before requesting pickup', 409, { code: 'PHOTO_REQUIRED' });
     if (!input.kabadiwalaId) {
       const result = await store.$transaction(async (tx: any) => {
         if (operationId) {

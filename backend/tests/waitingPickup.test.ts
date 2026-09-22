@@ -33,7 +33,7 @@ describe('waiting pickup lifecycle', () => {
         findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }),
         findMany: vi.fn().mockResolvedValue([{ collectorProfileId: 'collector-1' }])
       },
-      householdListing: { findFirst: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: null, longitude: null }) },
+      householdListing: { findFirst: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: null, longitude: null, photoReference: 'listing-photo.jpg', photoReferences: ['listing-photo.jpg'] }) },
       collector: { findMany: vi.fn().mockResolvedValue([{ id: 'collector-1', areaName: 'Sector 12', latitude: null, longitude: null }]) },
       notificationEvent: { create: vi.fn().mockResolvedValue({ id: 'notification-1', accountId: 'collector-1' }) },
       $transaction: vi.fn(async (callback: (value: any) => unknown) => callback(tx))

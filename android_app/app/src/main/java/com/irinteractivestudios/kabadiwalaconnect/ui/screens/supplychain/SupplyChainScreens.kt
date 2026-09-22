@@ -1,5 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
@@ -81,6 +84,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
@@ -306,8 +311,55 @@ fun HouseholdListingCreateScreen(
     var dataDestructionRequested by rememberSaveable { mutableStateOf(false) }
     var photoPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var photoError by rememberSaveable { mutableStateOf(false) }
+    var cameraError by rememberSaveable { mutableStateOf(false) }
+    var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val ioScope = rememberCoroutineScope()
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+        val capturedPath = pendingCameraPath
+        pendingCameraPath = null
+        if (captured && capturedPath != null) {
+            ioScope.launch(Dispatchers.IO) {
+                val normalized = runCatching {
+                    ImagePipeline.prepareForUpload(File(capturedPath), File(context.filesDir, "household_photos"))
+                }.getOrNull()
+                File(capturedPath).delete()
+                withContext(Dispatchers.Main.immediate) {
+                    if (normalized != null) {
+                        val wasEmpty = photoPaths.isEmpty()
+                        photoPaths = (photoPaths + normalized.absolutePath).distinct().take(6)
+                        photoError = false
+                        cameraError = false
+                        if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
+                    } else {
+                        cameraError = true
+                    }
+                }
+            }
+        } else {
+            capturedPath?.let { File(it).delete() }
+        }
+    }
+    val launchCamera = {
+        if (photoPaths.size < 6) {
+            val directory = File(context.filesDir, "household_photos").apply { mkdirs() }
+            val file = File(directory, "camera_${System.currentTimeMillis()}.jpg")
+            pendingCameraPath = file.absolutePath
+            camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+        }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else cameraError = true
+    }
+    val requestCamera = {
+        if (photoPaths.size < 6) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                launchCamera()
+            } else {
+                cameraPermission.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         ioScope.launch(Dispatchers.IO) {
@@ -320,6 +372,7 @@ fun HouseholdListingCreateScreen(
                 val wasEmpty = photoPaths.isEmpty()
                 photoPaths = (photoPaths + paths).distinct().take(6)
                 photoError = paths.size < uris.size
+                cameraError = false
                 if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
             }
         }
@@ -334,7 +387,7 @@ fun HouseholdListingCreateScreen(
     val parsedWeight = weight.toDoubleOrNull()
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
     val areaError = area.isNotBlank() && area.trim().length < 2
-    val canSubmit = parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val canSubmit = photoPaths.isNotEmpty() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
@@ -363,8 +416,29 @@ fun HouseholdListingCreateScreen(
                                 }
                             }
                         }
-                        OutlinedButton(onClick = { gallery.launch("image/*") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.AddPhotoAlternate, "Add photos"); Spacer(Modifier.width(8.dp)); Text(if (photoPaths.isEmpty()) "Add scrap photos" else "Add more photos") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = requestCamera,
+                                enabled = photoPaths.size < 6,
+                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                            ) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = "Open camera")
+                                Spacer(Modifier.width(6.dp))
+                                Text("Camera")
+                            }
+                            OutlinedButton(
+                                onClick = { gallery.launch("image/*") },
+                                enabled = photoPaths.size < 6,
+                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
+                            ) {
+                                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Choose from gallery")
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (photoPaths.isEmpty()) "Gallery" else "Add more")
+                            }
+                        }
+                        if (photoPaths.isEmpty()) Text("Add at least one clear photo to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (photoError) Text("Some photos could not be processed. Please choose a JPEG, PNG, or WebP image.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (cameraError) Text("Camera could not be opened. Allow camera access or choose a photo from your gallery.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

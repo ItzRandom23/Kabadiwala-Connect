@@ -80,6 +80,10 @@ dependencies, not reasons to hide failures in the client.
   and prevented multi-angle selection. The Kabadiwala lot step also retained
   only one local photo, and both UIs exposed backend-oriented material names
   rather than everyday descriptions.
+- The dedicated Household listing screen later gained multi-select gallery
+  support, but its final submit predicate still allowed an image-less listing,
+  and it had no camera action. The backend also promoted the JSON draft to
+  `POSTED` before the separate multipart upload completed.
 
 ## Authentication fix
 
@@ -303,6 +307,13 @@ Gemini response or HTTP error shown.
   angles, local preview/removal, Photo Picker multi-select, manual material
   selection, and a single clear primary action. The Kabadiwala lot photo step
   now uses the same six-photo limit with angle previews and removal.
+- Completed the Household photo gate on 2026-09-22: the form now offers
+  Camera and Gallery actions, preserves up to six angles, handles camera
+  permission denial and capture/normalization failures with a gallery
+  fallback, and disables posting until at least one processed image exists.
+  The ViewModel repeats this guard. The backend now keeps JSON-only records in
+  `DRAFT`, promotes them to `POSTED` only after a validated photo upload, and
+  refuses pickup requests for legacy image-less listings.
 - Replaced technical material keys with everyday labels and examples, such as
   `Plastic bottles & containers`, `Wires & cables`, `Old TV / monitor`, and
   `Circuit boards & computer parts`. `Other scrap / not sure` remains an
