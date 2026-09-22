@@ -224,11 +224,16 @@ class MainActivity : ComponentActivity() {
                     .collectAsStateWithLifecycle(initialValue = 0)
                 LaunchedEffect(connection, bootstrap.restorable) {
                     if (!householdLivePreview && connection == ConnectionState.ONLINE && bootstrap.restorable) {
-                        val hasValidSession = withContext(Dispatchers.IO) {
-                            val isValid = app.container.hasValidSession() && app.container.currentAccount() != null
-                            if (isValid) {
-                                // Pull server deltas only after the bootstrap
-                                // has established a valid authenticated session.
+                        val restoredAccount = withContext(Dispatchers.IO) {
+                            // A locally expired access token is not an
+                            // automatic logout. Try the rotating refresh token
+                            // first; the previous implementation checked only
+                            // local expiry here and cleared valid accounts as
+                            // soon as connectivity returned.
+                            val account = app.container.restoreAuthenticatedSession()
+                            if (account != null) {
+                                // Pull server deltas only after restoration has
+                                // established a valid authenticated session.
                                 runCatching { app.container.reconcileChanges() }
                                 app.container.refreshCatalogs()
                                 // Re-arm durable offline work only after the
@@ -236,15 +241,12 @@ class MainActivity : ComponentActivity() {
                                 app.container.syncScheduler.requestSync()
                                 app.container.startPushTokenRegistration()
                             }
-                            isValid
+                            account
                         }
-                        if (!hasValidSession) {
-                            // A refresh token can be present after an expired
-                            // or revoked session. Do not strand the user on a
-                            // collector screen with a permanent “session
-                            // expired” banner: clear the account boundary and
-                            // return to the real sign-in route.
-                            app.container.expireAccountSession()
+                        if (restoredAccount == null) {
+                            // Restoration has already classified the session
+                            // as unauthenticated/expired. Return to the real
+                            // sign-in route without issuing protected calls.
                             sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                             activeRole = AccountRole.COLLECTOR
                             if (route != Destinations.AUTH) {

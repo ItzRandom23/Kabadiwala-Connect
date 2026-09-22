@@ -18,7 +18,7 @@ object RetrofitProvider {
         baseUrl: String = PLACEHOLDER_BASE_URL,
         tokenProvider: () -> String? = { null },
         tokenRefresher: (() -> String?)? = null,
-        onAuthenticationFailure: (() -> Unit)? = null
+        onAuthenticationFailure: ((failedToken: String?) -> Unit)? = null
     ): ApiService {
         val authInterceptor = Interceptor { chain ->
             val original = chain.request()
@@ -45,7 +45,14 @@ object RetrofitProvider {
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .authenticator { _, response ->
-                if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint() || response.retryCount() >= 2) {
+                if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint()) {
+                    null
+                } else if (response.retryCount() >= 2) {
+                    // The refreshed credential was also rejected. Clear the
+                    // session, but let the owner compare the failed token
+                    // with the current token before doing so; a late response
+                    // from an old account must not log out a new account.
+                    onAuthenticationFailure?.invoke(response.request.bearerToken())
                     null
                 } else {
                     // Multiple requests may fail together when a token expires.
@@ -63,7 +70,7 @@ object RetrofitProvider {
                             // leave the UI in a protected state with a dead
                             // session. The owner clears the local session and
                             // returns the user to authentication.
-                            onAuthenticationFailure?.invoke()
+                            onAuthenticationFailure?.invoke(requestToken)
                             null
                         }
                 }
@@ -91,6 +98,9 @@ object RetrofitProvider {
         }
         return count
     }
+
+    private fun Request.bearerToken(): String? =
+        header("Authorization")?.removePrefix("Bearer ")?.takeIf { it.isNotBlank() }
 
     private fun String.isPublicAuthEndpoint(): Boolean =
             endsWith("/auth/request-otp") ||

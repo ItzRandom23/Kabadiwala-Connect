@@ -193,13 +193,16 @@ class RemoteAuthenticationRepository(
         }
     }
 
-    override suspend fun refreshAccessToken(): String? = refreshMutex.withLock {
+    override suspend fun refreshAccessToken(force: Boolean): String? = refreshMutex.withLock {
         val current = storage?.get(SecureStorage.AUTH_TOKEN)
         // A concurrent caller may already have completed the rotation while
         // this caller was waiting for the mutex. Reuse that token; rotating
         // the refresh credential again would correctly be rejected by the
         // backend as token reuse.
-        if (session.isSessionValid() && !current.isNullOrBlank()) return@withLock current
+        // A forced refresh comes from a server-side 401. In that case the
+        // local expiry timestamp is not authoritative, so the current token
+        // must not be replayed.
+        if (!force && session.isSessionValid() && !current.isNullOrBlank()) return@withLock current
 
         runCatching {
             val refreshToken = storage?.get(SecureStorage.REFRESH_TOKEN) ?: return@runCatching null

@@ -110,8 +110,8 @@ class AppContainer(context: Context) {
         RetrofitProvider.create(
             baseUrl = BuildConfig.API_BASE_URL,
             tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
-            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken() } },
-            onAuthenticationFailure = { expireAccountSession() }
+            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken(force = true) } },
+            onAuthenticationFailure = { failedToken -> expireAccountSessionIfCurrentToken(failedToken) }
         )
     }
 
@@ -657,6 +657,17 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.COLLECTOR_ID)
         secureStorage.remove(SecureStorage.SYNC_CURSOR)
         secureStorage.remove(SecureStorage.ACTIVITY_CURSOR)
+    }
+
+    /**
+     * An OkHttp response can arrive after the user has signed into another
+     * account. Only expire the session if the rejected request belongs to the
+     * currently stored credential (or there is no replacement credential).
+     */
+    fun expireAccountSessionIfCurrentToken(failedToken: String?) {
+        val currentToken = secureStorage.get(SecureStorage.AUTH_TOKEN)
+        if (!failedToken.isNullOrBlank() && !currentToken.isNullOrBlank() && currentToken != failedToken) return
+        expireAccountSession()
     }
 
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }

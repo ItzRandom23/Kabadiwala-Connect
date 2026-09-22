@@ -230,8 +230,13 @@ interface AuthenticationRepository {
     suspend fun exportAccount(): JsonObject? = null
     /** Performs the server-side privacy deletion and returns whether it completed. */
     suspend fun deleteAccount(): Boolean = false
-    /** Refreshes credentials without loading profile data; used by the HTTP 401 authenticator. */
-    suspend fun refreshAccessToken(): String? = null
+    /**
+     * Refreshes credentials without loading profile data; used by the HTTP
+     * 401 authenticator. A forced refresh is required when the server has
+     * already rejected the current access token even though its local expiry
+     * timestamp has not elapsed yet.
+     */
+    suspend fun refreshAccessToken(force: Boolean = false): String? = null
     fun isSessionValid(): Boolean
     fun logout()
 }
