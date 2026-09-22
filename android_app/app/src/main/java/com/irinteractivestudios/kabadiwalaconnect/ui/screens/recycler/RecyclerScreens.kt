@@ -63,6 +63,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileEditDraft
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 data class MarketplaceLot(val id: String, val material: String, val weight: String, val range: String, val area: String, val distance: String, val requestId: String = id)
 
@@ -162,7 +164,7 @@ fun RecyclerVerificationScreen(
                     OutlinedTextField(authority, { authority = it }, label = { Text(stringResource(R.string.recycler_verification_authority)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(authorizationType, { authorizationType = it }, label = { Text(stringResource(R.string.recycler_verification_type)) }, placeholder = { Text(stringResource(R.string.recycler_verification_type_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(registrationNumber, { registrationNumber = it }, label = { Text(stringResource(R.string.recycler_verification_registration_number)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(validUntil, { validUntil = it.filter { char -> char.isDigit() || char == '-' }.take(10) }, label = { Text(stringResource(R.string.recycler_verification_valid_until)) }, placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(validUntil, { validUntil = formatIsoDateInput(it) }, label = { Text(stringResource(R.string.recycler_verification_valid_until)) }, placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(evidenceReference, { evidenceReference = it }, label = { Text(stringResource(R.string.recycler_verification_evidence_reference)) }, placeholder = { Text(stringResource(R.string.recycler_verification_evidence_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(verificationSource, { verificationSource = it }, label = { Text(stringResource(R.string.recycler_verification_source)) }, placeholder = { Text(stringResource(R.string.recycler_verification_source_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -240,11 +242,33 @@ private fun validateVerificationForm(
     authority.trim().length < 2 -> R.string.recycler_verification_error_authority
     authorizationType.trim().length < 2 -> R.string.recycler_verification_error_type
     registrationNumber.trim().length < 2 -> R.string.recycler_verification_error_registration
-    !validUntil.trim().matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) -> R.string.recycler_verification_error_date
+    !isValidIsoDate(validUntil.trim()) -> R.string.recycler_verification_error_date
     evidenceReference.trim().length < 2 -> R.string.recycler_verification_error_evidence
     verificationSource.trim().length < 2 -> R.string.recycler_verification_error_source
     !declarationAccepted -> R.string.recycler_verification_error_declaration
     else -> null
+}
+
+/**
+ * Keeps the date field usable with numeric keyboards, which usually do not
+ * expose a hyphen key. Users can type or paste eight digits and the ISO
+ * separators are inserted automatically.
+ */
+internal fun formatIsoDateInput(value: String): String {
+    val digits = value.filter(Char::isDigit).take(8)
+    return buildString {
+        append(digits.take(4))
+        if (digits.length > 4) append('-')
+        append(digits.drop(4).take(2))
+        if (digits.length > 6) append('-')
+        append(digits.drop(6).take(2))
+    }
+}
+
+internal fun isValidIsoDate(value: String): Boolean {
+    if (!value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) return false
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+    return runCatching { formatter.parse(value)?.let { formatter.format(it) == value } == true }.getOrDefault(false)
 }
 
 @Composable

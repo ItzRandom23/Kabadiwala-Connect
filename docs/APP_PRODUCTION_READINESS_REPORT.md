@@ -1186,6 +1186,12 @@ was available.
   500. The regression suite now passes 40 test files / 128 tests, with build
   and lint green. The deployed VPS must be rebuilt and restarted for this fix
   to take effect.
+- The Recycler verification validity-date field was corrected after on-device
+  feedback: the numeric keyboard no longer leaves users unable to enter the
+  required hyphens. Eight typed digits or a pasted date are normalized to
+  `YYYY-MM-DD`, and impossible calendar dates are rejected locally. The
+  Android testing unit suite and `assembleEnvTestingDebug` both pass after the
+  fix.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
