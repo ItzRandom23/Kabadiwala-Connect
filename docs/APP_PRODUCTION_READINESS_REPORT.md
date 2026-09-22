@@ -1056,6 +1056,27 @@ was available.
   the typed 422 `INVALID_PHOTO` response and does not create an AI inference;
   decoded images are also bounded to 25 megapixels before provider work. The
   focused backend contract suite passes 7/7, with build and lint green.
+- QR handover verification was audited on 2026-09-22. The backend generates
+  versioned, HMAC-signed `kc-supply-handover-v1` payloads, stores only a hash of
+  the one-time nonce, checks the exact current server QR, expiry, recycler
+  ownership, and replay/idempotency before completing settlement. The focused
+  integrity/lifecycle/offline suite passed 11/11 tests, including round-trip,
+  tampered-payload/signature rejection, traceability, retry canonicalization,
+  and offline Recycler confirmation.
+- Android contains the real JourneyApps/ZXing camera scanner plus a manual
+  signed-code fallback. The scanner is restricted to QR format, the scanned
+  value is matched against the account-scoped handover record, and final
+  confirmation uses a stable idempotency key; offline confirmation is queued
+  and revalidated by the backend. The QR display uses the server-issued signed
+  value and never manufactures a trusted code locally.
+- The testing APK installed and launched successfully on the local emulator
+  after a direct ADB install. The connected test task could not complete on the
+  current Android 17 emulator because its Package Installer returned a platform
+  `StorageManager` null-pointer while installing the test split APK. A real
+  authenticated Recycler session with a live handover was not available in
+  this disposable run, so camera-to-camera scanning and final settlement still
+  require one device-level cross-role rehearsal against the deployed testing
+  backend. This is an evidence limitation, not a claimed QR success.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
