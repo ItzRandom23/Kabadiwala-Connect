@@ -1224,6 +1224,11 @@ was available.
   and all 12 connected tests passed. ADB also completed a 1,200-event rapid-tap
   stress run and a deliberate process kill while the camera was open; capture
   returned to lot Step 2 with the photo intact and an empty crash buffer.
+- The next testing OTA artifact is now `versionCode 43 / 0.0.42-beta`.
+  `backend/app-update/update.json` was updated to reference the rebuilt APK,
+  and its SHA-256 and byte size were verified against the copied artifact.
+  Android `aapt` confirmed the embedded package version, and the backend TypeScript
+  build passed after the active APP_VERSION defaults were aligned.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,
