@@ -354,6 +354,9 @@ Gemini response or HTTP error shown.
   “Supply-chain tools” entry. Pickup cancellation/reassignment stays available
   from each card’s accessible overflow menu, and the Buyers route now switches
   between Lots, Offers, and Records instead of stacking all three lists.
+- Added a visible Log out action to the Recycler verification-pending route.
+  Recycler accounts are routed there before marketplace/profile access, so
+  logout must be available on that screen as well as on the full Profile route.
 - Preserved the existing role-specific navigation boundaries and manual/error
   states while avoiding new fake content. A dedicated physical-device,
   TalkBack, large-font, and low-end performance pass remains a release gate.

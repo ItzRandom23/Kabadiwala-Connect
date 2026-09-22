@@ -900,7 +900,8 @@ fun AppNavHost(
             if (demoMode) {
                 RecyclerVerificationScreen(
                     profile = DemoDataProvider.profile(AccountRole.RECYCLER),
-                    onOpenMarketplace = { navController.navigate(Destinations.RECYCLER_MARKETPLACE) }
+                    onOpenMarketplace = { navController.navigate(Destinations.RECYCLER_MARKETPLACE) },
+                    onLogout = onLogout
                 )
             } else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
@@ -919,6 +920,7 @@ fun AppNavHost(
                         scope.launch { factory.refreshAccount() }
                     },
                     onSubmit = vm::submitVerification,
+                    onLogout = onLogout,
                     onOpenMarketplace = {
                         navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
                             popUpTo(Destinations.RECYCLER_VERIFY) { inclusive = true }

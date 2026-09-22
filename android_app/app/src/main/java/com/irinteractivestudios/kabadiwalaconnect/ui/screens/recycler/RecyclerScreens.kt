@@ -82,7 +82,8 @@ fun RecyclerVerificationScreen(
     saved: Boolean = false,
     onRefresh: () -> Unit = {},
     onSubmit: (RecyclerVerificationRequestDto) -> Unit = {},
-    onOpenMarketplace: () -> Unit = {}
+    onOpenMarketplace: () -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     val status = recyclerProfile?.authorizationStatus?.let { value ->
         runCatching { RecyclerVerificationStatus.valueOf(value) }.getOrNull()
@@ -95,6 +96,7 @@ fun RecyclerVerificationScreen(
     var verificationSource by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.verificationSource.orEmpty()) }
     var declarationAccepted by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<Int?>(null) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
     val detailRes = when (status) {
         RecyclerVerificationStatus.PENDING -> R.string.recycler_verification_pending_detail
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_rejected_detail
@@ -114,7 +116,12 @@ fun RecyclerVerificationScreen(
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Storefront, null, tint = MaterialTheme.colorScheme.primary)
+            TextButton(onClick = { showLogoutConfirm = true }, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_logout), modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+            }
+        }
         Text(
             stringResource(
                 when {
@@ -185,6 +192,20 @@ fun RecyclerVerificationScreen(
             OutlinedButton(onClick = onRefresh, enabled = !loading && !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.recycler_verification_refresh)) }
             if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcTheme.extended.warning, style = MaterialTheme.typography.labelLarge)
         }
+    }
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text(stringResource(R.string.settings_logout)) },
+            text = { Text(stringResource(R.string.settings_logout_warning)) },
+            dismissButton = { TextButton(onClick = { showLogoutConfirm = false }) { Text(stringResource(R.string.common_back)) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutConfirm = false
+                    onLogout()
+                }) { Text(stringResource(R.string.settings_logout)) }
+            }
+        )
     }
 }
 
