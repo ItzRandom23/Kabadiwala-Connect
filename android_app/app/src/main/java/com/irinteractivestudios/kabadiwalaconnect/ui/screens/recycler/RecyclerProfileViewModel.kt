@@ -8,6 +8,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerProfileUpd
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRatesUpdateRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,7 +64,15 @@ class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
             _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.submitRecyclerVerificationRequest(request).requireData() }
                 .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Verification request could not be submitted")) }
+                .onFailure { error ->
+                    val remote = error as? RemoteApiException
+                    val message = if (remote?.code == "VALIDATION_ERROR" && remote.message.contains("expiry", ignoreCase = true)) {
+                        "You entered an invalid expiry date. Use a future date in YYYY-MM-DD format."
+                    } else {
+                        userFacingError(error, "Verification request could not be submitted")
+                    }
+                    _state.value = _state.value.copy(saving = false, error = message)
+                }
         }
     }
 }

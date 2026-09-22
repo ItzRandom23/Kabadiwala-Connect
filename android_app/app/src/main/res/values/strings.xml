@@ -132,7 +132,7 @@
     <string name="recycler_verification_error_authority">Enter the issuing authority.</string>
     <string name="recycler_verification_error_type">Enter the authorization type.</string>
     <string name="recycler_verification_error_registration">Enter the registration number.</string>
-    <string name="recycler_verification_error_date">Use the date format YYYY-MM-DD.</string>
+    <string name="recycler_verification_error_date">Enter a future expiry date in YYYY-MM-DD format.</string>
     <string name="recycler_verification_error_evidence">Add a document ID or official verification link.</string>
     <string name="recycler_verification_error_source">Tell us where the record can be checked.</string>
     <string name="recycler_verification_error_declaration">Confirm that these details match your official records.</string>

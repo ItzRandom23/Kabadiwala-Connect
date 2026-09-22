@@ -66,6 +66,10 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileEdit
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneOffset
 import java.util.Locale
 
 data class MarketplaceLot(val id: String, val material: String, val weight: String, val range: String, val area: String, val distance: String, val requestId: String = id)
@@ -184,7 +188,19 @@ fun RecyclerVerificationScreen(
                     OutlinedTextField(authority, { authority = it }, label = { Text(stringResource(R.string.recycler_verification_authority)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(authorizationType, { authorizationType = it }, label = { Text(stringResource(R.string.recycler_verification_type)) }, placeholder = { Text(stringResource(R.string.recycler_verification_type_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(registrationNumber, { registrationNumber = it }, label = { Text(stringResource(R.string.recycler_verification_registration_number)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(validUntil, { validUntil = formatIsoDateInput(it) }, label = { Text(stringResource(R.string.recycler_verification_valid_until)) }, placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        validUntil,
+                        { validUntil = formatIsoDateInput(it) },
+                        label = { Text(stringResource(R.string.recycler_verification_valid_until)) },
+                        placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        isError = localError == R.string.recycler_verification_error_date,
+                        supportingText = if (localError == R.string.recycler_verification_error_date) {
+                            { Text(stringResource(R.string.recycler_verification_error_date)) }
+                        } else null,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     OutlinedTextField(evidenceReference, { evidenceReference = it }, label = { Text(stringResource(R.string.recycler_verification_evidence_reference)) }, placeholder = { Text(stringResource(R.string.recycler_verification_evidence_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(verificationSource, { verificationSource = it }, label = { Text(stringResource(R.string.recycler_verification_source)) }, placeholder = { Text(stringResource(R.string.recycler_verification_source_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -192,7 +208,7 @@ fun RecyclerVerificationScreen(
                         Text(stringResource(R.string.recycler_verification_declaration), style = MaterialTheme.typography.bodyMedium)
                     }
                     localError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-                    error?.let { Text(stringResource(R.string.recycler_verification_submit_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Button(
                         onClick = {
                             val validationError = validateVerificationForm(authority, registrationNumber, authorizationType, validUntil, evidenceReference, verificationSource, declarationAccepted)
@@ -262,7 +278,7 @@ private fun validateVerificationForm(
     authority.trim().length < 2 -> R.string.recycler_verification_error_authority
     authorizationType.trim().length < 2 -> R.string.recycler_verification_error_type
     registrationNumber.trim().length < 2 -> R.string.recycler_verification_error_registration
-    !isValidIsoDate(validUntil.trim()) -> R.string.recycler_verification_error_date
+    !isFutureIsoDate(validUntil.trim()) -> R.string.recycler_verification_error_date
     evidenceReference.trim().length < 2 -> R.string.recycler_verification_error_evidence
     verificationSource.trim().length < 2 -> R.string.recycler_verification_error_source
     !declarationAccepted -> R.string.recycler_verification_error_declaration
@@ -289,6 +305,17 @@ internal fun isValidIsoDate(value: String): Boolean {
     if (!value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) return false
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
     return runCatching { formatter.parse(value)?.let { formatter.format(it) == value } == true }.getOrDefault(false)
+}
+
+internal fun isFutureIsoDate(value: String): Boolean {
+    if (!isValidIsoDate(value)) return false
+    return runCatching {
+        LocalDate.parse(value)
+            .atTime(LocalTime.MAX)
+            .atOffset(ZoneOffset.UTC)
+            .toInstant()
+            .isAfter(Instant.now())
+    }.getOrDefault(false)
 }
 
 @Composable
