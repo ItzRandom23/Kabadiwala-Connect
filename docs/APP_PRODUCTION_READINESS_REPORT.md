@@ -1177,6 +1177,15 @@ was available.
   inventory, inventory movements, and procurement requirements all returned
   HTTP 401, confirming protected-route enforcement rather than an anonymous
   data leak.
+- A production VPS error reported a MongoDB/Prisma `P2034` write conflict while
+  formalisation concurrently upserted `collectorPassport`. The backend now
+  retries the complete affected transaction with bounded exponential backoff
+  for transient write conflicts (passport refresh, safety acknowledgement,
+  Recycler handover profile refresh, and collector settlement). Exhausted
+  retries return a safe 503 with a retry hint instead of exposing a raw Prisma
+  500. The regression suite now passes 40 test files / 128 tests, with build
+  and lint green. The deployed VPS must be rebuilt and restarted for this fix
+  to take effect.
 
 **NOT READY** until the external dependencies and remaining on-device gates
 above are completed. The implemented P0 fixes materially reduce the startup,

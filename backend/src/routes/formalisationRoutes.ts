@@ -9,6 +9,7 @@ import { AppError } from '../utils/errors.js';
 import { assertInventoryInvariant, recordInventoryMovement } from '../services/inventoryLedger.js';
 import { evaluateSettlementVariance, riskLevelForFlags } from '../services/settlementRules.js';
 import { emitNotification } from '../services/notificationService.js';
+import { isTransientTransactionConflict, withTransactionRetry } from '../utils/transactionRetry.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const positive = z.number().finite().positive();
@@ -36,6 +37,17 @@ function operationKey(req: any) {
 }
 
 const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
+
+async function retryableTransaction<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
+  try {
+    return await withTransactionRetry(operation);
+  } catch (error) {
+    if (isTransientTransactionConflict(error)) {
+      throw new AppError('SERVICE_UNAVAILABLE', `${operationName} is temporarily busy. Please try again.`, 503, { code: 'TRANSACTION_BUSY', retryAfterSeconds: 1 });
+    }
+    throw error;
+  }
+}
 
 function signQr(encoded: string, secret: string) {
   return createHmac('sha256', secret).update(`kc-supply-handover-v1.${encoded}`).digest('base64url');
@@ -587,7 +599,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
   });
 
   router.get('/kabadiwala/passport', requireAuth(jwt, collectors), async (req, res) => {
-    const passport = await store.$transaction(async (tx: Store) => { await ensurePassport(tx, req.identity!.collectorId); return refreshPassport(tx, req.identity!.collectorId); });
+    const passport = await retryableTransaction<any>(() => store.$transaction(async (tx: Store) => { await ensurePassport(tx, req.identity!.collectorId); return refreshPassport(tx, req.identity!.collectorId); }), 'The collector profile');
     res.json({ success: true, data: { ...passport, officialCertification: false, disclaimer: 'Platform-generated evidence profile. Not a government, CPCB or official license.' } });
   });
 
@@ -616,12 +628,12 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
   router.post('/kabadiwala/safety/:moduleKey/acknowledge', requireAuth(jwt, collectors), async (req, res) => {
     const moduleKey = parse(z.string().regex(/^[A-Z0-9_]{3,80}$/), req.params.moduleKey);
     if (!['BATTERY_SAFE_HANDLING', 'CRT_PCB_SAFE_HANDLING', 'MIXED_UNKNOWN_ESCALATION'].includes(moduleKey)) throw new AppError('NOT_FOUND', 'Safety module not found', 404, { code: 'SAFETY_MODULE_NOT_FOUND' });
-    const result = await store.$transaction(async (tx: Store) => {
+    const result = await retryableTransaction(() => store.$transaction(async (tx: Store) => {
       const row = await tx.safetyProgress.upsert({ where: { collectorId_moduleKey: { collectorId: req.identity!.collectorId, moduleKey } }, update: { acknowledged: true, completedAt: new Date() }, create: { collectorId: req.identity!.collectorId, moduleKey, acknowledged: true, completedAt: new Date() } });
       await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'SAFETY_MODULE_ACKNOWLEDGED', 'SAFETY', row.id, { moduleKey });
       await refreshPassport(tx, req.identity!.collectorId);
       return row;
-    });
+    }), 'Safety progress');
     res.json({ success: true, data: result });
   });
 
@@ -814,7 +826,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       if (idempotency) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId: idempotency, action: 'RECYCLER_CONFIRM_HANDOVER', entityId: handover.id, requestHash: reconciliationHash, response: jsonValue(finalHandover) } });
       return finalHandover;
     });
-    if (!requiresReview) await store.$transaction(async (tx: Store) => { const pool = handover.poolId ? await tx.poolContribution.findMany({ where: { poolId: handover.poolId }, select: { collectorId: true }, distinct: ['collectorId'] }) : []; for (const row of pool) await refreshPassport(tx, row.collectorId); await refreshPassport(tx, handover.collectorId); });
+    if (!requiresReview) await retryableTransaction(() => store.$transaction(async (tx: Store) => { const pool = handover.poolId ? await tx.poolContribution.findMany({ where: { poolId: handover.poolId }, select: { collectorId: true }, distinct: ['collectorId'] }) : []; for (const row of pool) await refreshPassport(tx, row.collectorId); await refreshPassport(tx, handover.collectorId); }), 'The collector evidence profile');
     res.json({ success: true, data: result, message: requiresReview ? 'Handover needs collector review because settlement changed.' : 'Handover completed and traceability updated.' });
   });
 
@@ -975,7 +987,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const handover = await store.supplyHandover.findUnique({ where: { id: handoverId } });
     const contribution = handover?.poolId ? await store.poolContribution.findFirst({ where: { poolId: handover.poolId, collectorId: req.identity!.collectorId, handoverId } }) : null;
     if (!handover || (handover.collectorId !== req.identity!.collectorId && !contribution)) throw new AppError('NOT_FOUND', 'Handover settlement not found', 404, { code: 'HANDOVER_NOT_FOUND' });
-    const result = await store.$transaction(async (tx: Store) => {
+    const result = await retryableTransaction(() => store.$transaction(async (tx: Store) => {
       if (contribution) {
         const settlement = await tx.poolSettlement.updateMany({ where: { contributionId: contribution.id, status: 'PENDING_COLLECTOR_CONFIRMATION' }, data: { status: decision.decision === 'ACCEPT' ? 'COMPLETED' : 'DISPUTED', collectorDecision: decision.decision, reasonCode: decision.reasonCode ?? undefined, evidenceReference: decision.evidenceReference ?? undefined, updatedAt: new Date() } });
         if (!settlement.count) throw new AppError('CONFLICT', 'This contribution settlement is no longer actionable', 409, { code: 'SETTLEMENT_ALREADY_DECIDED' });
@@ -1024,7 +1036,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       }
       await audit(tx, req.identity!.collectorId, 'COLLECTOR', decision.decision === 'ACCEPT' ? 'SETTLEMENT_ACCEPTED' : 'SETTLEMENT_DISPUTED', 'SUPPLY_HANDOVER', handoverId, { reasonCode: decision.reasonCode ?? null, evidenceReference: decision.evidenceReference ?? null, notes: decision.notes ?? null });
       return tx.supplyHandover.findUniqueOrThrow({ where: { id: handoverId } });
-    });
+    }), 'The settlement');
     res.json({ success: true, data: result });
   });
 
