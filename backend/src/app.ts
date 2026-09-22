@@ -23,6 +23,7 @@ import { transactionRoutes } from './routes/transactionRoutes.js';
 import { activityRoutes } from './routes/activityRoutes.js';
 import { supplyChainRoutes } from './routes/supplyChainRoutes.js';
 import { formalisationRoutes } from './routes/formalisationRoutes.js';
+import { accountRoutes } from './routes/accountRoutes.js';
 import type { JwtService } from './services/jwt.js';
 import type { CollectorService } from './services/collectorService.js';
 import type { AuthService } from './services/authService.js';
@@ -84,6 +85,7 @@ export function createApp(
   const api = express.Router();
   api.use(healthRoutes(db, config, storageReady));
   if (authService) api.use('/auth', authRoutes(authService, emailAuthService, jwt, db, accountPrivacyService));
+  api.use(accountRoutes(jwt, db));
   if (collectorRepository) api.use('/collectors', collectorRoutes(jwt, collectorRepository, collectorService, db));
   if (collectorRepository) api.use(supplyChainRoutes(jwt, collectorRepository, db, storage));
   if (collectorRepository) api.use(formalisationRoutes(jwt, collectorRepository, db, config.TRACEABILITY_SIGNING_SECRET));

@@ -48,6 +48,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.HelpScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SafetyScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SettingsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SettingsViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileEditDraft
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingRoute
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
@@ -113,6 +114,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AccountProfileUpdate
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 import com.irinteractivestudios.kabadiwalaconnect.util.DemoModePolicy
 import java.io.File
@@ -776,7 +778,32 @@ fun AppNavHost(
         }
         composable(Destinations.PROFILE) {
             if (demoMode) DemoProfileScreen(role = role, onExitDemo = onLogout, onResetDemo = DemoSessionStore::reset)
-            else ProfileScreen(factory.currentAccount)
+            else {
+                var profile by remember { mutableStateOf(factory.currentAccount) }
+                var saving by remember { mutableStateOf(false) }
+                var saveError by remember { mutableStateOf<String?>(null) }
+                val scope = rememberCoroutineScope()
+                ProfileScreen(
+                    profile = profile,
+                    saving = saving,
+                    saveError = saveError,
+                    onSave = { draft: ProfileEditDraft ->
+                        saving = true
+                        saveError = null
+                        scope.launch {
+                            runCatching {
+                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, profile?.latitude, profile?.longitude))
+                            }.onSuccess { updated ->
+                                profile = updated ?: profile
+                                saving = false
+                            }.onFailure {
+                                saving = false
+                                saveError = "Could not save account details. Please try again."
+                            }
+                        }
+                    }
+                )
+            }
         }
         composable(Destinations.NOTIFICATIONS) {
             if (demoMode) DemoInfoScreen(stringResource(R.string.demo_info_notifications_title), stringResource(R.string.demo_info_notifications_detail))
@@ -939,7 +966,33 @@ fun AppNavHost(
         }
         composable(Destinations.RECYCLER_PROFILE) {
             if (demoMode) DemoProfileScreen(AccountRole.RECYCLER, onExitDemo = onLogout, onResetDemo = DemoSessionStore::reset)
-            else RecyclerProfileScreen(factory.currentAccount, onLogout = onLogout)
+            else {
+                var profile by remember { mutableStateOf(factory.currentAccount) }
+                var saving by remember { mutableStateOf(false) }
+                var saveError by remember { mutableStateOf<String?>(null) }
+                val scope = rememberCoroutineScope()
+                RecyclerProfileScreen(
+                    profile = profile,
+                    onLogout = onLogout,
+                    saving = saving,
+                    saveError = saveError,
+                    onSave = { draft: ProfileEditDraft ->
+                        saving = true
+                        saveError = null
+                        scope.launch {
+                            runCatching {
+                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, profile?.latitude, profile?.longitude))
+                            }.onSuccess { updated ->
+                                profile = updated ?: profile
+                                saving = false
+                            }.onFailure {
+                                saving = false
+                                saveError = "Could not save account details. Please try again."
+                            }
+                        }
+                    }
+                )
+            }
         }
         composable(Destinations.RECYCLER_SCAN) {
             if (demoMode) DemoRecyclerScanScreen()

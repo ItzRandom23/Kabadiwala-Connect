@@ -60,6 +60,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EmptyContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileEditDraft
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 
@@ -677,10 +678,10 @@ private fun String.displayMaterial(): String = when (this) {
 @Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text("$label · ₹/kg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }
 
 @Composable
-fun RecyclerProfileScreen(profile: AccountProfile?, onLogout: () -> Unit) {
+fun RecyclerProfileScreen(profile: AccountProfile?, onLogout: () -> Unit, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null) {
     var showLogoutConfirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        ProfileScreen(profile, Modifier.weight(1f))
+        ProfileScreen(profile, Modifier.weight(1f), onSave = onSave, saving = saving, saveError = saveError)
         OutlinedButton(onClick = { showLogoutConfirm = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).heightIn(min = 52.dp)) { Text(stringResource(R.string.settings_logout)) }
     }
     if (showLogoutConfirm) {

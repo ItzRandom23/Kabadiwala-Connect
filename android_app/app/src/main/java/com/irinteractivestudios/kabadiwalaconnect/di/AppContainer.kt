@@ -8,6 +8,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomPriceRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomRecyclerRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomQuoteRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.local.RemoteQuoteRepository
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AccountProfileUpdate
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticationRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockAuthenticationRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockOtpService
@@ -297,6 +298,9 @@ class AppContainer(context: Context) {
     }
 
     suspend fun refreshAccount(): AccountProfile? = authenticationRepository.refreshAccount()
+
+    suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile? =
+        authenticationRepository.updateAccountProfile(update)
 
     suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null, force: Boolean = false) = catalogRefreshMutex.withLock {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return@withLock

@@ -1056,6 +1056,25 @@ was available.
   the typed 422 `INVALID_PHOTO` response and does not create an AI inference;
   decoded images are also bounded to 25 megapixels before provider work. The
   focused backend contract suite passes 7/7, with build and lint green.
+- Phone sign-in retry handling was corrected. Android was checking the human
+  error message instead of the structured `RemoteApiException.code`, so an
+  account conflict could be rendered as the generic “server could not
+  complete registration” state. The client now recognizes the structured
+  conflict and retries the verified phone-only path; the backend also resolves
+  legacy accounts whose phone exists only on the linked Collector or Recycler
+  profile.
+- Account settings are no longer read-only. Authenticated roles can update
+  their display/business name, security email, and area through the new
+  account-scoped endpoint, which updates both the account identity and its
+  business profile atomically. Mobile number and role remain protected because
+  they define the verified identity and authorization boundary. Duplicate
+  security emails return a typed conflict instead of silently overwriting
+  another account.
+- After these changes, the complete backend suite passed 39/39 files and
+  122/122 tests; `npm run build`, `npm run lint`,
+  `:app:testEnvTestingDebugUnitTest`, and `:app:assembleEnvTestingDebug` also
+  passed. A live VPS deployment still needs the updated backend and APK before
+  this behavior can be verified against the deployed service.
 - QR handover verification was audited on 2026-09-22. The backend generates
   versioned, HMAC-signed `kc-supply-handover-v1` payloads, stores only a hash of
   the one-time nonce, checks the exact current server QR, expiry, recycler

@@ -127,12 +127,33 @@ export class AuthService {
 
   private async findExistingPhoneAccount(phone: string) {
     if (!this.db) return null;
-    const user = await this.db.user.findFirst({ where: { phone } });
+    const user = await this.findUserByPhone(this.db, phone);
     if (!user || user.accountStatus === 'SUSPENDED' || user.accountStatus === 'DELETED') return null;
     const profile = user.role === 'RECYCLER'
       ? await this.db.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
       : await this.db.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
     return this.issuePhone(user, profile);
+  }
+
+  /**
+   * Older phone accounts may have their phone stored only on the business
+   * profile, not on User. Treat the verified phone as the same identity in
+   * both layouts so retrying registration cannot create a duplicate account
+   * or surface a misleading server error.
+   */
+  private async findUserByPhone(client: any, phone: string) {
+    const direct = await client.user.findFirst({ where: { phone } });
+    if (direct) return direct;
+    // Lightweight repository doubles used by legacy tests only expose User;
+    // the production Prisma client exposes both profile collections.
+    if (!client.collector?.findFirst || !client.recycler?.findFirst) return null;
+    const [collector, recycler] = await Promise.all([
+      client.collector.findFirst({ where: { phone }, select: { id: true } }),
+      client.recycler.findFirst({ where: { phone }, select: { id: true } })
+    ]);
+    if (collector) return client.user.findFirst({ where: { collectorProfileId: collector.id } });
+    if (recycler) return client.user.findFirst({ where: { recyclerProfileId: recycler.id } });
+    return null;
   }
 
   private async verifyPhoneAccount(phone: string, input: PhoneAccountInput) {
@@ -160,7 +181,7 @@ export class AuthService {
         return candidate;
       };
 
-      let user = await tx.user.findFirst({ where: { phone } });
+      let user = await this.findUserByPhone(tx, phone);
 
       // Link legacy OTP-created records to the account identity model without
       // creating a second account for the same verified mobile number.

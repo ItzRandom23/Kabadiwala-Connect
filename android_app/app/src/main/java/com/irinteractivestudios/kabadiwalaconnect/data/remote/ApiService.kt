@@ -191,6 +191,9 @@ interface ApiService {
     @GET("auth/profile")
     suspend fun getAccountProfile(): Response<ApiEnvelope<AccountProfileDto>>
 
+    @PUT("account/profile")
+    suspend fun updateAccountProfile(@Body body: AccountProfileUpdateRequestDto): Response<ApiEnvelope<AccountProfileDto>>
+
     @POST("auth/refresh")
     suspend fun refreshSession(@Body body: RefreshTokenRequestDto): Response<ApiEnvelope<RefreshTokenResponseDto>>
 

@@ -259,8 +259,13 @@ class OnboardingViewModel(
             // matching account identity. A verified phone is enough to safely
             // retry through the existing-phone sign-in path; this avoids
             // trapping a user on an erroneous duplicate-account message.
-            val result = if (registrationResult == OtpVerification.AccountConflict && current.role == AccountRole.COLLECTOR) {
+            val result = if (registrationResult == OtpVerification.AccountConflict) {
                 try {
+                    // A verified phone is the identity boundary. Retry once
+                    // through the phone-only path so an existing Household,
+                    // Kabadiwala, or Recycler account is signed in instead of
+                    // being treated as a failed new registration. The server
+                    // still decides the role and account status.
                     auth.verifyOtp(current.phone, current.otp)
                 } catch (_: Exception) {
                     OtpVerification.NetworkError

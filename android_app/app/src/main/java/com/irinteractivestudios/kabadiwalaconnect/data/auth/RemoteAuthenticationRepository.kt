@@ -13,6 +13,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.VerifyOtpRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RefreshTokenRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountDeletionRequestDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfileUpdateRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
@@ -229,6 +230,21 @@ class RemoteAuthenticationRepository(
         remote
     }.getOrNull()
 
+    override suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile {
+        val result = api.updateAccountProfile(
+            AccountProfileUpdateRequestDto(
+                displayName = update.displayName?.trim()?.takeIf { it.isNotEmpty() },
+                email = update.email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() },
+                areaName = update.areaName?.trim()?.takeIf { it.isNotEmpty() },
+                latitude = update.latitude,
+                longitude = update.longitude,
+                preferredLanguage = update.preferredLanguage?.let(LocaleManager::toBackendName)
+            )
+        ).requireData().toDomain()
+        storage?.saveAccount(result)
+        return result
+    }
+
     override suspend fun exportAccount(): JsonObject = api.exportAccount().requireData()
 
     override suspend fun deleteAccount(): Boolean {
@@ -268,6 +284,11 @@ class RemoteAuthenticationRepository(
 
     private fun errorCode(error: Exception): String? {
         if (error !is RemoteApiException) return null
+        // The transport already parsed the structured API error. Falling back
+        // to parsing the human-readable message made ACCOUNT_CONFLICT look
+        // like a generic server failure and trapped returning phone users in
+        // the registration flow.
+        if (error.code.isNotBlank()) return error.code
         val raw = error.message.orEmpty()
         return runCatching {
             val root = Gson().fromJson(raw, JsonObject::class.java)

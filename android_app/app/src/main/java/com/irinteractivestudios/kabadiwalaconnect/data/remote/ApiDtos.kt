@@ -84,6 +84,7 @@ data class RefreshTokenResponseDto(val token: String, val refreshToken: String)
 data class AdminAuthResponseDto(val token: String, val refreshToken: String? = null, val user: AdminProfileDto)
 data class AdminProfileDto(val id: String, val email: String, val displayName: String? = null, val role: String = "ADMIN", val permissions: List<String> = emptyList())
 data class AccountProfileDto(val id: String, val email: String? = null, val phone: String? = null, val displayName: String? = null, val areaName: String? = null, val latitude: Double? = null, val longitude: Double? = null, val role: String, val preferredLanguage: String = "ENGLISH", val accountStatus: String = "ACTIVE", val verificationStatus: String = "VERIFIED", val profileId: String = "", val profile: RecyclerDto? = null, val createdAt: String? = null, val updatedAt: String? = null)
+data class AccountProfileUpdateRequestDto(val displayName: String? = null, val email: String? = null, val areaName: String? = null, val latitude: Double? = null, val longitude: Double? = null, val preferredLanguage: String? = null)
 
 data class CollectorDto(val id: String, val phone: String, val email: String? = null, val displayName: String? = null, val preferredLanguage: String? = null, val primaryLocation: LocationDto? = null, val accountStatus: String? = null, val createdAt: String? = null, val lastLoginAt: String? = null)
 data class CollectorUpdateDto(val preferredLanguage: String? = null, val primaryLocation: LocationDto? = null, val displayName: String? = null, val email: String? = null)

@@ -54,6 +54,15 @@ data class PhoneAccountRequest(
     val longitude: Double? = null
 )
 
+data class AccountProfileUpdate(
+    val displayName: String?,
+    val email: String?,
+    val areaName: String?,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val preferredLanguage: String? = null
+)
+
 sealed interface EmailAuthentication {
     data class Success(val token: String, val expiresAtEpochMs: Long, val profile: AccountProfile) : EmailAuthentication
     data object InvalidCredentials : EmailAuthentication
@@ -216,6 +225,7 @@ interface AuthenticationRepository {
     suspend fun authenticateEmail(request: EmailAccountRequest): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication = EmailAuthentication.NetworkError
     suspend fun refreshAccount(): AccountProfile? = null
+    suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile? = null
     /** Returns the authenticated account export without exposing credentials. */
     suspend fun exportAccount(): JsonObject? = null
     /** Performs the server-side privacy deletion and returns whether it completed. */

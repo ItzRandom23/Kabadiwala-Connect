@@ -35,6 +35,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverReposi
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AccountProfileUpdate
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 
 /**
@@ -69,6 +70,7 @@ class KcViewModelFactory(
         container.refreshCatalogs(location, current?.latitude, current?.longitude, force)
     suspend fun refreshEarnings() = container.refreshEarnings()
     suspend fun refreshAccount() = container.refreshAccount()
+    suspend fun updateAccountProfile(update: AccountProfileUpdate) = container.updateAccountProfile(update)
     suspend fun refreshActivity() = container.refreshActivity()
     suspend fun exportAccount() = container.authenticationRepository.exportAccount()
     suspend fun deleteAccount() = container.authenticationRepository.deleteAccount()
