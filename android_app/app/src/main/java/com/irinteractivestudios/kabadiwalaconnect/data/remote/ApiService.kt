@@ -48,7 +48,11 @@ interface ApiService {
     @GET("household/listings/{listingId}/passport")
     suspend fun getHouseholdListingPassport(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdPassportResponseDto>>
     @GET("household/kabadiwalas")
-    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null): Response<ApiEnvelope<List<KabadiwalaProfileDto>>>
+    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20): Response<ApiEnvelope<KabadiwalaDirectoryDto>>
+    @GET("household/kabadiwalas/{kabadiwalaId}")
+    suspend fun getHouseholdKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null): Response<ApiEnvelope<KabadiwalaPublicProfileDto>>
+    @POST("household/pickups/{pickupId}/review")
+    suspend fun reviewHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: HouseholdPickupReviewDto): Response<ApiEnvelope<HouseholdPickupReviewResultDto>>
     @POST("household/listings/{listingId}/pickups")
     suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<PickupRequestDto>>
     @GET("household/pickups")
@@ -89,6 +93,8 @@ interface ApiService {
     suspend fun reassignPickup(@Path("pickupId") pickupId: String, @Body body: PickupReassignDto): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/complete")
     suspend fun completePickup(@Path("pickupId") pickupId: String, @Body body: PickupCompletionDto): Response<ApiEnvelope<PickupRequestDto>>
+    @POST("kabadiwala/pickups/{pickupId}/settlement-payment")
+    suspend fun recordPickupSettlementPayment(@Path("pickupId") pickupId: String, @Body body: PickupSettlementPaymentRequestDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<PickupSettlementPaymentDto>>
     @GET("kabadiwala/inventory")
     suspend fun getKabadiwalaInventory(): Response<ApiEnvelope<List<InventoryBalanceDto>>>
     @GET("kabadiwala/inventory/movements")
@@ -450,6 +456,14 @@ interface ApiService {
     suspend fun adminResolveDispute(@Path("disputeId") disputeId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
     @GET("admin/payments")
     suspend fun adminPayments(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("admin/household-pickup-payments")
+    suspend fun adminHouseholdPickupPayments(@Query("status") status: String? = "RECORDED"): Response<ApiEnvelope<List<JsonObject>>>
+    @GET("admin/kabadiwala-cohort")
+    suspend fun adminKabadiwalaCohort(@Query("status") status: String? = "PENDING"): Response<ApiEnvelope<List<JsonObject>>>
+    @POST("admin/kabadiwala-cohort/{kabadiwalaId}/verification")
+    suspend fun adminVerifyKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @POST("admin/household-pickup-payments/{paymentId}/reconcile")
+    suspend fun adminReconcileHouseholdPickupPayment(@Path("paymentId") paymentId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
     @GET("admin/payments/{paymentId}")
     suspend fun adminPayment(@Path("paymentId") paymentId: String): Response<ApiEnvelope<JsonObject>>
     @POST("admin/payments/{paymentId}/verify")

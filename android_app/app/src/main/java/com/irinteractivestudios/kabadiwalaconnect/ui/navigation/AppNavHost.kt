@@ -234,8 +234,10 @@ fun AppNavHost(
                     onSelect = vm::select,
                     onClearSelection = vm::clearSelection,
                     onAuthorizeRecycler = vm::authorizeRecycler,
+                    onApprovePartner = vm::approveKabadiwala,
                     onResolveDispute = vm::resolveDispute,
                     onVerifyPayment = vm::verifyPayment,
+                    onDisputePickupPayment = vm::disputePickupPayment,
                     onReversePayment = vm::reversePayment,
                     onResolveAnomaly = vm::resolveAnomaly,
                     onImportPrice = vm::importPrice,
@@ -381,7 +383,7 @@ fun AppNavHost(
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment)
             } else {
                 val vm: HomeViewModel = viewModel(factory = factory)
                 val state by vm.uiState.collectAsStateWithLifecycle()
@@ -420,7 +422,7 @@ fun AppNavHost(
             else {
                 val vm: SupplyChainViewModel = viewModel(factory = factory); val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-                KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement)
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRejectPickup = vm::rejectPickup, onConfirmAvailability = vm::confirmAvailability, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment)
             }
         }
         composable(Destinations.KABADIWALA_LOTS) {
@@ -447,8 +449,17 @@ fun AppNavHost(
             ) else if (role == AccountRole.HOUSEHOLD) {
                 val supplyVm: SupplyChainViewModel = viewModel(factory = factory)
                 val supplyState by supplyVm.state.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) { supplyVm.refreshHousehold() }
-                HouseholdKabadiwalasScreen(supplyState, supplyVm::refreshHousehold)
+                LaunchedEffect(Unit) { supplyVm.refreshHousehold(areaQuery = factory.currentAccount?.areaName) }
+                HouseholdKabadiwalasScreen(
+                    state = supplyState,
+                    onRefresh = supplyVm::refreshHousehold,
+                    onSearch = { area, radius -> supplyVm.searchHouseholdKabadiwalas(area, radius) },
+                    onUseLocation = { location, radius -> supplyVm.searchHouseholdKabadiwalas(location.areaName.orEmpty(), radius, location) },
+                    onLoadMore = supplyVm::loadMoreHouseholdKabadiwalas,
+                    onOpenProfile = supplyVm::openKabadiwalaProfile,
+                    onCloseProfile = supplyVm::closeKabadiwalaProfile,
+                    onRatePickup = supplyVm::rateHouseholdPickup
+                )
             } else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
         }
         composable(Destinations.RECYCLERS_FOR_LOT, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->

@@ -10,41 +10,36 @@ function fakeDb() {
   } as any;
 }
 
-describe('price location fallback', () => {
+describe('price location matching', () => {
   it('falls back from an area label to its city', async () => {
     const db = fakeDb();
-    db.price.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(price);
+    db.price.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(price);
 
     const result = await new PriceRepository(db).latest('PCB' as any, 'Kothrud, Pune');
 
     expect(result).toEqual(price);
-    expect(db.price.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { materialCategory: 'PCB', OR: [{ areaName: 'Pune' }, { city: 'Pune' }] }
+    expect(db.price.findFirst).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      where: { materialCategory: 'PCB', OR: [{ areaName: { equals: 'Pune', mode: 'insensitive' } }, { city: { equals: 'Pune', mode: 'insensitive' } }] }
     }));
   });
 
-  it('falls back to the latest known rate for the material', async () => {
+  it('does not return a price from an unrelated area', async () => {
     const db = fakeDb();
-    db.price.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(price);
+    db.price.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
 
     const result = await new PriceRepository(db).latest('PCB' as any, 'Baner, Pune');
 
-    expect(result).toEqual(price);
-    expect(db.price.findFirst).toHaveBeenLastCalledWith({
-      where: { materialCategory: 'PCB' },
-      orderBy: { effectiveAt: 'desc' }
-    });
+    expect(result).toBeNull();
+    expect(db.price.findFirst).toHaveBeenCalledTimes(3);
   });
 
-  it('uses the same fallback rule for history', async () => {
+  it('does not return history from an unrelated area', async () => {
     const db = fakeDb();
-    db.priceHistory.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ marketPrice: 2400 }]);
+    db.priceHistory.findMany.mockResolvedValue([]);
 
     const result = await new PriceRepository(db).history('PCB' as any, 'Kothrud, Pune', new Date(0));
 
-    expect(result).toEqual([{ marketPrice: 2400 }]);
-    expect(db.priceHistory.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { materialCategory: 'PCB', effectiveAt: { gte: new Date(0) }, OR: [{ areaName: 'Pune' }, { city: 'Pune' }] }
-    }));
+    expect(result).toEqual([]);
+    expect(db.priceHistory.findMany).toHaveBeenCalledTimes(3);
   });
 });

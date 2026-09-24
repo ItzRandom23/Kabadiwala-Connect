@@ -12,10 +12,43 @@ data class ApiEnvelope<T>(val success: Boolean = false, val data: T? = null, val
 data class HouseholdListingCreateDto(val materialCategory: String, val estimatedWeight: Double, val condition: String, val notes: String? = null, val photoReference: String? = null, val areaName: String, val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean = false, val ownerPreparationCompleted: Boolean = false, val dataDestructionRequested: Boolean = false)
 data class HouseholdListingUpdateDto(val materialCategory: String? = null, val estimatedWeight: Double? = null, val condition: String? = null, val notes: String? = null, val photoReference: String? = null, val areaName: String? = null, val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean? = null, val ownerPreparationCompleted: Boolean? = null, val dataDestructionRequested: Boolean? = null)
 data class HouseholdListingDto(val id: String = "", val householdId: String = "", val materialCategory: String = "OTHER", val estimatedWeight: Double = 0.0, val condition: String = "INTACT", val notes: String? = null, val photoReference: String? = null, val photoReferences: List<String> = emptyList(), val photoCount: Int? = 0, val photoAttached: Boolean? = false, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null, val estimatedPriceMin: Double? = null, val estimatedPriceMax: Double? = null, val dataBearingDevice: Boolean = false, val ownerPreparationCompleted: Boolean = false, val dataDestructionRequested: Boolean = false, val destructionEvidenceStatus: String = "NOT_APPLICABLE", val recyclerEvidenceReference: String? = null, val status: String = "POSTED", val createdAt: String? = null, val updatedAt: String? = null)
-data class KabadiwalaProfileDto(val id: String = "", val displayName: String? = null, val areaName: String = "", val latitude: Double? = null, val longitude: Double? = null)
+data class KabadiwalaProfileDto(
+    val id: String = "",
+    val displayName: String? = null,
+    val areaName: String = "",
+    val verified: Boolean = false,
+    val distanceKm: Double? = null,
+    val acceptingPickups: Boolean = false,
+    val availablePickupSlots: Int = 0,
+    val completedPickupCount: Int = 0,
+    val acceptedWeightKg: Double = 0.0,
+    val collectedMaterials: List<String> = emptyList(),
+    val ratingAverage: Double? = null,
+    val reviewCount: Int = 0
+)
+data class KabadiwalaDirectoryDto(val items: List<KabadiwalaProfileDto> = emptyList(), val pagination: PageDto = PageDto(), val requiresLocation: Boolean = false)
+data class KabadiwalaPublicProfileDto(
+    val id: String = "",
+    val displayName: String? = null,
+    val areaName: String = "",
+    val verified: Boolean = false,
+    val distanceKm: Double? = null,
+    val acceptingPickups: Boolean = false,
+    val availablePickupSlots: Int = 0,
+    val completedPickupCount: Int = 0,
+    val acceptedWeightKg: Double = 0.0,
+    val collectedMaterials: List<String> = emptyList(),
+    val ratingAverage: Double? = null,
+    val reviewCount: Int = 0,
+    val memberSince: String? = null
+)
+data class HouseholdPickupReviewDto(val rating: Int)
+data class HouseholdPickupReviewResultDto(val id: String = "", val pickupId: String = "", val rating: Int = 0, val verified: Boolean = false, val ratingAverage: Double? = null, val reviewCount: Int = 0)
+data class PickupSettlementPaymentRequestDto(val amount: Double, val method: String, val recordedAt: String? = null, val reference: String? = null, val notes: String? = null)
+data class PickupSettlementPaymentDto(val pickupId: String = "", val amount: Double = 0.0, val paymentMethod: String = "", val recordedAt: String? = null, val reference: String? = null, val status: String = "RECORDED")
 data class PickupRequestCreateDto(val kabadiwalaId: String? = null, val requestedSlot: String? = null)
 data class CancellationRequestDto(val reason: String? = null)
-data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String? = null, val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val finalAmount: Double? = null, val acceptedAt: String? = null, val availabilityConfirmedAt: String? = null, val inTransitAt: String? = null, val arrivedAt: String? = null, val weighedAt: String? = null, val cancelledAt: String? = null, val noShow: Boolean = false, val lateCancellation: Boolean = false, val reassignmentReason: String? = null, val settlementStatus: String? = null, val settlementBeforeValue: Double? = null, val settlementAfterValue: Double? = null, val settlementReasonCode: String? = null, val settlementEvidenceReference: String? = null, val householdDecision: String? = null, val settlementDisputeNotes: String? = null, val settlementDecisionAt: String? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null)
+data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String? = null, val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val finalAmount: Double? = null, val acceptedAt: String? = null, val availabilityConfirmedAt: String? = null, val inTransitAt: String? = null, val arrivedAt: String? = null, val weighedAt: String? = null, val cancelledAt: String? = null, val noShow: Boolean = false, val lateCancellation: Boolean = false, val reassignmentReason: String? = null, val settlementStatus: String? = null, val settlementBeforeValue: Double? = null, val settlementAfterValue: Double? = null, val settlementReasonCode: String? = null, val settlementEvidenceReference: String? = null, val householdDecision: String? = null, val settlementDisputeNotes: String? = null, val settlementDecisionAt: String? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null, val householdReviewRating: Int? = null, val settlementPayment: PickupSettlementPaymentDto? = null)
 data class PickupScheduleDto(val scheduledSlot: String)
 data class PickupStatusDto(val status: String)
 data class PickupCompletionDto(val actualWeight: Double, val finalCategory: String, val grade: String = "UNSPECIFIED", val ratePerKg: Double, val reasonCode: String? = null, val evidenceReference: String? = null)

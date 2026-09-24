@@ -1,5 +1,9 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.prices
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +27,7 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,15 +36,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Price
@@ -48,10 +58,17 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.util.PriceSpeaker
+import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 import java.util.Date
 import java.util.Locale
 import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -61,6 +78,38 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val refreshFailed by vm.refreshFailed.collectAsStateWithLifecycle()
     var selectedMaterial by remember { mutableStateOf("") }
+    var locationInput by remember(location) { mutableStateOf(location) }
+    var showLocationRationale by remember { mutableStateOf(false) }
+    var locationError by remember { mutableStateOf(false) }
+    var locationBusy by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val locationProvider = remember(context) { AndroidLocationProvider(context) }
+    fun applyLocation(value: String) {
+        val cleaned = value.trim()
+        if (cleaned.isBlank()) return
+        vm.selectLocation(cleaned)
+        // selectedLocation changes synchronously, so refresh will request this
+        // exact area and the backend will not substitute another city's rate.
+        vm.refresh()
+    }
+    val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!granted) locationError = true else scope.launch {
+            locationBusy = true
+            val current = runCatching { locationProvider.current() }.getOrNull()
+            val place = current?.areaName
+            if (place.isNullOrBlank()) locationError = true else {
+                locationInput = place
+                applyLocation(place)
+                locationError = false
+            }
+            locationBusy = false
+        }
+    }
+    LaunchedEffect(demoMode) { if (!demoMode && location.isNotBlank()) vm.refresh() }
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -81,21 +130,52 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
         }
         if (demoMode) DemoDataBanner()
         Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.medium,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Column(Modifier.padding(start = 10.dp)) {
-                    Text(stringResource(R.string.prices_location_context, location), style = MaterialTheme.typography.titleSmall)
-                    Text(stringResource(R.string.prices_location_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.padding(start = 10.dp)) {
+                        Text(if (location.isBlank()) "Choose your market area" else stringResource(R.string.prices_location_context, location), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("Rates are shown only when verified data is available for this area.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .82f))
+                    }
                 }
+                OutlinedTextField(
+                    value = locationInput,
+                    onValueChange = { locationInput = it.take(160) },
+                    label = { Text("Locality, city, state or PIN code") },
+                    placeholder = { Text("e.g. Kothrud, Pune, Maharashtra") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Search),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { applyLocation(locationInput) }, enabled = locationInput.isNotBlank() && !refreshing, modifier = Modifier.weight(1f).height(48.dp)) { Text("Search area") }
+                    OutlinedButton(onClick = {
+                        val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        if (hasLocation) scope.launch {
+                            locationBusy = true
+                            val current = runCatching { locationProvider.current() }.getOrNull()
+                            val place = current?.areaName
+                            if (place.isNullOrBlank()) locationError = true else { locationInput = place; applyLocation(place); locationError = false }
+                            locationBusy = false
+                        } else showLocationRationale = true
+                    }, enabled = !locationBusy && !refreshing, modifier = Modifier.weight(1f).height(48.dp)) {
+                        if (locationBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.LocationOn, null)
+                        Spacer(Modifier.width(6.dp)); Text("Use my location")
+                    }
+                }
+                if (locationError) Text("Could not determine an area. Enter your locality, city or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            locations.forEach { place -> FilterChip(selected = place == location, onClick = { vm.selectLocation(place) }, label = { Text(place) }) }
+        if (locations.isNotEmpty()) {
+            Text("Areas with configured price data", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                locations.take(12).forEach { place -> FilterChip(selected = place == location, onClick = { locationInput = place; applyLocation(place) }, label = { Text(place) }) }
+            }
         }
         if (refreshFailed) Text(stringResource(R.string.common_error_title), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         when (state) {
@@ -107,6 +187,13 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
             is UiState.Syncing -> if (state.cached.isNullOrEmpty()) LoadingContent() else PriceBoard(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
         }
     }
+    if (showLocationRationale) AlertDialog(
+        onDismissRequest = { showLocationRationale = false },
+        title = { Text("Use your current location?") },
+        text = { Text("Location helps choose a local price area. You can continue by entering an area or PIN code instead.") },
+        confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Continue") } },
+        dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text("Enter area") } }
+    )
 }
 
 @Composable

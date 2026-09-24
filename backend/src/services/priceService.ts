@@ -20,43 +20,55 @@ export class PriceService {
 
   async board(material: MaterialCategory, location?: string) {
     const price = await this.repo.latest(material, location);
-    if (!price) {
-      // A missing market-data row is a normal catalogue state, not a server
-      // failure. Return a typed unavailable board so clients can show an
-      // empty/offline state without generating repeated 404 error logs.
+    const requestedLocation = location?.trim() || null;
+    const dataAgeDays = price ? Math.max(0, Math.floor((Date.now() - price.effectiveAt.getTime()) / 86400000)) : null;
+    const unavailableReason = !price
+      ? 'NO_LOCAL_RATE'
+      : price.source === 'SYSTEM'
+        ? 'DEMO_DATA'
+        : price.qualityStatus !== 'VALIDATED'
+          ? 'RATE_NOT_VERIFIED'
+          : dataAgeDays != null && dataAgeDays > 7
+            ? 'RATE_STALE'
+            : null;
+    if (!price || unavailableReason) {
       return {
         available: false,
         materialCategory: material,
-        location: location?.trim() || null,
+        location: requestedLocation,
+        requestedLocation,
+        locationMatched: Boolean(price),
+        sourceContext: price ? 'LOCATION_MATCH' : 'NO_LOCAL_RATE',
         priceMin: null,
         priceMax: null,
         marketPrice: null,
         historicalAverage: null,
         unit: 'KILOGRAM',
-        source: null,
-        qualityStatus: 'UNAVAILABLE',
-        ingestedAt: null,
+        source: price ? { type: price.source, organization: price.sourceOrganization, reference: price.sourceReference } : null,
+        qualityStatus: unavailableReason === 'RATE_STALE' ? 'STALE' : unavailableReason === 'RATE_NOT_VERIFIED' ? price?.qualityStatus : 'UNAVAILABLE',
+        unavailableReason,
+        ingestedAt: price?.ingestedAt.toISOString() ?? null,
+        dataAgeDays,
         trend: { direction: 'STABLE', percentage: 0 },
-        lastUpdated: null,
+        lastUpdated: price?.effectiveAt.toISOString() ?? null,
         complianceRegime: material === 'BATTERY' ? 'BATTERY_WASTE_RULES' : 'E_WASTE_RULES',
-        disclaimer: 'No verified price is available for this material yet. Confirm the current rate before sale.'
+        disclaimer: unavailableReason === 'RATE_STALE'
+          ? 'The configured rate is out of date and is not shown. Confirm the current rate with a local operator.'
+          : 'No verified current price is available for this material and area yet.'
       };
     }
 
-    const history = await this.repo.history(material, location, new Date(Date.now() - 30 * 86400000));
-    const requestedLocation = location?.trim() || null;
-    const requestedCity = requestedLocation?.split(',').map(part => part.trim()).filter(Boolean).at(-1) ?? null;
-    const locationMatched = !requestedLocation || [price.areaName, price.city].includes(requestedLocation) || (requestedCity != null && [price.areaName, price.city].includes(requestedCity));
-    const stale = Date.now() - price.effectiveAt.getTime() > 7 * 86400000;
+    const history = (await this.repo.history(material, location, new Date(Date.now() - 30 * 86400000)))
+      .filter(point => point.source !== 'SYSTEM' && point.qualityStatus === 'VALIDATED');
     const observationCount = history.length;
-    const confidence = stale ? 'LOW' : observationCount >= 20 && price.qualityStatus === 'VALIDATED' ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : observationCount > 0 ? 'LOW' : 'INSUFFICIENT';
+    const confidence = observationCount >= 20 ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : observationCount > 0 ? 'LOW' : 'INSUFFICIENT';
     return {
       available: true,
       materialCategory: material,
       location: price.areaName ?? price.city,
       requestedLocation,
-      locationMatched,
-      sourceContext: locationMatched ? 'LOCATION_MATCH' : 'MATERIAL_FALLBACK',
+      locationMatched: true,
+      sourceContext: 'LOCATION_MATCH',
       priceMin: price.priceMin,
       priceMax: price.priceMax,
       marketPrice: price.marketPrice,
@@ -64,25 +76,25 @@ export class PriceService {
       unit: price.unit,
       source: { type: price.source, organization: price.sourceOrganization, reference: price.sourceReference },
       sourceClassification: price.source,
-      qualityStatus: stale ? 'STALE' : price.qualityStatus,
+      qualityStatus: price.qualityStatus,
       ingestedAt: price.ingestedAt.toISOString(),
       observationCount,
-      dataAgeDays: Math.max(0, Math.floor((Date.now() - price.effectiveAt.getTime()) / 86400000)),
       confidence,
-      isDemoData: price.source === 'SYSTEM',
+      dataAgeDays,
+      isDemoData: false,
       trend: this.trend(price.marketPrice, history),
       lastUpdated: price.effectiveAt.toISOString(),
       complianceRegime: material === 'BATTERY' ? 'BATTERY_WASTE_RULES' : 'E_WASTE_RULES',
-      disclaimer: stale ? 'This price is more than 7 days old. Confirm the current rate before sale.' : 'Indicative buying range; final price is confirmed after inspection.'
+      disclaimer: 'Indicative buying range; final price is confirmed after inspection.'
     };
   }
 
   async history(material: MaterialCategory, location: string | undefined, days: number) {
-    const points = await this.repo.history(material, location, new Date(Date.now() - days * 86400000));
+    const points = (await this.repo.history(material, location, new Date(Date.now() - days * 86400000)))
+      .filter(point => point.source !== 'SYSTEM' && point.qualityStatus === 'VALIDATED');
     const latest = points.length ? points[points.length - 1] : null;
     const requestedLocation = location?.trim() || null;
-    const requestedCity = requestedLocation?.split(',').map(part => part.trim()).filter(Boolean).at(-1) ?? null;
-    const locationMatched = !requestedLocation || Boolean(latest && [latest.areaName, latest.city].includes(requestedLocation)) || Boolean(latest && requestedCity != null && [latest.areaName, latest.city].includes(requestedCity));
+    const locationMatched = Boolean(requestedLocation && latest);
     const latestAgeDays = latest ? Math.max(0, Math.floor((Date.now() - latest.effectiveAt.getTime()) / 86400000)) : null;
     const observationCount = points.length;
     const confidence = !latest ? 'INSUFFICIENT' : latestAgeDays != null && latestAgeDays > 7 ? 'LOW' : observationCount >= 20 && latest.qualityStatus === 'VALIDATED' ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : 'LOW';

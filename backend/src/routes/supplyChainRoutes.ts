@@ -7,7 +7,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { JwtService } from '../services/jwt.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import type { StorageService } from '../services/storage.js';
-import { requireAuth as baseRequireAuth, requireHousehold as baseRequireHousehold, requireRecycler } from '../middleware/auth.js';
+import { requireAuth as baseRequireAuth, requireHousehold as baseRequireHousehold, requireRecycler, requireAdmin } from '../middleware/auth.js';
 import { AppError } from '../utils/errors.js';
 import { assertInventoryInvariant, ownedKg, recordInventoryMovement } from '../services/inventoryLedger.js';
 import { emitNotification } from '../services/notificationService.js';
@@ -143,6 +143,42 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   const store: any = db;
   const requireAuth = (_jwt: JwtService, _collectors: CollectorRepository) => baseRequireAuth(jwt, collectors, db);
   const requireHousehold = (_jwt: JwtService, _collectors: CollectorRepository) => baseRequireHousehold(jwt, collectors, db);
+  const publicPartnerSummaries = async (profiles: any[], latitude?: number, longitude?: number) => {
+    if (!profiles.length) return [];
+    const ids = profiles.map(profile => profile.id);
+    const [completed, reviews, pickupDays] = await Promise.all([
+      store.pickupRequest.findMany({ where: { kabadiwalaId: { in: ids }, status: 'COMPLETED' }, select: { kabadiwalaId: true, actualWeight: true, finalCategory: true } }),
+      store.householdPickupReview?.findMany
+        ? store.householdPickupReview.findMany({ where: { kabadiwalaId: { in: ids }, verified: true }, select: { kabadiwalaId: true, rating: true } })
+        : Promise.resolve([]),
+      store.collectorPickupDay?.findMany
+        ? store.collectorPickupDay.findMany({ where: { collectorId: { in: ids }, dayKey: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()) }, select: { collectorId: true, capacity: true, bookedCount: true } })
+        : Promise.resolve([])
+    ]);
+    const todayByCollector = new Map(pickupDays.map((row: any) => [row.collectorId, row]));
+    return profiles.map(profile => {
+      const partnerPickups = completed.filter((row: any) => row.kabadiwalaId === profile.id);
+      const partnerReviews = reviews.filter((row: any) => row.kabadiwalaId === profile.id);
+      const today: any = todayByCollector.get(profile.id);
+      const capacity = today?.capacity ?? profile.dailyPickupCapacity ?? 8;
+      const slots = Math.max(0, capacity - (today?.bookedCount ?? 0));
+      const distance = distanceKm(latitude, longitude, profile.latitude, profile.longitude);
+      return {
+        id: profile.id,
+        displayName: profile.displayName,
+        areaName: profile.areaName,
+        verified: profile.pilotVerifiedAt != null,
+        distanceKm: distance == null ? null : Number(distance.toFixed(1)),
+        acceptingPickups: slots > 0,
+        availablePickupSlots: slots,
+        completedPickupCount: partnerPickups.length,
+        acceptedWeightKg: Number(partnerPickups.reduce((sum: number, row: any) => sum + (row.actualWeight ?? 0), 0).toFixed(2)),
+        collectedMaterials: [...new Set(partnerPickups.map((row: any) => row.finalCategory).filter(Boolean))],
+        ratingAverage: partnerReviews.length ? Number((partnerReviews.reduce((sum: number, row: any) => sum + row.rating, 0) / partnerReviews.length).toFixed(2)) : null,
+        reviewCount: partnerReviews.length
+      };
+    });
+  };
 
   router.post('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
     const input = parse(listingInput, req.body);
@@ -242,15 +278,91 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     });
     res.json({ success: true, data: householdListingDto(updated) });
   });
-  router.get('/household/kabadiwalas', requireHousehold(jwt, collectors), async (req, res) => {
-    const locationQuery = parse(z.object({ latitude: z.coerce.number().finite().min(-90).max(90).optional(), longitude: z.coerce.number().finite().min(-180).max(180).optional(), radiusKm: z.coerce.number().finite().positive().max(200).default(25) }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
+  router.get('/admin/kabadiwala-cohort', requireAdmin(jwt, db, 'PARTNER_VERIFICATION'), async (req, res) => {
+    const status = parse(z.enum(['PENDING', 'VERIFIED']).default('PENDING'), req.query.status);
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
-    const profiles = await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } });
-    const data = profiles.map((profile: any) => ({ ...profile, distanceKm: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
-      .filter((profile: any) => locationQuery.latitude === undefined || (profile.distanceKm != null && profile.distanceKm <= locationQuery.radiusKm))
-      .sort((left: any, right: any) => (left.distanceKm ?? Number.POSITIVE_INFINITY) - (right.distanceKm ?? Number.POSITIVE_INFINITY) || left.id.localeCompare(right.id));
-    res.json({ success: true, data, locationFilter: locationQuery.latitude === undefined ? null : { latitude: locationQuery.latitude, longitude: locationQuery.longitude, radiusKm: locationQuery.radiusKm } });
+    const profiles = ids.length ? await store.collector.findMany({
+      where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: status === 'VERIFIED' ? { not: null } : null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, displayName: true, areaName: true, createdAt: true, pilotVerifiedAt: true }
+    }) : [];
+    res.json({ success: true, data: profiles.map((profile: any) => ({ id: profile.id, displayName: profile.displayName, areaName: profile.areaName, createdAt: profile.createdAt, verifiedAt: profile.pilotVerifiedAt })) });
+  });
+  router.post('/admin/kabadiwala-cohort/:kabadiwalaId/verification', requireAdmin(jwt, db, 'PARTNER_VERIFICATION'), async (req, res) => {
+    const kabadiwalaId = parse(id, req.params.kabadiwalaId);
+    const input = parse(z.object({ decision: z.enum(['APPROVE', 'REVOKE']), notes: z.string().trim().min(8).max(500) }).strict(), req.body);
+    const account = await store.user.findFirst({ where: { collectorProfileId: kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { id: true } });
+    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true } }) : null;
+    if (!profile) throw new AppError('NOT_FOUND', 'Active Kabadiwala profile not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
+    const verifiedAt = input.decision === 'APPROVE' ? new Date() : null;
+    const updated = await store.$transaction(async (tx: any) => {
+      const row = await tx.collector.update({ where: { id: kabadiwalaId }, data: { pilotVerifiedAt: verifiedAt, pilotVerifiedBy: verifiedAt ? req.identity!.collectorId : null } });
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'ADMIN', input.decision === 'APPROVE' ? 'KABADIWALA_PILOT_APPROVED' : 'KABADIWALA_PILOT_REVOKED', 'COLLECTOR', kabadiwalaId, { notes: input.notes });
+      return row;
+    });
+    res.json({ success: true, data: { id: updated.id, displayName: updated.displayName, areaName: updated.areaName, verifiedAt: updated.pilotVerifiedAt } });
+  });
+  router.get('/household/kabadiwalas', requireHousehold(jwt, collectors), async (req, res) => {
+    const locationQuery = parse(z.object({
+      latitude: z.coerce.number().finite().min(-90).max(90).optional(),
+      longitude: z.coerce.number().finite().min(-180).max(180).optional(),
+      area: z.string().trim().max(160).optional(),
+      radiusKm: z.coerce.number().finite().positive().max(200).default(25),
+      page: z.coerce.number().int().min(1).max(10000).default(1),
+      limit: z.coerce.number().int().min(1).max(50).default(20)
+    }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
+    const areaQuery = locationQuery.area?.trim() || '';
+    if (locationQuery.latitude === undefined && !areaQuery) {
+      return res.json({ success: true, data: { items: [], pagination: { page: locationQuery.page, limit: locationQuery.limit, total: 0, totalPages: 0 }, requiresLocation: true } });
+    }
+    const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
+    const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
+    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, pilotVerifiedAt: true } }) : [];
+    const matching = profiles.map((profile: any) => ({ profile, distance: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
+      .filter(({ profile, distance }: any) => {
+        if (locationQuery.latitude !== undefined) return distance != null && distance <= locationQuery.radiusKm;
+        return String(profile.areaName ?? '').toLocaleLowerCase().includes(areaQuery.toLocaleLowerCase());
+      })
+      .sort((left: any, right: any) => (left.distance ?? Number.POSITIVE_INFINITY) - (right.distance ?? Number.POSITIVE_INFINITY) || left.profile.id.localeCompare(right.profile.id));
+    const total = matching.length;
+    const pageRows = matching.slice((locationQuery.page - 1) * locationQuery.limit, locationQuery.page * locationQuery.limit);
+    const items = await publicPartnerSummaries(pageRows.map((row: any) => row.profile), locationQuery.latitude, locationQuery.longitude);
+    res.json({ success: true, data: {
+      items,
+      pagination: { page: locationQuery.page, limit: locationQuery.limit, total, totalPages: Math.ceil(total / locationQuery.limit) },
+      requiresLocation: false,
+      locationFilter: { area: areaQuery || null, radiusKm: locationQuery.latitude === undefined ? null : locationQuery.radiusKm }
+    } });
+  });
+  router.get('/household/kabadiwalas/:kabadiwalaId', requireHousehold(jwt, collectors), async (req, res) => {
+    const kabadiwalaId = parse(id, req.params.kabadiwalaId);
+    const location = parse(z.object({ latitude: z.coerce.number().finite().min(-90).max(90).optional(), longitude: z.coerce.number().finite().min(-180).max(180).optional() }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
+    const account = await store.user.findFirst({ where: { collectorProfileId: kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { id: true } });
+    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, createdAt: true, pilotVerifiedAt: true } }) : null;
+    if (!profile) throw new AppError('NOT_FOUND', 'Active Kabadiwala profile not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
+    const [summary] = await publicPartnerSummaries([profile], location.latitude, location.longitude);
+    res.json({ success: true, data: { ...summary, memberSince: profile.createdAt } });
+  });
+  router.post('/household/pickups/:pickupId/review', requireHousehold(jwt, collectors), async (req, res) => {
+    const pickupId = parse(id, req.params.pickupId);
+    const input = parse(z.object({ rating: z.number().int().min(1).max(5) }).strict(), req.body);
+    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED', kabadiwalaId: { not: null } }, select: { id: true, kabadiwalaId: true } });
+    if (!pickup) throw new AppError('CONFLICT', 'A rating is available only after a completed pickup', 409, { code: 'PICKUP_NOT_REVIEWABLE' });
+    const prior = await store.householdPickupReview.findUnique({ where: { pickupId } });
+    if (prior) throw new AppError('CONFLICT', 'This completed pickup has already been rated', 409, { code: 'PICKUP_ALREADY_REVIEWED' });
+    try {
+      const review = await store.$transaction(async (tx: any) => {
+        const created = await tx.householdPickupReview.create({ data: { pickupId, householdId: req.identity!.collectorId, kabadiwalaId: pickup.kabadiwalaId, rating: input.rating, verified: true } });
+        await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_PICKUP_RATED', 'PICKUP_REQUEST', pickupId, { rating: input.rating, kabadiwalaId: pickup.kabadiwalaId });
+        return created;
+      });
+      const ratings = await store.householdPickupReview.findMany({ where: { kabadiwalaId: pickup.kabadiwalaId, verified: true }, select: { rating: true } });
+      res.status(201).json({ success: true, data: { id: review.id, pickupId, rating: review.rating, verified: true, ratingAverage: Number((ratings.reduce((sum: number, row: any) => sum + row.rating, 0) / ratings.length).toFixed(2)), reviewCount: ratings.length } });
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new AppError('CONFLICT', 'This completed pickup has already been rated', 409, { code: 'PICKUP_ALREADY_REVIEWED' });
+      throw error;
+    }
   });
   router.get('/household/pickups/:pickupId/reassignment-options', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -259,8 +371,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const listing = await store.householdListing.findFirst({ where: { id: pickup.listingId, householdId: req.identity!.collectorId }, select: { materialCategory: true, latitude: true, longitude: true, areaName: true } });
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((row: any) => row.collectorProfileId).filter((value: any): value is string => Boolean(value) && value !== pickup.kabadiwalaId);
-    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
-    const options = profiles.map((profile: any) => ({ ...profile, distanceKm: distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude), sameArea: Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase()) })).sort((a: any, b: any) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
+    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const options = profiles.map((profile: any) => {
+      const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
+      return { id: profile.id, displayName: profile.displayName, areaName: profile.areaName, distanceKm: distance == null ? null : Number(distance.toFixed(1)), sameArea: Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase()) };
+    }).sort((a: any, b: any) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
     res.json({ success: true, data: { pickupId, materialCategory: listing?.materialCategory ?? null, options, privacy: 'Only active Kabadiwala profiles are shown; private inventory and reliability details are not disclosed.' } });
   });
   router.post('/household/pickups/:pickupId/reassign', requireHousehold(jwt, collectors), async (req, res) => {
@@ -281,7 +396,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (pickup.kabadiwalaId === input.kabadiwalaId) throw new AppError('VALIDATION_ERROR', 'Choose a different Kabadiwala', 422, { code: 'SAME_KABADIWALA_SELECTED' });
       const target = await tx.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { collectorProfileId: true } });
       if (!target) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
-      const targetProfile = await tx.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true } });
+      const targetProfile = await tx.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true } });
       if (!targetProfile) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
 
       // A previous cancelled/rejected request for this same listing and
@@ -345,7 +460,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } });
         const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
         const ids = users.map((row: { collectorProfileId: string | null }) => row.collectorProfileId).filter((value: string | null): value is string => Boolean(value));
-        const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+        const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
         const matching = profiles.filter((profile: any) => {
           const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
           const sameArea = Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase());
@@ -357,6 +472,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     }
     const kabadiwala = await store.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' } });
     if (!kabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404);
+    const verifiedKabadiwala = await store.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true } });
+    if (!verifiedKabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
     // Claim the listing and create the request in one transaction. The
     // conditional POSTED -> MATCHED update is the single-winner guard when
     // two kabadiwalas are selected concurrently.
@@ -395,7 +512,19 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     res.status(result.created ? 201 : 200).json({ success: true, data: result.pickup, ...(result.replayed ? { message: 'Pickup request already processed' } : {}) });
   });
   router.get('/household/pickups', requireHousehold(jwt, collectors), async (req, res) => {
-    res.json({ success: true, data: await store.pickupRequest.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+    const pickups = await store.pickupRequest.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
+    const ids = pickups.map((pickup: any) => pickup.id);
+    const [reviews, payments] = await Promise.all([
+      ids.length && store.householdPickupReview?.findMany ? store.householdPickupReview.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, rating: true } }) : Promise.resolve([]),
+      ids.length && store.pickupSettlementPayment?.findMany ? store.pickupSettlementPayment.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true } }) : Promise.resolve([])
+    ]);
+    const reviewByPickup = new Map(reviews.map((review: any) => [review.pickupId, review.rating]));
+    const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
+    res.json({ success: true, data: pickups.map((pickup: any) => ({
+      ...pickup,
+      householdReviewRating: reviewByPickup.get(pickup.id) ?? null,
+      settlementPayment: paymentByPickup.get(pickup.id) ?? null
+    })) });
   });
   router.get('/household/pickups/:pickupId', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -557,7 +686,12 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       const listing = listingById.get(pickup.listingId);
       return collectorCanSeeWaitingPickup(own, listing);
     });
-    res.json({ success: true, data: [...assigned, ...visibleWaiting] });
+    const visible = [...assigned, ...visibleWaiting];
+    const payments = visible.length && store.pickupSettlementPayment?.findMany
+      ? await store.pickupSettlementPayment.findMany({ where: { pickupId: { in: visible.map((pickup: any) => pickup.id) } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true } })
+      : [];
+    const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
+    res.json({ success: true, data: visible.map((pickup: any) => ({ ...pickup, settlementPayment: paymentByPickup.get(pickup.id) ?? null })) });
   });
   router.post('/kabadiwala/listings/:listingId/accept', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -712,7 +846,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/pickups/:pickupId/settlement-payment', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
-    const input = parse(z.object({ amount: positive.max(100000000), method: z.enum(['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET']), recordedAt: z.string().datetime().optional(), reference: z.string().trim().max(200).optional(), notes: z.string().trim().max(1000).optional() }).strict(), req.body);
+    const input = parse(z.object({ amount: positive.max(100000000), method: z.enum(['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET', 'UPI']), recordedAt: z.string().datetime().optional(), reference: z.string().trim().max(200).optional(), notes: z.string().trim().max(1000).optional() }).strict(), req.body);
     const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: { in: ['ACCEPTED', 'COMPLETED', 'DISPUTED'] } } });
     if (!pickup) throw new AppError('CONFLICT', 'Household must accept the pickup settlement before payment', 409, { code: 'PICKUP_SETTLEMENT_NOT_ACCEPTED' });
     const expectedAmount = Number((pickup.finalAmount ?? 0).toFixed(2));
@@ -737,16 +871,44 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         return { payment: prior, replayed: true };
       }
       const anomaly = Math.abs(input.amount - expectedAmount) > 0.01;
-      const payment = await tx.pickupSettlementPayment.create({ data: { sourceKey, requestHash: hash, pickupId, householdId: pickup.householdId, collectorId: req.identity!.collectorId, amount: Number(input.amount.toFixed(2)), paymentMethod: input.method, recordedAt, reference: input.reference ?? null, notes: input.notes ?? null, anomaly, anomalyReason: anomaly ? 'Payment differs from the household-accepted pickup settlement' : null, status: anomaly ? 'DISPUTED' : 'VERIFIED' } });
+      const payment = await tx.pickupSettlementPayment.create({ data: { sourceKey, requestHash: hash, pickupId, householdId: pickup.householdId, collectorId: req.identity!.collectorId, amount: Number(input.amount.toFixed(2)), paymentMethod: input.method, recordedAt, reference: input.reference ?? null, notes: input.notes ?? null, anomaly, anomalyReason: anomaly ? 'Payment differs from the household-accepted pickup settlement' : null, status: anomaly ? 'DISPUTED' : 'RECORDED' } });
       if (anomaly) await tx.anomalyFlag.create({ data: { entityType: 'PICKUP_REQUEST', entityId: pickupId, ruleCode: 'PICKUP_PAYMENT_AMOUNT_DIFFERENCE', severity: 'MEDIUM', details: { expectedAmount, amount: payment.amount, paymentId: payment.id } } });
-      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: anomaly ? 'DISPUTED' : 'COMPLETED' } });
+      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: anomaly ? 'DISPUTED' : 'ACCEPTED' } });
       if (!updated.count && !anomaly) throw new AppError('CONFLICT', 'Pickup settlement changed before payment was recorded', 409, { code: 'PICKUP_SETTLEMENT_CONFLICT' });
-      await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_VERIFIED', 'PICKUP_REQUEST', pickupId, { paymentId: payment.id, expectedAmount, amount: payment.amount, method: payment.paymentMethod });
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_RECORDED', 'PICKUP_REQUEST', pickupId, { paymentId: payment.id, expectedAmount, amount: payment.amount, method: payment.paymentMethod });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'RECORD_PICKUP_SETTLEMENT_PAYMENT', entityId: payment.id, requestHash: hash, response: jsonValue(payment) } });
       return { payment, replayed: false };
     });
-    if (!result.replayed) await emitNotification(store, { accountId: pickup.householdId, type: result.payment.anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_VERIFIED', title: result.payment.anomaly ? 'Pickup payment needs review' : 'Pickup payment recorded', body: result.payment.anomaly ? 'The recorded pickup payment differs from the accepted settlement.' : 'Your accepted pickup settlement has been paid and recorded.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_SETTLEMENT_PAYMENT:${result.payment.id}` });
+    if (!result.replayed) await emitNotification(store, { accountId: pickup.householdId, type: result.payment.anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_RECORDED', title: result.payment.anomaly ? 'Pickup payment needs review' : 'Pickup payment recorded', body: result.payment.anomaly ? 'The recorded pickup payment differs from the accepted settlement.' : 'The Kabadiwala recorded this payment. An operator will reconcile it.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_SETTLEMENT_PAYMENT:${result.payment.id}` });
     res.status(result.replayed ? 200 : 201).json({ success: true, data: result.payment, ...(result.replayed ? { message: 'Pickup payment already recorded' } : {}) });
+  });
+  router.get('/admin/household-pickup-payments', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), async (req, res) => {
+    const status = parse(z.enum(['RECORDED', 'DISPUTED', 'VERIFIED', 'REVERSED']).default('RECORDED'), req.query.status);
+    const payments = await store.pickupSettlementPayment.findMany({ where: { status }, orderBy: { recordedAt: 'asc' }, take: 100, select: { id: true, pickupId: true, householdId: true, collectorId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true, anomaly: true, anomalyReason: true } });
+    res.json({ success: true, data: payments.map((payment: any) => ({ ...payment, kind: 'HOUSEHOLD_PICKUP_SETTLEMENT' })) });
+  });
+  router.post('/admin/household-pickup-payments/:paymentId/reconcile', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), async (req, res) => {
+    const paymentId = parse(id, req.params.paymentId);
+    const input = parse(z.object({ decision: z.enum(['VERIFY', 'DISPUTE']), notes: z.string().trim().max(1000).optional() }).strict(), req.body);
+    if (input.decision === 'DISPUTE' && !input.notes) throw new AppError('VALIDATION_ERROR', 'Add a note explaining the payment mismatch', 422, { code: 'PAYMENT_RECONCILIATION_NOTE_REQUIRED' });
+    const result = await store.$transaction(async (tx: any) => {
+      const payment = await tx.pickupSettlementPayment.findUnique({ where: { id: paymentId } });
+      if (!payment) throw new AppError('NOT_FOUND', 'Pickup payment not found', 404, { code: 'PICKUP_PAYMENT_NOT_FOUND' });
+      const nextStatus = input.decision === 'VERIFY' ? 'VERIFIED' : 'DISPUTED';
+      const updated = await tx.pickupSettlementPayment.updateMany({ where: { id: paymentId, status: 'RECORDED' }, data: { status: nextStatus, confirmedAt: new Date(), anomaly: input.decision === 'DISPUTE' ? true : payment.anomaly, anomalyReason: input.notes ?? payment.anomalyReason } });
+      if (!updated.count) throw new AppError('CONFLICT', 'Pickup payment is no longer awaiting reconciliation', 409, { code: 'PICKUP_PAYMENT_ALREADY_RECONCILED' });
+      if (input.decision === 'VERIFY') {
+        await tx.pickupRequest.updateMany({ where: { id: payment.pickupId, householdId: payment.householdId, kabadiwalaId: payment.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: 'COMPLETED' } });
+      } else {
+        await tx.pickupRequest.updateMany({ where: { id: payment.pickupId, householdId: payment.householdId, kabadiwalaId: payment.collectorId, status: 'COMPLETED' }, data: { settlementStatus: 'DISPUTED', settlementDisputeNotes: input.notes } });
+        await tx.anomalyFlag.create({ data: { entityType: 'PICKUP_REQUEST', entityId: payment.pickupId, ruleCode: 'PICKUP_PAYMENT_OPERATOR_DISPUTE', severity: 'MEDIUM', details: { paymentId, notes: input.notes } } });
+      }
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'ADMIN', input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED_BY_OPERATOR', 'PICKUP_REQUEST', payment.pickupId, { paymentId, decision: input.decision, notes: input.notes ?? null });
+      return tx.pickupSettlementPayment.findUniqueOrThrow({ where: { id: paymentId } });
+    });
+    const recipients = [...new Set([result.householdId, result.collectorId])];
+    await Promise.all(recipients.map(accountId => emitNotification(store, { accountId, type: input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED', title: input.decision === 'VERIFY' ? 'Pickup payment reconciled' : 'Pickup payment needs review', body: input.decision === 'VERIFY' ? 'An operator reconciled the pickup payment record.' : 'An operator flagged the pickup payment for follow-up.', route: `household/pickups/${result.pickupId}`, dedupeKey: `PICKUP_PAYMENT_RECONCILED:${result.id}:${input.decision}:${accountId}` })));
+    res.json({ success: true, data: { ...result, kind: 'HOUSEHOLD_PICKUP_SETTLEMENT' } });
   });
   router.get('/kabadiwala/inventory', requireAuth(jwt, collectors), async (req, res) => {
     const balances = await store.inventoryBalance.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, orderBy: { updatedAt: 'desc' } });

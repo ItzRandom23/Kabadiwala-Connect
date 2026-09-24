@@ -26,15 +26,16 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 @OptIn(ExperimentalCoroutinesApi::class)
 class PricesViewModel(
     prices: PriceRepository,
-    connectivity: ConnectivityObserver
+    connectivity: ConnectivityObserver,
+    initialLocation: String? = null
 ) : ViewModel() {
 
     private val catalog = prices as? PriceCatalogRepository
-    private val _location = MutableStateFlow("Pune")
+    private val _location = MutableStateFlow(initialLocation?.trim().orEmpty())
     val selectedLocation = _location.asStateFlow()
-    val locations: StateFlow<List<String>> = catalog?.observeLocations()?.stateIn(viewModelScope, SharingStarted.Eagerly, listOf("Pune"))
-        ?: MutableStateFlow(listOf("Pune")).asStateFlow()
-    fun selectLocation(location: String) { _location.value = location }
+    val locations: StateFlow<List<String>> = catalog?.observeLocations()?.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        ?: MutableStateFlow(emptyList<String>()).asStateFlow()
+    fun selectLocation(location: String) { _location.value = location.trim() }
 
     private var catalogRefresher: suspend (String) -> Unit = {}
     private val _refreshing = MutableStateFlow(false)

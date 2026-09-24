@@ -175,16 +175,28 @@ fun LotRoute(
             }
         }
     }
-    val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) {
+    val loadCurrentLocation: () -> Unit = {
+        vm.beginLocationRequest()
+        ioScope.launch {
+            val current = runCatching { locationProvider.current() }.getOrNull()
+            withContext(Dispatchers.Main.immediate) { vm.setGpsLocation(current) }
+        }
+    }
+    val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!fineGranted && !coarseGranted) {
             vm.setLocationError()
         } else {
-            vm.beginLocationRequest()
-            ioScope.launch {
-                val current = runCatching { locationProvider.current() }.getOrNull()
-                withContext(Dispatchers.Main.immediate) { vm.setGpsLocation(current) }
-            }
+            loadCurrentLocation()
         }
+    }
+    var showLocationRationale by remember { mutableStateOf(false) }
+    val requestLocation = {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineGranted) loadCurrentLocation() else showLocationRationale = true
     }
     
     val useDemoPhoto: (() -> Unit)? = if (demoMode) {
@@ -203,8 +215,7 @@ fun LotRoute(
                 .onFailure { vm.setPhotoError() }
         },
         onRequestLocation = {
-            runCatching { location.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
-                .onFailure { vm.setLocationError() }
+            requestLocation()
         },
         onSafety = onSafety,
         onHome = onHome,
@@ -220,6 +231,23 @@ fun LotRoute(
                     .onFailure { vm.setPhotoError() }
             },
             onDismiss = { showCameraRationale = false }
+        )
+    }
+    if (showLocationRationale) {
+        PermissionRationaleDialog(
+            permission = FeaturePermission.LOCATION,
+            onAllow = {
+                showLocationRationale = false
+                runCatching {
+                    location.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                }.onFailure { vm.setLocationError() }
+            },
+            onDismiss = { showLocationRationale = false }
         )
     }
 }

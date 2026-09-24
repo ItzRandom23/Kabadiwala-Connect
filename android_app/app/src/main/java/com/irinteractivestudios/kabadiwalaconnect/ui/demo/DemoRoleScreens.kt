@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HealthAndSafety
@@ -29,7 +32,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -37,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -99,17 +102,32 @@ fun DemoHouseholdHomeScreen(
     val state by DemoSessionStore.state.collectAsStateWithLifecycle()
     DemoListScreen(stringResource(R.string.demo_household_title), stringResource(R.string.demo_household_subtitle), modifier) {
         item {
-            DemoSectionCard(stringResource(R.string.demo_your_next_sale), Icons.Filled.Inventory2) {
-                if (!state.householdLotPosted) {
-                    Text(stringResource(R.string.demo_no_lot), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.demo_create_lot_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = DemoSessionStore::postHouseholdLot, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.demo_create_lot)) }
-                } else {
-                    Text(stringResource(R.string.demo_copper_cable_weight), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.demo_estimated_range), color = MaterialTheme.colorScheme.primary)
-                    Text(householdStatus(state), color = if (state.householdTransactionConfirmed) KcTheme.extended.success else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = onOpenDeal, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                        Text(stringResource(if (state.selectedKabadiwalaId == DemoSessionStore.PRIMARY_KABADIWALA_ID) R.string.demo_open_connected_pickup else R.string.demo_choose_kabadiwala))
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 8.dp, bottomStart = 28.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Text(stringResource(R.string.demo_your_next_sale).uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (state.householdLotPosted) stringResource(R.string.demo_copper_cable_weight) else stringResource(R.string.demo_no_lot),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!state.householdLotPosted) {
+                        Text(stringResource(R.string.demo_create_lot_detail), color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .82f))
+                        Button(onClick = DemoSessionStore::postHouseholdLot, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                            Icon(Icons.Filled.Inventory2, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.demo_create_lot))
+                        }
+                    } else {
+                        Text(stringResource(R.string.demo_estimated_range), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(householdStatus(state), color = if (state.householdTransactionConfirmed) KcTheme.extended.success else MaterialTheme.colorScheme.onTertiaryContainer)
+                        Button(onClick = onOpenDeal, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                            Text(stringResource(if (state.selectedKabadiwalaId == DemoSessionStore.PRIMARY_KABADIWALA_ID) R.string.demo_open_connected_pickup else R.string.demo_choose_kabadiwala))
+                        }
                     }
                 }
             }
@@ -130,6 +148,73 @@ fun DemoHouseholdHomeScreen(
             DemoSectionCard(stringResource(R.string.demo_trust_trail), Icons.Filled.Shield) {
                 Text(stringResource(R.string.demo_trust_steps), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.demo_trust_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DemoKabadiwalaOverview(
+    state: DemoSessionState,
+    householdRating: Int?,
+    onInventory: () -> Unit,
+    onPickups: () -> Unit,
+    onLots: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { DemoDataBanner() }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.demo_kabadiwala_title), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.demo_kabadiwala_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 8.dp, bottomStart = 28.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text(stringResource(R.string.demo_today_collection_value).uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text("₹2,450", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.demo_ahead_usual_day), color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                DemoAction(stringResource(R.string.demo_open_inventory), Icons.Filled.Inventory2, onInventory, Modifier.fillMaxWidth())
+                DemoAction(stringResource(R.string.demo_review_pickups), Icons.Filled.LocalShipping, onPickups, Modifier.fillMaxWidth())
+                DemoAction(stringResource(R.string.demo_route_buyers), Icons.Filled.Storefront, onLots, Modifier.fillMaxWidth())
+            }
+        }
+        item {
+            DemoSectionCard(stringResource(R.string.demo_household_connection), Icons.Filled.LocalShipping) {
+                Text(if (state.householdLotPosted && state.selectedKabadiwalaId == DemoSessionStore.PRIMARY_KABADIWALA_ID) stringResource(R.string.demo_household_line) else stringResource(R.string.demo_waiting_household), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(householdStatus(state), color = if (state.householdTransactionConfirmed) KcTheme.extended.success else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (householdRating != null) Text(stringResource(R.string.demo_household_rating, householdRating), color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        item {
+            DemoSectionCard(stringResource(R.string.demo_formal_route_advantage), Icons.Filled.Route) {
+                Text(stringResource(R.string.demo_route_buyer), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.demo_route_value), color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.demo_route_confidence), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            DemoSectionCard(stringResource(R.string.demo_growth_passport), Icons.AutoMirrored.Filled.TrendingUp) {
+                Text(stringResource(R.string.demo_growth_level), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.demo_growth_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            DemoSectionCard(stringResource(R.string.demo_pooling_opportunity), Icons.Filled.Groups) {
+                Text(stringResource(R.string.demo_pooling_summary), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.demo_pooling_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -214,46 +299,14 @@ fun DemoHouseholdDealScreen(kabadiwalaId: String, onFindAnother: () -> Unit, mod
 @Composable
 fun DemoKabadiwalaHomeScreen(onInventory: () -> Unit, onPickups: () -> Unit, onLots: () -> Unit, modifier: Modifier = Modifier) {
     val state by DemoSessionStore.state.collectAsStateWithLifecycle()
-    val householdRating = state.householdRating
-    DemoListScreen(stringResource(R.string.demo_kabadiwala_title), stringResource(R.string.demo_kabadiwala_subtitle), modifier) {
-        item {
-            DemoSectionCard(stringResource(R.string.demo_today_collection_value), Icons.Filled.TrendingUp) {
-                Text("₹2,450", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.demo_ahead_usual_day), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    DemoAction(stringResource(R.string.demo_open_inventory), Icons.Filled.Inventory2, onInventory, Modifier.fillMaxWidth())
-                    DemoAction(stringResource(R.string.demo_review_pickups), Icons.Filled.LocalShipping, onPickups, Modifier.fillMaxWidth())
-                    DemoAction(stringResource(R.string.demo_route_buyers), Icons.Filled.Storefront, onLots, Modifier.fillMaxWidth())
-                }
-            }
-        }
-        item {
-            DemoSectionCard(stringResource(R.string.demo_household_connection), Icons.Filled.LocalShipping) {
-                Text(if (state.householdLotPosted && state.selectedKabadiwalaId == DemoSessionStore.PRIMARY_KABADIWALA_ID) stringResource(R.string.demo_household_line) else stringResource(R.string.demo_waiting_household), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(householdStatus(state), color = if (state.householdTransactionConfirmed) KcTheme.extended.success else MaterialTheme.colorScheme.onSurfaceVariant)
-                if (householdRating != null) Text(stringResource(R.string.demo_household_rating, householdRating), color = MaterialTheme.colorScheme.primary)
-            }
-        }
-        item {
-            DemoSectionCard(stringResource(R.string.demo_formal_route_advantage), Icons.Filled.Route) {
-                Text(stringResource(R.string.demo_route_buyer), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.demo_route_value), color = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.demo_route_confidence), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item {
-            DemoSectionCard(stringResource(R.string.demo_growth_passport), Icons.Filled.TrendingUp) {
-                Text(stringResource(R.string.demo_growth_level), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.demo_growth_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item {
-            DemoSectionCard(stringResource(R.string.demo_pooling_opportunity), Icons.Filled.Groups) {
-                Text(stringResource(R.string.demo_pooling_summary), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.demo_pooling_detail), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
+    DemoKabadiwalaOverview(
+        state = state,
+        householdRating = state.householdRating,
+        onInventory = onInventory,
+        onPickups = onPickups,
+        onLots = onLots,
+        modifier = modifier
+    )
 }
 
 @Composable

@@ -81,7 +81,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(HomeViewModel::class.java) ->
             HomeViewModel(container.lotRepository, container.connectivityObserver, container.database.syncQueueDao()) { container.currentAccount()?.profileId.orEmpty() }
         modelClass.isAssignableFrom(PricesViewModel::class.java) ->
-            PricesViewModel(container.priceRepository, container.connectivityObserver)
+            PricesViewModel(container.priceRepository, container.connectivityObserver, container.currentAccount()?.areaName)
         modelClass.isAssignableFrom(RecyclersViewModel::class.java) ->
             RecyclersViewModel(container.recyclerRepository, container.connectivityObserver, container.apiService)
         modelClass.isAssignableFrom(EarningsViewModel::class.java) ->
@@ -111,7 +111,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() }, { LocaleManager.persistedTag(app) })
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() }, { LocaleManager.persistedTag(app) }, { container.currentAccount()?.areaName })
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

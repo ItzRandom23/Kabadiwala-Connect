@@ -41,8 +41,10 @@ fun AdminConsoleScreen(
     onSelect: (JsonObject) -> Unit,
     onClearSelection: () -> Unit,
     onAuthorizeRecycler: (String, String, String?, String?, String?, String?, String?, String?, String?) -> Unit,
+    onApprovePartner: (String, String) -> Unit,
     onResolveDispute: (String, String, String?) -> Unit,
     onVerifyPayment: (String) -> Unit,
+    onDisputePickupPayment: (String, String) -> Unit,
     onReversePayment: (String, String, String?, String?, String?) -> Unit,
     onResolveAnomaly: (String, String, String, String?) -> Unit,
     onImportPrice: (String, String, String, Double, Double, Double, String, String) -> Unit,
@@ -51,6 +53,7 @@ fun AdminConsoleScreen(
     onLogout: () -> Unit
 ) {
     var recyclerDialog by remember { mutableStateOf<String?>(null) }
+    var partnerDialog by remember { mutableStateOf<String?>(null) }
     var disputeDialog by remember { mutableStateOf<String?>(null) }
     var paymentDialog by remember { mutableStateOf<String?>(null) }
     var anomalyDialog by remember { mutableStateOf<String?>(null) }
@@ -101,6 +104,7 @@ fun AdminConsoleScreen(
             state.items.forEach { item ->
                 when (state.section) {
                     AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, { recyclerDialog = item.stringValue("id", "recyclerId") }, onSelect)
+                    AdminSection.PARTNERS -> PilotPartnerCard(item, state.actionBusy, { partnerDialog = item.stringValue("id") }, onSelect)
                     AdminSection.DISPUTES -> DisputeReviewCard(item, state.actionBusy) { disputeDialog = item.stringValue("id", "disputeId") }
                     AdminSection.PAYMENTS -> PaymentReviewCard(item, state.actionBusy) { paymentDialog = item.stringValue("id", "paymentId") }
                     AdminSection.ANOMALIES -> AnomalyReviewCard(item, state.actionBusy) { anomalyDialog = item.stringValue("id", "flagId") }
@@ -121,6 +125,17 @@ fun AdminConsoleScreen(
             }
         )
     }
+    partnerDialog?.let { id ->
+        PilotPartnerApprovalDialog(
+            partnerName = state.items.firstOrNull { it.stringValue("id") == id }?.stringValue("displayName") ?: "Kabadiwala",
+            busy = state.actionBusy,
+            onDismiss = { partnerDialog = null },
+            onApprove = { notes ->
+                partnerDialog = null
+                onApprovePartner(id, notes)
+            }
+        )
+    }
     disputeDialog?.let { id ->
         DisputeResolutionDialog(id, state.actionBusy, { disputeDialog = null }) { resolution, notes ->
             disputeDialog = null
@@ -128,9 +143,13 @@ fun AdminConsoleScreen(
         }
     }
     paymentDialog?.let { id ->
-        PaymentActionDialog(id, state.actionBusy, { paymentDialog = null }, onVerify = {
+        val pickupPayment = state.items.firstOrNull { it.get("id")?.asString == id }?.get("kind")?.asString == "HOUSEHOLD_PICKUP_SETTLEMENT"
+        PaymentActionDialog(id, state.actionBusy, pickupPayment, { paymentDialog = null }, onVerify = {
             paymentDialog = null
             onVerifyPayment(id)
+        }, onDisputePickup = { notes ->
+            paymentDialog = null
+            onDisputePickupPayment(id, notes)
         }, onReverse = { reason, provider, reference, evidence ->
             paymentDialog = null
             onReversePayment(id, reason, provider, reference, evidence)
@@ -185,6 +204,44 @@ private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, onReview: () -> 
 )
 
 @Composable
+private fun PilotPartnerCard(item: JsonObject, busy: Boolean, onApprove: () -> Unit, onSelect: (JsonObject) -> Unit) = ReviewCard(
+    title = item.stringValue("displayName", "id"),
+    subtitle = "${item.stringValue("areaName")} · pilot verification pending",
+    item = item,
+    actionLabel = "Approve pilot partner",
+    busy = busy,
+    onAction = onApprove,
+    onSelect = onSelect
+)
+
+@Composable
+private fun PilotPartnerApprovalDialog(partnerName: String, busy: Boolean, onDismiss: () -> Unit, onApprove: (String) -> Unit) {
+    var notes by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Approve pilot partner") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${partnerName} will appear in household search after approval.")
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it.take(500) },
+                    label = { Text("Verification notes") },
+                    placeholder = { Text("Identity and service area checked") },
+                    supportingText = { Text("Keep notes operational; do not enter identity document numbers.") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onApprove(notes.trim()) }, enabled = !busy && notes.trim().length >= 8) { Text("Approve") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } }
+    )
+}
+
+@Composable
 private fun DisputeReviewCard(item: JsonObject, busy: Boolean, onResolve: () -> Unit) = ReviewCard(
     title = item.stringValue("id", "disputeId"),
     subtitle = "${item.stringValue("status")} · ${item.stringValue("reason", "type")}",
@@ -197,7 +254,7 @@ private fun DisputeReviewCard(item: JsonObject, busy: Boolean, onResolve: () -> 
 @Composable
 private fun PaymentReviewCard(item: JsonObject, busy: Boolean, onReview: () -> Unit) = ReviewCard(
     title = item.stringValue("id", "paymentId"),
-    subtitle = "${item.stringValue("status")} · ${item.stringValue("amount")} ${item.stringValue("currency")}",
+    subtitle = if (item.stringValue("kind") == "HOUSEHOLD_PICKUP_SETTLEMENT") "Pickup payout · ${item.stringValue("paymentMethod")} · ₹${item.stringValue("amount")} · ${item.stringValue("status")}" else "${item.stringValue("status")} · ${item.stringValue("amount")} ${item.stringValue("currency")}",
     item = item,
     actionLabel = "Review",
     busy = busy,
@@ -268,8 +325,9 @@ private fun DisputeResolutionDialog(id: String, busy: Boolean, onDismiss: () -> 
 }
 
 @Composable
-private fun PaymentActionDialog(id: String, busy: Boolean, onDismiss: () -> Unit, onVerify: () -> Unit, onReverse: (String, String?, String?, String?) -> Unit) {
+private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolean, onDismiss: () -> Unit, onVerify: () -> Unit, onDisputePickup: (String) -> Unit, onReverse: (String, String?, String?, String?) -> Unit) {
     var reverse by remember { mutableStateOf(false) }
+    var dispute by remember { mutableStateOf(false) }
     var reason by remember { mutableStateOf("") }
     var provider by remember { mutableStateOf("") }
     var reference by remember { mutableStateOf("") }
@@ -282,14 +340,19 @@ private fun PaymentActionDialog(id: String, busy: Boolean, onDismiss: () -> Unit
                 AdminField("Provider", provider) { provider = it }
                 AdminField("External reference", reference) { reference = it }
                 AdminField("Evidence reference", evidence) { evidence = it }
-            } else Text("Choose the audited action for this payment.")
+            } else if (dispute) {
+                Text("Explain why the external cash/UPI record does not reconcile.")
+                AdminField("Reconciliation note", reason) { reason = it }
+            } else Text(if (pickupPayment) "Confirm that this recorded cash/UPI payment matches the pickup evidence." else "Choose the audited action for this payment.")
         }
     }, confirmButton = {
         if (reverse) Button(onClick = { onReverse(reason, provider, reference, evidence) }, enabled = !busy && reason.isNotBlank()) { Text("Reverse") }
-        else Button(onClick = onVerify, enabled = !busy) { Text("Verify") }
+        else if (dispute) Button(onClick = { onDisputePickup(reason) }, enabled = !busy && reason.isNotBlank()) { Text("Flag for follow-up") }
+        else Button(onClick = onVerify, enabled = !busy) { Text(if (pickupPayment) "Reconcile" else "Verify") }
     }, dismissButton = {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (!reverse) TextButton(onClick = { reverse = true }) { Text("Reverse instead") }
+            if (!reverse && pickupPayment && !dispute) TextButton(onClick = { dispute = true }) { Text("Flag mismatch") }
+            else if (!reverse && !pickupPayment && !dispute) TextButton(onClick = { reverse = true }) { Text("Reverse instead") }
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     })

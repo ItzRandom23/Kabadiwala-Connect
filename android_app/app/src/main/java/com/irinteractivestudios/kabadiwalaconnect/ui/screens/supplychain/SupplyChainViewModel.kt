@@ -17,6 +17,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
+import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import okhttp3.MultipartBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -35,7 +36,17 @@ data class SupplyChainState(
     val error: String? = null,
     val listings: List<HouseholdListingDto> = emptyList(),
     val kabadiwalas: List<KabadiwalaProfileDto> = emptyList(),
-    val kabadiwalaRadiusKm: Int = 5,
+    val kabadiwalaRadiusKm: Int = 25,
+    val kabadiwalaAreaQuery: String = "",
+    val kabadiwalaLatitude: Double? = null,
+    val kabadiwalaLongitude: Double? = null,
+    val kabadiwalaPage: Int = 1,
+    val kabadiwalaHasMore: Boolean = false,
+    val kabadiwalaLoading: Boolean = false,
+    val kabadiwalaRequiresLocation: Boolean = false,
+    val selectedKabadiwalaId: String? = null,
+    val kabadiwalaProfile: KabadiwalaPublicProfileDto? = null,
+    val kabadiwalaProfileLoading: Boolean = false,
     val pickups: List<PickupRequestDto> = emptyList(),
     val inventory: List<InventoryBalanceDto> = emptyList(),
     val inventoryMovements: List<InventoryMovementDto> = emptyList(),
@@ -86,9 +97,10 @@ class SupplyChainViewModel(
      * stale collector screen cannot issue an unauthenticated request.
      */
     private val authenticatedSessionReady: () -> Boolean = { true },
-    private val languageProvider: () -> String = { LocaleManager.ENGLISH }
+    private val languageProvider: () -> String = { LocaleManager.ENGLISH },
+    private val initialHouseholdArea: () -> String? = { null }
 ) : ViewModel() {
-    private val _state = MutableStateFlow(SupplyChainState())
+    private val _state = MutableStateFlow(SupplyChainState(kabadiwalaAreaQuery = initialHouseholdArea().orEmpty()))
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
 
@@ -114,7 +126,7 @@ class SupplyChainViewModel(
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
         stateAccountId = current
-        _state.value = SupplyChainState()
+        _state.value = SupplyChainState(kabadiwalaAreaQuery = initialHouseholdArea().orEmpty())
     }
 
     private suspend fun cachedHouseholdListings(): List<HouseholdListingDto> {
@@ -182,10 +194,11 @@ class SupplyChainViewModel(
         ))
     }
 
-    fun refreshHousehold(radiusKm: Int? = null) {
+    fun refreshHousehold(radiusKm: Int? = null, areaQuery: String? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         resetForAccountChange()
         val requestedRadiusKm = radiusKm ?: _state.value.kabadiwalaRadiusKm
+        val requestedArea = areaQuery ?: _state.value.kabadiwalaAreaQuery
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null, notice = null)
             val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
@@ -196,9 +209,13 @@ class SupplyChainViewModel(
                 restorePendingPhotoUpload()
                 val listings = mergeHouseholdListings(api.getHouseholdListings().requireData())
                 val pickups = api.getHouseholdPickups().requireData()
-                val anchor = listings.firstOrNull { it.latitude != null && it.longitude != null }
-                val kabadiwalas = api.getHouseholdKabadiwalas(anchor?.latitude, anchor?.longitude, requestedRadiusKm).requireData()
-                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = kabadiwalas, kabadiwalaRadiusKm = requestedRadiusKm, error = null)
+                val directory = api.getHouseholdKabadiwalas(
+                    _state.value.kabadiwalaLatitude,
+                    _state.value.kabadiwalaLongitude,
+                    requestedRadiusKm,
+                    requestedArea.ifBlank { null }
+                ).requireData()
+                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, error = null)
             }.onFailure { error ->
                 // Keep the durable account-scoped cache visible when the
                 // request fails after process death or during an offline
@@ -212,9 +229,48 @@ class SupplyChainViewModel(
             }
         }
     }
+    fun searchHouseholdKabadiwalas(area: String, radiusKm: Int = _state.value.kabadiwalaRadiusKm, location: CurrentLocation? = null) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        val query = area.trim()
+        if (location == null && query.isBlank()) {
+            _state.value = _state.value.copy(kabadiwalaAreaQuery = "", kabadiwalaLatitude = null, kabadiwalaLongitude = null, kabadiwalas = emptyList(), kabadiwalaRequiresLocation = true, kabadiwalaHasMore = false)
+            return
+        }
+        resetForAccountChange()
+        _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaLoading = true, error = null)
+        viewModelScope.launch {
+            runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData() }
+                .onSuccess { directory ->
+                    _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
+                }
+                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
+        }
+    }
+    fun loadMoreHouseholdKabadiwalas() {
+        val current = _state.value
+        if (current.kabadiwalaLoading || !current.kabadiwalaHasMore) return
+        _state.value = current.copy(kabadiwalaLoading = true)
+        viewModelScope.launch {
+            runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1).requireData() }
+                .onSuccess { directory ->
+                    _state.value = _state.value.copy(kabadiwalas = _state.value.kabadiwalas + directory.items, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
+                }
+                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
+        }
+    }
+    fun openKabadiwalaProfile(kabadiwalaId: String) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        _state.value = _state.value.copy(selectedKabadiwalaId = kabadiwalaId, kabadiwalaProfile = null, kabadiwalaProfileLoading = true, error = null)
+        viewModelScope.launch {
+            runCatching { api.getHouseholdKabadiwala(kabadiwalaId, _state.value.kabadiwalaLatitude, _state.value.kabadiwalaLongitude).requireData() }
+                .onSuccess { profile -> _state.value = _state.value.copy(kabadiwalaProfile = profile, kabadiwalaProfileLoading = false) }
+                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaProfileLoading = false, error = friendly(error)) }
+        }
+    }
+    fun closeKabadiwalaProfile() { _state.value = _state.value.copy(selectedKabadiwalaId = null, kabadiwalaProfile = null, kabadiwalaProfileLoading = false) }
     fun increaseHouseholdRadius() {
-        val next = when (_state.value.kabadiwalaRadiusKm) { 5 -> 10; 10 -> 20; else -> 20 }
-        if (next != _state.value.kabadiwalaRadiusKm) refreshHousehold(next)
+        val next = when (_state.value.kabadiwalaRadiusKm) { 5 -> 10; 10 -> 25; 25 -> 50; 50 -> 100; 100 -> 200; else -> 200 }
+        if (next != _state.value.kabadiwalaRadiusKm) searchHouseholdKabadiwalas(_state.value.kabadiwalaAreaQuery, next, _state.value.kabadiwalaLatitude?.let { CurrentLocation(it, _state.value.kabadiwalaLongitude ?: return, _state.value.kabadiwalaAreaQuery) })
     }
     fun refreshKabadiwala() {
         if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
@@ -496,6 +552,17 @@ class SupplyChainViewModel(
     fun cancelKabadiwalaPickup(pickupId: String, reason: String? = null) = action("cancel-collector-$pickupId", AccountRole.COLLECTOR, { api.cancelKabadiwalaPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshKabadiwala(); "Pickup cancelled." })
     fun reassignPickup(pickupId: String, reason: String, noShow: Boolean = false) = action("reassign-$pickupId", AccountRole.COLLECTOR, { api.reassignPickup(pickupId, PickupReassignDto(reason, noShow)).requireData(); refreshKabadiwala(); "Pickup returned to the network for reassignment." })
     fun completePickup(pickupId: String, input: PickupCompletionDto) = action("complete-$pickupId", AccountRole.COLLECTOR, { api.completePickup(pickupId, input).requireData(); refreshKabadiwala(); "Purchase completed and inventory updated." })
+    fun recordPickupSettlementPayment(pickupId: String, input: PickupSettlementPaymentRequestDto) = action("pickup-payment-$pickupId", AccountRole.COLLECTOR, {
+        api.recordPickupSettlementPayment(pickupId, input, UUID.randomUUID().toString()).requireData()
+        refreshKabadiwala()
+        "Payment recorded for operator reconciliation."
+    })
+    fun rateHouseholdPickup(pickupId: String, rating: Int) = action("rate-pickup-$pickupId", AccountRole.HOUSEHOLD, {
+        api.reviewHouseholdPickup(pickupId, HouseholdPickupReviewDto(rating)).requireData()
+        refreshHousehold()
+        _state.value.selectedKabadiwalaId?.let(::openKabadiwalaProfile)
+        "Verified pickup rating submitted."
+    })
     fun createBulkLot(input: BulkLotCreateDto) = action("create-bulk", AccountRole.COLLECTOR) {
         // Keep the returned server record visible immediately. The follow-up
         // refresh reconciles it with the authoritative list, but a slow or

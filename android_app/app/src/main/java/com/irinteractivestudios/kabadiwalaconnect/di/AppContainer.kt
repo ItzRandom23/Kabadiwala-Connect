@@ -319,12 +319,14 @@ class AppContainer(context: Context) {
             return@withLock
         }
         val categories = listOf("CRT", "LCD_PANEL", "PCB", "CABLE", "COPPER", "BATTERY", "MOTOR", "MAGNET", "PLASTIC", "OTHER")
-        val prices = coroutineScope {
+        val boardResults = coroutineScope {
             categories.map { category -> async {
-                runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }
-                    .getOrNull()
-                    ?.takeIf { it.available && it.marketPrice != null }
-                    ?.let { board ->
+                category to runCatching { apiService.getPriceBoard(category, resolvedLocation).requireData() }
+            } }.awaitAll()
+        }
+        val prices = boardResults.mapNotNull { (category, result) ->
+            result.getOrNull()?.takeIf { it.available && it.marketPrice != null }?.let { board ->
+                runCatching {
                 val marketPrice = board.marketPrice ?: return@let null
                 // Keep the trend chart backed by the same server snapshot as
                 // the headline rate. History is optional so a partial outage
@@ -336,7 +338,7 @@ class AppContainer(context: Context) {
                 }.getOrDefault("")
                 PriceEntity(
                     id = "${resolvedLocation}_$category",
-                    location = board.location ?: resolvedLocation,
+                    location = resolvedLocation,
                     materialLabel = category.toDisplayMaterial(),
                     ratePerKg = marketPrice,
                     minRatePerKg = board.priceMin ?: marketPrice,
@@ -351,10 +353,12 @@ class AppContainer(context: Context) {
                     trendPercentage = board.trend?.percentage ?: 0.0,
                     complianceRegime = board.complianceRegime
                 )
-                }
-            } }.awaitAll().filterNotNull()
+                }.getOrNull()
+            }
         }
-        if (prices.isNotEmpty()) database.priceDao().replaceLocation(resolvedLocation, prices)
+        // An authoritative empty response removes outdated local rates; a
+        // network failure leaves the existing offline cache untouched.
+        if (boardResults.all { it.second.isSuccess }) database.priceDao().replaceLocation(resolvedLocation, prices)
         val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account.latitude, longitude ?: account.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,

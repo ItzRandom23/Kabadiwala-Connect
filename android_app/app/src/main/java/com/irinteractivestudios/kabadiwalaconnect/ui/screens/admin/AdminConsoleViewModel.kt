@@ -18,6 +18,7 @@ import java.util.TimeZone
 
 enum class AdminSection(val label: String) {
     RECYCLERS("Recycler review"),
+    PARTNERS("Pilot partners"),
     DISPUTES("Disputes"),
     PAYMENTS("Payments"),
     ANOMALIES("Anomalies"),
@@ -51,8 +52,13 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
             runCatching {
                 when (section) {
                     AdminSection.RECYCLERS -> api.adminRecyclerQueue("PENDING").requireData()
+                    AdminSection.PARTNERS -> api.adminKabadiwalaCohort("PENDING").requireData()
                     AdminSection.DISPUTES -> api.adminDisputes("OPEN").requireData()
-                    AdminSection.PAYMENTS -> api.adminPayments("PENDING").requireData()
+                    AdminSection.PAYMENTS -> {
+                        val recorded = api.adminPayments("PENDING").requireData()
+                        val pickupPayments = api.adminHouseholdPickupPayments("RECORDED").requireData()
+                        recorded + pickupPayments
+                    }
                     AdminSection.ANOMALIES -> api.adminFormalAnomalies("OPEN").requireData()
                     AdminSection.TOOLS -> emptyList()
                 }
@@ -99,8 +105,25 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminResolveDispute(disputeId, body).requireData()
     }
 
+    fun approveKabadiwala(kabadiwalaId: String, notes: String) = action {
+        api.adminVerifyKabadiwala(kabadiwalaId, JsonObject().apply {
+            addProperty("decision", "APPROVE")
+            addProperty("notes", notes)
+        }).requireData()
+    }
+
     fun verifyPayment(paymentId: String) = action {
-        api.adminVerifyPayment(paymentId, JsonObject()).requireData()
+        val pickupPayment = _state.value.items.firstOrNull { it.get("id")?.asString == paymentId }
+            ?.get("kind")?.asString == "HOUSEHOLD_PICKUP_SETTLEMENT"
+        if (pickupPayment) api.adminReconcileHouseholdPickupPayment(paymentId, JsonObject().apply { addProperty("decision", "VERIFY") }).requireData()
+        else api.adminVerifyPayment(paymentId, JsonObject()).requireData()
+    }
+
+    fun disputePickupPayment(paymentId: String, notes: String) = action {
+        api.adminReconcileHouseholdPickupPayment(paymentId, JsonObject().apply {
+            addProperty("decision", "DISPUTE")
+            addProperty("notes", notes)
+        }).requireData()
     }
 
     fun reversePayment(paymentId: String, reason: String, provider: String?, externalReference: String?, evidenceReference: String?) = action {

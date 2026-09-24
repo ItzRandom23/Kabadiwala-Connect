@@ -3,9 +3,11 @@ import type { MaterialCategory, PrismaClient } from '@prisma/client';
 const locationCandidates = (location?: string) => {
   const normalized = location?.trim();
   if (!normalized) return [];
+  // Users may enter a locality, city, state and PIN code together. Resolve
+  // only exact configured labels, preferring the most specific entered part.
+  // Never silently borrow another city's latest price.
   const parts = normalized.split(',').map(part => part.trim()).filter(Boolean);
-  const city = parts[parts.length - 1];
-  return Array.from(new Set([normalized, city].filter(Boolean) as string[]));
+  return Array.from(new Set([normalized, ...parts].filter(Boolean)));
 };
 
 export class PriceRepository {
@@ -14,32 +16,25 @@ export class PriceRepository {
   async latest(material: MaterialCategory, location?: string) {
     for (const candidate of locationCandidates(location)) {
       const scoped = await this.db.price.findFirst({
-        where: { materialCategory: material, OR: [{ areaName: candidate }, { city: candidate }] },
+        where: { materialCategory: material, OR: [{ areaName: { equals: candidate, mode: 'insensitive' } }, { city: { equals: candidate, mode: 'insensitive' } }] },
         orderBy: { effectiveAt: 'desc' }
       });
       if (scoped) return scoped;
     }
 
-    // A new area may not have a local row yet. Use the latest known rate for
-    // the same material rather than turning the prices screen into a 404.
-    // The service labels the response as an indicative reference when this
-    // fallback is outside the requested location.
-    return this.db.price.findFirst({ where: { materialCategory: material }, orderBy: { effectiveAt: 'desc' } });
+    return null;
   }
 
   async history(material: MaterialCategory, location: string | undefined, since: Date) {
     for (const candidate of locationCandidates(location)) {
       const scoped = await this.db.priceHistory.findMany({
-        where: { materialCategory: material, effectiveAt: { gte: since }, OR: [{ areaName: candidate }, { city: candidate }] },
+        where: { materialCategory: material, effectiveAt: { gte: since }, OR: [{ areaName: { equals: candidate, mode: 'insensitive' } }, { city: { equals: candidate, mode: 'insensitive' } }] },
         orderBy: { effectiveAt: 'asc' }
       });
       if (scoped.length) return scoped;
     }
 
-    return this.db.priceHistory.findMany({
-      where: { materialCategory: material, effectiveAt: { gte: since } },
-      orderBy: { effectiveAt: 'asc' }
-    });
+    return [];
   }
 
   get(id: string) {

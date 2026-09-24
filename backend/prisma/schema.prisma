@@ -265,6 +265,7 @@ enum PaymentMethod {
   CASH
   BANK_TRANSFER
   DIGITAL_WALLET
+  UPI
 }
 
 enum PaymentStatus {
@@ -370,6 +371,8 @@ model Collector {
   areaName          String
   dailyPickupCapacity Int              @default(8)
   accountStatus     AccountStatus     @default(ACTIVE)
+  pilotVerifiedAt   DateTime?
+  pilotVerifiedBy   String?
   createdAt         DateTime          @default(now())
   lastLoginAt       DateTime?
   lots              Lot[]
@@ -379,6 +382,7 @@ model Collector {
   syncOperations    SyncOperation[]
 
   @@index([accountStatus])
+  @@index([accountStatus, pilotVerifiedAt])
   @@index([areaName])
   @@index([phone])
   @@index([email])
@@ -1052,6 +1056,21 @@ model NotificationEvent {
   createdAt DateTime  @default(now())
 
   @@index([accountId, readAt, createdAt])
+}
+
+// A household rating is tied to one completed pickup and intentionally stores
+// no public comment or household identity in the directory response.
+model HouseholdPickupReview {
+  id           String   @id @default(cuid()) @map("_id")
+  pickupId     String   @unique
+  householdId  String
+  kabadiwalaId String
+  rating       Int
+  verified     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([kabadiwalaId, verified, createdAt])
+  @@index([householdId, createdAt])
 }
 
 // Device tokens are account-scoped so a shared phone cannot receive another

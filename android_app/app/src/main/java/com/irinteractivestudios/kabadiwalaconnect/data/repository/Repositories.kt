@@ -40,7 +40,7 @@ interface PriceRepository {
 interface PriceCatalogRepository : PriceRepository {
     fun observePrices(location: String): Flow<List<Price>>
     fun observeLocations(): Flow<List<String>>
-    override fun observePrices(): Flow<List<Price>> = observePrices("Pune")
+    override fun observePrices(): Flow<List<Price>> = observePrices("")
 }
 
 interface RecyclerRepository {

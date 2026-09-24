@@ -1,8 +1,8 @@
 {
-  "versionCode": 45,
-  "versionName": "0.0.44-beta",
-  "apkUrl": "kabadiwala-connect-0.0.44-beta-debug.apk",
-  "sha256": "24F41B253F40506D015EB2D3B98B3908E140C12A9E47DD0D32E8293F21802B98",
-  "sizeBytes": 28462494,
-  "releaseNotes": "Improved OTP verification feedback, recoverable camera permissions with Settings guidance, and clearer Recycler expiry-date validation."
+  "versionCode": 46,
+  "versionName": "0.0.45-beta",
+  "apkUrl": "kabadiwala-connect-0.0.45-beta-debug.apk",
+  "sha256": "2BEC4E959C11C226DDB91A449FBB95170B59837B3470C3E6B97A966888D1C886",
+  "sizeBytes": 28560835,
+  "releaseNotes": "India-wide area price search, verified nearby Kabadiwala profiles and ratings, and operator-reconciled cash/UPI pickup payments."
 }
