@@ -49,6 +49,9 @@ data class SupplyChainState(
     val kabadiwalaProfile: KabadiwalaPublicProfileDto? = null,
     val kabadiwalaProfileLoading: Boolean = false,
     val pickups: List<PickupRequestDto> = emptyList(),
+    val householdPickupQr: HouseholdPickupQrDto? = null,
+    val householdPickupQrLoadingId: String? = null,
+    val householdPickupQrError: String? = null,
     val inventory: List<InventoryBalanceDto> = emptyList(),
     val inventoryMovements: List<InventoryMovementDto> = emptyList(),
     val bulkLots: List<BulkLotDto> = emptyList(),
@@ -106,14 +109,22 @@ class SupplyChainViewModel(
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
 
-    private fun friendly(error: Throwable) = when ((error as? RemoteApiException)?.code) {
-        "HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED" -> "Your session expired. Please sign in again."
-        "HTTP_403" -> "This action is not available for your role."
-        "HTTP_409" -> "That record changed. Refresh and try again."
-        "HTTP_422" -> "Check the highlighted details and try again."
-        "EMPTY_RESPONSE" -> "The server returned an incomplete response. Please try again."
-        "INVALID_PHOTO", "PHOTO_REQUIRED", "PHOTO_UPLOAD_FAILED" -> "That photo could not be uploaded. Choose another clear image and retry."
-        else -> when {
+    private fun friendly(error: Throwable): String {
+        val remote = error as? RemoteApiException
+        val message = remote?.message.orEmpty()
+        val code = remote?.code.orEmpty()
+        return when {
+            message.contains("no longer available", ignoreCase = true) || message.contains("not available to accept", ignoreCase = true) -> "Another Kabadiwala already took this pickup. The queue has been refreshed."
+            message.contains("household QR", ignoreCase = true) && message.contains("before", ignoreCase = true) -> "Ask the household to show its pickup QR, then scan it before weighing."
+            message.contains("QR is invalid or expired", ignoreCase = true) -> "This QR is invalid or expired. Ask the household to refresh it and scan again."
+            message.contains("reason code is required", ignoreCase = true) -> "Choose why the final material, weight, or value differs from the listing."
+            message.contains("already been scanned", ignoreCase = true) -> "This pickup was already verified. Refresh the pickup list to see the update."
+            code in setOf("HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED") || remote?.httpCode == 401 -> "Your session expired. Please sign in again."
+            remote?.code == "HTTP_403" || remote?.httpCode == 403 -> "This action is not available for your role."
+            code == "EMPTY_RESPONSE" -> "The server returned an incomplete response. Please try again."
+            code in setOf("INVALID_PHOTO", "PHOTO_REQUIRED", "PHOTO_UPLOAD_FAILED") -> "That photo could not be uploaded. Choose another clear image and retry."
+            remote?.httpCode == 409 -> "That record changed. Refresh and try again."
+            remote?.httpCode == 422 -> "Check the highlighted details and try again."
             error is IllegalStateException && error.message?.contains("photo", ignoreCase = true) == true -> "The selected photo is no longer available. Choose it again."
             error is IOException -> "Connection issue. Check your internet and retry."
             else -> "Could not load the latest collection data. Please try again."
@@ -501,6 +512,32 @@ class SupplyChainViewModel(
             }
         }
     })
+    fun loadHouseholdPickupQr(pickupId: String) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        _state.value = _state.value.copy(householdPickupQr = null, householdPickupQrLoadingId = pickupId, householdPickupQrError = null)
+        viewModelScope.launch {
+            runCatching { api.getHouseholdPickupQr(pickupId).requireData() }
+                .onSuccess { qr ->
+                    if (_state.value.householdPickupQrLoadingId == pickupId) {
+                        _state.value = _state.value.copy(householdPickupQr = qr, householdPickupQrLoadingId = null, householdPickupQrError = null)
+                    }
+                }
+                .onFailure { error ->
+                    if (_state.value.householdPickupQrLoadingId == pickupId) {
+                        _state.value = _state.value.copy(householdPickupQrLoadingId = null, householdPickupQrError = friendly(error))
+                    }
+                }
+        }
+    }
+    fun clearHouseholdPickupQr() {
+        _state.value = _state.value.copy(householdPickupQr = null, householdPickupQrLoadingId = null, householdPickupQrError = null)
+    }
+    fun verifyHouseholdPickupQr(pickupId: String, qrCodeData: String) = action("verify-household-qr-$pickupId", AccountRole.COLLECTOR, {
+        val verified = api.confirmHouseholdPickupQr(pickupId, HouseholdPickupQrVerifyDto(qrCodeData)).requireData()
+        _state.value = _state.value.copy(pickups = _state.value.pickups.map { if (it.id == verified.id) verified else it })
+        refreshKabadiwala()
+        "Household pickup verified. You can now record the final weight."
+    })
     fun clearHouseholdMaterialSuggestion() {
         _state.value = _state.value.copy(materialSuggestion = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE, materialDetectionMessage = null)
     }
@@ -568,7 +605,18 @@ class SupplyChainViewModel(
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })
     fun decideHouseholdSettlement(pickupId: String, decision: String, reasonCode: String? = null, notes: String? = null) = action("settlement-$pickupId", AccountRole.HOUSEHOLD, { api.decideHouseholdSettlement(pickupId, SettlementDecisionDto(decision, reasonCode, null, notes)).requireData(); refreshHousehold(); "Settlement decision recorded." })
-    fun acceptListing(listingId: String) = action("accept-$listingId", AccountRole.COLLECTOR, { api.acceptHouseholdListing(listingId).requireSuccess(); refreshKabadiwala(); "Pickup accepted." })
+    fun acceptListing(listingId: String) = action("accept-$listingId", AccountRole.COLLECTOR, {
+        try {
+            api.acceptHouseholdListing(listingId).requireSuccess()
+            refreshKabadiwala()
+            "Pickup accepted."
+        } catch (error: Throwable) {
+            if ((error as? RemoteApiException)?.let { it.code == "PICKUP_NOT_AVAILABLE" || it.message.contains("no longer available", ignoreCase = true) || it.message.contains("not available to accept", ignoreCase = true) } == true) {
+                refreshKabadiwala()
+                "Another Kabadiwala already took this pickup. The queue is refreshing."
+            } else throw error
+        }
+    })
     fun rejectPickup(pickupId: String, reason: String? = null) = action("reject-$pickupId", AccountRole.COLLECTOR, { api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup declined and returned to the network." })
     fun confirmAvailability(pickupId: String, slot: String? = null) = action("availability-$pickupId", AccountRole.COLLECTOR, { api.confirmPickupAvailability(pickupId, PickupAvailabilityDto(true, slot)).requireData(); refreshKabadiwala(); "Availability confirmed." })
     fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireSuccess(); refreshKabadiwala(); "Pickup scheduled." })

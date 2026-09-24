@@ -1,8 +1,8 @@
 {
-  "versionCode": 47,
-  "versionName": "0.0.46-beta",
-  "apkUrl": "kabadiwala-connect-0.0.46-beta-debug.apk",
-  "sha256": "466C4071C1AE12FC87631F1FFA82253C150FAC31B26CFD95AB02D0FAB026F739",
-  "sizeBytes": 28610026,
-  "releaseNotes": "Pickup scheduling during 10:30 AM–6:00 PM India time, full-screen scrap photos, improved pickup updates, and UI refinements."
+  "versionCode": 48,
+  "versionName": "0.0.47-beta",
+  "apkUrl": "kabadiwala-connect-0.0.47-beta-debug.apk",
+  "sha256": "B3EC8319EA9D689818FFE76A62644CAB5058A64D35903EE1014EDE21305EC153",
+  "sizeBytes": 28626411,
+  "releaseNotes": "Verified household pickup QR before final weighing, full-screen weighing with settlement reasons, pickup queue conflict handling, and UI refinements."
 }

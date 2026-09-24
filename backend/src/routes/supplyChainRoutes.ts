@@ -534,6 +534,20 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const settlementPayment = await store.pickupSettlementPayment.findUnique({ where: { pickupId } });
     res.json({ success: true, data: { pickup, listing, settlementPayment } });
   });
+  router.get('/household/pickups/:pickupId/qr', requireHousehold(jwt, collectors), async (req, res) => {
+    const pickupId = parse(id, req.params.pickupId);
+    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId } });
+    if (!pickup) throw new AppError('NOT_FOUND', 'Pickup not found', 404, { code: 'PICKUP_NOT_FOUND' });
+    if (pickup.status !== 'ARRIVED') throw new AppError('CONFLICT', 'The pickup QR is available when the Kabadiwala arrives', 409, { code: 'PICKUP_QR_NOT_READY' });
+    if (pickup.householdQrScannedAt) throw new AppError('CONFLICT', 'The household QR has already been scanned', 409, { code: 'PICKUP_QR_ALREADY_SCANNED' });
+    const now = Date.now();
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, data: {
+      pickupId,
+      qrCodeData: jwt.generateHouseholdPickupQrToken(pickupId, pickup.householdId),
+      expiresAt: new Date(now + 10 * 60 * 1000).toISOString()
+    } });
+  });
   router.get('/household/pickups/:pickupId/passport', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId } });
@@ -678,8 +692,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/kabadiwala/pickups', requireAuth(jwt, collectors), async (req, res) => {
     const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
-    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
-    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
+    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
+    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: any) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
     const listingById = new Map<string, any>(waitingListings.map((listing: any) => [listing.id, listing] as [string, any]));
     const visibleWaiting = waiting.filter((pickup: any) => {
@@ -707,7 +721,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         }
         updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }, data: { kabadiwalaId: req.identity!.collectorId, status: 'ACCEPTED', acceptedAt: new Date() } });
       }
-      if (!updated.count) throw new AppError('CONFLICT', 'Pickup is not available to accept', 409);
+      if (!updated.count) throw new AppError('CONFLICT', 'This pickup is no longer available. Refresh the queue to see current requests.', 409, { code: 'PICKUP_NOT_AVAILABLE' });
       await tx.householdListing.updateMany({ where: { id: listingId, status: 'POSTED' }, data: { status: 'MATCHED' } });
       const pickup = await tx.pickupRequest.findFirstOrThrow({ where: { listingId, kabadiwalaId: req.identity!.collectorId } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_ACCEPTED', 'PICKUP_REQUEST', pickup.id, { listingId });
@@ -802,6 +816,27 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     });
     res.json({ success: true, data: { status: next } });
   });
+  router.post('/kabadiwala/pickups/:pickupId/confirm-household-qr', requireAuth(jwt, collectors), async (req, res) => {
+    const pickupId = parse(id, req.params.pickupId);
+    const input = parse(z.object({ qrCodeData: z.string().trim().min(1).max(4096) }), req.body ?? {});
+    const result = await store.$transaction(async (tx: any) => {
+      const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED' } });
+      if (!pickup) throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
+      if (!jwt.verifyHouseholdPickupQrToken(input.qrCodeData, pickupId, pickup.householdId)) {
+        throw new AppError('VALIDATION_ERROR', 'This household QR is invalid or expired. Ask the household to refresh it.', 422, { code: 'PICKUP_QR_INVALID' });
+      }
+      if (pickup.householdQrScannedAt) return pickup;
+      const scannedAt = new Date();
+      const updated = await tx.pickupRequest.updateMany({
+        where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED', householdQrScannedAt: null },
+        data: { householdQrScannedAt: scannedAt }
+      });
+      if (!updated.count) throw new AppError('CONFLICT', 'Pickup changed before the household QR was confirmed', 409, { code: 'PICKUP_QR_SCAN_CONFLICT' });
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'HOUSEHOLD_PICKUP_QR_SCANNED', 'PICKUP_REQUEST', pickupId, { scannedAt: scannedAt.toISOString() });
+      return tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
+    });
+    res.json({ success: true, data: result });
+  });
   router.post('/kabadiwala/pickups/:pickupId/complete', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const input = parse(z.object({ actualWeight: positive.max(500), finalCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), ratePerKg: positive.max(1000000), reasonCode: z.string().trim().max(120).optional(), evidenceReference: z.string().trim().max(500).optional() }), req.body);
@@ -817,6 +852,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       }
       const pickupBefore = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED' } });
       if (!pickupBefore) throw new AppError('CONFLICT', 'Pickup cannot be weighed', 409, { code: 'PICKUP_NOT_WEIGHABLE' });
+      if (!pickupBefore.householdQrScannedAt) throw new AppError('CONFLICT', 'Scan the household pickup QR before recording final weight', 409, { code: 'HOUSEHOLD_PICKUP_QR_REQUIRED' });
       const listing = await tx.householdListing.findUnique({ where: { id: pickupBefore.listingId } });
       const finalAmount = Number((input.actualWeight * input.ratePerKg).toFixed(2));
       const estimatedReference = listing?.estimatedPriceMax ?? listing?.estimatedPriceMin ?? null;

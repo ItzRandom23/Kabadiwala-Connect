@@ -1193,6 +1193,7 @@ model PickupRequest {
   availabilityConfirmedAt DateTime?
   inTransitAt       DateTime?
   arrivedAt         DateTime?
+  householdQrScannedAt DateTime?
   weighedAt         DateTime?
   cancelledAt       DateTime?
   noShow            Boolean    @default(false)

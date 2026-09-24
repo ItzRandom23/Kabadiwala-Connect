@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Recycling
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Star
@@ -105,6 +106,8 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
@@ -137,6 +140,11 @@ fun HouseholdSupplyScreen(
     onCancelPickup: (String) -> Unit = {},
     onReschedulePickup: (String, String) -> Unit = { _, _ -> },
     onDecideSettlement: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
+    pickupQr: HouseholdPickupQrDto? = null,
+    pickupQrLoadingId: String? = null,
+    pickupQrError: String? = null,
+    onLoadPickupQr: (String) -> Unit = {},
+    onClearPickupQr: () -> Unit = {},
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
@@ -170,7 +178,12 @@ fun HouseholdSupplyScreen(
                 onCancelListing = onCancelListing,
                 onCancelPickup = onCancelPickup,
                 onReschedulePickup = onReschedulePickup,
-                onDecideSettlement = onDecideSettlement
+                onDecideSettlement = onDecideSettlement,
+                pickupQr = pickupQr,
+                pickupQrLoadingId = pickupQrLoadingId,
+                pickupQrError = pickupQrError,
+                onLoadPickupQr = onLoadPickupQr,
+                onClearPickupQr = onClearPickupQr
             )
         }
     }
@@ -445,7 +458,12 @@ private fun HouseholdListingCard(
     onCancelListing: (String) -> Unit,
     onCancelPickup: (String) -> Unit,
     onReschedulePickup: (String, String) -> Unit,
-    onDecideSettlement: (String, String, String?, String?) -> Unit
+    onDecideSettlement: (String, String, String?, String?) -> Unit,
+    pickupQr: HouseholdPickupQrDto?,
+    pickupQrLoadingId: String?,
+    pickupQrError: String?,
+    onLoadPickupQr: (String) -> Unit,
+    onClearPickupQr: () -> Unit
 ) {
     val activePickupStatuses = setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
     val pickup = pickups.firstOrNull { it.status in activePickupStatuses }
@@ -453,6 +471,7 @@ private fun HouseholdListingCard(
     var showCancelPickup by remember(pickup?.id) { mutableStateOf(false) }
     var showReschedule by remember(pickup?.id) { mutableStateOf(false) }
     var showSettlement by remember(pickup?.id) { mutableStateOf(false) }
+    var showPickupQr by remember(pickup?.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
@@ -487,6 +506,25 @@ private fun HouseholdListingCard(
             pickup?.let { item ->
                 Text("Pickup: ${statusName(item.status)}", fontWeight = FontWeight.SemiBold)
                 Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == "ARRIVED") {
+                    if (item.householdQrScannedAt != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text("Household handover verified", Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { showPickupQr = true; onLoadPickupQr(item.id) },
+                            enabled = pickupQrLoadingId != item.id,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                        ) {
+                            if (pickupQrLoadingId == item.id) CircularProgressIndicator(Modifier.size(20.dp))
+                            else Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (pickupQrLoadingId == item.id) "Preparing pickup QR…" else "Show pickup QR to Kabadiwala")
+                        }
+                    }
+                }
                 item.scheduledSlot?.let { Text("Scheduled: ${it.take(16).replace('T', ' ')}") }
                 if (item.finalAmount != null) Text("Final settlement: ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 if (item.status in setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED")) {
@@ -512,6 +550,37 @@ private fun HouseholdListingCard(
         dismissButton = { TextButton(onClick = { showCancelListing = false }) { Text("Keep listing") } }
     )
     pickup?.let { item ->
+        if (showPickupQr && item.status == "ARRIVED" && item.householdQrScannedAt == null) {
+            val qr = pickupQr?.takeIf { it.pickupId == item.id }
+            Dialog(onDismissRequest = { showPickupQr = false; onClearPickupQr() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Column(
+                        Modifier.fillMaxSize().imePadding().padding(horizontal = 24.dp, vertical = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
+                        Text("Verify this pickup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                        Text("Ask the Kabadiwala to scan this QR before weighing your scrap.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
+                        when {
+                            qr != null -> {
+                                val bitmap = remember(qr.qrCodeData) { createSupplyQr(qr.qrCodeData) }
+                                if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = "One-time household pickup verification QR", modifier = Modifier.size(260.dp), contentScale = ContentScale.Fit)
+                                else Text("Could not create this QR. Refresh and try again.", color = MaterialTheme.colorScheme.error)
+                                Text("This one-time QR expires shortly. Keep it open while it is scanned.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp).heightIn(min = 50.dp)) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Refresh QR") }
+                            }
+                            pickupQrLoadingId == item.id -> CircularProgressIndicator(Modifier.padding(24.dp))
+                            pickupQrError != null -> {
+                                Text(pickupQrError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 50.dp)) { Text("Try again") }
+                            }
+                        }
+                        TextButton(onClick = { showPickupQr = false; onClearPickupQr() }, modifier = Modifier.padding(top = 18.dp).heightIn(min = 48.dp)) { Text("Close") }
+                    }
+                }
+            }
+        }
         if (showCancelPickup) AlertDialog(
             onDismissRequest = { showCancelPickup = false },
             title = { Text("Cancel this pickup?") },
@@ -807,7 +876,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }) {
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
     val title = when (section) {
@@ -841,7 +910,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment) }
+                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Text("View all ${state.pickups.size} pickups")
@@ -1057,7 +1126,7 @@ private fun SupplyChainToolsShortcut(onClick: () -> Unit) {
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showAvailability by remember { mutableStateOf(false) }
@@ -1068,6 +1137,13 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     var selectedPhotoIndex by remember(pickup.id) { mutableStateOf<Int?>(null) }
     var showPayment by remember(pickup.id) { mutableStateOf(false) }
     var showMoreActions by remember(pickup.id) { mutableStateOf(false) }
+    var scannerLaunchError by rememberSaveable(pickup.id) { mutableStateOf(false) }
+    val pickupScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.takeIf(String::isNotBlank)?.let { qrData ->
+            scannerLaunchError = false
+            onVerifyHouseholdQr(pickup.id, qrData)
+        }
+    }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1133,7 +1209,28 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     Text("Start trip during pickup hours: 10:30 AM–6:00 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 "IN_TRANSIT" -> Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
-                "ARRIVED" -> Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record weight") }
+                "ARRIVED" -> {
+                    if (pickup.householdQrScannedAt == null) {
+                        Text("Scan the household’s one-time pickup QR before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(
+                            onClick = {
+                                scannerLaunchError = false
+                                runCatching {
+                                    pickupScanner.launch(
+                                        ScanOptions()
+                                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                            .setBeepEnabled(false)
+                                            .setPrompt("Scan household pickup QR")
+                                    )
+                                }.onFailure { scannerLaunchError = true }
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                        ) { Icon(Icons.Filled.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Scan household pickup QR") }
+                        if (scannerLaunchError) Text("Could not open the QR scanner. Check camera access and try again.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record final weight") }
+                    }
+                }
                 "COMPLETED" -> {
                     Text("Added to inventory · ${money(pickup.finalAmount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     when (pickup.settlementPayment?.status) {
@@ -1150,7 +1247,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
         onDismiss = { showSchedule = false },
         onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
     )
-    if (showComplete) CompletionDialog(pickup, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
+    if (showComplete && pickup.householdQrScannedAt != null) CompletionDialog(pickup, listing, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
     if (showAvailability) SchedulePickupDialog(onDismiss = { showAvailability = false }, onSubmit = { onConfirmAvailability(pickup.id, it); showAvailability = false })
     if (showReject) ReasonDialog(title = "Decline pickup", confirmLabel = "Decline", onDismiss = { showReject = false }, onSubmit = { onReject(pickup.id, it); showReject = false })
     if (showCancel) ReasonDialog(title = "Cancel pickup", confirmLabel = "Cancel", onDismiss = { showCancel = false }, onSubmit = { onCancel(pickup.id, it); showCancel = false })
@@ -1429,38 +1526,81 @@ private fun SettlementDecisionDialog(
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun CompletionDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, onSubmit: (PickupCompletionDto) -> Unit) {
+private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListingDto?, onDismiss: () -> Unit, onSubmit: (PickupCompletionDto) -> Unit) {
     var weight by remember { mutableStateOf("") }
     var rate by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(pickup.finalCategory ?: "PLASTIC") }
+    var category by remember { mutableStateOf(listing?.materialCategory ?: pickup.finalCategory ?: "OTHER") }
     var grade by remember { mutableStateOf("UNSPECIFIED") }
+    var reasonCode by remember { mutableStateOf<String?>(null) }
     val total = (weight.toDoubleOrNull() ?: 0.0) * (rate.toDoubleOrNull() ?: 0.0)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Final weighing") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("The household sees this amount immediately.", style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                Text("Final material", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    materials.forEach { option ->
-                        FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 1) })
-                    }
-                }
-                OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true)
-                if (total > 0) Text("Settlement preview · ₹${"%.2f".format(total)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { val w = weight.toDoubleOrNull(); val r = rate.toDoubleOrNull(); if (w != null && r != null && w > 0 && w <= 500 && r > 0) onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r)) },
-                enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true
-            ) { Text("Complete pickup") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    val actualWeight = weight.toDoubleOrNull()
+    val referenceValue = listing?.estimatedPriceMax ?: listing?.estimatedPriceMin
+    val weightChanged = listing != null && actualWeight != null && kotlin.math.abs(actualWeight - listing.estimatedWeight) / listing.estimatedWeight > 0.2
+    val valueChanged = referenceValue != null && total > 0 && kotlin.math.abs(total - referenceValue) / referenceValue.coerceAtLeast(1.0) > 0.2
+    val materialChanged = listing != null && category != listing.materialCategory
+    val reasonRequired = listing == null || materialChanged || weightChanged || valueChanged
+    val reasonOptions = listOf(
+        "MATERIAL_MISMATCH" to "Material differs",
+        "WEIGHT_VARIANCE" to "Weight differs",
+        "VALUE_VARIANCE" to "Value differs",
+        "OTHER_INSPECTION" to "Other inspection reason"
     )
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().imePadding()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Final weighing", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("Pickup ${pickup.id.takeLast(7)} · household handover verified", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close final weighing") }
+                }
+                HorizontalDivider()
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("Enter the measured weight and the rate agreed with the household.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    listing?.let { Text("Listed as ${materialName(it.materialCategory)} · approx. ${"%.1f".format(it.estimatedWeight)} kg", style = MaterialTheme.typography.bodyMedium) }
+                    OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Agreed rate · ₹/kg") }, supportingText = { Text("Confirm the rate with the household before completing.") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Final material", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        materials.forEach { option -> FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 1) }) }
+                    }
+                    OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (reasonRequired) {
+                        Text("Why is the final result different? Select a reason to continue.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            reasonOptions.forEach { (code, label) -> FilterChip(selected = reasonCode == code, onClick = { reasonCode = code }, label = { Text(label) }) }
+                        }
+                    }
+                    if (total > 0) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Household settlement", style = MaterialTheme.typography.labelLarge)
+                            Text("₹${"%.2f".format(total)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text("The household will review the final amount before it is settled.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Cancel") }
+                    Button(
+                        onClick = {
+                            val w = weight.toDoubleOrNull()
+                            val r = rate.toDoubleOrNull()
+                            if (w != null && r != null && w > 0 && w <= 500 && r > 0 && (!reasonRequired || reasonCode != null)) {
+                                onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r, reasonCode.takeIf { reasonRequired }))
+                            }
+                        },
+                        enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (!reasonRequired || reasonCode != null),
+                        modifier = Modifier.weight(1.3f).heightIn(min = 52.dp)
+                    ) { Text("Complete pickup") }
+                }
+            }
+        }
+    }
 }
 
 @Composable

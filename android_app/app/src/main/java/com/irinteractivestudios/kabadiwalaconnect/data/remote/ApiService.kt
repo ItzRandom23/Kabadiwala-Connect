@@ -60,6 +60,8 @@ interface ApiService {
     suspend fun getHouseholdPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
     @GET("household/pickups/{pickupId}")
     suspend fun getHouseholdPickup(@Path("pickupId") pickupId: String): Response<ApiEnvelope<JsonObject>>
+    @GET("household/pickups/{pickupId}/qr")
+    suspend fun getHouseholdPickupQr(@Path("pickupId") pickupId: String): Response<ApiEnvelope<HouseholdPickupQrDto>>
     @GET("household/pickups/{pickupId}/passport")
     suspend fun getHouseholdPickupPassport(@Path("pickupId") pickupId: String): Response<ApiEnvelope<JsonObject>>
     @POST("household/pickups/{pickupId}/reschedule")
@@ -88,6 +90,8 @@ interface ApiService {
     suspend fun schedulePickup(@Path("pickupId") pickupId: String, @Body body: PickupScheduleDto): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/status")
     suspend fun updatePickupStatus(@Path("pickupId") pickupId: String, @Body body: PickupStatusDto): Response<ApiEnvelope<JsonObject>>
+    @POST("kabadiwala/pickups/{pickupId}/confirm-household-qr")
+    suspend fun confirmHouseholdPickupQr(@Path("pickupId") pickupId: String, @Body body: HouseholdPickupQrVerifyDto): Response<ApiEnvelope<PickupRequestDto>>
     @POST("kabadiwala/pickups/{pickupId}/cancel")
     suspend fun cancelKabadiwalaPickup(@Path("pickupId") pickupId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/reassign")
