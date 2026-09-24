@@ -32,7 +32,7 @@ fun KcBrandLogo(
         border = BorderStroke(1.dp, KcTheme.extended.logoPlateBorder),
         modifier = modifier
             .size(size)
-            .shadow(8.dp, CircleShape, ambientColor = MaterialTheme.colorScheme.primary)
+            .shadow(3.dp, CircleShape)
     ) {
         Image(
             painter = painterResource(R.drawable.ic_kc_logo),

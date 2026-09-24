@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,7 +70,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import java.util.concurrent.TimeUnit
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
+import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
 
 @Composable
 fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: PriceSpeaker, demoMode: Boolean = false, modifier: Modifier = Modifier) {
@@ -139,8 +143,19 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.padding(start = 10.dp)) {
-                        Text(if (location.isBlank()) "Choose your market area" else stringResource(R.string.prices_location_context, location), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text("Rates are shown only when verified data is available for this area.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .82f))
+                        Text(
+                            if (location.isBlank()) "Choose your market area" else stringResource(R.string.prices_location_context, location),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (BuildConfig.DEBUG) "Live rates appear when available; this development build fills gaps with samples."
+                            else "Live local rates appear here when available.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .82f)
+                        )
                     }
                 }
                 OutlinedTextField(
@@ -152,8 +167,8 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Search),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { applyLocation(locationInput) }, enabled = locationInput.isNotBlank() && !refreshing, modifier = Modifier.weight(1f).height(48.dp)) { Text("Search area") }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { applyLocation(locationInput) }, enabled = locationInput.isNotBlank() && !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
                     OutlinedButton(onClick = {
                         val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         if (hasLocation) scope.launch {
@@ -163,9 +178,9 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                             if (place.isNullOrBlank()) locationError = true else { locationInput = place; applyLocation(place); locationError = false }
                             locationBusy = false
                         } else showLocationRationale = true
-                    }, enabled = !locationBusy && !refreshing, modifier = Modifier.weight(1f).height(48.dp)) {
+                    }, enabled = !locationBusy && !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         if (locationBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.LocationOn, null)
-                        Spacer(Modifier.width(6.dp)); Text("Use my location")
+                        Spacer(Modifier.width(8.dp)); Text("Use current location", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 if (locationError) Text("Could not determine an area. Enter your locality, city or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -182,9 +197,9 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
             is UiState.Loading -> LoadingContent()
             is UiState.Error -> ErrorContent(onRetry = vm::refresh)
             is UiState.Empty -> MarketPriceEmpty(location, refreshing, vm::refresh)
-            is UiState.Offline -> if (state.cached.isNullOrEmpty()) MarketPriceEmpty(location, refreshing, vm::refresh) else PriceBoard(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
-            is UiState.Success -> PriceBoard(state.data, false, selectedMaterial, { selectedMaterial = it }, speaker)
-            is UiState.Syncing -> if (state.cached.isNullOrEmpty()) LoadingContent() else PriceBoard(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
+            is UiState.Offline -> if (state.cached.isNullOrEmpty()) MarketPriceEmpty(location, refreshing, vm::refresh) else PriceBoardContent(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
+            is UiState.Success -> PriceBoardContent(state.data, false, selectedMaterial, { selectedMaterial = it }, speaker)
+            is UiState.Syncing -> if (state.cached.isNullOrEmpty()) LoadingContent() else PriceBoardContent(state.cached, true, selectedMaterial, { selectedMaterial = it }, speaker)
         }
     }
     if (showLocationRationale) AlertDialog(
@@ -194,6 +209,24 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
         confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Continue") } },
         dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text("Enter area") } }
     )
+}
+
+@Composable
+private fun PriceBoardContent(prices: List<Price>, cached: Boolean, selected: String, select: (String) -> Unit, speaker: PriceSpeaker) {
+    if (prices.any { it.qualityStatus == "DEMO_SAMPLE" }) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("DEVELOPMENT SAMPLE RATES", style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
+                Text("Sample-labeled values and trends are generated for layout testing. They are not live or verified prices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+    PriceBoard(prices, cached, selected, select, speaker)
 }
 
 @Composable
@@ -222,6 +255,7 @@ private fun MarketPriceEmpty(location: String, refreshing: Boolean, onRefresh: (
 private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, select: (String) -> Unit, speaker: PriceSpeaker) {
     if (prices.isEmpty()) { EmptyContent(); return }
     val current = prices.firstOrNull { it.materialLabel == selected } ?: prices.first()
+    val isSample = current.qualityStatus == "DEMO_SAMPLE"
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         prices.forEach { price -> FilterChip(selected = price.materialLabel == current.materialLabel, onClick = { select(price.materialLabel) }, label = { Text(price.materialLabel) }) }
     }
@@ -243,19 +277,12 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (isSample) Text("SAMPLE · NOT LIVE", style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
             Text(
                 stringResource(R.string.prices_rate_value, current.ratePerKg),
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.primary
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TrendIcon(current.trend)
-                Text(
-                    trendText(current.trend, current.trendPercentage),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.prices_range, current.minRatePerKg, current.maxRatePerKg, current.unit.toDisplayUnit()),
@@ -263,7 +290,7 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
+                if (!isSample) Text(
                     stringResource(R.string.prices_last_updated, IndiaFormat.shortDate(current.updatedAtEpochMs)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -274,10 +301,19 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (current.qualityStatus.equals("STALE", ignoreCase = true) || System.currentTimeMillis() - current.updatedAtEpochMs > TimeUnit.DAYS.toMillis(7)) {
+            if (isSample) current.disclaimer?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (!isSample) Row(verticalAlignment = Alignment.CenterVertically) {
+                TrendIcon(current.trend)
+                Text(
+                    trendText(current.trend, current.trendPercentage),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+            if (!isSample && (current.qualityStatus.equals("STALE", ignoreCase = true) || System.currentTimeMillis() - current.updatedAtEpochMs > TimeUnit.DAYS.toMillis(7))) {
                 Text(stringResource(R.string.prices_stale), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
             }
-            current.disclaimer?.takeIf { it.isNotBlank() }?.let {
+            current.disclaimer?.takeIf { !isSample && it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -285,15 +321,17 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
     OutlinedButton(onClick = { speaker.speak(current.materialLabel, current.ratePerKg, Locale.getDefault().language) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
         Icon(Icons.Filled.GraphicEq, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.prices_hear))
     }
-    Text(stringResource(R.string.prices_history_title), style = MaterialTheme.typography.titleLarge)
-    History(current.history)
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(stringResource(R.string.prices_recycler_placeholder), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
+    if (!isSample) {
+        Text(stringResource(R.string.prices_history_title), style = MaterialTheme.typography.titleLarge)
+        History(current.history)
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .34f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.prices_recycler_placeholder), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
+        }
     }
 }
 

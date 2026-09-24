@@ -64,6 +64,7 @@ object Destinations {
     const val KABADIWALA_INVENTORY = "kabadiwala/inventory"
     const val KABADIWALA_PICKUPS = "kabadiwala/pickups"
     const val KABADIWALA_LOTS = "kabadiwala/lots"
+    const val KABADIWALA_TOOLS = "kabadiwala/tools"
 
     /** Secondary screens, reachable only through Settings (no bottom tab). */
     const val SAFETY = "settings/safety"

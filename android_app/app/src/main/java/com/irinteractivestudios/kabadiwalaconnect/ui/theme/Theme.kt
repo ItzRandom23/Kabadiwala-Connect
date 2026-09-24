@@ -23,14 +23,14 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = KcWhite,
     primaryContainer = KcGreenPrimaryContainer,
     onPrimaryContainer = KcGreenOnPrimaryContainer,
-    secondary = KcLightMuted,
+    secondary = KcLightSecondary,
     onSecondary = KcWhite,
-    secondaryContainer = KcLightRaised,
-    onSecondaryContainer = KcLightText,
+    secondaryContainer = KcLightSecondaryContainer,
+    onSecondaryContainer = KcLightOnSecondaryContainer,
     tertiary = KcLightTertiary,
     onTertiary = KcWhite,
-    tertiaryContainer = Color(0xFFDDECE2),
-    onTertiaryContainer = Color(0xFF102A1D),
+    tertiaryContainer = KcLightTertiaryContainer,
+    onTertiaryContainer = KcLightOnTertiaryContainer,
     background = KcLightBackground,
     onBackground = KcLightText,
     surface = KcLightSurface,
@@ -52,14 +52,16 @@ private val LightColorScheme = lightColorScheme(
 private val DarkColorScheme = darkColorScheme(
     primary = KcLime,
     onPrimary = KcLimeOn,
-    primaryContainer = Color(0xFF354A1A),
-    onPrimaryContainer = Color(0xFFE7FFAA),
-    secondary = KcMutedText,
-    onSecondary = KcLimeOn,
-    secondaryContainer = KcGraphiteRaised,
-    onSecondaryContainer = KcText,
+    primaryContainer = Color(0xFF314736),
+    onPrimaryContainer = Color(0xFFE2EEDC),
+    secondary = KcAmber,
+    onSecondary = Color(0xFF302718),
+    secondaryContainer = Color(0xFF493A22),
+    onSecondaryContainer = Color(0xFFF2E5C7),
     tertiary = KcCyan,
     onTertiary = KcLimeOn,
+    tertiaryContainer = Color(0xFF293B30),
+    onTertiaryContainer = Color(0xFFE2EDE3),
     background = KcGraphiteBackground,
     onBackground = KcText,
     surface = KcGraphiteSurface,
@@ -73,8 +75,8 @@ private val DarkColorScheme = darkColorScheme(
     outline = KcGraphiteBorder,
     error = KcErrorRed,
     onError = KcLimeOn,
-    errorContainer = Color(0xFF5B2424),
-    onErrorContainer = Color(0xFFFFDADA)
+    errorContainer = Color(0xFF4D3028),
+    onErrorContainer = Color(0xFFFFDDD2)
 )
 
 @Immutable
@@ -93,7 +95,7 @@ private val LocalKcExtendedColors = staticCompositionLocalOf {
         success = KcMint,
         warning = KcAmber,
         logoPlate = KcSurfaceRaised,
-        logoPlateBorder = KcLime.copy(alpha = .7f),
+        logoPlateBorder = KcLogoPlateDarkBorder,
         isOperations = false
     )
 }

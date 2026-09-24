@@ -3,103 +3,95 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Graphite Neon Room palette.
- *
- * Keep the action colour scarce: it marks the primary action, selected
- * navigation, progress, and important feedback. Everything else stays in the
- * graphite surface family so hierarchy remains legible in the field.
+ * Kabadiwala Connect's forest and sage palette. Shared names are retained for
+ * existing screens; the values now stay within one calm green, warm neutral,
+ * and amber family in both system themes.
  */
-val KcLime = Color(0xFFC9FF3A)
-val KcLimeOn = Color(0xFF11150E)
-val KcGraphiteBackground = Color(0xFF0B0E0C)
-val KcGraphiteSurface = Color(0xFF141915)
-val KcGraphiteRaised = Color(0xFF1D251F)
-val KcGraphiteBorder = Color(0xFF2A352D)
-val KcWhite = Color(0xFFFFFFFF)
-val KcMutedText = Color(0xFFAEB9AF)
-val KcErrorRed = Color(0xFFFF6B6B)
+val KcLime = Color(0xFF879C77) // Muted sage action in dark mode (legacy name).
+val KcLimeOn = Color(0xFF17251B)
+val KcGraphiteBackground = Color(0xFF101610)
+val KcGraphiteSurface = Color(0xFF171F19)
+val KcGraphiteRaised = Color(0xFF222E25)
+val KcGraphiteBorder = Color(0xFF39483D)
+val KcWhite = Color(0xFFF7F8F4)
+val KcMutedText = Color(0xFFB2BDB3)
+val KcErrorRed = Color(0xFFE9947A)
 
-// Compatibility names used by older screens. They now resolve to the same
-// product tokens instead of carrying a second, visually different palette.
+// Compatibility names used by older screens, mapped to the current palette.
 val KcViolet = KcLime
-val KcVioletStrong = KcLime
-val KcVioletSoft = Color(0xFFE7FFAA)
+val KcVioletStrong = Color(0xFF80A86F)
+val KcVioletSoft = Color(0xFFDCE9D6)
 val KcMagenta = KcMutedText
-val KcCyan = Color(0xFF9BC7A7)
-val KcMint = KcLime
-val KcAmber = Color(0xFFFFD166)
+val KcCyan = Color(0xFFA5C7B2)
+val KcMint = Color(0xFF8BAF91)
+val KcAmber = Color(0xFFE5BC72)
 val KcCoral = KcErrorRed
 
 val KcNight = KcGraphiteBackground
-val KcNightSecondary = Color(0xFF101410)
+val KcNightSecondary = Color(0xFF131B15)
 val KcSurface = KcGraphiteSurface
 val KcSurfaceRaised = KcGraphiteRaised
-val KcSurfaceHigh = Color(0xFF263229)
+val KcSurfaceHigh = Color(0xFF2B3A2F)
 val KcText = KcWhite
 val KcMuted = KcMutedText
 val KcOutline = KcGraphiteBorder
 
-// Light mode keeps the brand identity but swaps the canvas and text roles for
-// comfortable contrast. The same lime remains reserved for primary actions.
-val KcLightBackground = Color(0xFFF5F8F3)
-val KcLightSurface = Color(0xFFFFFFFF)
-// Light surfaces form a deliberate ladder: background < low < container < high.
-// Keeping these steps ordered prevents cards from looking like unrelated colors.
-val KcLightRaised = Color(0xFFE8EFE8)
-val KcLightContainerHigh = Color(0xFFDDE7DF)
-val KcLightText = Color(0xFF11150E)
-val KcLightMuted = Color(0xFF4F5D52)
+// Light mode uses a soft warm canvas with forest green actions and dark text.
+val KcLightBackground = Color(0xFFF5F6F0)
+val KcLightSurface = Color(0xFFFFFEFA)
+val KcLightRaised = Color(0xFFE9EFE7)
+val KcLightContainerHigh = Color(0xFFDCE6DC)
+val KcLightText = Color(0xFF1B2920)
+val KcLightMuted = Color(0xFF526257)
 val KcLightOutline = Color(0xFF748276)
-val KcLightOutlineVariant = Color(0xFFC5D0C6)
-// Lime is the brand action fill, but it is too bright to use as text on a
-// light canvas. This readable green keeps the same hue family at 7:1+ against
-// white while leaving KcLime available for high-emphasis action surfaces.
-val KcLightPrimary = Color(0xFF315B00)
-// Tertiary is also used directly for icons and inline status text. The mint
-// tertiary used by the dark palette is intentionally not reused on a white
-// canvas because it fails contrast as text there.
-val KcLightTertiary = Color(0xFF2F6B47)
-// Semantic text/icon colors need their own light-theme values. The dark-theme
-// amber, mint, and coral are intentionally brighter and lose contrast on a
-// light canvas, especially in compact status labels.
-val KcLightWarning = Color(0xFF704900)
-val KcLightSuccess = Color(0xFF006B45)
-val KcLightError = Color(0xFFB3261E)
+val KcLightOutlineVariant = Color(0xFFC7D1C7)
+val KcLightPrimary = Color(0xFF2E6645)
+val KcLightSecondary = Color(0xFF8A5B1D)
+val KcLightSecondaryContainer = Color(0xFFF2E7D2)
+val KcLightOnSecondaryContainer = Color(0xFF493419)
+val KcLightTertiary = Color(0xFF496F52)
+val KcLightTertiaryContainer = Color(0xFFE1EAE0)
+val KcLightOnTertiaryContainer = Color(0xFF203427)
+val KcLightWarning = Color(0xFF805514)
+val KcLightSuccess = Color(0xFF356B4A)
+val KcLightError = Color(0xFFA8422C)
 
-// Semantic aliases retained for existing screens and tests.
+// Semantic aliases retained for existing screens.
 val KcGreenPrimary = KcLime
 val KcGreenOnPrimary = KcLimeOn
-// A calm sage container keeps the brand family without turning light mode neon.
-val KcGreenPrimaryContainer = Color(0xFFDCECC3)
-val KcGreenOnPrimaryContainer = Color(0xFF183300)
-val KcAmberSecondary = Color(0xFFB87500)
-val KcAmberOnSecondary = Color(0xFF241400)
-val KcAmberSecondaryContainer = Color(0xFFFFE3A8)
-val KcAmberOnSecondaryContainer = Color(0xFF382100)
+val KcGreenPrimaryContainer = Color(0xFFDCE9D6)
+val KcGreenOnPrimaryContainer = Color(0xFF1A3926)
+val KcAmberSecondary = KcLightSecondary
+val KcAmberOnSecondary = Color(0xFFFFFFFF)
+val KcAmberSecondaryContainer = KcLightSecondaryContainer
+val KcAmberOnSecondaryContainer = KcLightOnSecondaryContainer
 val KcLimeAccent = KcLime
 val KcTealSecondary = KcCyan
 val KcBackground = KcLightBackground
 val KcOnBackground = KcLightText
 val KcOnSurface = KcLightText
 val KcSurfaceVariant = KcLightRaised
-val KcSurfaceSunken = Color(0xFFF0F4EF)
+val KcSurfaceSunken = Color(0xFFF0F2EC)
 val KcOnSurfaceVariant = KcLightMuted
-val KcSuccess = Color(0xFF078A59)
-val KcOnSuccess = Color.White
-val KcSuccessContainer = Color(0xFFB9F8D7)
-val KcOnSuccessContainer = Color(0xFF003824)
-val KcWarning = Color(0xFF9A6200)
-val KcOnWarning = Color.White
-val KcWarningContainer = Color(0xFFFFE2A8)
-val KcOnWarningContainer = Color(0xFF392100)
-val KcError = KcErrorRed
-val KcOnError = Color.White
-val KcErrorContainer = Color(0xFFFFD9DF)
-val KcOnErrorContainer = Color(0xFF410014)
-val KcInfo = Color(0xFF006C86)
-val KcOnInfo = Color.White
-val KcInfoContainer = Color(0xFFB9EEFF)
-val KcOnInfoContainer = Color(0xFF003642)
+
+// Semantic state colors use forest/sage, amber, and warm terracotta rather
+// than the default Material purple and pink containers.
+val KcSuccess = Color(0xFF3D7952)
+val KcOnSuccess = Color(0xFFFFFFFF)
+val KcSuccessContainer = Color(0xFFD9EBDD)
+val KcOnSuccessContainer = Color(0xFF193A26)
+val KcWarning = Color(0xFF94651D)
+val KcOnWarning = Color(0xFFFFFFFF)
+val KcWarningContainer = Color(0xFFF1E2C4)
+val KcOnWarningContainer = Color(0xFF483516)
+val KcError = KcLightError
+val KcOnError = Color(0xFFFFFFFF)
+val KcErrorContainer = Color(0xFFF5DED6)
+val KcOnErrorContainer = Color(0xFF4A241A)
+val KcInfo = Color(0xFF3B7165)
+val KcOnInfo = Color(0xFFFFFFFF)
+val KcInfoContainer = Color(0xFFD9EAE1)
+val KcOnInfoContainer = Color(0xFF18372E)
 
 val KcDarkBackground = KcGraphiteBackground
 val KcDarkOnBackground = KcText
@@ -110,4 +102,4 @@ val KcDarkSurfaceHigh = KcSurfaceHigh
 val KcDarkOutline = KcOutline
 val KcDarkMuted = KcMuted
 val KcLogoPlateDark = KcSurfaceRaised
-val KcLogoPlateDarkBorder = KcLime.copy(alpha = .7f)
+val KcLogoPlateDarkBorder = Color(0xFF667D5E)

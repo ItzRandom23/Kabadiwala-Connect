@@ -11,7 +11,7 @@ import { requireAuth as baseRequireAuth, requireHousehold as baseRequireHousehol
 import { AppError } from '../utils/errors.js';
 import { assertInventoryInvariant, ownedKg, recordInventoryMovement } from '../services/inventoryLedger.js';
 import { emitNotification } from '../services/notificationService.js';
-import { movePickupDay, releasePickupDay, validatePickupSlot } from '../services/pickupSchedulingService.js';
+import { assertPickupWorkTime, movePickupDay, releasePickupDay, validatePickupSlot } from '../services/pickupSchedulingService.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const condition = z.enum(['INTACT', 'DAMAGED', 'PARTIAL']);
@@ -627,7 +627,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       }));
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'LISTING_CANCELLED', 'HOUSEHOLD_LISTING', listingId, { reason: input.reason ?? null, cancelledPickupCount: activePickups.length });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'CANCELLED' } });
   });
   router.post('/household/pickups/:pickupId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId); const input = parse(cancellationInput, req.body ?? {});
@@ -641,7 +641,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!remaining) await tx.householdListing.updateMany({ where: { id: pickup.listingId, householdId: req.identity!.collectorId, status: 'MATCHED' }, data: { status: 'POSTED' } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_CANCELLED', 'PICKUP_REQUEST', pickupId, { reason: input.reason ?? null });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'CANCELLED' } });
   });
 
   router.get('/kabadiwala/listings', requireAuth(jwt, collectors), async (req, res) => {
@@ -712,7 +712,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       const pickup = await tx.pickupRequest.findFirstOrThrow({ where: { listingId, kabadiwalaId: req.identity!.collectorId } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_ACCEPTED', 'PICKUP_REQUEST', pickup.id, { listingId });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'ACCEPTED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/reject', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -724,7 +724,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await tx.householdListing.updateMany({ where: { id: pickup.listingId, status: 'MATCHED' }, data: { status: 'POSTED' } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_REJECTED', 'PICKUP_REQUEST', pickupId, { reason: input.reason ?? null });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'REJECTED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/confirm-availability', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -750,7 +750,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!updated.count) throw new AppError('CONFLICT', 'Pickup changed before scheduling', 409, { code: 'PICKUP_SCHEDULE_CONFLICT' });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_SCHEDULED', 'PICKUP_REQUEST', pickupId, { scheduledSlot: scheduledSlot.toISOString() });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'SCHEDULED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/cancel', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -766,7 +766,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (recentCancellations >= 3 || pickup.scheduledSlot && pickup.scheduledSlot.getTime() - Date.now() < 24 * 60 * 60 * 1000) await tx.anomalyFlag.create({ data: { entityType: 'COLLECTOR', entityId: req.identity!.collectorId, ruleCode: recentCancellations >= 3 ? 'REPEATED_PICKUP_CANCELLATION' : 'LATE_PICKUP_CANCELLATION', severity: recentCancellations >= 3 ? 'MEDIUM' : 'LOW', details: { pickupId, recentCancellations, scheduledSlot: pickup.scheduledSlot, reason: input.reason ?? null } } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_CANCELLED', 'PICKUP_REQUEST', pickupId, { reason: input.reason ?? null });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: 'CANCELLED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/reassign', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -789,6 +789,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/pickups/:pickupId/status', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId); const next = parse(z.object({ status: z.enum(['IN_TRANSIT', 'ARRIVED']) }), req.body).status;
+    if (next === 'IN_TRANSIT') assertPickupWorkTime(new Date());
     // A household may request an immediate collection without selecting a
     // time slot. In that case ACCEPTED can move straight to IN_TRANSIT;
     // scheduled pickups still follow the same transition. The conditional
@@ -799,7 +800,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!updated.count) throw new AppError('CONFLICT', 'Invalid pickup transition', 409);
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', `PICKUP_${next}`, 'PICKUP_REQUEST', pickupId, { status: next });
     });
-    res.json({ success: true });
+    res.json({ success: true, data: { status: next } });
   });
   router.post('/kabadiwala/pickups/:pickupId/complete', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);

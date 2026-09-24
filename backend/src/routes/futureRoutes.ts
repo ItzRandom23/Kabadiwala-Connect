@@ -126,6 +126,10 @@ function geminiModelName() {
   return (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-3.5-flash-lite';
 }
 
+const GEMINI_ATTEMPT_TIMEOUT_MS = 10_000;
+const GEMINI_MAX_ATTEMPTS = 2;
+const GEMINI_RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
 async function callGemini(
   parts: unknown[],
   maxOutputTokens = 220,
@@ -133,43 +137,73 @@ async function callGemini(
   diagnostics?: { requestId?: string; operation: string }
 ) {
   const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) return null;
   const model = geminiModelName();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5500);
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.1, maxOutputTokens, ...(responseMimeType ? { responseMimeType } : {}) } }),
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      // Keep provider failures actionable in server logs without ever logging
-      // the API key, image bytes, prompt, or provider response body.
-      console.warn(JSON.stringify({
-        event: 'gemini_provider_unavailable',
-        requestId: diagnostics?.requestId,
-        operation: diagnostics?.operation ?? 'unknown',
-        model,
-        status: response.status
-      }));
-      return null;
-    }
-    const text = geminiText(await response.json());
-    return text ? { text, model } : null;
-  } catch (error) {
+  if (!key) {
     console.warn(JSON.stringify({
       event: 'gemini_provider_unavailable',
       requestId: diagnostics?.requestId,
       operation: diagnostics?.operation ?? 'unknown',
       model,
-      reason: error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network_error'
+      reason: 'missing_api_key'
     }));
     return null;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GEMINI_ATTEMPT_TIMEOUT_MS);
+    let retry = false;
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.1, maxOutputTokens, ...(responseMimeType ? { responseMimeType } : {}) } }),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        // Keep provider failures actionable without logging the key, image,
+        // prompt, or provider response body. Retry only transient statuses.
+        console.warn(JSON.stringify({
+          event: 'gemini_provider_unavailable',
+          requestId: diagnostics?.requestId,
+          operation: diagnostics?.operation ?? 'unknown',
+          model,
+          status: response.status,
+          attempt
+        }));
+        retry = attempt < GEMINI_MAX_ATTEMPTS && GEMINI_RETRYABLE_STATUSES.has(response.status);
+      } else {
+        const text = geminiText(await response.json());
+        if (text) return { text, model };
+        console.warn(JSON.stringify({
+          event: 'gemini_provider_unavailable',
+          requestId: diagnostics?.requestId,
+          operation: diagnostics?.operation ?? 'unknown',
+          model,
+          reason: 'empty_response',
+          attempt
+        }));
+        return null;
+      }
+    } catch (error) {
+      const reason = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network_error';
+      console.warn(JSON.stringify({
+        event: 'gemini_provider_unavailable',
+        requestId: diagnostics?.requestId,
+        operation: diagnostics?.operation ?? 'unknown',
+        model,
+        reason,
+        attempt
+      }));
+      retry = attempt < GEMINI_MAX_ATTEMPTS;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!retry) return null;
+    await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+  }
+  return null;
 }
 
 function parseJsonObject(text: string) {

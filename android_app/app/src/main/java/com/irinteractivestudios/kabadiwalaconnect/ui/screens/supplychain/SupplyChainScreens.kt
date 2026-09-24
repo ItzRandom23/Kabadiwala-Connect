@@ -13,6 +13,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +86,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -95,6 +98,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
@@ -228,6 +233,7 @@ private fun HouseholdSalePanel(busy: Boolean, onCreateListing: () -> Unit) {
 /** Live directory for a household. Pickup requests are made from a listing,
  * so the selected buyer and listing ownership remain explicit. */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun HouseholdKabadiwalasScreen(
     state: SupplyChainState,
     onRefresh: () -> Unit,
@@ -277,11 +283,9 @@ fun HouseholdKabadiwalasScreen(
             }
         }
         item {
-            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomEnd = 6.dp, bottomStart = 24.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Search across India", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Enter a locality, city, state or PIN code. Partners appear only where service is active.", style = MaterialTheme.typography.bodySmall)
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Search across India", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Enter a locality, city, state or PIN code. Partners appear only where service is active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -296,22 +300,31 @@ fun HouseholdKabadiwalasScreen(
         }
         item {
             Text("Search radius", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 listOf(5, 10, 25, 50, 100, 200).forEach { distance ->
-                    FilterChip(selected = radiusKm == distance, onClick = { radiusKm = distance }, label = { Text("$distance km") })
+                    FilterChip(
+                        selected = radiusKm == distance,
+                        onClick = { radiusKm = distance },
+                        label = { Text("$distance km", maxLines = 1) },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    )
                 }
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { onSearch(area.trim(), radiusKm) }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Search area") }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onSearch(area.trim(), radiusKm) }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
                 OutlinedButton(onClick = {
                     val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (hasLocation) loadCurrentLocation() else showLocationRationale = true
-                }, enabled = !locationBusy && !state.kabadiwalaLoading, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) {
+                }, enabled = !locationBusy && !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                     if (locationBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.LocationOn, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Use my location")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Use current location", maxLines = 1)
                 }
             }
             if (locationError) Text("Location unavailable. Search by area or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
@@ -353,7 +366,6 @@ fun HouseholdKabadiwalasScreen(
             }
         }
         if (state.kabadiwalaHasMore) item { OutlinedButton(onClick = onLoadMore, enabled = !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Load more partners") } }
-        item { OutlinedButton(onClick = onRefresh, enabled = !state.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Refresh my listings and pickups") } }
     }
     if (showLocationRationale) AlertDialog(
         onDismissRequest = { showLocationRationale = false },
@@ -548,6 +560,7 @@ fun HouseholdListingCreateScreen(
     var cameraError by rememberSaveable { mutableStateOf(false) }
     var showCameraPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var cameraPermissionRequested by rememberSaveable { mutableStateOf(false) }
+    var cameraPermissionDenied by rememberSaveable { mutableStateOf(false) }
     var cameraPermissionBlocked by rememberSaveable { mutableStateOf(false) }
     var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -567,6 +580,8 @@ fun HouseholdListingCreateScreen(
                         photoPaths = (photoPaths + normalized.absolutePath).distinct().take(6)
                         photoError = false
                         cameraError = false
+                        cameraPermissionDenied = false
+                        cameraPermissionBlocked = false
                         if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
                     } else {
                         cameraError = true
@@ -587,6 +602,8 @@ fun HouseholdListingCreateScreen(
             }.onFailure {
                 pendingCameraPath = null
                 file.delete()
+                cameraPermissionDenied = false
+                cameraPermissionBlocked = false
                 cameraError = true
             }
         }
@@ -596,8 +613,11 @@ fun HouseholdListingCreateScreen(
         cameraPermissionRequested = true
         if (granted) {
             cameraError = false
+            cameraPermissionDenied = false
+            cameraPermissionBlocked = false
             launchCamera()
         } else {
+            cameraPermissionDenied = true
             val activity = context as? android.app.Activity
             cameraPermissionBlocked = activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
             cameraError = true
@@ -606,6 +626,8 @@ fun HouseholdListingCreateScreen(
     val requestCamera = {
         if (photoPaths.size < 6) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                cameraPermissionDenied = false
+                cameraPermissionBlocked = false
                 launchCamera()
             } else if (cameraPermissionRequested && (context as? android.app.Activity)?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.CAMERA) } == true) {
                 cameraPermissionBlocked = true
@@ -629,6 +651,8 @@ fun HouseholdListingCreateScreen(
                 photoPaths = (photoPaths + paths).distinct().take(6)
                 photoError = paths.size < uris.size
                 cameraError = false
+                cameraPermissionDenied = false
+                cameraPermissionBlocked = false
                 if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
             }
         }
@@ -698,8 +722,11 @@ fun HouseholdListingCreateScreen(
                         if (photoPaths.isEmpty()) Text("Add at least one clear photo to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (photoError) Text("Some photos could not be processed. Please choose a JPEG, PNG, or WebP image.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         if (cameraError) Text(
-                            if (cameraPermissionBlocked) "Camera access is blocked. Allow it in Settings, or choose a photo from your gallery."
-                            else "Camera couldn't be opened. Allow camera access or choose a photo from your gallery.",
+                            when {
+                                cameraPermissionBlocked -> "Camera access is blocked. Allow it in Settings, or choose a photo from your gallery."
+                                cameraPermissionDenied -> "Camera permission is needed to take a photo. Allow access or choose one from your gallery."
+                                else -> "Camera couldn't start. Try again or choose a photo from your gallery."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -780,25 +807,27 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }) {
     var showBulk by remember { mutableStateOf(false) }
-    var showTools by rememberSaveable(section) { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
     val title = when (section) {
         KabadiwalaSection.HOME -> "Collection desk"
         KabadiwalaSection.INVENTORY -> "Scrap inventory"
         KabadiwalaSection.PICKUPS -> "Household pickups"
         KabadiwalaSection.LOTS -> "Recycler sales"
+        KabadiwalaSection.TOOLS -> "Field tools"
     }
     val subtitle = when (section) {
         KabadiwalaSection.HOME -> "Your next pickup, stock and earnings in one view"
         KabadiwalaSection.INVENTORY -> "Available stock ready for a buyer"
         KabadiwalaSection.PICKUPS -> "Requests waiting for your next move"
         KabadiwalaSection.LOTS -> "Turn collected stock into buyer offers"
+        KabadiwalaSection.TOOLS -> "Routes, shared stock and safe handling"
     }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             if (section == KabadiwalaSection.HOME) CollectorDeskHeader(onRefresh, state.loading)
+            else if (section == KabadiwalaSection.TOOLS) FieldToolsHeader(onRefresh, state.loading)
             else RoleHeader(title, subtitle, Icons.Filled.Inventory2, onRefresh, state.loading)
         }
         if (section == KabadiwalaSection.HOME) item {
@@ -812,7 +841,12 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment) }
+                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment) }
+                if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
+                    TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text("View all ${state.pickups.size} pickups")
+                    }
+                }
             }
             KabadiwalaSection.INVENTORY -> {
                 item { InventoryTotals(state.inventory) }
@@ -831,12 +865,12 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 when (lotsMode) {
                     "LOTS" -> {
                         item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.") }
+                        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
                         items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk) }
                     }
                     "OFFERS" -> {
                         item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on listed lots appear here.") }
+                        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
                         items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer) }
                     }
                     else -> {
@@ -848,39 +882,37 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (visibleCapturedLots.isEmpty()) item { EmptyPanel("No saved records", "Collected scrap records will appear here.") }
+                        if (visibleCapturedLots.isEmpty()) item { EmptyPanel("No saved records", "Collected scrap records will appear here.", actionLabel = "Record scrap", onAction = onCreateCapturedLot) }
                         items(visibleCapturedLots, key = { "captured-${it.id}" }) { lot -> CapturedLotCard(lot) }
                     }
+                }
+            }
+            KabadiwalaSection.TOOLS -> {
+                item {
+                    FormalisationDashboard(
+                        state = state,
+                        currentArea = currentArea,
+                        currentCollectorId = currentCollectorId,
+                        onRouteEstimate = onRouteEstimate,
+                        onCreatePool = onCreatePool,
+                        onJoinPool = onJoinPool,
+                        onLeavePool = onLeavePool,
+                        onLockPool = onLockPool,
+                        onPreparePoolHandover = onPreparePoolHandover,
+                        onPrepareBulkHandover = onPrepareBulkHandover,
+                        onConfirmCollectorHandover = onConfirmCollectorHandover,
+                        onAcknowledgeSafety = onAcknowledgeSafety,
+                        onLoadSafetyRouting = onLoadSafetyRouting,
+                        onLoadMaterialPassport = onLoadMaterialPassport,
+                        onLoadAnomalies = onLoadAnomalies,
+                        onDecideSupplySettlement = onDecideSupplySettlement
+                    )
                 }
             }
         }
         if (section == KabadiwalaSection.HOME) {
             item {
-                SupplyChainToolsToggle(
-                    expanded = showTools,
-                    summary = "Routes · pooling · QR handovers · passport",
-                    onToggle = { showTools = !showTools }
-                )
-            }
-            if (showTools) item {
-                FormalisationDashboard(
-                    state = state,
-                    currentArea = currentArea,
-                    currentCollectorId = currentCollectorId,
-                    onRouteEstimate = onRouteEstimate,
-                    onCreatePool = onCreatePool,
-                    onJoinPool = onJoinPool,
-                    onLeavePool = onLeavePool,
-                    onLockPool = onLockPool,
-                    onPreparePoolHandover = onPreparePoolHandover,
-                    onPrepareBulkHandover = onPrepareBulkHandover,
-                    onConfirmCollectorHandover = onConfirmCollectorHandover,
-                    onAcknowledgeSafety = onAcknowledgeSafety,
-                    onLoadSafetyRouting = onLoadSafetyRouting,
-                    onLoadMaterialPassport = onLoadMaterialPassport,
-                    onLoadAnomalies = onLoadAnomalies,
-                    onDecideSupplySettlement = onDecideSupplySettlement
-                )
+                SupplyChainToolsShortcut(onOpenTools)
             }
         }
     }
@@ -927,13 +959,19 @@ private fun CollectorOverview(state: SupplyChainState, onCreateCapturedLot: () -
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Today’s field board", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Pickups, scheduled stops and stock ready for buyers.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                Text("Today at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Pickup workload and available stock.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                CollectorMetric(waiting.toString(), "Waiting", Modifier.weight(1f))
-                CollectorMetric(scheduled.toString(), "Scheduled", Modifier.weight(1f))
-                CollectorMetric("${"%.1f".format(stockKg)} kg", "In stock", Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Waiting pickups", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                    Text(waiting.toString(), style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold)
+                    Text("Need your attention", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                }
+                Column(Modifier.width(126.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    CollectorMetric(scheduled.toString(), "Scheduled", Modifier.fillMaxWidth())
+                    CollectorMetric("${"%.1f".format(stockKg)} kg", "In stock", Modifier.fillMaxWidth())
+                }
             }
             Button(onClick = onCreateCapturedLot, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 Icon(Icons.Filled.Inventory2, contentDescription = null)
@@ -968,6 +1006,21 @@ private fun CollectorDeskHeader(onRefresh: () -> Unit, loading: Boolean) {
 }
 
 @Composable
+private fun FieldToolsHeader(onRefresh: () -> Unit, loading: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Plan routes, coordinate shared stock, and review safe handling.",
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        IconButton(onClick = onRefresh, enabled = !loading) {
+            if (loading) CircularProgressIndicator(Modifier.size(22.dp)) else Icon(Icons.Filled.Refresh, "Refresh")
+        }
+    }
+}
+
+@Composable
 private fun CollectorMetric(value: String, label: String, modifier: Modifier = Modifier) {
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, modifier = modifier) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -978,27 +1031,30 @@ private fun CollectorMetric(value: String, label: String, modifier: Modifier = M
 }
 
 @Composable
-private fun SupplyChainToolsToggle(expanded: Boolean, summary: String, onToggle: () -> Unit) {
-    Surface(
+private fun SupplyChainToolsShortcut(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(Modifier.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Icon(Icons.Filled.Recycling, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.padding(horizontal = 10.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Supply-chain tools", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Field tools", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Routes · pooling · safety · records", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = onToggle, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(if (expanded) "Hide" else "Open")
-            }
+            Text("Open", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
-enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS }
+enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 
 @Composable
 private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit) {
@@ -1009,6 +1065,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     var showCancel by remember { mutableStateOf(false) }
     var showReassign by remember { mutableStateOf(false) }
     var showPhotos by remember(pickup.id) { mutableStateOf(false) }
+    var selectedPhotoIndex by remember(pickup.id) { mutableStateOf<Int?>(null) }
     var showPayment by remember(pickup.id) { mutableStateOf(false) }
     var showMoreActions by remember(pickup.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
@@ -1047,7 +1104,9 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     Spacer(Modifier.width(8.dp))
                     Text(if (photoCount == 1) "View scrap photo" else "View $photoCount scrap angles")
                 }
-                if (showPhotos) ListingPhotoStrip(loadedPhotos, photoCount, photoError)
+                if (showPhotos) ListingPhotoStrip(loadedPhotos, photoCount, photoError) { index ->
+                    selectedPhotoIndex = index
+                }
             }
             when (pickup.status) {
                 "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Claim pickup") }
@@ -1059,12 +1118,20 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 }
                 "ACCEPTED" -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { showAvailability = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Confirm ready") }
+                        OutlinedButton(onClick = { showAvailability = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Confirm time") }
                         OutlinedButton(onClick = { showSchedule = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Schedule") }
                     }
-                    Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
+                    if (isPickupWorkTimeNow()) {
+                        Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
+                    } else {
+                        Text("Pickup work hours are 10:30 AM–6:00 PM India time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                "SCHEDULED" -> Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
+                "SCHEDULED" -> if (isPickupWorkTimeNow()) {
+                    Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
+                } else {
+                    Text("Start trip during pickup hours: 10:30 AM–6:00 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 "IN_TRANSIT" -> Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
                 "ARRIVED" -> Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record weight") }
                 "COMPLETED" -> {
@@ -1089,9 +1156,25 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     if (showCancel) ReasonDialog(title = "Cancel pickup", confirmLabel = "Cancel", onDismiss = { showCancel = false }, onSubmit = { onCancel(pickup.id, it); showCancel = false })
     if (showReassign) ReassignDialog(onDismiss = { showReassign = false }, onSubmit = { reason, noShow -> onReassign(pickup.id, reason, noShow); showReassign = false })
     if (showPayment) PickupSettlementPaymentDialog(pickup, onDismiss = { showPayment = false }, onSubmit = { payment -> onRecordPayment(pickup.id, payment); showPayment = false })
+    selectedPhotoIndex?.let { index ->
+        loadedPhotos.getOrNull(index)?.let { photo ->
+            FullScreenListingPhotoDialog(
+                photo = photo,
+                photoIndex = index,
+                photoCount = loadedPhotos.size,
+                onDismiss = { selectedPhotoIndex = null }
+            )
+        }
+    }
 }
 
 private fun paymentMethodName(value: String) = when (value) { "UPI", "DIGITAL_WALLET" -> "UPI"; "CASH" -> "Cash"; else -> value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() } }
+
+private fun isPickupWorkTimeNow(): Boolean {
+    val indiaNow = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+    val minutesSinceMidnight = indiaNow.get(java.util.Calendar.HOUR_OF_DAY) * 60 + indiaNow.get(java.util.Calendar.MINUTE)
+    return minutesSinceMidnight in (10 * 60 + 30)..(18 * 60)
+}
 
 @Composable
 private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: () -> Unit, onSubmit: (PickupSettlementPaymentRequestDto) -> Unit) {
@@ -1122,7 +1205,7 @@ private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: (
 }
 
 @Composable
-private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?) {
+private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, onPhotoClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (photos.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1133,8 +1216,8 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(photos) { index, bytes ->
                     val bitmap = remember(bytes) { runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() }
-                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(width = 144.dp, height = 112.dp)) {
-                        if (bitmap != null) Image(bitmap, "Scrap angle ${index + 1}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(width = 144.dp, height = 112.dp).clickable { onPhotoClick(index) }) {
+                        if (bitmap != null) Image(bitmap, "Open scrap photo ${index + 1} full screen", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     }
                 }
             }
@@ -1148,33 +1231,113 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
 }
 
 @Composable
+private fun FullScreenListingPhotoDialog(
+    photo: ByteArray,
+    photoIndex: Int,
+    photoCount: Int,
+    onDismiss: () -> Unit
+) {
+    val bitmap = remember(photo) {
+        runCatching { BitmapFactory.decodeByteArray(photo, 0, photo.size)?.asImageBitmap() }.getOrNull()
+    }
+    var scale by remember(photo) { mutableStateOf(1f) }
+    var offsetX by remember(photo) { mutableStateOf(0f) }
+    var offsetY by remember(photo) { mutableStateOf(0f) }
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        val nextScale = (scale * zoomChange).coerceIn(1f, 5f)
+        scale = nextScale
+        if (nextScale == 1f) {
+            offsetX = 0f
+            offsetY = 0f
+        } else {
+            offsetX += panChange.x
+            offsetY += panChange.y
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Scrap photo ${photoIndex + 1} of $photoCount",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .transformable(transformState)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offsetX
+                            translationY = offsetY
+                        }
+                )
+            } else {
+                MaterialText(
+                    "This photo could not be opened.",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White
+                )
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = "Close full-screen photo", tint = Color.White)
+            }
+            MaterialText(
+                "Photo ${photoIndex + 1} of $photoCount · Pinch to zoom",
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
 private fun SchedulePickupDialog(
     onDismiss: () -> Unit,
     onSubmit: (String) -> Unit
 ) {
-    // Near-term choices keep the field flow fast while the API still receives
-    // a real ISO-8601 timestamp rather than a display-only label.
+    // Offer the next three half-hour slots inside the server's India-time
+    // operating window and 90-minute lead time.
     val slots = remember {
+        val indiaTimeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+        val now = java.util.Calendar.getInstance(indiaTimeZone)
+        val earliestAllowedTime = System.currentTimeMillis() + 95L * 60L * 1000L
+        val candidates = mutableListOf<java.util.Date>()
+        for (dayOffset in 0..14) {
+            val day = java.util.Calendar.getInstance(indiaTimeZone).apply {
+                timeInMillis = now.timeInMillis
+                add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
+            }
+            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 30) {
+                val slot = (day.clone() as java.util.Calendar).apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, minutesOfDay / 60)
+                    set(java.util.Calendar.MINUTE, minutesOfDay % 60)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }
+                if (slot.timeInMillis >= earliestAllowedTime) candidates += slot.time
+                if (candidates.size == 3) break
+            }
+            if (candidates.size == 3) break
+        }
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }
-        val displayFormatter = java.text.SimpleDateFormat("EEE, d MMM · h:mm a", java.util.Locale.getDefault())
-        listOf(2, 4, 6).map { hours ->
-            java.util.Calendar.getInstance().apply {
-                add(java.util.Calendar.HOUR_OF_DAY, hours)
-                set(java.util.Calendar.MINUTE, 0)
-                set(java.util.Calendar.SECOND, 0)
-                set(java.util.Calendar.MILLISECOND, 0)
-            }.time.let { time -> formatter.format(time) to displayFormatter.format(time) }
+        val displayFormatter = java.text.SimpleDateFormat("EEE, d MMM · h:mm a", java.util.Locale.getDefault()).apply {
+            timeZone = indiaTimeZone
         }
+        candidates.map { time -> formatter.format(time) to displayFormatter.format(time) }
     }
-    var selected by remember { mutableStateOf(slots.first().first) }
+    var selected by remember(slots.first().first) { mutableStateOf(slots.first().first) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Schedule collection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Choose a time for this pickup.", style = MaterialTheme.typography.bodyMedium)
+                Text("Pickups run 10:30 AM–6:00 PM. Choose a slot at least 90 minutes from now.", style = MaterialTheme.typography.bodyMedium)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         androidx.compose.material3.RadioButton(selected = selected == slot.first, onClick = { selected = slot.first })
@@ -1484,19 +1647,21 @@ private fun FormalisationDashboard(
     onLoadAnomalies: (String) -> Unit,
     onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit
 ) {
+    var selectedToolsTab by rememberSaveable { mutableStateOf("ROUTES") }
     var routeMaterial by remember { mutableStateOf("CABLE") }
     var routeQuantity by remember { mutableStateOf("10") }
     var routeCondition by remember { mutableStateOf("INTACT") }
     var showJoin by remember { mutableStateOf<PoolOpportunityDto?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Surface(shape = RoundedCornerShape(28.dp, 8.dp, 28.dp, 28.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.onPrimaryContainer); Text("Formal route desk", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                Text("Compare routes, pools and passport evidence.", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text("Platform evidence—not a government certificate or guaranteed price.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .78f))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("ROUTES" to "Routes", "POOLING" to "Pooling", "SAFETY" to "Safety", "RECORDS" to "Records").forEach { (key, label) ->
+                FilterChip(selected = selectedToolsTab == key, onClick = { selectedToolsTab = key }, label = { Text(label) })
             }
         }
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
+        if (selectedToolsTab == "ROUTES") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary); Text("Formal Route Advantage", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 Text("Compare rate, pickup readiness and logistics cost.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1513,7 +1678,7 @@ private fun FormalisationDashboard(
                 }
             }
         }
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
+        if (selectedToolsTab == "SAFETY") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Safety-aware routing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("Check handling before moving hazardous or data-bearing material.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1528,7 +1693,7 @@ private fun FormalisationDashboard(
                 }
             }
         }
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
+        if (selectedToolsTab == "POOLING") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text("Cooperative pooling", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 Text("Reserve available stock; thresholds and contributions stay visible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1563,7 +1728,7 @@ private fun FormalisationDashboard(
                 if (state.poolOpportunities.isEmpty() && state.pools.isEmpty()) Text("No open demand. New pools appear after a Recycler publishes demand.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        if (state.demandIntelligence.isNotEmpty()) {
+        if (selectedToolsTab == "POOLING" && state.demandIntelligence.isNotEmpty()) {
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Demand intelligence", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1574,18 +1739,20 @@ private fun FormalisationDashboard(
                 }
             }
         }
-        state.passport?.let { passport ->
+        if (selectedToolsTab == "RECORDS") state.passport?.let { passport ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("Collector Growth Passport", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${passport.formalHandoverCount} handovers · ${"%.1f".format(passport.formalQuantityKg)} kg · ${passport.safetyModulesCompleted} safety modules", style = MaterialTheme.typography.bodyLarge); Text(passport.platformLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall); Text(passport.disclaimer ?: "Platform evidence profile; not official certification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .78f)) }
             }
         }
-        state.safety?.let { safety ->
+        if (selectedToolsTab == "SAFETY") state.safety?.let { safety ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Safety gate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); safety.modules.forEach { module -> val acknowledged = safety.progress.any { it.moduleKey == module.key && it.acknowledged }; Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(module.title, fontWeight = FontWeight.SemiBold); Text(module.whatNotToDo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (acknowledged) StatusChip("Acknowledged") else TextButton(onClick = { onAcknowledgeSafety(module.key) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Acknowledge") } } } }
             }
         }
-        state.handovers.take(3).forEach { handover -> SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement) }
-        if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text("Showing saved evidence. Changes wait for the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (selectedToolsTab == "RECORDS") {
+            state.handovers.take(3).forEach { handover -> SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement) }
+            if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text("Showing saved evidence. Changes wait for the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
     showJoin?.let { opportunity -> JoinPoolDialog(opportunity, onDismiss = { showJoin = null }, onSubmit = { quantity, grade, rate -> opportunity.existingPool?.id?.let { onJoinPool(it, quantity, grade, rate) }; showJoin = null }) }
 }
@@ -1654,6 +1821,23 @@ private fun Text(
 @Composable private fun BoxRule() { Spacer(Modifier.height(4.dp)); Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.width(36.dp).height(4.dp)) {}; Spacer(Modifier.height(8.dp)) }
 @Composable private fun SummaryStrip(left: String, right: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(left, fontWeight = FontWeight.Bold); Text(right, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } } }
 @Composable private fun StatusChip(text: String) { Surface(shape = RoundedCornerShape(99.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-@Composable private fun ErrorPanel(text: String, retry: () -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = retry) { Text("Retry") } } } }
+@Composable
+private fun ErrorPanel(text: String, retry: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = .4f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = retry, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("Retry") }
+        }
+    }
+}
 @Composable private fun LoadingPanel(text: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
-@Composable private fun EmptyPanel(title: String, detail: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .2f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+@Composable private fun EmptyPanel(title: String, detail: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .2f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(horizontal = 18.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant); if (actionLabel != null && onAction != null) TextButton(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp)) { Text(actionLabel) } } } }

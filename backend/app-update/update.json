@@ -1,8 +1,8 @@
 {
-  "versionCode": 46,
-  "versionName": "0.0.45-beta",
-  "apkUrl": "kabadiwala-connect-0.0.45-beta-debug.apk",
-  "sha256": "2BEC4E959C11C226DDB91A449FBB95170B59837B3470C3E6B97A966888D1C886",
-  "sizeBytes": 28560835,
-  "releaseNotes": "India-wide area price search, verified nearby Kabadiwala profiles and ratings, and operator-reconciled cash/UPI pickup payments."
+  "versionCode": 47,
+  "versionName": "0.0.46-beta",
+  "apkUrl": "kabadiwala-connect-0.0.46-beta-debug.apk",
+  "sha256": "466C4071C1AE12FC87631F1FFA82253C150FAC31B26CFD95AB02D0FAB026F739",
+  "sizeBytes": 28610026,
+  "releaseNotes": "Pickup scheduling during 10:30 AM–6:00 PM India time, full-screen scrap photos, improved pickup updates, and UI refinements."
 }

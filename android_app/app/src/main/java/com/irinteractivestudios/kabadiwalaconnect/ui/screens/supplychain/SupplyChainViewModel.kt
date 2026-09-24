@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
@@ -103,14 +104,30 @@ class SupplyChainViewModel(
     private val _state = MutableStateFlow(SupplyChainState(kabadiwalaAreaQuery = initialHouseholdArea().orEmpty()))
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
+    private var householdRefreshGeneration = 0L
 
     private fun friendly(error: Throwable) = when ((error as? RemoteApiException)?.code) {
         "HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED" -> "Your session expired. Please sign in again."
         "HTTP_403" -> "This action is not available for your role."
         "HTTP_409" -> "That record changed. Refresh and try again."
         "HTTP_422" -> "Check the highlighted details and try again."
+        "EMPTY_RESPONSE" -> "The server returned an incomplete response. Please try again."
         "INVALID_PHOTO", "PHOTO_REQUIRED", "PHOTO_UPLOAD_FAILED" -> "That photo could not be uploaded. Choose another clear image and retry."
-        else -> if (error is IllegalStateException && error.message?.contains("photo", ignoreCase = true) == true) "The selected photo is no longer available. Choose it again." else "Could not reach the recycling network. Check your connection and retry."
+        else -> when {
+            error is IllegalStateException && error.message?.contains("photo", ignoreCase = true) == true -> "The selected photo is no longer available. Choose it again."
+            error is IOException -> "Connection issue. Check your internet and retry."
+            else -> "Could not load the latest collection data. Please try again."
+        }
+    }
+
+    private fun householdRefreshError(error: Throwable, section: String): String {
+        val remoteCode = (error as? RemoteApiException)?.code
+        return when {
+            remoteCode in setOf("HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED", "HTTP_403", "HTTP_409", "HTTP_422") -> friendly(error)
+            error is IOException -> friendly(error)
+            remoteCode == "EMPTY_RESPONSE" -> "The server returned an incomplete response for $section. Please try again."
+            else -> "Could not load $section. Please try again."
+        }
     }
 
     private fun allowed(role: AccountRole): Boolean = roleProvider()?.let { it == role } ?: true
@@ -197,6 +214,7 @@ class SupplyChainViewModel(
     fun refreshHousehold(radiusKm: Int? = null, areaQuery: String? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         resetForAccountChange()
+        val generation = ++householdRefreshGeneration
         val requestedRadiusKm = radiusKm ?: _state.value.kabadiwalaRadiusKm
         val requestedArea = areaQuery ?: _state.value.kabadiwalaAreaQuery
         viewModelScope.launch {
@@ -205,18 +223,24 @@ class SupplyChainViewModel(
             if (cached.isNotEmpty()) {
                 _state.value = _state.value.copy(listings = cached)
             }
+            var activeSection = "your listings"
             runCatching {
                 restorePendingPhotoUpload()
                 val listings = mergeHouseholdListings(api.getHouseholdListings().requireData())
+                activeSection = "your pickup history"
                 val pickups = api.getHouseholdPickups().requireData()
+                activeSection = "nearby Kabadiwalas"
                 val directory = api.getHouseholdKabadiwalas(
                     _state.value.kabadiwalaLatitude,
                     _state.value.kabadiwalaLongitude,
                     requestedRadiusKm,
                     requestedArea.ifBlank { null }
-                ).requireData()
+                ).requireData().toKabadiwalaDirectoryDto()
+                if (generation != householdRefreshGeneration) return@launch
                 _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, error = null)
             }.onFailure { error ->
+                if (generation != householdRefreshGeneration) return@onFailure
+                Log.e("HouseholdRefresh", "Failed loading $activeSection (${error::class.java.simpleName})")
                 // Keep the durable account-scoped cache visible when the
                 // request fails after process death or during an offline
                 // transition. The error remains actionable via Retry.
@@ -224,7 +248,7 @@ class SupplyChainViewModel(
                 _state.value = _state.value.copy(
                     loading = false,
                     listings = latestCached.ifEmpty { _state.value.listings },
-                    error = friendly(error)
+                    error = householdRefreshError(error, activeSection)
                 )
             }
         }
@@ -239,7 +263,7 @@ class SupplyChainViewModel(
         resetForAccountChange()
         _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaLoading = true, error = null)
         viewModelScope.launch {
-            runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData() }
+            runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
                     _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
                 }
@@ -251,7 +275,7 @@ class SupplyChainViewModel(
         if (current.kabadiwalaLoading || !current.kabadiwalaHasMore) return
         _state.value = current.copy(kabadiwalaLoading = true)
         viewModelScope.launch {
-            runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1).requireData() }
+            runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
                     _state.value = _state.value.copy(kabadiwalas = _state.value.kabadiwalas + directory.items, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
                 }
@@ -540,16 +564,16 @@ class SupplyChainViewModel(
         )
         if (partialFailure) "Loaded ${photos.size} of $count scrap photos. You can retry for the remaining angles." else "${photos.size} scrap photo${if (photos.size == 1) "" else "s"} loaded."
     })
-    fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", AccountRole.HOUSEHOLD, { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Listing cancelled." })
-    fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshHousehold(); "Pickup cancelled." })
+    fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", AccountRole.HOUSEHOLD, { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Listing cancelled." })
+    fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })
     fun decideHouseholdSettlement(pickupId: String, decision: String, reasonCode: String? = null, notes: String? = null) = action("settlement-$pickupId", AccountRole.HOUSEHOLD, { api.decideHouseholdSettlement(pickupId, SettlementDecisionDto(decision, reasonCode, null, notes)).requireData(); refreshHousehold(); "Settlement decision recorded." })
-    fun acceptListing(listingId: String) = action("accept-$listingId", AccountRole.COLLECTOR, { api.acceptHouseholdListing(listingId).requireData(); refreshKabadiwala(); "Pickup accepted." })
-    fun rejectPickup(pickupId: String, reason: String? = null) = action("reject-$pickupId", AccountRole.COLLECTOR, { api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireData(); refreshKabadiwala(); "Pickup declined and returned to the network." })
+    fun acceptListing(listingId: String) = action("accept-$listingId", AccountRole.COLLECTOR, { api.acceptHouseholdListing(listingId).requireSuccess(); refreshKabadiwala(); "Pickup accepted." })
+    fun rejectPickup(pickupId: String, reason: String? = null) = action("reject-$pickupId", AccountRole.COLLECTOR, { api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup declined and returned to the network." })
     fun confirmAvailability(pickupId: String, slot: String? = null) = action("availability-$pickupId", AccountRole.COLLECTOR, { api.confirmPickupAvailability(pickupId, PickupAvailabilityDto(true, slot)).requireData(); refreshKabadiwala(); "Availability confirmed." })
-    fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireData(); refreshKabadiwala(); "Pickup scheduled." })
-    fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", AccountRole.COLLECTOR, { api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireData(); refreshKabadiwala(); "Pickup updated." })
-    fun cancelKabadiwalaPickup(pickupId: String, reason: String? = null) = action("cancel-collector-$pickupId", AccountRole.COLLECTOR, { api.cancelKabadiwalaPickup(pickupId, CancellationRequestDto(reason)).requireData(); refreshKabadiwala(); "Pickup cancelled." })
+    fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireSuccess(); refreshKabadiwala(); "Pickup scheduled." })
+    fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", AccountRole.COLLECTOR, { api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireSuccess(); refreshKabadiwala(); "Pickup updated." })
+    fun cancelKabadiwalaPickup(pickupId: String, reason: String? = null) = action("cancel-collector-$pickupId", AccountRole.COLLECTOR, { api.cancelKabadiwalaPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup cancelled." })
     fun reassignPickup(pickupId: String, reason: String, noShow: Boolean = false) = action("reassign-$pickupId", AccountRole.COLLECTOR, { api.reassignPickup(pickupId, PickupReassignDto(reason, noShow)).requireData(); refreshKabadiwala(); "Pickup returned to the network for reassignment." })
     fun completePickup(pickupId: String, input: PickupCompletionDto) = action("complete-$pickupId", AccountRole.COLLECTOR, { api.completePickup(pickupId, input).requireData(); refreshKabadiwala(); "Purchase completed and inventory updated." })
     fun recordPickupSettlementPayment(pickupId: String, input: PickupSettlementPaymentRequestDto) = action("pickup-payment-$pickupId", AccountRole.COLLECTOR, {

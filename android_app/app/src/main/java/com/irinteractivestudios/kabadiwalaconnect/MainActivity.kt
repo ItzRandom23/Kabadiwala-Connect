@@ -304,6 +304,7 @@ class MainActivity : ComponentActivity() {
                     Destinations.KABADIWALA_INVENTORY -> stringResource(R.string.nav_kabadiwala_inventory)
                     Destinations.KABADIWALA_PICKUPS -> stringResource(R.string.nav_kabadiwala_pickups)
                     Destinations.KABADIWALA_LOTS -> stringResource(R.string.nav_kabadiwala_lots)
+                    Destinations.KABADIWALA_TOOLS -> "Field tools"
                     Destinations.HOUSEHOLD_DEAL -> stringResource(R.string.future_transaction_chat)
                     Destinations.REWARDS -> stringResource(R.string.settings_rewards)
                     Destinations.SCHEMES -> stringResource(R.string.settings_schemes)

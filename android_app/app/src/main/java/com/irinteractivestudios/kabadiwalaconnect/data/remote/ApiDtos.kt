@@ -1,6 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.remote
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
 data class ApiErrorEnvelope(val success: Boolean = false, val error: ApiErrorDto? = null, val requestId: String? = null)
@@ -27,6 +28,101 @@ data class KabadiwalaProfileDto(
     val reviewCount: Int = 0
 )
 data class KabadiwalaDirectoryDto(val items: List<KabadiwalaProfileDto> = emptyList(), val pagination: PageDto = PageDto(), val requiresLocation: Boolean = false)
+
+/**
+ * The directory endpoint has existed in both a paginated-object form and a
+ * legacy bare-array form. Decode its JSON shape first, then normalize profile
+ * fields so an older deployed backend cannot break the entire household feed.
+ */
+internal fun JsonElement.toKabadiwalaDirectoryDto(): KabadiwalaDirectoryDto {
+    if (isJsonArray) {
+        val items = asJsonArray.mapNotNull { it.toKabadiwalaProfileOrNull() }
+        return KabadiwalaDirectoryDto(
+            items = items,
+            pagination = PageDto(page = 1, limit = maxOf(items.size, 20), total = items.size, totalPages = if (items.isEmpty()) 0 else 1)
+        )
+    }
+    if (!isJsonObject) return KabadiwalaDirectoryDto()
+
+    var root = asJsonObject
+    if (!root.has("items") && !root.has("partners") && !root.has("kabadiwalas") && root.get("data")?.isJsonObject == true) {
+        root = root.getAsJsonObject("data")
+    }
+    val itemValue = sequenceOf("items", "partners", "kabadiwalas", "results")
+        .mapNotNull { root.get(it) }
+        .firstOrNull()
+    val items = when {
+        itemValue?.isJsonArray == true -> itemValue.asJsonArray.mapNotNull { it.toKabadiwalaProfileOrNull() }
+        itemValue?.isJsonObject == true -> itemValue.asJsonObject.entrySet().mapNotNull { (id, value) -> value.toKabadiwalaProfileOrNull(id) }
+        root.has("id") || root.has("kabadiwalaId") || root.has("collectorId") -> listOfNotNull(root.toKabadiwalaProfileOrNull())
+        else -> emptyList()
+    }
+
+    val pageObject = root.get("pagination")?.takeIf { it.isJsonObject }?.asJsonObject
+    val page = pageObject?.intValue("page") ?: root.intValue("page") ?: 1
+    val limit = (pageObject?.intValue("limit") ?: root.intValue("limit") ?: 20).coerceAtLeast(1)
+    val total = pageObject?.intValue("total") ?: root.intValue("total") ?: items.size
+    val totalPages = pageObject?.intValue("totalPages") ?: root.intValue("totalPages")
+        ?: if (total == 0) 0 else (total + limit - 1) / limit
+
+    return KabadiwalaDirectoryDto(
+        items = items,
+        pagination = PageDto(page = page, limit = limit, total = total, totalPages = totalPages),
+        requiresLocation = root.booleanValue("requiresLocation") ?: false
+    )
+}
+
+private fun JsonElement.toKabadiwalaProfileOrNull(fallbackId: String? = null): KabadiwalaProfileDto? {
+    if (!isJsonObject) return null
+    val obj = asJsonObject
+    val materials = sequenceOf("collectedMaterials", "materials", "acceptedMaterials")
+        .mapNotNull { obj.get(it) }
+        .firstOrNull()
+        .let { value ->
+            when {
+                value?.isJsonArray == true -> value.asJsonArray.mapNotNull { element -> element.primitiveString() }.filter(String::isNotBlank)
+                value?.isJsonPrimitive == true -> value.primitiveString().orEmpty().split(',', '|').map(String::trim).filter(String::isNotBlank)
+                value?.isJsonObject == true -> value.asJsonObject.entrySet().filter { it.value.booleanPrimitive() == true }.map { it.key }
+                else -> emptyList()
+            }
+        }
+    return KabadiwalaProfileDto(
+        id = obj.firstString("id", "kabadiwalaId", "collectorId", "profileId") ?: fallbackId.orEmpty(),
+        displayName = obj.firstString("displayName", "name", "businessName"),
+        areaName = obj.firstString("areaName", "serviceArea", "area", "location") ?: "",
+        verified = obj.firstBoolean("verified", "isVerified") ?: false,
+        distanceKm = obj.firstDouble("distanceKm", "distance"),
+        acceptingPickups = obj.firstBoolean("acceptingPickups", "available", "isAvailable") ?: false,
+        availablePickupSlots = obj.firstInt("availablePickupSlots", "availableSlots") ?: 0,
+        completedPickupCount = obj.firstInt("completedPickupCount", "completedPickups", "completedPickupTotal") ?: 0,
+        acceptedWeightKg = obj.firstDouble("acceptedWeightKg", "totalAcceptedWeightKg", "totalWeightKg") ?: 0.0,
+        collectedMaterials = materials,
+        ratingAverage = obj.firstDouble("ratingAverage", "averageRating"),
+        reviewCount = obj.firstInt("reviewCount", "ratingCount") ?: 0
+    )
+}
+
+private fun JsonObject.firstValue(vararg names: String): JsonElement? = names.firstNotNullOfOrNull { name ->
+    get(name)?.takeUnless { it.isJsonNull }
+}
+
+private fun JsonObject.firstString(vararg names: String): String? = firstValue(*names)?.primitiveString()
+private fun JsonObject.firstBoolean(vararg names: String): Boolean? = firstValue(*names)?.booleanPrimitive()
+private fun JsonObject.firstDouble(vararg names: String): Double? = firstValue(*names)?.primitiveString()?.toDoubleOrNull()
+private fun JsonObject.firstInt(vararg names: String): Int? = firstValue(*names)?.primitiveString()?.toDoubleOrNull()?.toInt()
+private fun JsonObject.intValue(name: String): Int? = get(name)?.takeUnless { it.isJsonNull }?.primitiveString()?.toDoubleOrNull()?.toInt()
+private fun JsonObject.booleanValue(name: String): Boolean? = get(name)?.takeUnless { it.isJsonNull }?.booleanPrimitive()
+
+private fun JsonElement.primitiveString(): String? = runCatching {
+    takeIf { it.isJsonPrimitive }?.asString
+}.getOrNull()
+
+private fun JsonElement.booleanPrimitive(): Boolean? = runCatching {
+    if (!isJsonPrimitive) return null
+    val primitive = asJsonPrimitive
+    if (primitive.isBoolean) primitive.asBoolean else primitive.asString.toBooleanStrictOrNull()
+}.getOrNull()
+
 data class KabadiwalaPublicProfileDto(
     val id: String = "",
     val displayName: String? = null,

@@ -3,6 +3,28 @@ import { AppError } from '../utils/errors.js';
 export const DEFAULT_DAILY_PICKUP_CAPACITY = 8;
 export const PICKUP_MIN_LEAD_MS = 90 * 60 * 1000;
 export const PICKUP_MAX_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
+export const PICKUP_TIME_ZONE = 'Asia/Kolkata';
+export const PICKUP_WORK_START_MINUTES = 10 * 60 + 30;
+export const PICKUP_WORK_END_MINUTES = 18 * 60;
+
+export function isPickupWorkTime(value: Date) {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: PICKUP_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(value);
+  const hour = Number(parts.find(part => part.type === 'hour')?.value);
+  const minute = Number(parts.find(part => part.type === 'minute')?.value);
+  const minutesSinceMidnight = hour * 60 + minute;
+  return minutesSinceMidnight >= PICKUP_WORK_START_MINUTES && minutesSinceMidnight <= PICKUP_WORK_END_MINUTES;
+}
+
+export function assertPickupWorkTime(value: Date) {
+  if (!isPickupWorkTime(value)) {
+    throw new AppError('CONFLICT', 'Pickups are available from 10:30 AM to 6:00 PM India time', 409, { code: 'PICKUP_OUTSIDE_WORKING_HOURS' });
+  }
+}
 
 /**
  * Pickup times are intentionally validated on the server. The Android client
@@ -12,6 +34,7 @@ export const PICKUP_MAX_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
 export function validatePickupSlot(value: string, now = new Date()) {
   const slot = new Date(value);
   if (Number.isNaN(slot.getTime())) throw new AppError('VALIDATION_ERROR', 'Pickup time is invalid', 422, { code: 'PICKUP_SLOT_INVALID' });
+  assertPickupWorkTime(slot);
   if (slot.getTime() < now.getTime() + PICKUP_MIN_LEAD_MS) throw new AppError('CONFLICT', 'Choose a pickup time at least 90 minutes from now', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
   if (slot.getTime() > now.getTime() + PICKUP_MAX_HORIZON_MS) throw new AppError('CONFLICT', 'Pickup time must be within the next 14 days', 409, { code: 'PICKUP_SLOT_TOO_FAR' });
   if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || ![0, 30].includes(slot.getUTCMinutes())) {

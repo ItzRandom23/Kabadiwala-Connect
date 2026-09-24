@@ -1,6 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.data.remote
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -48,7 +49,7 @@ interface ApiService {
     @GET("household/listings/{listingId}/passport")
     suspend fun getHouseholdListingPassport(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdPassportResponseDto>>
     @GET("household/kabadiwalas")
-    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20): Response<ApiEnvelope<KabadiwalaDirectoryDto>>
+    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20): Response<ApiEnvelope<JsonElement>>
     @GET("household/kabadiwalas/{kabadiwalaId}")
     suspend fun getHouseholdKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null): Response<ApiEnvelope<KabadiwalaPublicProfileDto>>
     @POST("household/pickups/{pickupId}/review")
@@ -490,6 +491,18 @@ fun <T> Response<ApiEnvelope<T>>.requireData(): T {
         throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
     }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
+}
+
+fun <T> Response<ApiEnvelope<T>>.requireSuccess() {
+    val envelope = body()
+    if (!isSuccessful) {
+        val raw = errorBody()?.string().orEmpty()
+        val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
+    }
+    if (envelope?.success != true) {
+        throw RemoteApiException("EMPTY_RESPONSE", envelope?.message ?: "The server did not confirm the update", code())
+    }
 }
 
 fun <T> Response<T>.requireBody(): T {
