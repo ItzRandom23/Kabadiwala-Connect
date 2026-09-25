@@ -1,8 +1,8 @@
 {
-  "versionCode": 53,
-  "versionName": "0.0.52-beta",
-  "apkUrl": "kabadiwala-connect-0.0.52-beta-debug.apk",
-  "sha256": "60742B287400255B40359E9B28B19364C8C18C904A6A3F80470044A2737DD54B",
-  "sizeBytes": 28645032,
-  "releaseNotes": "Nearby Kabadiwala search now uses the saved household location, and pickup QR confirmation safely retries concurrent scans."
+  "versionCode": 54,
+  "versionName": "0.0.53-beta",
+  "apkUrl": "kabadiwala-connect-0.0.53-beta-debug.apk",
+  "sha256": "523B82F376EA0049B51970D59ABB51FD6B01F607B06E5DD7B842DF95C8003EAB",
+  "sizeBytes": 28645038,
+  "releaseNotes": "GPS addresses now keep street and house details separate from the locality, and household pickups include saved coordinates."
 }

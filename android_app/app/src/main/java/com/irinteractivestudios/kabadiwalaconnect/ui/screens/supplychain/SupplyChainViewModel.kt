@@ -406,6 +406,7 @@ class SupplyChainViewModel(
                         condition = input.condition,
                         notes = input.notes,
                         areaName = input.areaName,
+                        pickupAddress = input.pickupAddress,
                         latitude = input.latitude,
                         longitude = input.longitude,
                         estimatedPriceMin = input.estimatedPriceMin,

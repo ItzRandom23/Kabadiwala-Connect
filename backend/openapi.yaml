@@ -150,6 +150,21 @@ paths:
         '403': { description: 'Role, account, or capability denied' }
         '404': { description: 'Resource not found or not owned by caller' }
         '409': { description: 'State, ownership, idempotency, or concurrency conflict' }
+  /account/profile:
+    put:
+      tags: [Backend]
+      summary: 'Update account location details'
+      description: 'Street, block, and house details are private profile fields; areaName remains the locality used for matching.'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountProfileUpdate' }
+      responses:
+        '200': { description: 'Account profile updated' }
+        '401': { description: 'Authentication required or token invalid' }
+        '422': { description: 'Validation error' }
   /collectors/me:
     get:
       tags: [Backend]
@@ -1201,7 +1216,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: { type: object, required: [materialCategory, estimatedWeight, condition, areaName], properties: { materialCategory: { type: string }, estimatedWeight: { type: number, exclusiveMinimum: 0 }, condition: { type: string }, areaName: { type: string, maxLength: 160 }, pickupAddress: { type: string, maxLength: 240 }, latitude: { type: number, minimum: -90, maximum: 90 }, longitude: { type: number, minimum: -180, maximum: 180 }, notes: { type: string, maxLength: 1000 }, dataBearingDevice: { type: boolean }, ownerPreparationCompleted: { type: boolean }, dataDestructionRequested: { type: boolean } } }
       responses:
         '200': { description: 'See API contract for the exact success envelope.' }
         '400': { description: 'Validation error' }
@@ -2845,7 +2860,8 @@ components:
         payload: { type: object, additionalProperties: true }
       description: 'Operation-specific payloads and actions are defined in docs/BACKEND_API_CONTRACT.md. Formal actions are role-scoped: COLLECTOR_CONFIRM, RECYCLER_CONFIRM, DISPOSAL_EVIDENCE, RELEASE, and SETTLEMENT_DECISION.'
     EmailLogin: { type: object, required: [email, password], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 } } }
-    EmailSignup: { type: object, required: [email, password, role], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 }, role: { type: string, enum: [HOUSEHOLD, COLLECTOR, RECYCLER] }, preferredLanguage: { type: string }, areaName: { type: string }, businessName: { type: string }, authorizationNumber: { type: string }, materialsAccepted: { type: array, items: { type: string } }, pickupAvailable: { type: boolean }, serviceRadiusKm: { type: number } } }
+    EmailSignup: { type: object, required: [email, password, role], properties: { email: { type: string, format: email, maxLength: 254 }, password: { type: string, minLength: 8, maxLength: 128 }, role: { type: string, enum: [HOUSEHOLD, COLLECTOR, RECYCLER] }, preferredLanguage: { type: string }, areaName: { type: string, maxLength: 160 }, address: { type: string, maxLength: 240 }, latitude: { type: number, minimum: -90, maximum: 90 }, longitude: { type: number, minimum: -180, maximum: 180 }, businessName: { type: string }, authorizationNumber: { type: string }, materialsAccepted: { type: array, items: { type: string } }, pickupAvailable: { type: boolean }, serviceRadiusKm: { type: number } } }
+    AccountProfileUpdate: { type: object, properties: { displayName: { type: string, maxLength: 160 }, email: { type: string, format: email, maxLength: 254, nullable: true }, areaName: { type: string, maxLength: 160 }, address: { type: string, maxLength: 240 }, latitude: { type: number, minimum: -90, maximum: 90, nullable: true }, longitude: { type: number, minimum: -180, maximum: 180, nullable: true }, preferredLanguage: { type: string } } }
     RecyclerVerificationRequest: { type: object, required: [authority, registrationNumber, authorizationType, evidenceReference, verificationSource, validUntil], properties: { authority: { type: string, minLength: 2, maxLength: 160 }, registrationNumber: { type: string, minLength: 2, maxLength: 160 }, authorizationType: { type: string, minLength: 2, maxLength: 160 }, evidenceReference: { type: string, minLength: 2, maxLength: 500 }, verificationSource: { type: string, minLength: 2, maxLength: 500 }, validUntil: { type: string, format: date } } }
     LotCreate: { type: object, required: [materialCategory, condition, weight, collectionLocation], properties: { materialCategory: { type: string, enum: [CRT, LCD_PANEL, PCB, CABLE, COPPER, BATTERY, MOTOR, MAGNET, PLASTIC, OTHER] }, materialSubcategory: { type: string }, sourceType: { type: string }, wasteRegime: { type: string, enum: [E_WASTE, BATTERY_WASTE, OTHER] }, imageProvenance: { type: string, enum: [CAMERA, GALLERY, IMPORTED, LEGACY] }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, weight: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 500000 }, weightUnit: { type: string, enum: [KILOGRAM, GRAM, PIECE] }, collectionLocation: { type: object, properties: { latitude: { type: number }, longitude: { type: number }, areaName: { type: string }, precision: { type: string, enum: [GPS, MANUAL] } } }, notes: { type: string, maxLength: 1000 } } }
     LotUpdate: { type: object, required: [version], properties: { weight: { type: number }, condition: { type: string, enum: [INTACT, DAMAGED, PARTIAL] }, notes: { type: string }, version: { type: integer, minimum: 1 } } }

@@ -11,6 +11,9 @@ export type EmailAccountInput = {
   role: 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER';
   preferredLanguage: 'ENGLISH' | 'HINDI' | 'MARATHI' | 'ASSAMESE' | 'BENGALI' | 'BODO' | 'DOGRI' | 'GUJARATI' | 'KANNADA' | 'KASHMIRI' | 'KONKANI' | 'MAITHILI' | 'MALAYALAM' | 'MANIPURI' | 'NEPALI' | 'ODIA' | 'PUNJABI' | 'SANSKRIT' | 'SANTALI' | 'SINDHI' | 'TAMIL' | 'TELUGU' | 'URDU';
   areaName?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
   businessName?: string;
   authorizationNumber?: string;
   materialsAccepted?: string[];
@@ -38,6 +41,7 @@ const publicProfile = (user: any, profile: any) => ({
   phone: user.phone ?? profile?.phone ?? null,
   displayName: user.role === 'RECYCLER' ? profile?.name ?? null : profile?.displayName ?? null,
   areaName: profile?.areaName ?? null,
+  address: profile?.address ?? null,
   role: user.role,
   preferredLanguage: user.preferredLanguage,
   accountStatus: user.accountStatus,
@@ -66,7 +70,7 @@ export class EmailAuthService {
       created = await this.db.$transaction(async (tx) => {
       if (input.role !== 'RECYCLER') {
         const profile = await tx.collector.create({
-          data: { phone: null, email, preferredLanguage: input.preferredLanguage, areaName: input.areaName?.trim() ?? '' }
+          data: { phone: null, email, preferredLanguage: input.preferredLanguage, areaName: input.areaName?.trim() ?? '', address: input.address?.trim() || null, latitude: input.latitude, longitude: input.longitude }
         });
         const user = await tx.user.create({ data: { email, passwordHash: hashPassword(input.password), role: input.role, preferredLanguage: input.preferredLanguage, collectorProfileId: profile.id } });
         return { user, profile };
@@ -75,8 +79,10 @@ export class EmailAuthService {
         data: {
           email,
           name: input.businessName?.trim() || 'New recycler facility',
-          address: input.areaName?.trim() || 'Location to be confirmed',
+          address: input.address?.trim() || input.areaName?.trim() || 'Location to be confirmed',
           areaName: input.areaName?.trim() || 'Location to be confirmed',
+          latitude: input.latitude,
+          longitude: input.longitude,
           authorizationStatus: 'PENDING',
           licenseNumber: input.authorizationNumber?.trim() || null,
           maxPickupDistanceKm: input.serviceRadiusKm ?? 25,

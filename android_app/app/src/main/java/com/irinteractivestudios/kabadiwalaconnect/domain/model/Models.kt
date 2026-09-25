@@ -16,6 +16,8 @@ data class AccountProfile(
     val phoneNumber: String = "",
     val displayName: String? = null,
     val areaName: String? = null,
+    /** Optional street, building, block, or house detail; never used for area matching. */
+    val address: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
     /** Operator capabilities returned by the server; empty for non-admin accounts. */

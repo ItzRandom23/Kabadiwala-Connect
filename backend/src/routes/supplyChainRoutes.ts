@@ -17,7 +17,7 @@ const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY'
 const condition = z.enum(['INTACT', 'DAMAGED', 'PARTIAL']);
 const positive = z.number().finite().positive();
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/);
-const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().finite().min(-90).max(90).optional(), longitude: z.number().finite().min(-180).max(180).optional(), estimatedPriceMin: positive.max(100000000).optional(), estimatedPriceMax: positive.max(100000000).optional(), dataBearingDevice: z.boolean().default(false), ownerPreparationCompleted: z.boolean().default(false), dataDestructionRequested: z.boolean().default(false) }).refine(value => value.estimatedPriceMin == null || value.estimatedPriceMax == null || value.estimatedPriceMin <= value.estimatedPriceMax, { message: 'Estimated minimum cannot exceed estimated maximum', path: ['estimatedPriceMax'] }).refine(value => !value.ownerPreparationCompleted || value.dataBearingDevice, { message: 'Owner preparation only applies to data-bearing devices', path: ['ownerPreparationCompleted'] }).refine(value => !value.dataDestructionRequested || value.dataBearingDevice, { message: 'Destruction requests only apply to data-bearing devices', path: ['dataDestructionRequested'] });
+const listingInput = z.object({ materialCategory: material, estimatedWeight: positive.max(500), condition, notes: z.string().trim().max(1000).optional(), photoReference: z.string().trim().max(500).optional(), areaName: z.string().trim().min(1).max(160), pickupAddress: z.string().trim().max(240).optional(), latitude: z.number().finite().min(-90).max(90).optional(), longitude: z.number().finite().min(-180).max(180).optional(), estimatedPriceMin: positive.max(100000000).optional(), estimatedPriceMax: positive.max(100000000).optional(), dataBearingDevice: z.boolean().default(false), ownerPreparationCompleted: z.boolean().default(false), dataDestructionRequested: z.boolean().default(false) }).refine(value => value.estimatedPriceMin == null || value.estimatedPriceMax == null || value.estimatedPriceMin <= value.estimatedPriceMax, { message: 'Estimated minimum cannot exceed estimated maximum', path: ['estimatedPriceMax'] }).refine(value => !value.ownerPreparationCompleted || value.dataBearingDevice, { message: 'Owner preparation only applies to data-bearing devices', path: ['ownerPreparationCompleted'] }).refine(value => !value.dataDestructionRequested || value.dataBearingDevice, { message: 'Destruction requests only apply to data-bearing devices', path: ['dataDestructionRequested'] });
 const pickupRequest = z.object({ kabadiwalaId: id.optional(), requestedSlot: z.string().datetime().optional() });
 const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
 const activePickupStatuses = ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
@@ -658,7 +658,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
 
   router.get('/kabadiwala/listings', requireAuth(jwt, collectors), async (req, res) => {
-    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { listingId: true } });
+    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { listingId: true, status: true } });
+    const assignedListingIds = new Set(assigned.map((pickup: { listingId: string }) => pickup.listingId));
+    const addressVisibleListingIds = new Set(assigned.filter((pickup: { listingId: string; status: string }) => !['CANCELLED', 'REJECTED'].includes(pickup.status)).map((pickup: { listingId: string }) => pickup.listingId));
     const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
     const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { listingId: true } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: { listingId: string }) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
@@ -667,12 +669,12 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     }).map((listing: any) => listing.id);
     const assignedIds = [...new Set([...assigned.map((pickup: { listingId: string }) => pickup.listingId), ...visibleWaitingIds])];
     const listings = assignedIds.length
-      ? await store.householdListing.findMany({ where: { id: { in: assignedIds } }, select: { id: true, materialCategory: true, estimatedWeight: true, condition: true, notes: true, photoReference: true, photoReferences: true, areaName: true, latitude: true, longitude: true, estimatedPriceMin: true, estimatedPriceMax: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+      ? await store.householdListing.findMany({ where: { id: { in: assignedIds } }, select: { id: true, materialCategory: true, estimatedWeight: true, condition: true, notes: true, photoReference: true, photoReferences: true, areaName: true, pickupAddress: true, latitude: true, longitude: true, estimatedPriceMin: true, estimatedPriceMax: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' }, take: 100 })
       : [];
     // Photo references are private storage keys. The collector receives only a
     // presence flag; the image itself remains behind the assigned-pickup photo
     // endpoint below.
-    res.json({ success: true, data: listings.map(({ photoReference, photoReferences, ...listing }: { photoReference?: string | null; photoReferences?: string[]; [key: string]: unknown }) => ({ ...listing, photoAttached: Boolean(photoReference || photoReferences?.length), photoCount: photoReferences?.length || (photoReference ? 1 : 0) })) });
+    res.json({ success: true, data: listings.map(({ photoReference, photoReferences, ...listing }: { photoReference?: string | null; photoReferences?: string[]; [key: string]: any }) => ({ ...listing, pickupAddress: addressVisibleListingIds.has(listing.id) ? listing.pickupAddress ?? null : null, photoAttached: Boolean(photoReference || photoReferences?.length), photoCount: photoReferences?.length || (photoReference ? 1 : 0) })) });
   });
   router.get('/kabadiwala/listings/:listingId/photo', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);

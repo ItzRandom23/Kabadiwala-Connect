@@ -10,6 +10,7 @@ export type PhoneAccountInput = {
   role?: 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER';
   preferredLanguage?: string;
   areaName?: string;
+  address?: string;
   latitude?: number;
   longitude?: number;
   displayName?: string;
@@ -37,6 +38,7 @@ function publicPhoneProfile(user: any, profile: any) {
     phone: user.phone ?? profile?.phone ?? null,
     displayName: isRecycler ? profile?.name ?? null : profile?.displayName ?? null,
     areaName: profile?.areaName ?? null,
+    address: profile?.address ?? null,
     role: user.role,
     preferredLanguage: user.preferredLanguage,
     accountStatus: user.accountStatus,
@@ -164,6 +166,7 @@ export class AuthService {
       throw new AppError('VALIDATION_ERROR', 'Unsupported language', 422, { code: 'INVALID_LANGUAGE' });
     }
     const areaName = input.areaName?.trim() ?? '';
+    const address = input.address?.trim() ?? '';
     const latitude = input.latitude;
     const longitude = input.longitude;
     const displayName = input.displayName?.trim() ?? '';
@@ -244,6 +247,7 @@ export class AuthService {
               ...(accountEmail ? { email: accountEmail } : {}),
               ...(displayName ? { displayName } : {}),
               ...(areaName ? { areaName } : {}),
+              ...(address ? { address } : {}),
               ...(latitude !== undefined ? { latitude } : {}),
               ...(longitude !== undefined ? { longitude } : {}),
               preferredLanguage: preferredLanguage as any,
@@ -271,6 +275,7 @@ export class AuthService {
             displayName: displayName || null,
             preferredLanguage: preferredLanguage as any,
             areaName,
+            address: address || null,
             latitude,
             longitude,
             accountStatus: 'ACTIVE',
@@ -297,7 +302,7 @@ export class AuthService {
           phone,
           email: accountEmail,
           name: input.businessName?.trim() || displayName || 'New recycler facility',
-          address: areaName || 'Location to be confirmed',
+          address: address || areaName || 'Location to be confirmed',
           areaName: areaName || 'Location to be confirmed',
           latitude,
           longitude,

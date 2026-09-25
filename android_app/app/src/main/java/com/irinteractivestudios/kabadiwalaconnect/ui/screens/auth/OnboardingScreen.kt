@@ -374,6 +374,16 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
     }
     OutlinedTextField(state.area, vm::setArea, label = { Text(stringResource(R.string.auth_area_label)) }, leadingIcon = { Icon(Icons.Filled.LocationOn, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_area"))
+    OutlinedTextField(
+        value = state.address,
+        onValueChange = vm::setAddress,
+        label = { Text("Street / block / house number (optional)") },
+        supportingText = { Text("GPS may fill this in. Check it and add any missing details.") },
+        leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
+        minLines = 2,
+        maxLines = 3,
+        modifier = Modifier.fillMaxWidth().testTag("auth_address")
+    )
     if (state.role != AccountRole.RECYCLER) {
         OutlinedTextField(
             state.displayName,

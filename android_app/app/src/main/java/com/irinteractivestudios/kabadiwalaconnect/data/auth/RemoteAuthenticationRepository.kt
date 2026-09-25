@@ -73,6 +73,7 @@ class RemoteAuthenticationRepository(
                     role = account?.role?.wireName(),
                     preferredLanguage = account?.preferredLanguage?.let(LocaleManager::toBackendName),
                     areaName = account?.areaName.trimmedOrNull(),
+                    address = account?.address.trimmedOrNull(),
                     displayName = account?.displayName.trimmedOrNull(),
                     email = account?.email.trimmedOrNull(),
                     businessName = account?.businessName.trimmedOrNull(),
@@ -96,7 +97,8 @@ class RemoteAuthenticationRepository(
                     profileId = collector.id,
                     phoneNumber = collector.phone,
                     displayName = collector.displayName,
-                    areaName = collector.primaryLocation?.areaName
+                    areaName = collector.primaryLocation?.areaName,
+                    address = collector.address
                 )
             }
             profile?.let { storage?.saveAccount(it) }
@@ -138,6 +140,9 @@ class RemoteAuthenticationRepository(
                 role = request.role.wireName().takeUnless { request.isReturning },
                 preferredLanguage = LocaleManager.toBackendName(request.preferredLanguage),
                 areaName = request.areaName,
+                address = request.address.trim().takeIf { it.isNotEmpty() },
+                latitude = request.latitude,
+                longitude = request.longitude,
                 businessName = request.businessName,
                 authorizationNumber = request.authorizationNumber,
                 materialsAccepted = request.materialsAccepted,
@@ -244,6 +249,7 @@ class RemoteAuthenticationRepository(
                 displayName = update.displayName?.trim()?.takeIf { it.isNotEmpty() },
                 email = update.email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() },
                 areaName = update.areaName?.trim()?.takeIf { it.isNotEmpty() },
+                address = update.address?.trim(),
                 latitude = update.latitude,
                 longitude = update.longitude,
                 preferredLanguage = update.preferredLanguage?.let(LocaleManager::toBackendName)
@@ -280,6 +286,7 @@ class RemoteAuthenticationRepository(
             listOf(
                 SecureStorage.ACCOUNT_EMAIL, SecureStorage.ACCOUNT_PHONE,
                 SecureStorage.ACCOUNT_DISPLAY_NAME, SecureStorage.ACCOUNT_AREA_NAME,
+                SecureStorage.ACCOUNT_ADDRESS,
                 SecureStorage.ACCOUNT_ROLE, SecureStorage.ACCOUNT_VERIFICATION_STATUS,
                 SecureStorage.ACCOUNT_LANGUAGE, SecureStorage.ACCOUNT_PROFILE_ID,
                 SecureStorage.ACCOUNT_LATITUDE, SecureStorage.ACCOUNT_LONGITUDE,
@@ -333,6 +340,7 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     phoneNumber = phone ?: profile?.contact?.phone.orEmpty(),
     displayName = displayName ?: profile?.name,
     areaName = areaName ?: profile?.facilityLocation?.areaName,
+    address = address,
     latitude = latitude,
     longitude = longitude
 )

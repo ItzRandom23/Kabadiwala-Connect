@@ -30,6 +30,9 @@ data class EmailAccountRequest(
     val role: AccountRole,
     val preferredLanguage: String,
     val areaName: String = "",
+    val address: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val businessName: String = "",
     val authorizationNumber: String = "",
     val materialsAccepted: List<String> = emptyList(),
@@ -43,6 +46,7 @@ data class PhoneAccountRequest(
     val role: AccountRole,
     val preferredLanguage: String,
     val areaName: String = "",
+    val address: String = "",
     val displayName: String = "",
     val email: String = "",
     val businessName: String = "",
@@ -58,6 +62,7 @@ data class AccountProfileUpdate(
     val displayName: String?,
     val email: String?,
     val areaName: String?,
+    val address: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
     val preferredLanguage: String? = null
@@ -268,7 +273,10 @@ class MockAuthenticationRepository(
             businessName = account.businessName.ifBlank { null },
             phoneNumber = account.phoneNumber,
             displayName = account.displayName.ifBlank { account.businessName.ifBlank { null } },
-            areaName = account.areaName.ifBlank { null }
+            areaName = account.areaName.ifBlank { null },
+            address = account.address.trim().ifBlank { null },
+            latitude = account.latitude,
+            longitude = account.longitude
         )
         secureStorage?.saveAccount(profile)
         return result.copy(collectorId = profile.profileId, profile = profile)
@@ -283,7 +291,11 @@ class MockAuthenticationRepository(
             preferredLanguage = request.preferredLanguage,
             verificationStatus = if (request.role == AccountRole.RECYCLER) RecyclerVerificationStatus.PENDING else RecyclerVerificationStatus.VERIFIED,
             profileId = id,
-            businessName = request.businessName.ifBlank { null }
+            businessName = request.businessName.ifBlank { null },
+            areaName = request.areaName.ifBlank { null },
+            address = request.address.trim().ifBlank { null },
+            latitude = request.latitude,
+            longitude = request.longitude
         )
         val expiry = System.currentTimeMillis() + 30L * 24L * 60L * 60L * 1000L
         session.save("mock-email-${UUID.randomUUID()}", expiry)
@@ -302,6 +314,7 @@ fun SecureStorage.saveAccount(profile: AccountProfile) {
     put(SecureStorage.ACCOUNT_PHONE, profile.phoneNumber)
     put(SecureStorage.ACCOUNT_DISPLAY_NAME, profile.displayName ?: profile.businessName.orEmpty())
     put(SecureStorage.ACCOUNT_AREA_NAME, profile.areaName.orEmpty())
+    put(SecureStorage.ACCOUNT_ADDRESS, profile.address.orEmpty())
     put(SecureStorage.ACCOUNT_ROLE, profile.role.name)
     put(SecureStorage.ACCOUNT_VERIFICATION_STATUS, profile.verificationStatus.name)
     put(SecureStorage.ACCOUNT_LANGUAGE, profile.preferredLanguage)
@@ -325,6 +338,7 @@ fun SecureStorage.readAccount(): AccountProfile? {
         phoneNumber = get(SecureStorage.ACCOUNT_PHONE).orEmpty(),
         displayName = get(SecureStorage.ACCOUNT_DISPLAY_NAME)?.takeIf { it.isNotBlank() },
         areaName = get(SecureStorage.ACCOUNT_AREA_NAME)?.takeIf { it.isNotBlank() },
+        address = get(SecureStorage.ACCOUNT_ADDRESS)?.takeIf { it.isNotBlank() },
         latitude = get(SecureStorage.ACCOUNT_LATITUDE)?.toDoubleOrNull(),
         longitude = get(SecureStorage.ACCOUNT_LONGITUDE)?.toDoubleOrNull(),
         permissions = get(SecureStorage.ACCOUNT_PERMISSIONS).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()

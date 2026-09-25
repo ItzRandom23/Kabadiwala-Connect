@@ -41,7 +41,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificat
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.SectionCard
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 
-data class ProfileEditDraft(val displayName: String, val email: String, val areaName: String)
+data class ProfileEditDraft(val displayName: String, val email: String, val areaName: String, val address: String)
 
 @Composable
 fun ProfileScreen(
@@ -68,6 +68,7 @@ fun ProfileScreen(
             ProfileRow(Icons.Filled.Person, stringResource(R.string.profile_role), roleLabel(profile.role))
             ProfileRow(Icons.Filled.Language, stringResource(R.string.profile_language), LocaleManager.LABELS[activeLanguage] ?: activeLanguage)
             ProfileRow(Icons.Filled.LocationOn, stringResource(R.string.profile_area), profile.areaName ?: stringResource(R.string.profile_not_added))
+            ProfileRow(Icons.Filled.LocationOn, "Street / block / house", profile.address ?: stringResource(R.string.profile_not_added))
             ProfileRow(Icons.Filled.Verified, stringResource(R.string.profile_verification), verificationLabel(profile.verificationStatus))
             if (onSave != null && profile.role != AccountRole.ADMIN) {
                 Button(onClick = { editing = true }, enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -91,6 +92,7 @@ private fun ProfileEditorDialog(profile: AccountProfile, saving: Boolean, onDism
     var name by remember(profile.profileId) { mutableStateOf(profile.displayName ?: profile.businessName.orEmpty()) }
     var email by remember(profile.profileId) { mutableStateOf(profile.email) }
     var area by remember(profile.profileId) { mutableStateOf(profile.areaName.orEmpty()) }
+    var address by remember(profile.profileId) { mutableStateOf(profile.address.orEmpty()) }
     val valid = name.trim().isNotEmpty() && area.trim().isNotEmpty() && (email.isBlank() || email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")))
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -101,10 +103,11 @@ private fun ProfileEditorDialog(profile: AccountProfile, saving: Boolean, onDism
                 OutlinedTextField(name, { name = it.take(160) }, label = { Text(stringResource(R.string.profile_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it.take(254) }, label = { Text("Security email") }, singleLine = true, supportingText = { Text("Optional recovery and sign-in email") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(area, { area = it.take(160) }, label = { Text(stringResource(R.string.profile_area)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(address, { address = it.take(240) }, label = { Text("Street / block / house number") }, minLines = 2, maxLines = 3, supportingText = { Text("Used only as pickup detail for your account.") }, modifier = Modifier.fillMaxWidth())
             }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.common_back)) } },
-        confirmButton = { TextButton(onClick = { onSave(ProfileEditDraft(name.trim(), email.trim(), area.trim())) }, enabled = valid && !saving) { Text(if (saving) "Saving…" else "Save") } }
+        confirmButton = { TextButton(onClick = { onSave(ProfileEditDraft(name.trim(), email.trim(), area.trim(), address.trim())) }, enabled = valid && !saving) { Text(if (saving) "Saving…" else "Save") } }
     )
 }
 

@@ -33,6 +33,7 @@ interface SecureStorage {
         const val ACCOUNT_PHONE = "account_phone"
         const val ACCOUNT_DISPLAY_NAME = "account_display_name"
         const val ACCOUNT_AREA_NAME = "account_area_name"
+        const val ACCOUNT_ADDRESS = "account_address"
         const val ACCOUNT_ROLE = "account_role"
         const val ACCOUNT_VERIFICATION_STATUS = "account_verification_status"
         const val ACCOUNT_LANGUAGE = "account_language"

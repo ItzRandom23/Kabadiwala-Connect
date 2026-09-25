@@ -5,6 +5,7 @@ export type AccountProfileUpdate = {
   displayName?: string;
   email?: string | null;
   areaName?: string;
+  address?: string;
   latitude?: number | null;
   longitude?: number | null;
   preferredLanguage?: string;
@@ -56,7 +57,8 @@ export class AccountProfileService {
           data: {
             ...(email !== undefined ? { email } : {}),
             ...(input.displayName !== undefined ? { name: input.displayName } : {}),
-            ...(input.areaName !== undefined ? { areaName: input.areaName, address: input.areaName } : {}),
+            ...(input.areaName !== undefined ? { areaName: input.areaName } : {}),
+            ...(input.address ? { address: input.address } : {}),
             ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
             ...(input.longitude !== undefined ? { longitude: input.longitude } : {})
           },
@@ -71,6 +73,7 @@ export class AccountProfileService {
           ...(email !== undefined ? { email } : {}),
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
           ...(input.areaName !== undefined ? { areaName: input.areaName } : {}),
+          ...(input.address !== undefined ? { address: input.address || null } : {}),
           ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
           ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
           ...(input.preferredLanguage ? { preferredLanguage: input.preferredLanguage as any } : {})
@@ -89,6 +92,7 @@ function present(user: any, profile: any) {
     phone: user.phone ?? profile?.phone ?? null,
     displayName: recycler ? profile?.name ?? null : profile?.displayName ?? null,
     areaName: profile?.areaName ?? null,
+    address: profile?.address ?? null,
     latitude: profile?.latitude ?? null,
     longitude: profile?.longitude ?? null,
     role: user.role,

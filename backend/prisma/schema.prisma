@@ -369,6 +369,7 @@ model Collector {
   latitude          Float?
   longitude         Float?
   areaName          String
+  address           String?
   dailyPickupCapacity Int              @default(8)
   accountStatus     AccountStatus     @default(ACTIVE)
   pilotVerifiedAt   DateTime?
@@ -1163,6 +1164,7 @@ model HouseholdListing {
   photoReference  String?
   photoReferences String[] @default([])
   areaName        String
+  pickupAddress   String?
   latitude        Float?
   longitude       Float?
   estimatedPriceMin Float?

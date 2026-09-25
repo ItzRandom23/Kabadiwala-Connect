@@ -275,6 +275,9 @@ fun AppNavHost(
             HouseholdListingCreateScreen(
                 state = state,
                 initialArea = factory.currentAccount?.areaName.orEmpty(),
+                initialPickupAddress = factory.currentAccount?.address.orEmpty(),
+                latitude = factory.currentAccount?.latitude,
+                longitude = factory.currentAccount?.longitude,
                 busy = state.busy,
                 onBack = { navController.popBackStack() },
                 onSuggestMaterial = vm::suggestHouseholdMaterial,
@@ -923,7 +926,7 @@ fun AppNavHost(
                         saveError = null
                         scope.launch {
                             runCatching {
-                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, profile?.latitude, profile?.longitude))
+                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, draft.address, profile?.latitude, profile?.longitude))
                             }.onSuccess { updated ->
                                 profile = updated ?: profile
                                 saving = false
@@ -1114,7 +1117,7 @@ fun AppNavHost(
                         saveError = null
                         scope.launch {
                             runCatching {
-                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, profile?.latitude, profile?.longitude))
+                                factory.updateAccountProfile(AccountProfileUpdate(draft.displayName, draft.email, draft.areaName, draft.address, profile?.latitude, profile?.longitude))
                             }.onSuccess { updated ->
                                 profile = updated ?: profile
                                 saving = false

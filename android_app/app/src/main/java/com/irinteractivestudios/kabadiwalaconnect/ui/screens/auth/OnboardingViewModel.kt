@@ -45,6 +45,7 @@ data class OnboardingState(
     val otp: String = "",
     val language: String = LocaleManager.ENGLISH,
     val area: String = "",
+    val address: String = "",
     val locationChoice: LocationChoice = LocationChoice.MANUAL,
     val latitude: Double? = null,
     val longitude: Double? = null,
@@ -248,6 +249,7 @@ class OnboardingViewModel(
                             role = current.role,
                             preferredLanguage = current.language,
                             areaName = area,
+                            address = current.address.trim(),
                             displayName = displayName,
                             email = email,
                             businessName = businessName,
@@ -295,7 +297,8 @@ class OnboardingViewModel(
                         businessName = current.businessName.ifBlank { null },
                         phoneNumber = current.phone,
                         displayName = current.displayName.ifBlank { null },
-                        areaName = current.area
+                        areaName = current.area,
+                        address = current.address.trim().ifBlank { null }
                     )
                     // The backend owns the authenticated role. The client may
                     // request a role during signup, but must not rewrite the
@@ -361,6 +364,7 @@ class OnboardingViewModel(
                 latitude = detected?.latitude,
                 longitude = detected?.longitude,
                 area = detected?.areaName.orEmpty(),
+                address = detected?.formattedAddress.orEmpty(),
                 locationError = detected == null,
                 isLocationBusy = false,
                 step = OnboardingStep.AREA
@@ -373,12 +377,14 @@ class OnboardingViewModel(
             locationChoice = LocationChoice.MANUAL,
             latitude = null,
             longitude = null,
+            address = "",
             locationError = false,
             isLocationBusy = false,
             step = OnboardingStep.AREA
         )
     }
     fun setArea(value: String) { _state.value = _state.value.copy(area = value) }
+    fun setAddress(value: String) { _state.value = _state.value.copy(address = value.take(240)) }
     fun continueToPhone() {
         val current = _state.value
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
@@ -416,7 +422,7 @@ class OnboardingViewModel(
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true, authError = null)
             if (current.email.isNotBlank() && authenticatedCollectorId == null) {
-                val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
+                val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, address = current.address.trim(), latitude = current.latitude, longitude = current.longitude, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
                 when (val result = auth.authenticateEmail(request)) {
                     is EmailAuthentication.Success -> {
                         secureStorage?.saveAccount(result.profile)

@@ -152,12 +152,11 @@ private fun List<Address>.bestAddress(): Address? = maxByOrNull { address ->
  * unusable state-wide collection area.
  */
 private fun Address.collectionAreaName(): String? {
-    val localParts = listOf(
-    subLocality,
-    locality,
-    subAdminArea,
-    featureName?.takeUnless { value -> value.all(Char::isDigit) }
-    ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }.distinctBy(String::lowercase)
+    val localParts = listOfNotNull(
+        subLocality?.trim()?.takeIf(String::isNotBlank),
+        locality?.trim()?.takeIf(String::isNotBlank)
+            ?: subAdminArea?.trim()?.takeIf(String::isNotBlank)
+    ).distinctBy(String::lowercase)
     if (localParts.isEmpty()) return null
     return (localParts + listOfNotNull(adminArea?.trim()?.takeIf(String::isNotBlank)))
         .distinctBy(String::lowercase)

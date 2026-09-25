@@ -113,12 +113,16 @@ export class AccountPrivacyService {
             phone: null,
             email: null,
             displayName: null,
+            address: null,
             latitude: null,
             longitude: null,
             areaName: 'WITHDRAWN_ACCOUNT',
             accountStatus: 'DELETED'
           }
         });
+        if (role === 'HOUSEHOLD') {
+          await tx.householdListing.updateMany({ where: { householdId: profileId }, data: { pickupAddress: null, latitude: null, longitude: null } });
+        }
       }
 
       await tx.refreshToken.updateMany({ where: { actorId: profileId, revokedAt: null }, data: { revokedAt: now } });
