@@ -110,7 +110,7 @@ class AppContainer(context: Context) {
         RetrofitProvider.create(
             baseUrl = BuildConfig.API_BASE_URL,
             tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
-            tokenRefresher = { runBlocking { authenticationRepository.refreshAccessToken(force = true) } },
+            tokenRefresher = { failedToken -> runBlocking { authenticationRepository.refreshAccessToken(force = true, failedAccessToken = failedToken) } },
             onAuthenticationFailure = { failedToken -> expireAccountSessionIfCurrentToken(failedToken) }
         )
     }

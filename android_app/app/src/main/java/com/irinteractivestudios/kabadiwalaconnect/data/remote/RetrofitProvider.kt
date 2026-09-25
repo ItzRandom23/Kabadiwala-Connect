@@ -17,7 +17,7 @@ object RetrofitProvider {
     fun create(
         baseUrl: String = PLACEHOLDER_BASE_URL,
         tokenProvider: () -> String? = { null },
-        tokenRefresher: (() -> String?)? = null,
+        tokenRefresher: ((failedAccessToken: String?) -> String?)? = null,
         onAuthenticationFailure: ((failedToken: String?) -> Unit)? = null
     ): ApiService {
         val authInterceptor = Interceptor { chain ->
@@ -67,7 +67,7 @@ object RetrofitProvider {
                     synchronized(this) {
                         val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
                         val current = tokenProvider()
-                        val fresh = if (!current.isNullOrBlank() && current != requestToken) current else tokenRefresher()
+                        val fresh = if (!current.isNullOrBlank() && current != requestToken) current else tokenRefresher(requestToken)
                     fresh?.let { response.request.newBuilder().header("Authorization", "Bearer $it").build() }
                         ?: run {
                             // A rotated refresh token can be rejected when a
@@ -77,7 +77,7 @@ object RetrofitProvider {
                             // leave the UI in a protected state with a dead
                             // session. The owner clears the local session and
                             // returns the user to authentication.
-                            onAuthenticationFailure?.invoke(requestToken)
+                            if (tokenProvider().isNullOrBlank()) onAuthenticationFailure?.invoke(requestToken)
                             null
                         }
                 }

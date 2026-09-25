@@ -199,20 +199,22 @@ class RemoteAuthenticationRepository(
         }
     }
 
-    override suspend fun refreshAccessToken(force: Boolean): String? = refreshMutex.withLock {
+    override suspend fun refreshAccessToken(force: Boolean, failedAccessToken: String?): String? = refreshMutex.withLock {
         val current = storage?.get(SecureStorage.AUTH_TOKEN)
         // A concurrent caller may already have completed the rotation while
-        // this caller was waiting for the mutex. Reuse that token; rotating
-        // the refresh credential again would correctly be rejected by the
-        // backend as token reuse.
-        // A forced refresh comes from a server-side 401. In that case the
-        // local expiry timestamp is not authoritative, so the current token
-        // must not be replayed.
+        // this caller was waiting for the mutex. Compare against the access
+        // token rejected by the server, even on a forced refresh. Rotating
+        // twice can cause refresh-token reuse and revoke the whole family.
+        if (!failedAccessToken.isNullOrBlank() && !current.isNullOrBlank() && current != failedAccessToken) return@withLock current
         if (!force && session.isSessionValid() && !current.isNullOrBlank()) return@withLock current
 
+        val attemptedRefreshToken = storage?.get(SecureStorage.REFRESH_TOKEN)
+        if (attemptedRefreshToken.isNullOrBlank()) {
+            if (force && (failedAccessToken.isNullOrBlank() || current == failedAccessToken) && storage?.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) session.clear()
+            return@withLock null
+        }
         runCatching {
-            val refreshToken = storage?.get(SecureStorage.REFRESH_TOKEN) ?: return@runCatching null
-            val refreshed = api.refreshSession(RefreshTokenRequestDto(refreshToken)).requireData()
+            val refreshed = api.refreshSession(RefreshTokenRequestDto(attemptedRefreshToken)).requireData()
             val expiry = jwtExpiry(refreshed.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
             session.save(refreshed.token, expiry, refreshed.refreshToken)
             refreshed.token
@@ -222,7 +224,9 @@ class RemoteAuthenticationRepository(
             // credentials.
             val remote = it as? RemoteApiException
             Log.w(TAG, "Session refresh failed: type=${it::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
-            if (it is RemoteApiException && it.httpCode == 401) session.clear()
+            // Another login or refresh may have replaced the credential while
+            // this request was in flight. Never erase that newer session.
+            if (it is RemoteApiException && it.httpCode == 401 && storage.get(SecureStorage.REFRESH_TOKEN) == attemptedRefreshToken) session.clear()
             null
         }
     }

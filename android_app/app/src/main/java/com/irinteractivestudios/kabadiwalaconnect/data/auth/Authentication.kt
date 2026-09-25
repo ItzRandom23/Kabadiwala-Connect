@@ -242,7 +242,7 @@ interface AuthenticationRepository {
      * already rejected the current access token even though its local expiry
      * timestamp has not elapsed yet.
      */
-    suspend fun refreshAccessToken(force: Boolean = false): String? = null
+    suspend fun refreshAccessToken(force: Boolean = false, failedAccessToken: String? = null): String? = null
     fun isSessionValid(): Boolean
     fun logout()
 }

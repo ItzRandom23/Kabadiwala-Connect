@@ -1,8 +1,8 @@
 {
-  "versionCode": 58,
-  "versionName": "0.0.57-beta",
-  "apkUrl": "kabadiwala-connect-0.0.57-beta-debug.apk",
-  "sha256": "CA6022B1AA14A4AA599A427DDCF28FC30FA476B7A3DBAC8F9E15CFD17318D6FF",
-  "sizeBytes": 28661936,
-  "releaseNotes": "Shows an AI indicative scrap price range for identified phones and other whole devices when local prices are unavailable."
+  "versionCode": 59,
+  "versionName": "0.0.58-beta",
+  "apkUrl": "kabadiwala-connect-0.0.58-beta-debug.apk",
+  "sha256": "D74368A4BCFB9446826E6B69D892235C94BA372D987583BC98799E28784C06CA",
+  "sizeBytes": 28807288,
+  "releaseNotes": "Prevents concurrent session refreshes and temporary refresh failures from signing users out during photo detection."
 }
