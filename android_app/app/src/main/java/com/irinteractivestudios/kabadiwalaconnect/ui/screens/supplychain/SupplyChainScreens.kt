@@ -655,6 +655,7 @@ fun HouseholdListingCreateScreen(
     var ownerPreparationCompleted by rememberSaveable { mutableStateOf(false) }
     var dataDestructionRequested by rememberSaveable { mutableStateOf(false) }
     var photoPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var lastDetectionPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var photoError by rememberSaveable { mutableStateOf(false) }
     var cameraError by rememberSaveable { mutableStateOf(false) }
     var showCameraPermissionDialog by rememberSaveable { mutableStateOf(false) }
@@ -754,19 +755,17 @@ fun HouseholdListingCreateScreen(
     }
     val firstPhotoPath = photoPaths.firstOrNull()
     LaunchedEffect(firstPhotoPath, state.materialDetectionPath) {
+        if (firstPhotoPath != lastDetectionPhotoPath) {
+            lastDetectionPhotoPath = firstPhotoPath
+            materialChosenManually = false
+            material = ""
+            safetyAcknowledged = false
+        }
         if (firstPhotoPath.isNullOrBlank()) {
-            if (!materialChosenManually) {
-                material = ""
-                safetyAcknowledged = false
-            }
             if (state.materialDetectionPath != null || state.materialSuggestion != null || state.materialDetectionStatus != HouseholdMaterialDetectionStatus.IDLE) {
                 onClearMaterialSuggestion()
             }
         } else if (state.materialDetectionPath != firstPhotoPath) {
-            if (!materialChosenManually) {
-                material = ""
-                safetyAcknowledged = false
-            }
             onSuggestMaterial(firstPhotoPath)
         }
     }
@@ -896,7 +895,11 @@ fun HouseholdListingCreateScreen(
                         val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
                         Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
-                    HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> {
+                        state.materialSuggestion?.let { suggestion ->
+                            Text("AI suggestion: ${friendlyMaterial(suggestion.materialCategory).title}. Please check it below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                        } ?: Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    }
                     HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text(state.materialDetectionMessage ?: "Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     HouseholdMaterialDetectionStatus.IDLE -> Unit
                 }

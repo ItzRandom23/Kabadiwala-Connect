@@ -143,7 +143,7 @@ describe('material suggestion photo contract', () => {
   it('classifies an assembled phone as other scrap even if the model focuses on its plastic case', async () => {
     process.env.GEMINI_API_KEY = 'gemini-test-key';
     process.env.GEMINI_MODEL = 'gemini-test-model';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ itemName: 'smartphone', materialCategory: 'PLASTIC', confidence: 0.94, alternatives: ['LCD_PANEL'], rationale: 'Plastic case is visible.' }) }] } }] }), { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ itemName: 'smartphone', materialCategory: 'PLASTIC', confidence: 0.94, alternatives: ['LCD_PANEL'], rationale: 'Plastic case is visible.', estimatedPriceMinPerKg: 80, estimatedPriceMaxPerKg: 120 }) }] } }] }), { status: 200 })));
     const { app } = materialSuggestionApp();
 
     const response = await request(app)
@@ -152,7 +152,7 @@ describe('material suggestion photo contract', () => {
       .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchObject({ materialCategory: 'OTHER', itemName: 'smartphone', confidence: 0.75 });
+    expect(response.body.data).toMatchObject({ materialCategory: 'OTHER', itemName: 'smartphone', confidence: 0.75, estimatedPriceMinPerKg: 80, estimatedPriceMaxPerKg: 120 });
     expect(response.body.data.rationale).toContain('whole electronic device');
   });
 

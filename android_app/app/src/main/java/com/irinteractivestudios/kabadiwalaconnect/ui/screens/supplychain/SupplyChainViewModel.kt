@@ -605,7 +605,10 @@ class SupplyChainViewModel(
                 } finally {
                     prepared.delete()
                 }
-                val confident = suggestion.source.equals("AI", ignoreCase = true) && suggestion.confidence >= 0.6 && !suggestion.itemName.isNullOrBlank()
+                // OTHER is a valid high-confidence result for a whole phone,
+                // tablet, camera, or an item outside the short material list.
+                // Do not hide it just because the provider omitted itemName.
+                val confident = suggestion.source.equals("AI", ignoreCase = true) && suggestion.confidence >= 0.6
                 _state.value = _state.value.copy(materialSuggestion = suggestion, materialDetectionStatus = if (confident) HouseholdMaterialDetectionStatus.SUCCESS else HouseholdMaterialDetectionStatus.LOW_CONFIDENCE)
             } catch (_: IllegalArgumentException) {
                 _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This photo could not be processed. Choose a clear JPEG, PNG, or WebP image and try again.")
@@ -638,7 +641,14 @@ class SupplyChainViewModel(
     }
 
     fun estimateHouseholdPrice(materialCategory: String, weightKg: Double, condition: String, areaName: String) {
-        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        if (!allowed(AccountRole.HOUSEHOLD)) {
+            _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = "Price estimates are available for Household accounts.")
+            return
+        }
+        if (!protectedSessionReady()) {
+            _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = "Your session is still being restored. Try the price estimate again in a moment.")
+            return
+        }
         if (!weightKg.isFinite() || weightKg <= 0.0 || weightKg > 500.0) {
             clearHouseholdPriceEstimate()
             return

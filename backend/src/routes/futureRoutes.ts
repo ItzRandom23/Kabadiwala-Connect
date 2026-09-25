@@ -411,7 +411,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
         `Write itemName in English (2 to 5 words) and rationale in ${language}. Keep materialCategory as an English enum.`,
         'Return JSON only with exactly these keys: itemName, materialCategory, confidence, alternatives, rationale, estimatedPriceMinPerKg, estimatedPriceMaxPerKg.',
         `materialCategory must be one of: ${materialCategories.join(', ')}. confidence must be a number from 0 to 1. alternatives must be an array of at most 2 allowed categories. If uncertain, use OTHER and confidence below 0.5.`,
-        'estimatedPriceMinPerKg and estimatedPriceMaxPerKg must be rough INR per kilogram estimates for ordinary Indian scrap buying, based only on the identified category. Use null for OTHER, low confidence, or when there is not enough visual information. Never present the estimate as a live market quote.',
+        'estimatedPriceMinPerKg and estimatedPriceMaxPerKg must be rough INR per kilogram estimates for ordinary Indian scrap buying, based only on the identified item/category. Use null for low confidence or when there is not enough visual information, including when itemName is missing. Never present the estimate as a live market quote.',
         'Classify a whole phone, tablet, laptop, camera, or other assembled electronic device as OTHER, even if its case is plastic or it has a screen. Use PLASTIC only for loose plastic items. Use PCB, BATTERY, or LCD_PANEL only when that component itself is being sold separately.',
         'Do not identify brands, people, addresses, or safety compliance. Do not make pricing claims.'
       ].join('\n') },
@@ -437,7 +437,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       : typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
     const parsedMin = typeof parsed?.estimatedPriceMinPerKg === 'number' && Number.isFinite(parsed.estimatedPriceMinPerKg) ? parsed.estimatedPriceMinPerKg : null;
     const parsedMax = typeof parsed?.estimatedPriceMaxPerKg === 'number' && Number.isFinite(parsed.estimatedPriceMaxPerKg) ? parsed.estimatedPriceMaxPerKg : null;
-    const hasValidPriceRange = category !== 'OTHER' && finalConfidence >= 0.6 && parsedMin != null && parsedMax != null && parsedMin > 0 && parsedMax >= parsedMin && parsedMax <= 100000;
+    const hasValidPriceRange = finalConfidence >= 0.6 && itemName.length > 0 && parsedMin != null && parsedMax != null && parsedMin > 0 && parsedMax >= parsedMin && parsedMax <= 100000;
     const estimatedPriceMinPerKg = hasValidPriceRange ? Math.round(parsedMin! * 100) / 100 : null;
     const estimatedPriceMaxPerKg = hasValidPriceRange ? Math.round(parsedMax! * 100) / 100 : null;
     const data = { materialCategory: category, confidence: finalConfidence, alternatives, rationale, itemName: itemName || null, estimatedPriceMinPerKg, estimatedPriceMaxPerKg, source: 'AI', model: result.model };
