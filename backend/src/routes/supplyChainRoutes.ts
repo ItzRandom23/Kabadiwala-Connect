@@ -182,7 +182,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         id: profile.id,
         displayName: profile.displayName,
         areaName: profile.areaName,
-        verified: profile.pilotVerifiedAt != null,
+        // An active Kabadiwala account is eligible for household discovery.
+        // Only recycler facilities require admin authorization.
+        verified: true,
         distanceKm: distance == null ? null : Number(distance.toFixed(1)),
         acceptingPickups: slots > 0,
         availablePickupSlots: slots,
@@ -293,31 +295,6 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     });
     res.json({ success: true, data: householdListingDto(updated) });
   });
-  router.get('/admin/kabadiwala-cohort', requireAdmin(jwt, db, 'PARTNER_VERIFICATION'), async (req, res) => {
-    const status = parse(z.enum(['PENDING', 'VERIFIED']).default('PENDING'), req.query.status);
-    const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
-    const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
-    const profiles = ids.length ? await store.collector.findMany({
-      where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: status === 'VERIFIED' ? { not: null } : null },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, displayName: true, areaName: true, createdAt: true, pilotVerifiedAt: true }
-    }) : [];
-    res.json({ success: true, data: profiles.map((profile: any) => ({ id: profile.id, displayName: profile.displayName, areaName: profile.areaName, createdAt: profile.createdAt, verifiedAt: profile.pilotVerifiedAt })) });
-  });
-  router.post('/admin/kabadiwala-cohort/:kabadiwalaId/verification', requireAdmin(jwt, db, 'PARTNER_VERIFICATION'), async (req, res) => {
-    const kabadiwalaId = parse(id, req.params.kabadiwalaId);
-    const input = parse(z.object({ decision: z.enum(['APPROVE', 'REVOKE']), notes: z.string().trim().min(8).max(500) }).strict(), req.body);
-    const account = await store.user.findFirst({ where: { collectorProfileId: kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { id: true } });
-    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true } }) : null;
-    if (!profile) throw new AppError('NOT_FOUND', 'Active Kabadiwala profile not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
-    const verifiedAt = input.decision === 'APPROVE' ? new Date() : null;
-    const updated = await store.$transaction(async (tx: any) => {
-      const row = await tx.collector.update({ where: { id: kabadiwalaId }, data: { pilotVerifiedAt: verifiedAt, pilotVerifiedBy: verifiedAt ? req.identity!.collectorId : null } });
-      await auditSupplyEvent(tx, req.identity!.collectorId, 'ADMIN', input.decision === 'APPROVE' ? 'KABADIWALA_PILOT_APPROVED' : 'KABADIWALA_PILOT_REVOKED', 'COLLECTOR', kabadiwalaId, { notes: input.notes });
-      return row;
-    });
-    res.json({ success: true, data: { id: updated.id, displayName: updated.displayName, areaName: updated.areaName, verifiedAt: updated.pilotVerifiedAt } });
-  });
   router.get('/household/kabadiwalas', requireHousehold(jwt, collectors), async (req, res) => {
     const locationQuery = parse(z.object({
       latitude: z.coerce.number().finite().min(-90).max(90).optional(),
@@ -333,10 +310,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     }
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
-    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, pilotVerifiedAt: true } }) : [];
+    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true } }) : [];
     const matching = profiles.map((profile: any) => ({ profile, distance: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
       .filter(({ profile, distance }: any) => {
-        if (locationQuery.latitude !== undefined) return distance != null && distance <= locationQuery.radiusKm;
+        if (locationQuery.latitude !== undefined) {
+          // Some Kabadiwalas register with a service area but without GPS.
+          // Keep them discoverable through that explicit area when the
+          // household also supplied an area label, while still applying the
+          // radius strictly whenever the Kabadiwala has coordinates.
+          if (distance != null) return distance <= locationQuery.radiusKm;
+          return Boolean(areaQuery && areaNamesMatch(String(profile.areaName ?? ''), areaQuery));
+        }
         return areaNamesMatch(String(profile.areaName ?? ''), areaQuery);
       })
       .sort((left: any, right: any) => (left.distance ?? Number.POSITIVE_INFINITY) - (right.distance ?? Number.POSITIVE_INFINITY) || left.profile.id.localeCompare(right.profile.id));
@@ -354,7 +338,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const kabadiwalaId = parse(id, req.params.kabadiwalaId);
     const location = parse(z.object({ latitude: z.coerce.number().finite().min(-90).max(90).optional(), longitude: z.coerce.number().finite().min(-180).max(180).optional() }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
     const account = await store.user.findFirst({ where: { collectorProfileId: kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { id: true } });
-    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, createdAt: true, pilotVerifiedAt: true } }) : null;
+    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, createdAt: true } }) : null;
     if (!profile) throw new AppError('NOT_FOUND', 'Active Kabadiwala profile not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
     const [summary] = await publicPartnerSummaries([profile], location.latitude, location.longitude);
     res.json({ success: true, data: { ...summary, memberSince: profile.createdAt } });
@@ -386,7 +370,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const listing = await store.householdListing.findFirst({ where: { id: pickup.listingId, householdId: req.identity!.collectorId }, select: { materialCategory: true, latitude: true, longitude: true, areaName: true } });
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((row: any) => row.collectorProfileId).filter((value: any): value is string => Boolean(value) && value !== pickup.kabadiwalaId);
-    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
     const options = profiles.map((profile: any) => {
       const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
       return { id: profile.id, displayName: profile.displayName, areaName: profile.areaName, distanceKm: distance == null ? null : Number(distance.toFixed(1)), sameArea: Boolean(listing?.areaName && profile.areaName && areaNamesMatch(String(listing.areaName), String(profile.areaName))) };
@@ -411,7 +395,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (pickup.kabadiwalaId === input.kabadiwalaId) throw new AppError('VALIDATION_ERROR', 'Choose a different Kabadiwala', 422, { code: 'SAME_KABADIWALA_SELECTED' });
       const target = await tx.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { collectorProfileId: true } });
       if (!target) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
-      const targetProfile = await tx.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true } });
+      const targetProfile = await tx.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true } });
       if (!targetProfile) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
 
       // A previous cancelled/rejected request for this same listing and
@@ -475,7 +459,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } });
         const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
         const ids = users.map((row: { collectorProfileId: string | null }) => row.collectorProfileId).filter((value: string | null): value is string => Boolean(value));
-        const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+        const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
         const matching = profiles.filter((profile: any) => {
           const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
           const sameArea = Boolean(listing?.areaName && profile.areaName && areaNamesMatch(String(listing.areaName), String(profile.areaName)));
@@ -487,7 +471,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     }
     const kabadiwala = await store.user.findFirst({ where: { collectorProfileId: input.kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' } });
     if (!kabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404);
-    const verifiedKabadiwala = await store.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true } });
+    const verifiedKabadiwala = await store.collector.findFirst({ where: { id: input.kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true } });
     if (!verifiedKabadiwala) throw new AppError('NOT_FOUND', 'Kabadiwala not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
     // Claim the listing and create the request in one transaction. The
     // conditional POSTED -> MATCHED update is the single-winner guard when

@@ -234,7 +234,6 @@ fun AppNavHost(
                     onSelect = vm::select,
                     onClearSelection = vm::clearSelection,
                     onAuthorizeRecycler = vm::authorizeRecycler,
-                    onApprovePartner = vm::approveKabadiwala,
                     onResolveDispute = vm::resolveDispute,
                     onVerifyPayment = vm::verifyPayment,
                     onDisputePickupPayment = vm::disputePickupPayment,

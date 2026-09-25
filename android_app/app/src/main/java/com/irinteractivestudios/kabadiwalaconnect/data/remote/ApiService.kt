@@ -463,10 +463,6 @@ interface ApiService {
     suspend fun adminPayments(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
     @GET("admin/household-pickup-payments")
     suspend fun adminHouseholdPickupPayments(@Query("status") status: String? = "RECORDED"): Response<ApiEnvelope<List<JsonObject>>>
-    @GET("admin/kabadiwala-cohort")
-    suspend fun adminKabadiwalaCohort(@Query("status") status: String? = "PENDING"): Response<ApiEnvelope<List<JsonObject>>>
-    @POST("admin/kabadiwala-cohort/{kabadiwalaId}/verification")
-    suspend fun adminVerifyKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
     @POST("admin/household-pickup-payments/{paymentId}/reconcile")
     suspend fun adminReconcileHouseholdPickupPayment(@Path("paymentId") paymentId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
     @GET("admin/payments/{paymentId}")

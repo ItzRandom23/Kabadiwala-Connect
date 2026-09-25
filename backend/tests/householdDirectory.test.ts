@@ -19,7 +19,7 @@ function householdApp(db: any) {
 describe('household Kabadiwala directory', () => {
   it('returns paginated rounded distance and public aggregates without exact coordinates', async () => {
     const findManyProfiles = vi.fn().mockResolvedValue([
-      { id: 'collector-near', displayName: 'Asha', areaName: 'Kothrud, Pune', latitude: 0.01, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: new Date() },
+      { id: 'collector-near', displayName: 'Asha', areaName: 'Kothrud, Pune', latitude: 0.01, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: null },
       { id: 'collector-far', displayName: 'Rafiq', areaName: 'Pune', latitude: 2, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: new Date() }
     ]);
     const db = {
@@ -59,7 +59,7 @@ describe('household Kabadiwala directory', () => {
     expect(JSON.stringify(response.body)).not.toContain('latitude');
     expect(JSON.stringify(response.body)).not.toContain('longitude');
     expect(JSON.stringify(response.body)).not.toContain('0.01');
-    expect(findManyProfiles).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ pilotVerifiedAt: { not: null } }), select: expect.not.objectContaining({ phone: true, email: true }) }));
+    expect(findManyProfiles).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ accountStatus: 'ACTIVE' }), select: expect.not.objectContaining({ phone: true, email: true }) }));
   });
 
   it('requires a selected area or an explicit device location instead of listing everyone nationwide', async () => {

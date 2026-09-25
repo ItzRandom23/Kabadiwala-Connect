@@ -273,7 +273,10 @@ export class AuthService {
             areaName,
             latitude,
             longitude,
-            accountStatus: 'ACTIVE'
+            accountStatus: 'ACTIVE',
+            // Collector accounts are active immediately; admin authorization
+            // is reserved for recycler facilities.
+            pilotVerifiedAt: new Date()
           }
         });
         user = await tx.user.create({

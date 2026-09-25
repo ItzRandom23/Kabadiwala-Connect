@@ -18,7 +18,6 @@ import java.util.TimeZone
 
 enum class AdminSection(val label: String) {
     RECYCLERS("Recycler review"),
-    PARTNERS("Pilot partners"),
     DISPUTES("Disputes"),
     PAYMENTS("Payments"),
     ANOMALIES("Anomalies"),
@@ -52,7 +51,6 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
             runCatching {
                 when (section) {
                     AdminSection.RECYCLERS -> api.adminRecyclerQueue("PENDING").requireData()
-                    AdminSection.PARTNERS -> api.adminKabadiwalaCohort("PENDING").requireData()
                     AdminSection.DISPUTES -> api.adminDisputes("OPEN").requireData()
                     AdminSection.PAYMENTS -> {
                         val recorded = api.adminPayments("PENDING").requireData()
@@ -103,13 +101,6 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
             notes?.takeIf { it.isNotBlank() }?.let { addProperty("notes", it) }
         }
         api.adminResolveDispute(disputeId, body).requireData()
-    }
-
-    fun approveKabadiwala(kabadiwalaId: String, notes: String) = action {
-        api.adminVerifyKabadiwala(kabadiwalaId, JsonObject().apply {
-            addProperty("decision", "APPROVE")
-            addProperty("notes", notes)
-        }).requireData()
     }
 
     fun verifyPayment(paymentId: String) = action {

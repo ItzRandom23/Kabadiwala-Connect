@@ -367,8 +367,8 @@ fun HouseholdKabadiwalasScreen(
         if (state.kabadiwalaLoading) item { CircularProgressIndicator(Modifier.size(26.dp)) }
         if (!state.loading && !state.kabadiwalaLoading && state.kabadiwalas.isEmpty()) item {
             EmptyPanel(
-                if (state.kabadiwalaRequiresLocation && area.isBlank()) "Choose an area to begin" else "No partners serving this area yet",
-                if (state.kabadiwalaRequiresLocation && area.isBlank()) "Use your location or enter a locality, city, state or PIN code." else "We only show active, verified partners. Try a nearby area or a wider radius."
+                if (state.kabadiwalaRequiresLocation && area.isBlank()) "Choose an area to begin" else "No active Kabadiwalas serving this area yet",
+                if (state.kabadiwalaRequiresLocation && area.isBlank()) "Use your location or enter a locality, city, state or PIN code." else "Try a nearby area or a wider radius."
             )
         }
         items(state.kabadiwalas, key = { it.id }) { kabadiwala ->

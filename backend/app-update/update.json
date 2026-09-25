@@ -1,8 +1,8 @@
 {
-  "versionCode": 49,
-  "versionName": "0.0.48-beta",
-  "apkUrl": "kabadiwala-connect-0.0.48-beta-debug.apk",
-  "sha256": "3BCCD5D3789C450313D81C49CC169039228776503B35FBBD633A8E3DBE14A402",
-  "sizeBytes": 28645020,
-  "releaseNotes": "Validated sessions before opening account screens, improved GPS address and accuracy capture, and fixed pickup matching and QR retry handling."
+  "versionCode": 50,
+  "versionName": "0.0.49-beta",
+  "apkUrl": "kabadiwala-connect-0.0.49-beta-debug.apk",
+  "sha256": "59BFCBEC96C9425BD308D22FACD312D29745DF19CE8E7BF268555DC1865E8C70",
+  "sizeBytes": 28628658,
+  "releaseNotes": "Active Kabadiwalas now appear in household discovery without admin approval, with service-area fallback when GPS is unavailable. Recycler account authorization remains admin-managed."
 }

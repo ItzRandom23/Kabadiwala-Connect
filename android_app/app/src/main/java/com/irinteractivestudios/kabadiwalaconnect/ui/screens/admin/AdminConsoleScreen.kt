@@ -41,7 +41,6 @@ fun AdminConsoleScreen(
     onSelect: (JsonObject) -> Unit,
     onClearSelection: () -> Unit,
     onAuthorizeRecycler: (String, String, String?, String?, String?, String?, String?, String?, String?) -> Unit,
-    onApprovePartner: (String, String) -> Unit,
     onResolveDispute: (String, String, String?) -> Unit,
     onVerifyPayment: (String) -> Unit,
     onDisputePickupPayment: (String, String) -> Unit,
@@ -53,7 +52,6 @@ fun AdminConsoleScreen(
     onLogout: () -> Unit
 ) {
     var recyclerDialog by remember { mutableStateOf<String?>(null) }
-    var partnerDialog by remember { mutableStateOf<String?>(null) }
     var disputeDialog by remember { mutableStateOf<String?>(null) }
     var paymentDialog by remember { mutableStateOf<String?>(null) }
     var anomalyDialog by remember { mutableStateOf<String?>(null) }
@@ -104,7 +102,6 @@ fun AdminConsoleScreen(
             state.items.forEach { item ->
                 when (state.section) {
                     AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, { recyclerDialog = item.stringValue("id", "recyclerId") }, onSelect)
-                    AdminSection.PARTNERS -> PilotPartnerCard(item, state.actionBusy, { partnerDialog = item.stringValue("id") }, onSelect)
                     AdminSection.DISPUTES -> DisputeReviewCard(item, state.actionBusy) { disputeDialog = item.stringValue("id", "disputeId") }
                     AdminSection.PAYMENTS -> PaymentReviewCard(item, state.actionBusy) { paymentDialog = item.stringValue("id", "paymentId") }
                     AdminSection.ANOMALIES -> AnomalyReviewCard(item, state.actionBusy) { anomalyDialog = item.stringValue("id", "flagId") }
@@ -122,17 +119,6 @@ fun AdminConsoleScreen(
             onSubmit = { status, reason, authority, registration, type, evidence, source, validUntil ->
                 recyclerDialog = null
                 onAuthorizeRecycler(id, status, reason, authority, registration, type, evidence, source, validUntil)
-            }
-        )
-    }
-    partnerDialog?.let { id ->
-        PilotPartnerApprovalDialog(
-            partnerName = state.items.firstOrNull { it.stringValue("id") == id }?.stringValue("displayName") ?: "Kabadiwala",
-            busy = state.actionBusy,
-            onDismiss = { partnerDialog = null },
-            onApprove = { notes ->
-                partnerDialog = null
-                onApprovePartner(id, notes)
             }
         )
     }
@@ -202,44 +188,6 @@ private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, onReview: () -> 
     onAction = onReview,
     onSelect = onSelect
 )
-
-@Composable
-private fun PilotPartnerCard(item: JsonObject, busy: Boolean, onApprove: () -> Unit, onSelect: (JsonObject) -> Unit) = ReviewCard(
-    title = item.stringValue("displayName", "id"),
-    subtitle = "${item.stringValue("areaName")} · pilot verification pending",
-    item = item,
-    actionLabel = "Approve pilot partner",
-    busy = busy,
-    onAction = onApprove,
-    onSelect = onSelect
-)
-
-@Composable
-private fun PilotPartnerApprovalDialog(partnerName: String, busy: Boolean, onDismiss: () -> Unit, onApprove: (String) -> Unit) {
-    var notes by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Approve pilot partner") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("${partnerName} will appear in household search after approval.")
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it.take(500) },
-                    label = { Text("Verification notes") },
-                    placeholder = { Text("Identity and service area checked") },
-                    supportingText = { Text("Keep notes operational; do not enter identity document numbers.") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onApprove(notes.trim()) }, enabled = !busy && notes.trim().length >= 8) { Text("Approve") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } }
-    )
-}
 
 @Composable
 private fun DisputeReviewCard(item: JsonObject, busy: Boolean, onResolve: () -> Unit) = ReviewCard(

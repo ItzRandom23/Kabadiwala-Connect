@@ -11,7 +11,7 @@ async function main() {
   if (adminEmail && adminPassword) {
     const salt = randomBytes(16);
     const passwordHash = `${salt.toString('hex')}:${scryptSync(adminPassword, salt, 64).toString('hex')}`;
-    await prisma.adminAccount.upsert({ where: { email: adminEmail }, update: { passwordHash, active: true, permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PARTNER_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] }, create: { email: adminEmail, passwordHash, displayName: 'Operations admin', permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PARTNER_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] } });
+    await prisma.adminAccount.upsert({ where: { email: adminEmail }, update: { passwordHash, active: true, permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] }, create: { email: adminEmail, passwordHash, displayName: 'Operations admin', permissions: ['RECYCLER_REVIEW', 'RECYCLER_AUTHORIZATION', 'DISPUTE_RESOLUTION', 'PAYMENT_VERIFICATION', 'PRICE_MANAGEMENT', 'DATASET_EXPORT'] } });
   } else if (adminEmail || adminPassword) {
     throw new Error('ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD must be provided together');
   }
