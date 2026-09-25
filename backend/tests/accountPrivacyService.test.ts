@@ -13,6 +13,7 @@ describe('account privacy service', () => {
     };
     const userUpdate = vi.fn().mockResolvedValue({});
     const collectorUpdate = vi.fn().mockResolvedValue({});
+    const listingAddressRedaction = vi.fn().mockResolvedValue({ count: 1 });
     const revoke = vi.fn().mockResolvedValue({ count: 2 });
     const notificationDelete = vi.fn().mockResolvedValue({ count: 4 });
     const deviceDelete = vi.fn().mockResolvedValue({ count: 1 });
@@ -21,6 +22,7 @@ describe('account privacy service', () => {
     const tx = {
       user: { update: userUpdate },
       collector: { update: collectorUpdate },
+      householdListing: { updateMany: listingAddressRedaction },
       refreshToken: { updateMany: revoke },
       notificationEvent: { deleteMany: notificationDelete },
       notificationDevice: { deleteMany: deviceDelete },
@@ -37,6 +39,7 @@ describe('account privacy service', () => {
     expect(result).toEqual({ deleted: true, alreadyDeleted: false, profileId: 'profile-1' });
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { email: null, phone: null, passwordHash: null, accountStatus: 'DELETED' } });
     expect(collectorUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'profile-1' }, data: expect.objectContaining({ accountStatus: 'DELETED', areaName: 'WITHDRAWN_ACCOUNT' }) }));
+    expect(listingAddressRedaction).toHaveBeenCalledWith({ where: { householdId: 'profile-1' }, data: { pickupAddress: null, latitude: null, longitude: null } });
     expect(revoke).toHaveBeenCalledWith({ where: { actorId: 'profile-1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
     expect(notificationDelete).toHaveBeenCalledWith({ where: { accountId: 'profile-1' } });
     expect(deviceDelete).toHaveBeenCalledWith({ where: { accountId: 'profile-1' } });

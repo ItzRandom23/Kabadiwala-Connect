@@ -44,7 +44,7 @@ describe('collector listing discovery privacy', () => {
       .set('Authorization', `Bearer ${jwt.generateToken('collector-1')}`);
 
     expect(response.status).toBe(200);
-    expect(findManyPickups).toHaveBeenCalledWith({ where: { kabadiwalaId: 'collector-1' }, select: { listingId: true } });
+    expect(findManyPickups).toHaveBeenCalledWith({ where: { kabadiwalaId: 'collector-1' }, select: { listingId: true, status: true } });
     expect(findManyListings).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: { in: ['assigned-listing'] } },
       select: expect.not.objectContaining({ photoReference: false })
