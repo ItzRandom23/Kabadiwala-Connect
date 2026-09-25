@@ -109,6 +109,7 @@ sealed interface OtpVerification {
     data object Expired : OtpVerification
     data object AttemptsExceeded : OtpVerification
     data object AccountConflict : OtpVerification
+    data object RoleRequired : OtpVerification
     data object ServerError : OtpVerification
     data object NetworkError : OtpVerification
 }

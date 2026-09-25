@@ -1,8 +1,8 @@
 {
-  "versionCode": 55,
-  "versionName": "0.0.54-beta",
-  "apkUrl": "kabadiwala-connect-0.0.54-beta-debug.apk",
-  "sha256": "BD97941452C7C857EBD149B44BFF48869B4406E27A764FFD3010E9D7AD5B3253",
-  "sizeBytes": 28645041,
-  "releaseNotes": "Collect a single full pickup address across signup, profiles, and pickups, with repeated GPS address components removed."
+  "versionCode": 56,
+  "versionName": "0.0.55-beta",
+  "apkUrl": "kabadiwala-connect-0.0.55-beta-debug.apk",
+  "sha256": "D4F7321D90BE47157694DF05C4897FCA0B5686FB2D75FA35E2809F89751BAF37",
+  "sizeBytes": 28661938,
+  "releaseNotes": "Fixes account type preselection, starts material detection after upload, adds Gemini Lite fallback, and shows indicative price ranges."
 }

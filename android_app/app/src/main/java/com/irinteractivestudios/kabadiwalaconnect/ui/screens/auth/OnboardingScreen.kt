@@ -278,9 +278,12 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 @Composable private fun RoleEntry(state: OnboardingState, vm: OnboardingViewModel) {
     Text(stringResource(R.string.auth_role_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_role_detail), style = MaterialTheme.typography.bodyLarge)
-    RoleCard(AccountRole.HOUSEHOLD, stringResource(R.string.auth_role_household), stringResource(R.string.auth_role_household_detail), Icons.Filled.Home, state.role == AccountRole.HOUSEHOLD) { vm.selectRole(AccountRole.HOUSEHOLD) }
-    RoleCard(AccountRole.COLLECTOR, stringResource(R.string.auth_role_collector), stringResource(R.string.auth_role_collector_detail), Icons.Filled.Recycling, state.role == AccountRole.COLLECTOR) { vm.selectRole(AccountRole.COLLECTOR) }
-    RoleCard(AccountRole.RECYCLER, stringResource(R.string.auth_role_recycler), stringResource(R.string.auth_role_recycler_detail), Icons.Filled.Storefront, state.role == AccountRole.RECYCLER) { vm.selectRole(AccountRole.RECYCLER) }
+    if (state.roleRequiredAfterSignIn) {
+        Text(stringResource(R.string.auth_role_account_missing), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+    }
+    RoleCard(AccountRole.HOUSEHOLD, stringResource(R.string.auth_role_household), stringResource(R.string.auth_role_household_detail), Icons.Filled.Home, state.roleSelected && state.role == AccountRole.HOUSEHOLD) { vm.selectRole(AccountRole.HOUSEHOLD) }
+    RoleCard(AccountRole.COLLECTOR, stringResource(R.string.auth_role_collector), stringResource(R.string.auth_role_collector_detail), Icons.Filled.Recycling, state.roleSelected && state.role == AccountRole.COLLECTOR) { vm.selectRole(AccountRole.COLLECTOR) }
+    RoleCard(AccountRole.RECYCLER, stringResource(R.string.auth_role_recycler), stringResource(R.string.auth_role_recycler_detail), Icons.Filled.Storefront, state.roleSelected && state.role == AccountRole.RECYCLER) { vm.selectRole(AccountRole.RECYCLER) }
 }
 
 @Composable private fun RoleCard(role: AccountRole, title: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {

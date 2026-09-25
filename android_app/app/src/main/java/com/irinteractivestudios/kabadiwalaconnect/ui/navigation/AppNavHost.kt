@@ -282,7 +282,9 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onSuggestMaterial = vm::suggestHouseholdMaterial,
                 onClearMaterialSuggestion = vm::clearHouseholdMaterialSuggestion,
-                onCreateListing = { input, paths -> vm.createListing(input, paths) }
+                onCreateListing = { input, paths -> vm.createListing(input, paths) },
+                onEstimateHouseholdPrice = vm::estimateHouseholdPrice,
+                onClearHouseholdPriceEstimate = vm::clearHouseholdPriceEstimate
             )
         }
         composable(Destinations.MY_LOTS) {

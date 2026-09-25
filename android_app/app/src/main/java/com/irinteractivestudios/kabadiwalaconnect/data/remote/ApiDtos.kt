@@ -378,6 +378,9 @@ data class MaterialSuggestionDto(
     val confidence: Double = 0.0,
     val alternatives: List<String> = emptyList(),
     val rationale: String = "",
+    val itemName: String? = null,
+    val estimatedPriceMinPerKg: Double? = null,
+    val estimatedPriceMaxPerKg: Double? = null,
     val source: String = "TEMPLATE",
     val model: String? = null
 )

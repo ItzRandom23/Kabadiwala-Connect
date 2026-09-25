@@ -18,7 +18,7 @@ val friendlyMaterials = listOf(
     FriendlyMaterial("MAGNET", "Magnets", "Speaker or motor magnets"),
     FriendlyMaterial("CRT", "Old TV / monitor (thick glass)", "Box-style TV or computer monitor", hazardous = true),
     FriendlyMaterial("LCD_PANEL", "Flat TV / monitor screen", "LCD, LED or flat-panel display"),
-    FriendlyMaterial("OTHER", "Other scrap / not sure", "Choose this if none of the above fits")
+    FriendlyMaterial("OTHER", "Phones, electronics & other scrap", "Phones, tablets, cameras, or items not listed above")
 )
 
 fun friendlyMaterial(key: String): FriendlyMaterial = friendlyMaterials.firstOrNull { it.key == key } ?: friendlyMaterials.last()

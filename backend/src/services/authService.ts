@@ -82,6 +82,12 @@ export class AuthService {
     if (!this.db) {
       let collector = await this.collectors.findByPhone(phone);
       const created = !collector;
+      if (created && !input?.role) {
+        throw new AppError('VALIDATION_ERROR', 'Choose an account type to continue', 422, { code: 'ROLE_REQUIRED' });
+      }
+      if (created && input?.role !== 'COLLECTOR') {
+        throw new AppError('SERVICE_UNAVAILABLE', 'Account registration is unavailable', 503, { code: 'ACCOUNT_DATABASE_REQUIRED' });
+      }
       collector ??= await this.collectors.create(phone);
       collector = await this.collectors.touchLogin(collector.id);
       console.log(JSON.stringify({ event: created ? 'collector_created' : 'collector_login', collectorId: collector.id }));
@@ -159,7 +165,7 @@ export class AuthService {
   }
 
   private async verifyPhoneAccount(phone: string, input: PhoneAccountInput) {
-    const requestedRole = input.role ?? 'COLLECTOR';
+    const requestedRole = input.role;
     const email = normalizedEmail(input.email);
     const preferredLanguage = (input.preferredLanguage ?? 'ENGLISH').trim().toUpperCase();
     if (!supportedLanguages.has(preferredLanguage)) {
@@ -208,7 +214,7 @@ export class AuthService {
         }
       }
 
-      if (!user && requestedRole === 'RECYCLER') {
+      if (!user) {
         const legacyRecycler = await tx.recycler.findFirst({ where: { phone } });
         if (legacyRecycler) {
           user = await tx.user.findFirst({ where: { recyclerProfileId: legacyRecycler.id } });
@@ -259,6 +265,10 @@ export class AuthService {
           ? await tx.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
           : await tx.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
         return this.issuePhone(user, profile);
+      }
+
+      if (!requestedRole) {
+        throw new AppError('VALIDATION_ERROR', 'Choose an account type to continue', 422, { code: 'ROLE_REQUIRED' });
       }
 
       if (requestedRole !== 'RECYCLER' && !displayName) {

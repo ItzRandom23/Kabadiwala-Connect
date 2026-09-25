@@ -26,6 +26,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.google.gson.Gson
 import java.io.File
@@ -74,8 +77,12 @@ data class SupplyChainState(
     val notice: String? = null,
     val pendingPhotoUpload: PendingPhotoUpload? = null,
     val materialSuggestion: MaterialSuggestionDto? = null,
+    val materialDetectionPath: String? = null,
     val materialDetectionStatus: HouseholdMaterialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE,
     val materialDetectionMessage: String? = null,
+    val householdPriceEstimate: HouseholdPriceEstimate? = null,
+    val householdPriceEstimateLoading: Boolean = false,
+    val householdPriceEstimateMessage: String? = null,
     val listingPhotos: Map<String, List<ByteArray>> = emptyMap(),
     val listingPhotoErrors: Map<String, String> = emptyMap()
 )
@@ -83,6 +90,17 @@ data class SupplyChainState(
 enum class HouseholdMaterialDetectionStatus { IDLE, PROCESSING, SUCCESS, LOW_CONFIDENCE, UNSUPPORTED_IMAGE, NETWORK_ERROR, SERVICE_ERROR }
 
 data class PendingPhotoUpload(val listingId: String, val localPaths: List<String>)
+
+data class HouseholdPriceEstimate(
+    val materialCategory: String,
+    val weightKg: Double,
+    val condition: String,
+    val areaName: String,
+    val minimum: Double,
+    val maximum: Double,
+    val disclaimer: String,
+    val source: String = "VERIFIED_LOCAL"
+)
 
 class SupplyChainViewModel(
     private val api: ApiService,
@@ -116,6 +134,8 @@ class SupplyChainViewModel(
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
+    private var materialDetectionJob: Job? = null
+    private var householdPriceEstimateJob: Job? = null
 
     private fun friendly(error: Throwable): String {
         val remote = error as? RemoteApiException
@@ -131,11 +151,15 @@ class SupplyChainViewModel(
             remote?.code == "HTTP_403" || remote?.httpCode == 403 -> "This action is not available for your role."
             code == "EMPTY_RESPONSE" -> "The server returned an incomplete response. Please try again."
             code in setOf("INVALID_PHOTO", "PHOTO_REQUIRED", "PHOTO_UPLOAD_FAILED") -> "That photo could not be uploaded. Choose another clear image and retry."
-            remote?.httpCode == 409 -> "That record changed. Refresh and try again."
-            remote?.httpCode == 422 -> "Check the highlighted details and try again."
+            code == "PHOTO_STORAGE_UNAVAILABLE" -> "Photo upload is temporarily unavailable. Your listing was not posted; try again later."
+            code == "IDEMPOTENCY_KEY_REUSED" -> "This listing changed while it was being posted. Retry once; if it continues, start a new listing."
+            remote?.httpCode == 409 -> message.ifBlank { "That record changed. Refresh and try again." }
+            remote?.httpCode == 422 -> message.takeUnless { it == "Invalid request" }.orEmpty().ifBlank { "Review the required details and try again." }
             error is IllegalStateException && error.message?.contains("photo", ignoreCase = true) == true -> "The selected photo is no longer available. Choose it again."
             error is IOException -> "Connection issue. Check your internet and retry."
-            else -> "Could not load the latest collection data. Please try again."
+            remote?.httpCode != null && remote.httpCode >= 500 -> "The server couldn't finish this action. Check your connection and try again."
+            !remote?.message.isNullOrBlank() -> remote.message
+            else -> "Could not complete this action. Please try again."
         }
     }
 
@@ -161,6 +185,10 @@ class SupplyChainViewModel(
     private fun resetForAccountChange() {
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
+        materialDetectionJob?.cancel()
+        householdPriceEstimateJob?.cancel()
+        materialDetectionJob = null
+        householdPriceEstimateJob = null
         stateAccountId = current
         _state.value = newHouseholdSearchState()
     }
@@ -548,13 +576,25 @@ class SupplyChainViewModel(
         "Household pickup verified. You can now record the final weight."
     })
     fun clearHouseholdMaterialSuggestion() {
-        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE, materialDetectionMessage = null)
+        materialDetectionJob?.cancel()
+        materialDetectionJob = null
+        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionPath = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE, materialDetectionMessage = null)
     }
     fun suggestHouseholdMaterial(path: String) {
-        if (!allowed(AccountRole.HOUSEHOLD) || path.isBlank()) return
-        if (_state.value.materialDetectionStatus == HouseholdMaterialDetectionStatus.PROCESSING) return
-        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
-        viewModelScope.launch {
+        if (path.isBlank()) return
+        if (!allowed(AccountRole.HOUSEHOLD)) {
+            _state.value = _state.value.copy(
+                materialSuggestion = null,
+                materialDetectionPath = path,
+                materialDetectionStatus = HouseholdMaterialDetectionStatus.SERVICE_ERROR,
+                materialDetectionMessage = "Photo detection is unavailable because the active account is not a Household account."
+            )
+            return
+        }
+        if (_state.value.materialDetectionStatus == HouseholdMaterialDetectionStatus.PROCESSING && _state.value.materialDetectionPath == path) return
+        materialDetectionJob?.cancel()
+        _state.value = _state.value.copy(materialSuggestion = null, materialDetectionPath = path, materialDetectionStatus = HouseholdMaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
+        materialDetectionJob = viewModelScope.launch {
             try {
                 val source = File(path)
                 val prepared = ImagePipeline.prepareForUpload(source, source.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
@@ -565,20 +605,89 @@ class SupplyChainViewModel(
                 } finally {
                     prepared.delete()
                 }
-                val confident = suggestion.confidence >= 0.5 && !suggestion.materialCategory.equals("OTHER", ignoreCase = true)
+                val confident = suggestion.source.equals("AI", ignoreCase = true) && suggestion.confidence >= 0.6 && !suggestion.itemName.isNullOrBlank()
                 _state.value = _state.value.copy(materialSuggestion = suggestion, materialDetectionStatus = if (confident) HouseholdMaterialDetectionStatus.SUCCESS else HouseholdMaterialDetectionStatus.LOW_CONFIDENCE)
             } catch (_: IllegalArgumentException) {
-                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This image could not be processed.")
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This photo could not be processed. Choose a clear JPEG, PNG, or WebP image and try again.")
             } catch (error: RemoteApiException) {
                 val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "SERVICE_UNAVAILABLE" || error.code == "GEMINI_UNAVAILABLE"
-                _state.value = _state.value.copy(materialDetectionStatus = when { error.httpCode == 422 || error.code == "VALIDATION_ERROR" -> HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> HouseholdMaterialDetectionStatus.SERVICE_ERROR; else -> HouseholdMaterialDetectionStatus.NETWORK_ERROR }, materialDetectionMessage = null)
+                val status = when { error.httpCode == 422 || error.code == "VALIDATION_ERROR" -> HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> HouseholdMaterialDetectionStatus.SERVICE_ERROR; else -> HouseholdMaterialDetectionStatus.NETWORK_ERROR }
+                val message = when {
+                    status == HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE -> "This photo could not be read. Choose a clear JPEG, PNG, or WebP image and try again."
+                    error.httpCode == 401 -> "Your session expired. Sign in again, then retry photo detection."
+                    error.httpCode == 403 -> "Photo detection is unavailable for this account. Choose the material below."
+                    error.httpCode == 429 -> "Photo detection is busy. Wait a moment and retry."
+                    serviceFailure -> "The AI service is temporarily unavailable. You can choose the material below or retry."
+                    else -> "Photo detection could not connect. Check your connection and retry."
+                }
+                _state.value = _state.value.copy(materialDetectionStatus = status, materialDetectionMessage = message)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: IOException) {
-                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = null)
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = "Photo detection could not connect. Check your connection and retry.")
             } catch (_: Exception) {
-                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = null)
+                _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = "Photo detection failed unexpectedly. You can choose the material below or retry.")
             }
         }
     }
+
+    fun clearHouseholdPriceEstimate() {
+        householdPriceEstimateJob?.cancel()
+        householdPriceEstimateJob = null
+        _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = null)
+    }
+
+    fun estimateHouseholdPrice(materialCategory: String, weightKg: Double, condition: String, areaName: String) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        if (!weightKg.isFinite() || weightKg <= 0.0 || weightKg > 500.0) {
+            clearHouseholdPriceEstimate()
+            return
+        }
+        householdPriceEstimateJob?.cancel()
+        val requestedArea = areaName.trim()
+        _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = true, householdPriceEstimateMessage = null)
+        householdPriceEstimateJob = viewModelScope.launch {
+            delay(350)
+            try {
+                val board = api.getPriceBoard(materialCategory, requestedArea.ifBlank { null }).requireData()
+                val priceMin = board.priceMin
+                val priceMax = board.priceMax
+                if (!board.available || priceMin == null || priceMax == null || priceMin <= 0.0 || priceMax < priceMin) {
+                    _state.value = _state.value.copy(
+                        householdPriceEstimate = null,
+                        householdPriceEstimateLoading = false,
+                        householdPriceEstimateMessage = "No current verified price range is available for this material and area. Your Kabadiwala will confirm the price after weighing."
+                    )
+                    return@launch
+                }
+                val conditionMultiplier = when (condition) { "DAMAGED" -> 0.7; "PARTIAL" -> 0.4; else -> 1.0 }
+                val estimate = HouseholdPriceEstimate(
+                    materialCategory = materialCategory,
+                    weightKg = weightKg,
+                    condition = condition,
+                    areaName = requestedArea,
+                    minimum = (priceMin * weightKg * conditionMultiplier).roundMoney(),
+                    maximum = (priceMax * weightKg * conditionMultiplier).roundMoney(),
+                    disclaimer = board.disclaimer ?: "Indicative range only. The Kabadiwala confirms the final price after inspection."
+                )
+                _state.value = _state.value.copy(householdPriceEstimate = estimate, householdPriceEstimateLoading = false, householdPriceEstimateMessage = null)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IOException) {
+                _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = "Couldn't load current prices. You can still post the listing; the final price is confirmed after weighing.")
+            } catch (error: RemoteApiException) {
+                _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = when (error.httpCode) {
+                    401 -> "Your session expired. Sign in again to load the price estimate."
+                    403 -> "Price estimates are unavailable for this account. You can still post the listing."
+                    else -> "Couldn't load current prices. You can still post the listing; the final price is confirmed after weighing."
+                })
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(householdPriceEstimate = null, householdPriceEstimateLoading = false, householdPriceEstimateMessage = "Couldn't calculate a price range right now. You can still post the listing.")
+            }
+        }
+    }
+
+    private fun Double.roundMoney(): Double = kotlin.math.round(this * 100.0) / 100.0
 
     fun loadKabadiwalaListingPhotos(listingId: String, photoCount: Int) = action("photos-$listingId", AccountRole.COLLECTOR, {
         val count = photoCount.coerceIn(1, 6)

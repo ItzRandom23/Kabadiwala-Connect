@@ -481,14 +481,14 @@ interface ApiService {
     suspend fun adminExportDataset(@Query("from") from: String? = null): Response<ApiEnvelope<JsonObject>>
 }
 
-class RemoteApiException(val code: String, override val message: String, val httpCode: Int? = null, val retryAfterSeconds: Long? = null) : Exception(message)
+class RemoteApiException(val code: String, override val message: String, val httpCode: Int? = null, val retryAfterSeconds: Long? = null, val detailsCode: String? = null) : Exception(message)
 
 fun <T> Response<ApiEnvelope<T>>.requireData(): T {
     val body = body()
     if (!isSuccessful) {
         val raw = errorBody()?.string().orEmpty()
         val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
-        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull(), apiError?.details?.get("code")?.asString)
     }
     return body?.data ?: throw RemoteApiException("EMPTY_RESPONSE", body?.message ?: "The server returned no data", code())
 }

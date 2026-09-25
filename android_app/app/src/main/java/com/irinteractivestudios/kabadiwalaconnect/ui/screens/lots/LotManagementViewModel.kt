@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
@@ -24,6 +25,8 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -87,6 +90,7 @@ class LotManagementViewModel(
     private val _state = MutableStateFlow(LotDraftState())
     val state: StateFlow<LotDraftState> = _state.asStateFlow()
     private var currentPrices: List<Price> = emptyList()
+    private var materialSuggestionJob: Job? = null
 
     init {
         priceCatalog?.let { catalog ->
@@ -98,25 +102,65 @@ class LotManagementViewModel(
             }
         }
     }
-    fun photoCaptured(path: String) {
+    fun photoCaptured(path: String, detectMaterial: Boolean = true) {
         val result = photoValidator(path)
-        _state.value = if (result.valid) _state.value.copy(photoPath = path, photoPaths = listOf(path), photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL) else _state.value.copy(photoError = "invalid", photoWarning = null)
+        if (!result.valid) {
+            _state.value = _state.value.copy(photoError = "invalid", photoWarning = null)
+            return
+        }
+        materialSuggestionJob?.cancel()
+        materialSuggestionJob = null
+        _state.value = recalc(_state.value.copy(photoPath = path, photoPaths = listOf(path), photoError = null, photoWarning = result.warning, material = null, materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL))
+        if (detectMaterial) suggestMaterial()
     }
     fun addPhoto(path: String) {
         val result = photoValidator(path)
         if (!result.valid) { _state.value = _state.value.copy(photoError = "invalid", photoWarning = null); return }
-        val paths = (_state.value.photoPaths + path).distinct().take(6)
-        _state.value = _state.value.copy(photoPath = paths.firstOrNull(), photoPaths = paths, photoError = null, photoWarning = result.warning, materialSuggestion = null, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.IDLE, materialDetectionMessage = null, step = LotStep.MATERIAL)
+        val current = _state.value
+        val paths = (current.photoPaths + path).distinct().take(6)
+        val primaryChanged = paths.firstOrNull() != current.photoPath
+        if (primaryChanged) {
+            materialSuggestionJob?.cancel()
+            materialSuggestionJob = null
+        }
+        _state.value = recalc(current.copy(
+            photoPath = paths.firstOrNull(), photoPaths = paths, photoError = null, photoWarning = result.warning,
+            material = if (primaryChanged) null else current.material,
+            materialSuggestion = if (primaryChanged) null else current.materialSuggestion,
+            materialSuggestionLoading = if (primaryChanged) false else current.materialSuggestionLoading,
+            materialSuggestionError = if (primaryChanged) false else current.materialSuggestionError,
+            materialDetectionStatus = if (primaryChanged) MaterialDetectionStatus.IDLE else current.materialDetectionStatus,
+            materialDetectionMessage = if (primaryChanged) null else current.materialDetectionMessage,
+            step = LotStep.MATERIAL
+        ))
+        if (primaryChanged) suggestMaterial()
     }
     fun addPhotos(paths: List<String>) { paths.forEach(::addPhoto) }
     fun setPhotoError() { _state.value = _state.value.copy(photoError = "invalid", photoWarning = null) }
     fun removePhoto(path: String) {
-        val paths = _state.value.photoPaths - path
-        _state.value = _state.value.copy(photoPath = paths.firstOrNull(), photoPaths = paths, materialSuggestion = null, materialDetectionStatus = MaterialDetectionStatus.IDLE)
+        val current = _state.value
+        val paths = current.photoPaths - path
+        if (paths == current.photoPaths) return
+        val primaryChanged = paths.firstOrNull() != current.photoPath
+        if (primaryChanged) {
+            materialSuggestionJob?.cancel()
+            materialSuggestionJob = null
+        }
+        _state.value = recalc(current.copy(
+            photoPath = paths.firstOrNull(), photoPaths = paths,
+            material = if (primaryChanged) null else current.material,
+            materialSuggestion = if (primaryChanged) null else current.materialSuggestion,
+            materialSuggestionLoading = if (primaryChanged) false else current.materialSuggestionLoading,
+            materialSuggestionError = if (primaryChanged) false else current.materialSuggestionError,
+            materialDetectionStatus = if (primaryChanged) MaterialDetectionStatus.IDLE else current.materialDetectionStatus,
+            materialDetectionMessage = if (primaryChanged) null else current.materialDetectionMessage,
+            step = if (paths.isEmpty()) LotStep.PHOTO else current.step
+        ))
+        if (primaryChanged && paths.isNotEmpty()) suggestMaterial()
     }
     fun confirmPhotos() { if (_state.value.photoPaths.isNotEmpty()) _state.value = _state.value.copy(step = LotStep.MATERIAL) }
     fun demoPhotoCaptured(path: String) {
-        photoCaptured(path)
+        photoCaptured(path, detectMaterial = false)
         if (_state.value.photoPath == path) {
             _state.value = _state.value.copy(
                 materialSuggestion = MaterialSuggestionDto(
@@ -135,7 +179,7 @@ class LotManagementViewModel(
             chooseMaterial(Material.COPPER)
         }
     }
-    fun retake() { _state.value = _state.value.copy(step = LotStep.PHOTO, photoError = null) }
+    fun retake() { materialSuggestionJob?.cancel(); materialSuggestionJob = null; _state.value = _state.value.copy(step = LotStep.PHOTO, photoError = null, materialSuggestionLoading = false) }
     fun goBack() {
         val current = _state.value
         val previous = when (current.step) {
@@ -148,7 +192,7 @@ class LotManagementViewModel(
         }
         _state.value = current.copy(step = previous, saveError = false, isSaving = false)
     }
-    fun startOver() { _state.value = LotDraftState() }
+    fun startOver() { materialSuggestionJob?.cancel(); materialSuggestionJob = null; _state.value = LotDraftState() }
     fun chooseMaterial(material: Material) { _state.value = recalc(_state.value.copy(material = material, step = LotStep.CONDITION)) }
     fun applyMaterialSuggestion() {
         val suggested = materialToEnum(_state.value.materialSuggestion?.materialCategory) ?: return
@@ -157,10 +201,15 @@ class LotManagementViewModel(
     fun suggestMaterial() {
         val current = _state.value
         val path = current.photoPath ?: return
-        val service = api ?: return
+        val service = api
+        if (service == null) {
+            _state.value = current.copy(materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = "AI material detection is not configured. Choose the material manually.")
+            return
+        }
         if (current.materialSuggestionLoading) return
+        materialSuggestionJob?.cancel()
         _state.value = current.copy(materialSuggestionLoading = true, materialSuggestionError = false, materialDetectionStatus = MaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
-        viewModelScope.launch {
+        materialSuggestionJob = viewModelScope.launch {
             try {
                 val file = File(path)
                 val mime = file.imageMimeType()
@@ -187,18 +236,27 @@ class LotManagementViewModel(
                     materialDetectionMessage = null
                 )
             } catch (_: IllegalArgumentException) {
-                // Keep provider/file-validation details out of UI state. The
-                // screen renders the localized manual-fallback message for
-                // this typed status.
-                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = null)
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This photo could not be processed. Choose a clear JPEG, PNG, or WebP image and try again.")
             } catch (error: RemoteApiException) {
                 val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "GEMINI_UNAVAILABLE" || error.code == "SERVICE_UNAVAILABLE"
                 val unsupported = error.httpCode == 422 || error.code == "VALIDATION_ERROR"
-                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = when { unsupported -> MaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> MaterialDetectionStatus.SERVICE_ERROR; else -> MaterialDetectionStatus.NETWORK_ERROR }, materialDetectionMessage = null)
+                val status = when { unsupported -> MaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> MaterialDetectionStatus.SERVICE_ERROR; else -> MaterialDetectionStatus.NETWORK_ERROR }
+                val message = when {
+                    unsupported -> "This photo could not be read. Choose a clear JPEG, PNG, or WebP image and try again."
+                    error.httpCode == 401 -> "Your session expired. Sign in again, then retry photo detection."
+                    error.httpCode == 403 -> "Photo detection is unavailable for this account. Choose the material manually."
+                    error.httpCode == 429 -> "Photo detection is busy. Wait a moment and retry."
+                    serviceFailure -> "The AI service is temporarily unavailable. Choose the material manually or retry."
+                    else -> "Photo detection could not connect. Check your connection and retry."
+                }
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = status, materialDetectionMessage = message)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: IOException) {
-                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = null)
-            } catch (_: Exception) {
-                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = null)
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = "Photo detection could not connect. Check your connection and retry.")
+            } catch (error: Exception) {
+                Log.w("LotMaterialSuggest", "Image suggestion failed (${error::class.java.simpleName})")
+                _state.value = _state.value.copy(materialSuggestion = null, materialSuggestionLoading = false, materialSuggestionError = true, materialDetectionStatus = MaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = "Photo detection failed unexpectedly. Choose the material manually or retry.")
             }
         }
     }

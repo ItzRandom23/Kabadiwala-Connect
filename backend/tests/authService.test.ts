@@ -13,7 +13,8 @@ describe('collector authentication service', () => {
     await expect(provider.verify('9876543210', '123456')).resolves.toBe('approved');
   });
 
-  it('verifies a development OTP and creates a collector', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-1'); const result = await service.verifyOtp('9876543210', '123456', 'ip-1'); expect(result.collector.id).toBe('collector-new'); expect(result.token).toBeTruthy(); });
+  it('verifies a development OTP and creates a collector with an explicit role', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-1'); const result = await service.verifyOtp('9876543210', '123456', 'ip-1', { role: 'COLLECTOR' }); expect(result.collector.id).toBe('collector-new'); expect(result.token).toBeTruthy(); });
+  it('does not create a collector when the account type was not chosen', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-no-role'); await expect(service.verifyOtp('9876543210', '123456', 'ip-no-role')).rejects.toMatchObject({ code: 'VALIDATION_ERROR', status: 422, details: { code: 'ROLE_REQUIRED' } }); });
   it('rejects an invalid OTP', async () => { const { service } = setup(); await service.requestOtp('9876543210', 'ip-1'); await expect(service.verifyOtp('9876543210', '000000', 'ip-1')).rejects.toMatchObject({ code: 'OTP_INVALID' }); });
   it('logs in an existing collector', async () => { const { service } = setup(true); await service.requestOtp('9876543210', 'ip-2'); const result = await service.verifyOtp('9876543210', '123456', 'ip-2'); expect(result.collector.id).toBe('collector-1'); });
 
@@ -59,6 +60,61 @@ describe('collector authentication service', () => {
     expect(result.user?.role).toBe('HOUSEHOLD');
     expect(result.user?.profileId).toBe('household-profile-1');
     expect(new JwtService(config).verifyToken(result.token).role).toBe('HOUSEHOLD');
+  });
+
+  it('links a legacy recycler profile when phone login omits a role', async () => {
+    const legacyProfile = {
+      id: 'legacy-recycler-1',
+      phone: '9876543203',
+      name: 'Recycler A',
+      areaName: 'Pune',
+      authorizationStatus: 'PENDING'
+    };
+    let createdUser: any = null;
+    const tx = {
+      user: {
+        findFirst: async () => null,
+        create: async ({ data }: any) => {
+          createdUser = { id: 'linked-recycler-user-1', ...data, accountStatus: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() };
+          return createdUser;
+        }
+      },
+      collector: { findFirst: async () => null },
+      recycler: {
+        findFirst: async () => legacyProfile,
+        findUnique: async () => legacyProfile
+      }
+    };
+    const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
+    const service = new AuthService(new DevelopmentOtpProvider(config), {} as any, new JwtService(config), undefined, db);
+
+    const result = await service.verifyOtp('9876543203', '123456', 'ip-legacy-recycler');
+
+    expect(createdUser).toMatchObject({ phone: '9876543203', role: 'RECYCLER', recyclerProfileId: 'legacy-recycler-1' });
+    expect(result.user?.role).toBe('RECYCLER');
+    expect(result.user?.profileId).toBe('legacy-recycler-1');
+    expect(new JwtService(config).verifyToken(result.token).role).toBe('RECYCLER');
+  });
+
+  it('requires a role before creating a new phone account', async () => {
+    let created = false;
+    const tx = {
+      user: { findFirst: async () => null },
+      collector: {
+        findFirst: async () => null,
+        create: async () => { created = true; throw new Error('Unexpected account creation'); }
+      },
+      recycler: { findFirst: async () => null }
+    };
+    const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
+    const service = new AuthService(new DevelopmentOtpProvider(config), {} as any, new JwtService(config), undefined, db);
+
+    await service.requestOtp('9876543202', 'ip-new-account');
+    await expect(service.verifyOtp('9876543202', '123456', 'ip-new-account', {
+      areaName: 'Pune',
+      displayName: 'New household'
+    })).rejects.toMatchObject({ code: 'VALIDATION_ERROR', status: 422, details: { code: 'ROLE_REQUIRED' } });
+    expect(created).toBe(false);
   });
 
   it('does not block a verified phone when the optional email belongs to another account', async () => {
@@ -115,7 +171,8 @@ describe('collector authentication service', () => {
   it('requires a name when creating a new collector phone account', async () => {
     const tx = {
       user: { findFirst: async () => null },
-      collector: { findFirst: async () => null }
+      collector: { findFirst: async () => null },
+      recycler: { findFirst: async () => null }
     };
     const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
     const service = new AuthService(new DevelopmentOtpProvider(config), {} as any, new JwtService(config), undefined, db);

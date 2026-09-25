@@ -32,6 +32,7 @@ const schema = z.object({
   AI_DESCRIPTION_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().min(1).optional(),
+  GEMINI_FALLBACK_MODELS: z.string().optional(),
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().min(1).default('uploads'),
   LOCAL_UPLOAD_BASE_URL: z.string().default(''),

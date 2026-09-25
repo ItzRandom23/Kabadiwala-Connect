@@ -24,6 +24,7 @@ function materialSuggestionApp() {
 afterEach(() => {
   delete process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_MODEL;
+  delete process.env.GEMINI_FALLBACK_MODELS;
   vi.unstubAllGlobals();
 });
 
@@ -70,7 +71,7 @@ describe('material suggestion photo contract', () => {
       const body = JSON.parse(String(init?.body)) as { contents: Array<{ parts: Array<{ inline_data: { mime_type: string; data: string } }> }> };
       expect(body.contents[0].parts[1].inline_data.mime_type).toBe('image/png');
       expect(body.contents[0].parts[1].inline_data.data).toBe(validPng.toString('base64'));
-      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ materialCategory: 'COPPER', confidence: 0.91, alternatives: ['CABLE', 'OTHER'], rationale: 'Visible copper wiring.' }) }] } }] }), { status: 200 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ itemName: 'copper wire', materialCategory: 'COPPER', confidence: 0.91, alternatives: ['CABLE', 'OTHER'], rationale: 'Visible copper wiring.', estimatedPriceMinPerKg: 35, estimatedPriceMaxPerKg: 48 }) }] } }] }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { app, aiInference } = materialSuggestionApp();
@@ -87,6 +88,9 @@ describe('material suggestion photo contract', () => {
       confidence: 0.91,
       alternatives: ['CABLE', 'OTHER'],
       rationale: 'Visible copper wiring.',
+      itemName: 'copper wire',
+      estimatedPriceMinPerKg: 35,
+      estimatedPriceMaxPerKg: 48,
       source: 'AI',
       model: 'gemini-test-model'
     });
@@ -113,6 +117,43 @@ describe('material suggestion photo contract', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({ materialCategory: 'LCD_PANEL', alternatives: ['PLASTIC'] });
+    expect(response.body.data.confidence).toBeLessThan(0.5);
+  });
+
+  it('tries a Lite fallback after a transient provider failure and returns the working model', async () => {
+    process.env.GEMINI_API_KEY = 'gemini-test-key';
+    process.env.GEMINI_MODEL = 'gemini-3.5-flash-lite';
+    process.env.GEMINI_FALLBACK_MODELS = 'gemini-3.1-flash-lite';
+    const fetchMock = vi.fn(async (input: string | URL) => String(input).includes('gemini-3.5-flash-lite')
+      ? new Response(JSON.stringify({ error: { status: 'UNAVAILABLE', message: 'Provider busy' } }), { status: 503 })
+      : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ itemName: 'copper wire', materialCategory: 'COPPER', confidence: 0.86, alternatives: [], rationale: 'Copper wire is visible.' }) }] } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { app } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ materialCategory: 'COPPER', itemName: 'copper wire', model: 'gemini-3.1-flash-lite' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifies an assembled phone as other scrap even if the model focuses on its plastic case', async () => {
+    process.env.GEMINI_API_KEY = 'gemini-test-key';
+    process.env.GEMINI_MODEL = 'gemini-test-model';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ itemName: 'smartphone', materialCategory: 'PLASTIC', confidence: 0.94, alternatives: ['LCD_PANEL'], rationale: 'Plastic case is visible.' }) }] } }] }), { status: 200 })));
+    const { app } = materialSuggestionApp();
+
+    const response = await request(app)
+      .post('/future/lots/material-suggestion')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', validPng, { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ materialCategory: 'OTHER', itemName: 'smartphone', confidence: 0.75 });
+    expect(response.body.data.rationale).toContain('whole electronic device');
   });
 
   it('does not record malformed provider output as an AI result', async () => {

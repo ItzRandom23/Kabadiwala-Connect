@@ -104,6 +104,7 @@ class RemoteAuthenticationRepository(
             profile?.let { storage?.saveAccount(it) }
             OtpVerification.Success(auth.token, expiry, profile?.profileId.orEmpty(), profile)
         } catch (error: Exception) {
+            if ((error as? RemoteApiException)?.detailsCode == "ROLE_REQUIRED") return OtpVerification.RoleRequired
             when (errorCode(error)) {
                 "OTP_EXPIRED" -> OtpVerification.Expired
                 "OTP_ATTEMPTS_EXCEEDED" -> OtpVerification.AttemptsExceeded

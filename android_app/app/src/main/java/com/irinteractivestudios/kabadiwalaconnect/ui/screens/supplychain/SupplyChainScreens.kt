@@ -120,6 +120,8 @@ import kotlin.math.roundToInt
 import java.io.File
 import java.util.Locale
 
+private fun Double.roundMoneyForUi(): Double = (this * 100.0).roundToInt() / 100.0
+
 // Keep this list identical to the backend MaterialCategory enum. Paper/newspaper
 // is not currently a first-class backend category, so it is represented by
 // OTHER until the contract adds a dedicated category.
@@ -635,12 +637,15 @@ fun HouseholdListingCreateScreen(
     onSuggestMaterial: (String) -> Unit,
     onClearMaterialSuggestion: () -> Unit,
     onCreateListing: (HouseholdListingCreateDto, List<String>) -> Unit,
-    busy: Set<String> = emptySet()
+    busy: Set<String> = emptySet(),
+    onEstimateHouseholdPrice: (String, Double, String, String) -> Unit = { _, _, _, _ -> },
+    onClearHouseholdPriceEstimate: () -> Unit = {}
 ) {
     // This is a multi-step, network-backed form. Save the draft through
     // Activity recreation so rotation, permission prompts, and keyboard
     // changes do not discard the user's photos or typed details.
-    var material by rememberSaveable { mutableStateOf(friendlyMaterials.first().key) }
+    var material by rememberSaveable { mutableStateOf("") }
+    var materialChosenManually by rememberSaveable { mutableStateOf(false) }
     var weight by rememberSaveable { mutableStateOf("") }
     var pickupAddress by rememberSaveable(initialPickupAddress, initialArea) { mutableStateOf(initialPickupAddress.ifBlank { initialArea }) }
     var notes by rememberSaveable { mutableStateOf("") }
@@ -670,13 +675,11 @@ fun HouseholdListingCreateScreen(
                 File(capturedPath).delete()
                 withContext(Dispatchers.Main.immediate) {
                     if (normalized != null) {
-                        val wasEmpty = photoPaths.isEmpty()
                         photoPaths = (photoPaths + normalized.absolutePath).distinct().take(6)
                         photoError = false
                         cameraError = false
                         cameraPermissionDenied = false
                         cameraPermissionBlocked = false
-                        if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
                     } else {
                         cameraError = true
                     }
@@ -741,18 +744,34 @@ fun HouseholdListingCreateScreen(
                 }.getOrNull()
             }
             withContext(Dispatchers.Main.immediate) {
-                val wasEmpty = photoPaths.isEmpty()
                 photoPaths = (photoPaths + paths).distinct().take(6)
                 photoError = paths.size < uris.size
                 cameraError = false
                 cameraPermissionDenied = false
                 cameraPermissionBlocked = false
-                if (wasEmpty) photoPaths.firstOrNull()?.let(onSuggestMaterial)
             }
         }
     }
-    LaunchedEffect(state.materialSuggestion?.materialCategory, state.materialDetectionStatus) {
-        if (state.materialDetectionStatus == HouseholdMaterialDetectionStatus.SUCCESS) {
+    val firstPhotoPath = photoPaths.firstOrNull()
+    LaunchedEffect(firstPhotoPath, state.materialDetectionPath) {
+        if (firstPhotoPath.isNullOrBlank()) {
+            if (!materialChosenManually) {
+                material = ""
+                safetyAcknowledged = false
+            }
+            if (state.materialDetectionPath != null || state.materialSuggestion != null || state.materialDetectionStatus != HouseholdMaterialDetectionStatus.IDLE) {
+                onClearMaterialSuggestion()
+            }
+        } else if (state.materialDetectionPath != firstPhotoPath) {
+            if (!materialChosenManually) {
+                material = ""
+                safetyAcknowledged = false
+            }
+            onSuggestMaterial(firstPhotoPath)
+        }
+    }
+    LaunchedEffect(firstPhotoPath, state.materialDetectionPath, state.materialSuggestion?.materialCategory, state.materialDetectionStatus) {
+        if (firstPhotoPath != null && state.materialDetectionPath == firstPhotoPath && state.materialDetectionStatus == HouseholdMaterialDetectionStatus.SUCCESS && !materialChosenManually) {
             state.materialSuggestion?.materialCategory?.takeIf { friendlyMaterials.any { item -> item.key == it } }?.let { material = it; safetyAcknowledged = false }
         }
     }
@@ -761,7 +780,43 @@ fun HouseholdListingCreateScreen(
     val parsedWeight = weight.toDoubleOrNull()
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
     val addressError = pickupAddress.isNotBlank() && pickupAddress.trim().length < 2
-    val canSubmit = photoPaths.isNotEmpty() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val priceArea = initialArea.trim()
+    val localPriceEstimate = state.householdPriceEstimate?.takeIf {
+        it.materialCategory == material && it.weightKg == parsedWeight && it.condition == condition && it.areaName == priceArea.trim()
+    }
+    val aiPriceEstimate = state.materialSuggestion?.let { suggestion ->
+        val minPerKg = suggestion.estimatedPriceMinPerKg
+        val maxPerKg = suggestion.estimatedPriceMaxPerKg
+        if (suggestion.source.equals("AI", ignoreCase = true) && suggestion.materialCategory == material && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
+            val conditionMultiplier = when (condition) { "DAMAGED" -> 0.7; "PARTIAL" -> 0.4; else -> 1.0 }
+            HouseholdPriceEstimate(
+                materialCategory = material,
+                weightKg = parsedWeight,
+                condition = condition,
+                areaName = priceArea,
+                minimum = (minPerKg * parsedWeight * conditionMultiplier).roundMoneyForUi(),
+                maximum = (maxPerKg * parsedWeight * conditionMultiplier).roundMoneyForUi(),
+                disclaimer = "AI estimate only, based on the detected material. Confirm the final price after weighing.",
+                source = "AI_INDICATIVE"
+            )
+        } else null
+    }
+    val currentPriceEstimate = localPriceEstimate ?: aiPriceEstimate
+    LaunchedEffect(material, parsedWeight, condition, priceArea) {
+        if (material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500) {
+            onEstimateHouseholdPrice(material, parsedWeight, condition, priceArea)
+        } else {
+            onClearHouseholdPriceEstimate()
+        }
+    }
+    val canSubmit = photoPaths.isNotEmpty() && material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val missingPostRequirements = buildList {
+        if (photoPaths.isEmpty()) add("add a photo")
+        if (material.isBlank()) add("choose a material")
+        if (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500) add("enter a weight from 0–500 kg")
+        if (pickupAddress.trim().isEmpty()) add("add a pickup address")
+        if (isHazardous && !safetyAcknowledged) add("confirm safe handling")
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
@@ -784,7 +839,12 @@ fun HouseholdListingCreateScreen(
                                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(96.dp)) {
                                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                                             if (bitmap != null) Image(bitmap, "Scrap photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                                            IconButton(onClick = { photoPaths = photoPaths - path; if (photoPaths.isEmpty()) onClearMaterialSuggestion() }, modifier = Modifier.size(36.dp).align(Alignment.TopEnd)) { Icon(Icons.Filled.Close, "Remove photo") }
+                                            IconButton(onClick = {
+                                                val remaining = photoPaths - path
+                                                val removedFirstPhoto = path == firstPhotoPath
+                                                photoPaths = remaining
+                                                if (remaining.isEmpty() || removedFirstPhoto) onClearMaterialSuggestion()
+                                            }, modifier = Modifier.size(36.dp).align(Alignment.TopEnd)) { Icon(Icons.Filled.Close, "Remove photo") }
                                         }
                                     }
                                 }
@@ -832,9 +892,12 @@ fun HouseholdListingCreateScreen(
                 Text("Pick the closest everyday description. You can change the AI suggestion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (state.materialDetectionStatus) {
                     HouseholdMaterialDetectionStatus.PROCESSING -> Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Checking the first photo…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall) }
-                    HouseholdMaterialDetectionStatus.SUCCESS -> state.materialSuggestion?.let { Text("We think this may be ${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                    HouseholdMaterialDetectionStatus.SUCCESS -> state.materialSuggestion?.let {
+                        val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
+                        Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
                     HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                    HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text("Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text(state.materialDetectionMessage ?: "Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     HouseholdMaterialDetectionStatus.IDLE -> Unit
                 }
                 if (state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) && photoPaths.isNotEmpty()) {
@@ -850,7 +913,7 @@ fun HouseholdListingCreateScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     friendlyMaterials.forEach { option ->
                         val selected = material == option.key
-                        Card(onClick = { material = option.key; safetyAcknowledged = false }, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow), border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null, modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
+                        Card(onClick = { material = option.key; materialChosenManually = true; safetyAcknowledged = false }, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow), border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null, modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
                             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) { Text(option.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold); Text(option.examples, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 if (selected) Icon(Icons.Filled.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary)
@@ -864,11 +927,72 @@ fun HouseholdListingCreateScreen(
             }
             item { Text("Condition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase().replaceFirstChar(Char::uppercase)) }) } } }
             item { OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
+            item {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = if (currentPriceEstimate != null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Estimated price range", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        when {
+                            state.householdPriceEstimateLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Checking current local prices…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                            }
+                            currentPriceEstimate != null -> {
+                                Text(
+                                    "₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", currentPriceEstimate.minimum)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", currentPriceEstimate.maximum)}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(if (currentPriceEstimate.source == "AI_INDICATIVE") "AI indicative estimate for ${currentPriceEstimate.weightKg} kg. Use it as a rough guide." else "Based on ${currentPriceEstimate.weightKg} kg, condition, and current ${if (currentPriceEstimate.areaName.isBlank()) "material" else "local"} buying rates.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text(currentPriceEstimate.disclaimer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                            else -> Text(
+                                state.householdPriceEstimateMessage ?: "Enter an approximate weight to see an available local price range. This estimate does not affect whether you can post.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { Text("Full pickup address") }, supportingText = { if (addressError) Text("Add a complete pickup address") else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.") }, isError = addressError, minLines = 2, maxLines = 3) }
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
-         Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = initialArea.ifBlank { pickupAddress.trim() }, pickupAddress = pickupAddress.trim(), latitude = latitude, longitude = longitude, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
+         state.error?.let { message ->
+             Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                 Text(message, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+             }
+         }
+         if (missingPostRequirements.isNotEmpty() && "create-listing" !in busy) {
+             Text(
+                 "To post, ${missingPostRequirements.joinToString() }.",
+                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                 style = MaterialTheme.typography.bodySmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant
+             )
+         }
+         Button(onClick = {
+             parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(
+                 materialCategory = material,
+                 estimatedWeight = value,
+                 condition = condition,
+                 notes = notes.trim().ifBlank { null },
+                 areaName = initialArea.ifBlank { pickupAddress.trim() },
+                 pickupAddress = pickupAddress.trim(),
+                 latitude = latitude,
+                 longitude = longitude,
+                 estimatedPriceMin = currentPriceEstimate?.minimum,
+                 estimatedPriceMax = currentPriceEstimate?.maximum,
+                 dataBearingDevice = dataBearingDevice,
+                 ownerPreparationCompleted = ownerPreparationCompleted,
+                 dataDestructionRequested = dataDestructionRequested
+             ), photoPaths) }
+         }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
      }
      if (showCameraPermissionDialog) {
          AlertDialog(

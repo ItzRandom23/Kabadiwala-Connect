@@ -35,6 +35,8 @@ data class OnboardingState(
     val password: String = "",
     val returningUser: Boolean = false,
     val role: AccountRole = AccountRole.COLLECTOR,
+    val roleSelected: Boolean = false,
+    val roleRequiredAfterSignIn: Boolean = false,
     val displayName: String = "",
     val businessName: String = "",
     val authorizationNumber: String = "",
@@ -80,11 +82,12 @@ class OnboardingViewModel(
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
     private var authenticatedCollectorId: String? = null
 
-    fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE) }
+    fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE, roleRequiredAfterSignIn = false) }
     fun useEmailSignIn() {
         _state.value = _state.value.copy(
             returningUser = true,
             step = OnboardingStep.EMAIL,
+            roleRequiredAfterSignIn = false,
             authError = null,
             otpRetryAfterSeconds = null,
             phoneError = false
@@ -100,7 +103,7 @@ class OnboardingViewModel(
             phoneError = false
         )
     }
-    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, authError = null) }
+    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, roleRequiredAfterSignIn = false, authError = null) }
     fun goBack() {
         val current = _state.value
         val previous = when (current.step) {
@@ -145,7 +148,7 @@ class OnboardingViewModel(
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true, authError = null)
             when (val result = if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password) else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, LocaleManager.ENGLISH, isReturning = true))) {
-                is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false) }
+                is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true) }
                 is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
                 else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)
             }
@@ -155,7 +158,7 @@ class OnboardingViewModel(
     // MainActivity. Registration reuses that choice instead of asking again.
     fun selectRole(role: AccountRole) {
         val next = if (role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
-        _state.value = _state.value.copy(role = role, step = next)
+        _state.value = _state.value.copy(role = role, roleSelected = true, roleRequiredAfterSignIn = false, step = next)
     }
     fun setDisplayName(value: String) { _state.value = _state.value.copy(displayName = value, displayNameError = false) }
     fun setBusinessName(value: String) { _state.value = _state.value.copy(businessName = value) }
@@ -311,6 +314,7 @@ class OnboardingViewModel(
                         isBusy = false,
                         otpError = null,
                         role = profile.role,
+                        roleSelected = true,
                         email = profile.email.ifBlank { current.email },
                         phone = profile.phoneNumber.ifBlank { current.phone },
                         displayName = profile.displayName.orEmpty(),
@@ -321,6 +325,16 @@ class OnboardingViewModel(
                 OtpVerification.Expired -> current.copy(isBusy = false, otpError = OtpError.EXPIRED)
                 OtpVerification.AttemptsExceeded -> current.copy(isBusy = false, otpError = OtpError.ATTEMPTS_EXCEEDED)
                 OtpVerification.AccountConflict -> current.copy(isBusy = false, otpError = OtpError.ACCOUNT_CONFLICT)
+                OtpVerification.RoleRequired -> current.copy(
+                    step = OnboardingStep.ROLE,
+                    returningUser = false,
+                    roleSelected = false,
+                    roleRequiredAfterSignIn = true,
+                    challenge = null,
+                    otp = "",
+                    otpError = null,
+                    isBusy = false
+                )
                 OtpVerification.ServerError -> current.copy(isBusy = false, otpError = OtpError.SERVER)
                 OtpVerification.NetworkError -> current.copy(isBusy = false, otpError = OtpError.NETWORK)
             }
@@ -398,6 +412,10 @@ class OnboardingViewModel(
     }
     fun continueToPhone() {
         val current = _state.value
+        if (!current.returningUser && !current.roleSelected) {
+            _state.value = current.copy(step = OnboardingStep.ROLE)
+            return
+        }
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
         val validDisplayName = current.role == AccountRole.RECYCLER || current.displayName.isNotBlank()
         _state.value = current.copy(emailError = !validEmail, displayNameError = !validDisplayName)
@@ -410,7 +428,8 @@ class OnboardingViewModel(
         role != AccountRole.RECYCLER || (businessName.isNotBlank() && materialsAccepted.isNotEmpty())
 
     private fun OnboardingState.hasRequiredRegistrationFields(): Boolean =
-        phone.isNotBlank() &&
+        roleSelected &&
+            phone.isNotBlank() &&
             address.isNotBlank() &&
             (role == AccountRole.RECYCLER || displayName.isNotBlank()) &&
             (email.isBlank() || EmailValidator.isValid(email)) &&
@@ -429,6 +448,10 @@ class OnboardingViewModel(
 
     fun saveProfile() {
         val current = _state.value
+        if (!current.returningUser && !current.roleSelected) {
+            _state.value = current.copy(step = OnboardingStep.ROLE)
+            return
+        }
         if (current.address.isBlank() && current.role != AccountRole.RECYCLER) return
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true, authError = null)
@@ -438,7 +461,7 @@ class OnboardingViewModel(
                     is EmailAuthentication.Success -> {
                         secureStorage?.saveAccount(result.profile)
                         saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
-                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role)
+                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true)
                     }
                     is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
                     else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)

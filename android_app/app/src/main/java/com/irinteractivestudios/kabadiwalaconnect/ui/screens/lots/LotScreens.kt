@@ -372,9 +372,9 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             }
             when (s.materialDetectionStatus) {
                 MaterialDetectionStatus.LOW_CONFIDENCE -> Text(stringResource(R.string.lot_material_low_confidence), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
-                MaterialDetectionStatus.UNSUPPORTED_IMAGE -> Text(stringResource(R.string.lot_material_unsupported_image), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                MaterialDetectionStatus.NETWORK_ERROR -> Text(stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                MaterialDetectionStatus.SERVICE_ERROR -> Text(stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.UNSUPPORTED_IMAGE -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_unsupported_image), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.NETWORK_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.SERVICE_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 else -> Unit
             }
             if (s.materialDetectionStatus in setOf(MaterialDetectionStatus.UNSUPPORTED_IMAGE, MaterialDetectionStatus.NETWORK_ERROR, MaterialDetectionStatus.SERVICE_ERROR)) {

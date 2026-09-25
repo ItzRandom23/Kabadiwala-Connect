@@ -4,7 +4,7 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Current release
 
-- Android testing release: `0.0.53-beta` (`versionCode 54`)
+- Android testing release: `0.0.55-beta` (`versionCode 56`)
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`

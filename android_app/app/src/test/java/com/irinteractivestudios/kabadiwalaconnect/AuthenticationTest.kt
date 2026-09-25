@@ -171,6 +171,25 @@ class AuthenticationTest {
         assertEquals(OnboardingStep.LOCATION_PERMISSION, vm.state.value.step)
     }
 
+    @Test fun onboarding_requiresAnExplicitAccountTypeBeforeRegistration() {
+        val vm = TestAuth.onboarding()
+        vm.start()
+        assertEquals(OnboardingStep.ROLE, vm.state.value.step)
+        assertFalse(vm.state.value.roleSelected)
+
+        vm.chooseManualLocation()
+        vm.setAddress("Pune")
+        vm.setDisplayName("Asha")
+        vm.continueToPhone()
+        assertEquals(OnboardingStep.ROLE, vm.state.value.step)
+
+        vm.selectRole(AccountRole.HOUSEHOLD)
+        assertTrue(vm.state.value.roleSelected)
+        assertEquals(AccountRole.HOUSEHOLD, vm.state.value.role)
+        vm.startOver()
+        assertFalse(vm.state.value.roleSelected)
+    }
+
     @Test fun onboarding_resetOtpReturnsToPhoneEntry() = runTest {
         val vm = TestAuth.onboarding()
         vm.setOtp("123456")
@@ -207,7 +226,7 @@ class AuthenticationTest {
         val vm = TestAuth.onboarding()
         vm.selectRole(AccountRole.COLLECTOR)
         vm.chooseManualLocation()
-        vm.setArea("Pune")
+        vm.setAddress("Pune")
         vm.setDisplayName("Asha")
         vm.continueToPhone()
 
@@ -225,7 +244,7 @@ class AuthenticationTest {
         val vm = TestAuth.onboarding()
         vm.selectRole(AccountRole.COLLECTOR)
         vm.chooseManualLocation()
-        vm.setArea("Pune")
+        vm.setAddress("Pune")
         vm.setDisplayName("   ")
 
         vm.continueToPhone()
@@ -306,6 +325,43 @@ class AuthenticationTest {
         }
     }
 
+    @Test fun onboardingSendsUnknownReturningPhoneToUnselectedAccountTypes() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification = OtpVerification.RoleRequired
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.useEmailSignIn()
+            vm.start()
+            vm.setPhone("9876543201")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.ROLE, vm.state.value.step)
+            assertFalse(vm.state.value.returningUser)
+            assertFalse(vm.state.value.roleSelected)
+            assertTrue(vm.state.value.roleRequiredAfterSignIn)
+            assertEquals(null, vm.state.value.challenge)
+            vm.selectRole(AccountRole.HOUSEHOLD)
+            assertFalse(vm.state.value.roleRequiredAfterSignIn)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun onboarding_retriesVerifiedExistingPhoneWhenRegistrationConflicts() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)
@@ -364,8 +420,9 @@ class AuthenticationTest {
             }
             val vm = OnboardingViewModel(auth, profiles)
             vm.setPhone("9876543210")
+            vm.selectRole(AccountRole.COLLECTOR)
             vm.chooseManualLocation()
-            vm.setArea("Pune")
+            vm.setAddress("Pune")
             vm.setDisplayName("Asha")
             vm.setEmail("friend@example.com")
             vm.requestOtp()
@@ -444,8 +501,9 @@ class AuthenticationTest {
             }
             val vm = OnboardingViewModel(auth, profiles)
             vm.setPhone("9876543210")
+            vm.selectRole(AccountRole.COLLECTOR)
             vm.chooseManualLocation()
-            vm.setArea("  Pune  ")
+            vm.setAddress("  Pune  ")
             vm.setDisplayName("  Asha  ")
             vm.setEmail("   ")
             vm.requestOtp()

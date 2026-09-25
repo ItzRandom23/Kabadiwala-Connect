@@ -416,6 +416,7 @@
     <string name="auth_use_email_instead">Sign in with email instead</string>
     <string name="auth_role_title">How do you use Kabadiwala Connect?</string>
     <string name="auth_role_detail">Choose the work you do. You can’t change this from the app.</string>
+    <string name="auth_role_account_missing">No account exists for this phone. Choose an account type to create one.</string>
     <string name="auth_role_household">I am a household / local seller</string>
     <string name="auth_role_household_detail">Sell your household scrap. You do not buy or process scrap.</string>
     <string name="auth_role_collector">I collect scrap</string>

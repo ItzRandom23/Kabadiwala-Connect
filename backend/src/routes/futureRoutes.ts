@@ -122,13 +122,50 @@ function geminiText(body: unknown): string | null {
   return typeof text === 'string' ? text.trim() : null;
 }
 
-function geminiModelName() {
-  return (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '') || 'gemini-3.5-flash-lite';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_GEMINI_FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'];
+
+function sanitizeGeminiModel(value: string | undefined) {
+  return (value || '').trim().replace(/^models\//, '').replace(/[^A-Za-z0-9._-]/g, '');
 }
 
-const GEMINI_ATTEMPT_TIMEOUT_MS = 10_000;
-const GEMINI_MAX_ATTEMPTS = 2;
+function geminiModelNames() {
+  const configuredFallbacks = (process.env.GEMINI_FALLBACK_MODELS || '')
+    .split(',')
+    .map(sanitizeGeminiModel)
+    .filter(Boolean);
+  const models = [
+    sanitizeGeminiModel(process.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL,
+    ...configuredFallbacks,
+    ...DEFAULT_GEMINI_FALLBACK_MODELS
+  ];
+  return [...new Set(models)];
+}
+
+function geminiModelName() {
+  return geminiModelNames()[0] || DEFAULT_GEMINI_MODEL;
+}
+
+const GEMINI_ATTEMPT_TIMEOUT_MS = 7_000;
+// A request gets one attempt per model. This keeps a provider outage from
+// blocking the upload while allowing the next Lite model to take over.
+const GEMINI_MAX_ATTEMPTS = 3;
 const GEMINI_RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+function geminiProviderError(body: unknown) {
+  if (!body || typeof body !== 'object') return {};
+  const error = (body as { error?: unknown }).error;
+  if (!error || typeof error !== 'object') return {};
+  const status = (error as { status?: unknown }).status;
+  const message = (error as { message?: unknown }).message;
+  const safeMessage = typeof message === 'string'
+    ? message.replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted]').slice(0, 240)
+    : undefined;
+  return {
+    ...(typeof status === 'string' ? { providerStatus: status.slice(0, 80) } : {}),
+    ...(safeMessage ? { providerMessage: safeMessage } : {})
+  };
+}
 
 async function callGemini(
   parts: unknown[],
@@ -137,22 +174,25 @@ async function callGemini(
   diagnostics?: { requestId?: string; operation: string }
 ) {
   const key = process.env.GEMINI_API_KEY?.trim();
-  const model = geminiModelName();
+  const models = geminiModelNames();
+  const primaryModel = models[0] || DEFAULT_GEMINI_MODEL;
   if (!key) {
     console.warn(JSON.stringify({
       event: 'gemini_provider_unavailable',
       requestId: diagnostics?.requestId,
       operation: diagnostics?.operation ?? 'unknown',
-      model,
+      model: primaryModel,
       reason: 'missing_api_key'
     }));
     return null;
   }
 
-  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+  let attempt = 0;
+  for (const [modelIndex, model] of models.entries()) {
+    if (attempt >= GEMINI_MAX_ATTEMPTS) break;
+    attempt += 1;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), GEMINI_ATTEMPT_TIMEOUT_MS);
-    let retry = false;
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
@@ -161,17 +201,21 @@ async function callGemini(
         signal: controller.signal
       });
       if (!response.ok) {
-        // Keep provider failures actionable without logging the key, image,
-        // prompt, or provider response body. Retry only transient statuses.
+        // Read only the provider's structured error fields. Never log the key,
+        // image, prompt, or raw response body.
+        const responseBody = await response.json().catch(() => null);
+        const providerError = geminiProviderError(responseBody);
         console.warn(JSON.stringify({
           event: 'gemini_provider_unavailable',
           requestId: diagnostics?.requestId,
           operation: diagnostics?.operation ?? 'unknown',
           model,
           status: response.status,
-          attempt
+          ...providerError,
+          attempt,
+          ...(modelIndex < models.length - 1 ? { nextModel: models[modelIndex + 1] } : {})
         }));
-        retry = attempt < GEMINI_MAX_ATTEMPTS && GEMINI_RETRYABLE_STATUSES.has(response.status);
+        if (!GEMINI_RETRYABLE_STATUSES.has(response.status)) return null;
       } else {
         const text = geminiText(await response.json());
         if (text) return { text, model };
@@ -181,9 +225,9 @@ async function callGemini(
           operation: diagnostics?.operation ?? 'unknown',
           model,
           reason: 'empty_response',
-          attempt
+          attempt,
+          ...(modelIndex < models.length - 1 ? { nextModel: models[modelIndex + 1] } : {})
         }));
-        return null;
       }
     } catch (error) {
       const reason = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network_error';
@@ -193,15 +237,14 @@ async function callGemini(
         operation: diagnostics?.operation ?? 'unknown',
         model,
         reason,
-        attempt
+        attempt,
+        ...(modelIndex < models.length - 1 ? { nextModel: models[modelIndex + 1] } : {})
       }));
-      retry = attempt < GEMINI_MAX_ATTEMPTS;
     } finally {
       clearTimeout(timeout);
     }
 
-    if (!retry) return null;
-    await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+    if (modelIndex < models.length - 1 && attempt < GEMINI_MAX_ATTEMPTS) continue;
   }
   return null;
 }
@@ -361,13 +404,15 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   } catch {
     throw new AppError('VALIDATION_ERROR', 'A JPEG, PNG, or WebP photo is required', 422, { code: 'INVALID_PHOTO' });
   }
-  const fallback = { materialCategory: 'OTHER', confidence: 0, alternatives: [], rationale: 'The photo could not be identified with enough confidence. Choose the material yourself.', source: 'TEMPLATE', model: null };
+  const fallback = { materialCategory: 'OTHER', confidence: 0, alternatives: [], rationale: 'The photo could not be identified with enough confidence. Choose the material yourself.', estimatedPriceMinPerKg: null, estimatedPriceMaxPerKg: null, source: 'TEMPLATE', model: null };
     const result = await callGemini([
       { text: [
-        'Identify the most likely recyclable material in this photo for a collector. This is only a suggestion; never invent certainty.',
-        `Write the response in ${language} for the rationale, but keep materialCategory as an English enum.`,
-        `Return JSON only with exactly these keys: materialCategory, confidence, alternatives, rationale.`,
+        'Identify the whole item in the photo first, then choose its selling category. This is only a suggestion; never invent certainty.',
+        `Write itemName in English (2 to 5 words) and rationale in ${language}. Keep materialCategory as an English enum.`,
+        'Return JSON only with exactly these keys: itemName, materialCategory, confidence, alternatives, rationale, estimatedPriceMinPerKg, estimatedPriceMaxPerKg.',
         `materialCategory must be one of: ${materialCategories.join(', ')}. confidence must be a number from 0 to 1. alternatives must be an array of at most 2 allowed categories. If uncertain, use OTHER and confidence below 0.5.`,
+        'estimatedPriceMinPerKg and estimatedPriceMaxPerKg must be rough INR per kilogram estimates for ordinary Indian scrap buying, based only on the identified category. Use null for OTHER, low confidence, or when there is not enough visual information. Never present the estimate as a live market quote.',
+        'Classify a whole phone, tablet, laptop, camera, or other assembled electronic device as OTHER, even if its case is plastic or it has a screen. Use PLASTIC only for loose plastic items. Use PCB, BATTERY, or LCD_PANEL only when that component itself is being sold separately.',
         'Do not identify brands, people, addresses, or safety compliance. Do not make pricing claims.'
       ].join('\n') },
       { inline_data: { mime_type: photo.mimetype, data: photo.buffer.toString('base64') } }
@@ -376,15 +421,28 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       throw materialSuggestionServiceError('GEMINI_UNAVAILABLE');
     }
     const parsed = parseJsonObject(result.text);
-    const category = normalizeMaterialCategory(parsed?.materialCategory);
+    const detectedCategory = normalizeMaterialCategory(parsed?.materialCategory);
     const confidence = typeof parsed?.confidence === 'number' && Number.isFinite(parsed.confidence) ? Math.max(0, Math.min(1, parsed.confidence)) : null;
-    if (!parsed || category == null || confidence == null) throw materialSuggestionServiceError('GEMINI_INVALID_RESPONSE');
+    if (!parsed || detectedCategory == null || confidence == null) throw materialSuggestionServiceError('GEMINI_INVALID_RESPONSE');
+    const itemName = typeof parsed.itemName === 'string' ? parsed.itemName.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
+    const wholeDevice = /\b(?:smartphone|iphone|cell\s*phone|mobile\s*(?:phone|device)|phone|tablet|laptop|camera|game\s*console|electronic\s*device)\b/i.test(itemName);
+    const category = wholeDevice ? 'OTHER' : detectedCategory;
+    const finalConfidence = !itemName ? Math.min(confidence, 0.49)
+      : wholeDevice && detectedCategory !== 'OTHER' ? Math.min(confidence, 0.75) : confidence;
     const alternatives = Array.isArray(parsed.alternatives)
       ? parsed.alternatives.map(normalizeMaterialCategory).filter((item): item is MaterialCategory => item != null && item !== category).slice(0, 2)
       : [];
-    const rationale = typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
-    const data = { materialCategory: category, confidence, alternatives, rationale, source: 'AI', model: result.model };
-    await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: 'GOOGLE_GEMINI', modelVersion: result.model, inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
+    const rationale = wholeDevice && detectedCategory !== 'OTHER'
+      ? 'This appears to be a whole electronic device. Use Other scrap unless you are selling a separated component.'
+      : typeof parsed?.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 300) : fallback.rationale;
+    const parsedMin = typeof parsed?.estimatedPriceMinPerKg === 'number' && Number.isFinite(parsed.estimatedPriceMinPerKg) ? parsed.estimatedPriceMinPerKg : null;
+    const parsedMax = typeof parsed?.estimatedPriceMaxPerKg === 'number' && Number.isFinite(parsed.estimatedPriceMaxPerKg) ? parsed.estimatedPriceMaxPerKg : null;
+    const hasValidPriceRange = category !== 'OTHER' && finalConfidence >= 0.6 && parsedMin != null && parsedMax != null && parsedMin > 0 && parsedMax >= parsedMin && parsedMax <= 100000;
+    const estimatedPriceMinPerKg = hasValidPriceRange ? Math.round(parsedMin! * 100) / 100 : null;
+    const estimatedPriceMaxPerKg = hasValidPriceRange ? Math.round(parsedMax! * 100) / 100 : null;
+    const data = { materialCategory: category, confidence: finalConfidence, alternatives, rationale, itemName: itemName || null, estimatedPriceMinPerKg, estimatedPriceMaxPerKg, source: 'AI', model: result.model };
+    console.info(JSON.stringify({ event: 'material_suggestion_generated', requestId: req.requestId, model: result.model, materialCategory: category, confidence: finalConfidence }));
+    await db.aiInference.create({ data: { feature: 'MATERIAL_CLASSIFICATION', modelProvider: 'GOOGLE_GEMINI', modelVersion: result.model, inputProvenance: { imageSha256: createHash('sha256').update(photo.buffer).digest('hex'), mimeType: photo.mimetype, bytes: photo.size, language }, prediction: data, confidence: finalConfidence, consentForTraining: String(req.body?.consentForTraining).toLowerCase() === 'true' } });
     return res.json({ success: true, data, message: 'Material suggestion generated' });
   });
 
