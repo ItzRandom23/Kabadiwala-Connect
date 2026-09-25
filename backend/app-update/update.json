@@ -1,8 +1,8 @@
 {
-  "versionCode": 52,
-  "versionName": "0.0.51-beta",
-  "apkUrl": "kabadiwala-connect-0.0.51-beta-debug.apk",
-  "sha256": "C0D92096399189B9ECC64D80B532CCF602CF912D37201CA012D62E000C19A2C3",
-  "sizeBytes": 28645035,
-  "releaseNotes": "Fixed a startup navigation race that could briefly show a role home screen to signed-out users."
+  "versionCode": 53,
+  "versionName": "0.0.52-beta",
+  "apkUrl": "kabadiwala-connect-0.0.52-beta-debug.apk",
+  "sha256": "60742B287400255B40359E9B28B19364C8C18C904A6A3F80470044A2737DD54B",
+  "sizeBytes": 28645032,
+  "releaseNotes": "Nearby Kabadiwala search now uses the saved household location, and pickup QR confirmation safely retries concurrent scans."
 }

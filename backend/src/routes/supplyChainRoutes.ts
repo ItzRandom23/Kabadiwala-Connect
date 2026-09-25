@@ -821,29 +821,52 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const collectorId = req.identity!.collectorId;
     const getAlreadyScannedPickup = async () => store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: collectorId } });
     try {
-      const result = await store.$transaction(async (tx: any) => {
-        const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: collectorId } });
-        if (!pickup) throw new AppError('NOT_FOUND', 'Pickup was not found for this Kabadiwala', 404, { code: 'PICKUP_NOT_FOUND' });
-        // A camera can deliver the same QR twice, and clients can retry after
-        // a lost response. Once recorded, that proof is durable and replay is
-        // safe even if the pickup has since advanced beyond ARRIVED.
-        if (pickup.householdQrScannedAt) return pickup;
-        if (pickup.status !== 'ARRIVED') throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
-        if (!jwt.verifyHouseholdPickupQrToken(input.qrCodeData, pickupId, pickup.householdId)) {
-          throw new AppError('VALIDATION_ERROR', 'This household QR is invalid or expired. Ask the household to refresh it.', 422, { code: 'PICKUP_QR_INVALID' });
+      let resolved: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result: any;
+        try {
+          result = await store.$transaction(async (tx: any) => {
+            const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: collectorId } });
+            if (!pickup) throw new AppError('NOT_FOUND', 'Pickup was not found for this Kabadiwala', 404, { code: 'PICKUP_NOT_FOUND' });
+            // A camera can deliver the same QR twice, and clients can retry after
+            // a lost response. Once recorded, that proof is durable and replay is
+            // safe even if the pickup has since advanced beyond ARRIVED.
+            if (pickup.householdQrScannedAt) return pickup;
+            if (pickup.status !== 'ARRIVED') throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
+            if (!jwt.verifyHouseholdPickupQrToken(input.qrCodeData, pickupId, pickup.householdId)) {
+              throw new AppError('VALIDATION_ERROR', 'This household QR is invalid or expired. Ask the household to refresh it.', 422, { code: 'PICKUP_QR_INVALID' });
+            }
+            const scannedAt = new Date();
+            const updated = await tx.pickupRequest.updateMany({
+              where: { id: pickupId, kabadiwalaId: collectorId, status: 'ARRIVED', householdQrScannedAt: null },
+              data: { householdQrScannedAt: scannedAt }
+            });
+            if (!updated.count) return null;
+            await auditSupplyEvent(tx, collectorId, 'COLLECTOR', 'HOUSEHOLD_PICKUP_QR_SCANNED', 'PICKUP_REQUEST', pickupId, { scannedAt: scannedAt.toISOString() });
+            return tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
+          });
+        } catch (transactionError: any) {
+          const latest = await getAlreadyScannedPickup().catch(() => null);
+          if (latest?.householdQrScannedAt) {
+            resolved = latest;
+            break;
+          }
+          const message = String(transactionError?.message ?? '');
+          const retryableConflict = transactionError?.code === 'P2034' || /write conflict|transaction conflict|transient transaction/i.test(message);
+          if (!retryableConflict || latest?.status !== 'ARRIVED' || attempt === 2) throw transactionError;
+          await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+          continue;
         }
-        const scannedAt = new Date();
-        const updated = await tx.pickupRequest.updateMany({
-          where: { id: pickupId, kabadiwalaId: collectorId, status: 'ARRIVED', householdQrScannedAt: null },
-          data: { householdQrScannedAt: scannedAt }
-        });
-        // Another scan may win after our transaction read. Resolve that race
-        // against the committed row below rather than reporting a false error.
-        if (!updated.count) return null;
-        await auditSupplyEvent(tx, collectorId, 'COLLECTOR', 'HOUSEHOLD_PICKUP_QR_SCANNED', 'PICKUP_REQUEST', pickupId, { scannedAt: scannedAt.toISOString() });
-        return tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
-      });
-      const resolved = result ?? await getAlreadyScannedPickup();
+
+        resolved = result ?? await getAlreadyScannedPickup();
+        if (resolved?.householdQrScannedAt) break;
+        if (!resolved) throw new AppError('NOT_FOUND', 'Pickup was not found for this Kabadiwala', 404, { code: 'PICKUP_NOT_FOUND' });
+        if (resolved.status !== 'ARRIVED') throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
+        // If a concurrent scan has started but is not committed yet, allow it
+        // to finish before deciding this request lost. Retry while the pickup
+        // remains ARRIVED so an isolated zero-row write cannot strand the QR.
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+      }
       if (!resolved?.householdQrScannedAt) throw new AppError('CONFLICT', 'Pickup changed before the household QR was confirmed', 409, { code: 'PICKUP_QR_SCAN_CONFLICT' });
       res.json({ success: true, data: resolved });
     } catch (error) {

@@ -4,17 +4,18 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Current release
 
-- Android testing release: `0.0.51-beta` (`versionCode 52`)
+- Android testing release: `0.0.52-beta` (`versionCode 53`)
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`
 
-The current beta includes a startup navigation fix that keeps signed-out users
-on authentication, plus GPS-aware lot locations, multi-photo scrap capture,
+The current beta keeps signed-out users on authentication, uses saved household
+coordinates for nearby Kabadiwala discovery, and recovers from concurrent pickup
+QR scans. It also includes GPS-aware lot locations, multi-photo scrap capture,
 Gemini-assisted material suggestions with manual fallback, account-scoped
 offline sync, role-aware navigation, verified household pickup QR handover,
-full-screen final weighing, QR handover to recyclers, and crash-safe camera
-and external-activity handling.
+full-screen final weighing, QR handover to recyclers, and crash-safe camera and
+external-activity handling.
 
 ## Product
 
@@ -150,8 +151,8 @@ handover photo failures are surfaced as recoverable UI states.
 The app checks the backend-hosted `/app/update.json` and compares its
 `versionCode` with the installed version. Each published entry must reference
 an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.0.51-beta` with
-`versionCode 52`.
+SHA-256 and byte size. The current manifest publishes `0.0.52-beta` with
+`versionCode 53`.
 
 The user confirms the download and Android separately confirms installation;
 updates are never installed silently. After changing the manifest or APK,

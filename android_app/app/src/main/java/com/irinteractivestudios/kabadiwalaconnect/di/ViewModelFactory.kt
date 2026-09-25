@@ -111,7 +111,12 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
             TransactionTimelineViewModel(container.apiService)
         modelClass.isAssignableFrom(SupplyChainViewModel::class.java) ->
-            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() }, { LocaleManager.persistedTag(app) }, { container.currentAccount()?.areaName })
+            SupplyChainViewModel(container.apiService, { container.currentAccount()?.role }, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId }, container.database.syncQueueDao(), { container.syncScheduler.requestSync() }, container.database.pendingPhotoUploadDao(), container.database.householdListingCacheDao(), { container.isAuthenticatedBackgroundWorkReady() }, { LocaleManager.persistedTag(app) }, { container.currentAccount()?.areaName }, {
+                val account = container.currentAccount()
+                val latitude = account?.latitude
+                val longitude = account?.longitude
+                if (latitude != null && longitude != null) CurrentLocation(latitude, longitude, account.areaName) else null
+            })
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

@@ -102,9 +102,17 @@ class SupplyChainViewModel(
      */
     private val authenticatedSessionReady: () -> Boolean = { true },
     private val languageProvider: () -> String = { LocaleManager.ENGLISH },
-    private val initialHouseholdArea: () -> String? = { null }
+    private val initialHouseholdArea: () -> String? = { null },
+    private val initialHouseholdLocation: () -> CurrentLocation? = { null }
 ) : ViewModel() {
-    private val _state = MutableStateFlow(SupplyChainState(kabadiwalaAreaQuery = initialHouseholdArea().orEmpty()))
+    private fun newHouseholdSearchState() = initialHouseholdLocation().let { location ->
+        SupplyChainState(
+            kabadiwalaAreaQuery = initialHouseholdArea().orEmpty(),
+            kabadiwalaLatitude = location?.latitude,
+            kabadiwalaLongitude = location?.longitude
+        )
+    }
+    private val _state = MutableStateFlow(newHouseholdSearchState())
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
@@ -154,7 +162,7 @@ class SupplyChainViewModel(
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
         stateAccountId = current
-        _state.value = SupplyChainState(kabadiwalaAreaQuery = initialHouseholdArea().orEmpty())
+        _state.value = newHouseholdSearchState()
     }
 
     private suspend fun cachedHouseholdListings(): List<HouseholdListingDto> {
