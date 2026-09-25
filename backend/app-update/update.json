@@ -1,8 +1,8 @@
 {
-  "versionCode": 54,
-  "versionName": "0.0.53-beta",
-  "apkUrl": "kabadiwala-connect-0.0.53-beta-debug.apk",
-  "sha256": "523B82F376EA0049B51970D59ABB51FD6B01F607B06E5DD7B842DF95C8003EAB",
-  "sizeBytes": 28645038,
-  "releaseNotes": "GPS addresses now keep street and house details separate from the locality, and household pickups include saved coordinates."
+  "versionCode": 55,
+  "versionName": "0.0.54-beta",
+  "apkUrl": "kabadiwala-connect-0.0.54-beta-debug.apk",
+  "sha256": "BD97941452C7C857EBD149B44BFF48869B4406E27A764FFD3010E9D7AD5B3253",
+  "sizeBytes": 28645041,
+  "releaseNotes": "Collect a single full pickup address across signup, profiles, and pickups, with repeated GPS address components removed."
 }

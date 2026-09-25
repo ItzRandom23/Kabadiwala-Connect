@@ -168,7 +168,12 @@ private fun Address.collectionAreaName(): String? {
 private fun Address.formattedStreetAddress(): String? {
     val lines = (0..maxAddressLineIndex).mapNotNull { index ->
         getAddressLine(index)?.trim()?.takeIf(String::isNotBlank)
-    }.distinctBy(String::lowercase)
+            ?.split(',')
+            ?.map(String::trim)
+            ?.filter(String::isNotBlank)
+            ?.distinctBy { it.replace(Regex("\\s+"), " ").lowercase(Locale.ROOT) }
+            ?.joinToString(", ")
+    }.distinctBy { it.replace(Regex("\\s+"), " ").lowercase(Locale.ROOT) }
     val hasStreetDetail = !premises.isNullOrBlank() || !subThoroughfare.isNullOrBlank() || !thoroughfare.isNullOrBlank()
     val detailedLine = lines.joinToString(", ").takeIf { hasStreetDetail && it.isNotBlank() }
     val structured = listOfNotNull(
@@ -182,7 +187,7 @@ private fun Address.formattedStreetAddress(): String? {
         postalCode?.trim()?.takeIf(String::isNotBlank)
     ).distinctBy(String::lowercase).joinToString(", ")
     return (detailedLine ?: structured.takeIf { hasStreetDetail && it.isNotBlank() })
-        ?.take(160)
+        ?.take(240)
         ?.trim()
         ?.takeIf(String::isNotBlank)
 }

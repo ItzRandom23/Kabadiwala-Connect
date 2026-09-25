@@ -366,19 +366,18 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     Text(stringResource(title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(detail), style = MaterialTheme.typography.bodyLarge)
     if (state.locationChoice == LocationChoice.GPS && state.area.isNotBlank()) {
-        Text(stringResource(R.string.auth_location_detected, state.area), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.auth_location_coordinates_saved), color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else if (state.locationChoice == LocationChoice.GPS && !state.locationError) {
         Text(stringResource(R.string.auth_location_coordinates_saved), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (state.locationError) {
         Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
     }
-    OutlinedTextField(state.area, vm::setArea, label = { Text(stringResource(R.string.auth_area_label)) }, leadingIcon = { Icon(Icons.Filled.LocationOn, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("auth_area"))
     OutlinedTextField(
         value = state.address,
         onValueChange = vm::setAddress,
-        label = { Text("Street / block / house number (optional)") },
-        supportingText = { Text("GPS may fill this in. Check it and add any missing details.") },
+        label = { Text("Full address") },
+        supportingText = { Text("GPS may fill this in. Add your street, block, or house number if missing.") },
         leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
         minLines = 2,
         maxLines = 3,
@@ -404,7 +403,7 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         stringResource(R.string.auth_continue_to_phone),
         vm::continueToPhone,
         icon = Icons.Filled.Phone,
-        enabled = state.area.isNotBlank() && (state.role == AccountRole.RECYCLER || state.displayName.isNotBlank()) && !state.isBusy,
+        enabled = state.address.isNotBlank() && (state.role == AccountRole.RECYCLER || state.displayName.isNotBlank()) && !state.isBusy,
         testTag = "auth_area_next"
     )
 }

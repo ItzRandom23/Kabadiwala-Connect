@@ -477,7 +477,16 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 @Composable private fun LocationStep(s: LotDraftState, vm: LotManagementViewModel, gps: () -> Unit) {
     Text(stringResource(R.string.lot_location_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_location_detail), style = MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(s.location, { vm.setLocation(it) }, label = { Text(stringResource(R.string.lot_area_label)) }, leadingIcon = { Icon(Icons.Filled.EditLocation, null) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("lot_location"))
+    OutlinedTextField(
+        value = s.location,
+        onValueChange = vm::setLocation,
+        label = { Text("Full pickup address") },
+        leadingIcon = { Icon(Icons.Filled.EditLocation, null) },
+        supportingText = { Text("Include your street, block, or house number if available.") },
+        minLines = 2,
+        maxLines = 3,
+        modifier = Modifier.fillMaxWidth().testTag("lot_location")
+    )
     when (s.locationStatus) {
         LotLocationStatus.REQUESTING -> Text(stringResource(R.string.lot_gps_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LotLocationStatus.SAVED -> Text(stringResource(R.string.lot_gps_saved), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)

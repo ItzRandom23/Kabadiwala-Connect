@@ -363,7 +363,7 @@ class OnboardingViewModel(
                 locationChoice = if (detected == null) LocationChoice.MANUAL else LocationChoice.GPS,
                 latitude = detected?.latitude,
                 longitude = detected?.longitude,
-                area = detected?.areaName.orEmpty(),
+                area = detected?.areaName.orEmpty().ifBlank { detected?.formattedAddress.orEmpty() },
                 address = detected?.formattedAddress.orEmpty(),
                 locationError = detected == null,
                 isLocationBusy = false,
@@ -377,20 +377,31 @@ class OnboardingViewModel(
             locationChoice = LocationChoice.MANUAL,
             latitude = null,
             longitude = null,
+            area = "",
             address = "",
             locationError = false,
             isLocationBusy = false,
             step = OnboardingStep.AREA
         )
     }
-    fun setArea(value: String) { _state.value = _state.value.copy(area = value) }
-    fun setAddress(value: String) { _state.value = _state.value.copy(address = value.take(240)) }
+    fun setAddress(value: String) {
+        val address = value.take(240)
+        val current = _state.value
+        _state.value = current.copy(
+            address = address,
+            // Keep the reverse-geocoded service area for GPS locations. For a
+            // manually entered address, use the full address as the matching
+            // fallback so registration still has a useful location value.
+            area = current.area.takeIf { current.locationChoice == LocationChoice.GPS && it.isNotBlank() }
+                ?: address.trim()
+        )
+    }
     fun continueToPhone() {
         val current = _state.value
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
         val validDisplayName = current.role == AccountRole.RECYCLER || current.displayName.isNotBlank()
         _state.value = current.copy(emailError = !validEmail, displayNameError = !validDisplayName)
-        if (current.area.isNotBlank() && validDisplayName && validEmail && (current.role != AccountRole.RECYCLER || current.hasRequiredRecyclerDetails())) {
+        if (current.address.isNotBlank() && validDisplayName && validEmail && (current.role != AccountRole.RECYCLER || current.hasRequiredRecyclerDetails())) {
             _state.value = _state.value.copy(step = OnboardingStep.PHONE)
         }
     }
@@ -400,7 +411,7 @@ class OnboardingViewModel(
 
     private fun OnboardingState.hasRequiredRegistrationFields(): Boolean =
         phone.isNotBlank() &&
-            area.isNotBlank() &&
+            address.isNotBlank() &&
             (role == AccountRole.RECYCLER || displayName.isNotBlank()) &&
             (email.isBlank() || EmailValidator.isValid(email)) &&
             hasRequiredRecyclerDetails()
@@ -418,7 +429,7 @@ class OnboardingViewModel(
 
     fun saveProfile() {
         val current = _state.value
-        if (current.area.isBlank() && current.role != AccountRole.RECYCLER) return
+        if (current.address.isBlank() && current.role != AccountRole.RECYCLER) return
         viewModelScope.launch {
             _state.value = current.copy(isBusy = true, authError = null)
             if (current.email.isNotBlank() && authenticatedCollectorId == null) {

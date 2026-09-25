@@ -497,8 +497,8 @@ private fun HouseholdListingCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(listing.areaName, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            listing.pickupAddress?.takeIf(String::isNotBlank)?.let { address -> Text("Pickup address · $address", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            val pickupAddress = listing.pickupAddress?.takeIf(String::isNotBlank) ?: listing.areaName
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("Pickup address · $pickupAddress", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (listing.photoAttached == true || !listing.photoReference.isNullOrBlank() || listing.photoReferences.isNotEmpty()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             val minEstimate = listing.estimatedPriceMin
             val maxEstimate = listing.estimatedPriceMax
@@ -642,8 +642,7 @@ fun HouseholdListingCreateScreen(
     // changes do not discard the user's photos or typed details.
     var material by rememberSaveable { mutableStateOf(friendlyMaterials.first().key) }
     var weight by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable(initialArea) { mutableStateOf(initialArea) }
-    var pickupAddress by rememberSaveable(initialPickupAddress) { mutableStateOf(initialPickupAddress) }
+    var pickupAddress by rememberSaveable(initialPickupAddress, initialArea) { mutableStateOf(initialPickupAddress.ifBlank { initialArea }) }
     var notes by rememberSaveable { mutableStateOf("") }
     var condition by rememberSaveable { mutableStateOf("INTACT") }
     var safetyAcknowledged by rememberSaveable { mutableStateOf(false) }
@@ -761,8 +760,8 @@ fun HouseholdListingCreateScreen(
     val isHazardous = friendlyMaterial(material).hazardous
     val parsedWeight = weight.toDoubleOrNull()
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
-    val areaError = area.isNotBlank() && area.trim().length < 2
-    val canSubmit = photoPaths.isNotEmpty() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && area.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val addressError = pickupAddress.isNotBlank() && pickupAddress.trim().length < 2
+    val canSubmit = photoPaths.isNotEmpty() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
@@ -865,12 +864,11 @@ fun HouseholdListingCreateScreen(
             }
             item { Text("Condition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase().replaceFirstChar(Char::uppercase)) }) } } }
             item { OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
-            item { OutlinedTextField(area, { area = it.take(160) }, modifier = Modifier.fillMaxWidth(), label = { Text("Pickup area") }, supportingText = { if (areaError) Text("Add an area or nearby landmark") }, isError = areaError, singleLine = true) }
-            item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { Text("Street / block / house number (optional)") }, supportingText = { Text("Confirm the building and pickup details. This is shared with the assigned Kabadiwala.") }, minLines = 2, maxLines = 3) }
+            item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { Text("Full pickup address") }, supportingText = { if (addressError) Text("Add a complete pickup address") else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.") }, isError = addressError, minLines = 2, maxLines = 3) }
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
-         Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = area.trim(), pickupAddress = pickupAddress.trim().ifBlank { null }, latitude = latitude, longitude = longitude, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
+         Button(onClick = { parsedWeight?.let { value -> onCreateListing(HouseholdListingCreateDto(materialCategory = material, estimatedWeight = value, condition = condition, notes = notes.trim().ifBlank { null }, areaName = initialArea.ifBlank { pickupAddress.trim() }, pickupAddress = pickupAddress.trim(), latitude = latitude, longitude = longitude, dataBearingDevice = dataBearingDevice, ownerPreparationCompleted = ownerPreparationCompleted, dataDestructionRequested = dataDestructionRequested), photoPaths) } }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
      }
      if (showCameraPermissionDialog) {
          AlertDialog(
@@ -1199,10 +1197,9 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     }
                 }
             }
-            Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · ${listing?.areaName ?: "Area unavailable"}")
-            listing?.pickupAddress?.takeIf { it.isNotBlank() && pickup.status != "WAITING_FOR_PICKUP" }?.let { address ->
-                Text("Pickup address · $address", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            val confirmedPickupAddress = listing?.pickupAddress?.takeIf { it.isNotBlank() && pickup.status != "WAITING_FOR_PICKUP" }
+            val pickupLocation = confirmedPickupAddress ?: listing?.areaName ?: "Area unavailable"
+            Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · $pickupLocation")
             val photoCount = listing?.photoCount ?: 0
             if (photoCount > 0 && pickup.status != "WAITING_FOR_PICKUP") {
                 OutlinedButton(onClick = { showPhotos = true; if (loadedPhotos.size < photoCount) onLoadPhotos(pickup.listingId, photoCount) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {

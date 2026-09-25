@@ -176,8 +176,8 @@
     <string name="lot_weight_error">Enter more than 0 and less than 500 kg.</string>
     <string name="lot_next">Next</string>
     <string name="lot_location_title">Where did you collect it?</string>
-    <string name="lot_location_detail">Use GPS to fill the pickup address and coordinates, or enter an area manually.</string>
-    <string name="lot_area_label">Pickup address or area</string>
+    <string name="lot_location_detail">Use GPS to fill the pickup address and coordinates, or enter your full street address manually.</string>
+    <string name="lot_area_label">Pickup address</string>
     <string name="lot_use_gps">Use GPS location</string>
     <string name="lot_gps_saved">Location captured. Confirm the pickup address below.</string>
     <string name="lot_gps_loading">Waiting briefly for a more accurate GPS fix…</string>
