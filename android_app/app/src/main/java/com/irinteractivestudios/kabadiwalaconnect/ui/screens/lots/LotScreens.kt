@@ -485,6 +485,25 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         LotLocationStatus.ERROR -> Text(stringResource(R.string.lot_gps_error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         LotLocationStatus.IDLE -> Unit
     }
+    if (s.locationStatus == LotLocationStatus.SAVED) {
+        s.locationAccuracyMeters?.let { accuracy ->
+            Text(
+                stringResource(R.string.lot_gps_accuracy, accuracy.roundToInt().coerceAtLeast(1)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (accuracy > 100f) Text(
+                stringResource(R.string.lot_gps_accuracy_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+        if (s.locationNeedsStreetDetails) Text(
+            stringResource(R.string.lot_gps_address_incomplete),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary
+        )
+    }
     OutlinedButton(onClick = gps, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_gps)) }
     KcPrimaryButton(stringResource(R.string.lot_confirm_location), vm::confirmLocation, icon = Icons.Filled.CheckCircle, enabled = s.location.isNotBlank(), testTag = "lot_location_next")
 }

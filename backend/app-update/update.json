@@ -1,8 +1,8 @@
 {
-  "versionCode": 48,
-  "versionName": "0.0.47-beta",
-  "apkUrl": "kabadiwala-connect-0.0.47-beta-debug.apk",
-  "sha256": "B3EC8319EA9D689818FFE76A62644CAB5058A64D35903EE1014EDE21305EC153",
-  "sizeBytes": 28626411,
-  "releaseNotes": "Verified household pickup QR before final weighing, full-screen weighing with settlement reasons, pickup queue conflict handling, and UI refinements."
+  "versionCode": 49,
+  "versionName": "0.0.48-beta",
+  "apkUrl": "kabadiwala-connect-0.0.48-beta-debug.apk",
+  "sha256": "3BCCD5D3789C450313D81C49CC169039228776503B35FBBD633A8E3DBE14A402",
+  "sizeBytes": 28645020,
+  "releaseNotes": "Validated sessions before opening account screens, improved GPS address and accuracy capture, and fixed pickup matching and QR retry handling."
 }

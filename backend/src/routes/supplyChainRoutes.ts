@@ -49,6 +49,23 @@ function distanceKm(aLat?: number | null, aLng?: number | null, bLat?: number | 
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function normalizeAreaName(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('en-IN').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
+}
+
+function areaNamesMatch(profileArea: string, requestedArea: string): boolean {
+  const profile = normalizeAreaName(profileArea);
+  const requested = normalizeAreaName(requestedArea);
+  if (!profile || !requested) return false;
+  if (profile.includes(requested) || requested.includes(profile)) return true;
+
+  // Area entries are often hierarchical, while a household may type only a
+  // colony or district. Compare their comma-separated parts in either order.
+  const profileParts = profileArea.split(/[,;|/]+/).map(normalizeAreaName).filter(Boolean);
+  const requestedParts = requestedArea.split(/[,;|/]+/).map(normalizeAreaName).filter(Boolean);
+  return profileParts.some(part => requestedParts.some(queryPart => part.includes(queryPart) || queryPart.includes(part)));
+}
+
 /**
  * Waiting pickups are discoverable only inside the same service boundary used
  * by the collector feed. The accept endpoint must repeat this check because a
@@ -57,12 +74,10 @@ function distanceKm(aLat?: number | null, aLng?: number | null, bLat?: number | 
 function collectorCanSeeWaitingPickup(collector: any, listing: any, maxDistanceKm = 25): boolean {
   if (!collector || !listing) return false;
   const distance = distanceKm(collector.latitude, collector.longitude, listing.latitude, listing.longitude);
-  const sameArea = Boolean(
-    collector.areaName &&
-      listing.areaName &&
-      String(collector.areaName).toLowerCase() === String(listing.areaName).toLowerCase()
-  );
-  return sameArea || (distance != null && distance <= maxDistanceKm) || (collector.latitude == null && collector.longitude == null);
+  const sameArea = Boolean(collector.areaName && listing.areaName && areaNamesMatch(String(collector.areaName), String(listing.areaName)));
+  // If GPS is unavailable, use the saved service area as the fallback. Do not
+  // send every location-less listing to every collector.
+  return sameArea || (distance != null && distance <= maxDistanceKm);
 }
 
 async function validateSourceListings(store: any, collectorId: string, sourceListingIds: string[], materialCategory: string) {
@@ -322,7 +337,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const matching = profiles.map((profile: any) => ({ profile, distance: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
       .filter(({ profile, distance }: any) => {
         if (locationQuery.latitude !== undefined) return distance != null && distance <= locationQuery.radiusKm;
-        return String(profile.areaName ?? '').toLocaleLowerCase().includes(areaQuery.toLocaleLowerCase());
+        return areaNamesMatch(String(profile.areaName ?? ''), areaQuery);
       })
       .sort((left: any, right: any) => (left.distance ?? Number.POSITIVE_INFINITY) - (right.distance ?? Number.POSITIVE_INFINITY) || left.profile.id.localeCompare(right.profile.id));
     const total = matching.length;
@@ -374,7 +389,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
     const options = profiles.map((profile: any) => {
       const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
-      return { id: profile.id, displayName: profile.displayName, areaName: profile.areaName, distanceKm: distance == null ? null : Number(distance.toFixed(1)), sameArea: Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase()) };
+      return { id: profile.id, displayName: profile.displayName, areaName: profile.areaName, distanceKm: distance == null ? null : Number(distance.toFixed(1)), sameArea: Boolean(listing?.areaName && profile.areaName && areaNamesMatch(String(listing.areaName), String(profile.areaName))) };
     }).sort((a: any, b: any) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
     res.json({ success: true, data: { pickupId, materialCategory: listing?.materialCategory ?? null, options, privacy: 'Only active Kabadiwala profiles are shown; private inventory and reliability details are not disclosed.' } });
   });
@@ -463,8 +478,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE', pilotVerifiedAt: { not: null } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
         const matching = profiles.filter((profile: any) => {
           const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
-          const sameArea = Boolean(listing?.areaName && profile.areaName && listing.areaName.toLowerCase() === profile.areaName.toLowerCase());
-          return sameArea || (distance != null && distance <= 25) || (listing?.latitude == null && listing?.longitude == null);
+          const sameArea = Boolean(listing?.areaName && profile.areaName && areaNamesMatch(String(listing.areaName), String(profile.areaName)));
+          return sameArea || (distance != null && distance <= 25);
         });
         await Promise.allSettled(matching.map((profile: any) => emitNotification(store, { accountId: profile.id, type: 'PICKUP_WAITING_FOR_PICKUP', title: 'Pickup needed nearby', body: 'A household is waiting for a Kabadiwala. Open pickups to claim it.', route: `kabadiwala/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_WAITING_FOR_PICKUP:${result.pickup.id}:${profile.id}` })));
       }
@@ -819,23 +834,45 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/kabadiwala/pickups/:pickupId/confirm-household-qr', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const input = parse(z.object({ qrCodeData: z.string().trim().min(1).max(4096) }), req.body ?? {});
-    const result = await store.$transaction(async (tx: any) => {
-      const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED' } });
-      if (!pickup) throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
-      if (!jwt.verifyHouseholdPickupQrToken(input.qrCodeData, pickupId, pickup.householdId)) {
-        throw new AppError('VALIDATION_ERROR', 'This household QR is invalid or expired. Ask the household to refresh it.', 422, { code: 'PICKUP_QR_INVALID' });
-      }
-      if (pickup.householdQrScannedAt) return pickup;
-      const scannedAt = new Date();
-      const updated = await tx.pickupRequest.updateMany({
-        where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED', householdQrScannedAt: null },
-        data: { householdQrScannedAt: scannedAt }
+    const collectorId = req.identity!.collectorId;
+    const getAlreadyScannedPickup = async () => store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: collectorId } });
+    try {
+      const result = await store.$transaction(async (tx: any) => {
+        const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: collectorId } });
+        if (!pickup) throw new AppError('NOT_FOUND', 'Pickup was not found for this Kabadiwala', 404, { code: 'PICKUP_NOT_FOUND' });
+        // A camera can deliver the same QR twice, and clients can retry after
+        // a lost response. Once recorded, that proof is durable and replay is
+        // safe even if the pickup has since advanced beyond ARRIVED.
+        if (pickup.householdQrScannedAt) return pickup;
+        if (pickup.status !== 'ARRIVED') throw new AppError('CONFLICT', 'Pickup must be at the household before scanning its QR', 409, { code: 'PICKUP_QR_NOT_EXPECTED' });
+        if (!jwt.verifyHouseholdPickupQrToken(input.qrCodeData, pickupId, pickup.householdId)) {
+          throw new AppError('VALIDATION_ERROR', 'This household QR is invalid or expired. Ask the household to refresh it.', 422, { code: 'PICKUP_QR_INVALID' });
+        }
+        const scannedAt = new Date();
+        const updated = await tx.pickupRequest.updateMany({
+          where: { id: pickupId, kabadiwalaId: collectorId, status: 'ARRIVED', householdQrScannedAt: null },
+          data: { householdQrScannedAt: scannedAt }
+        });
+        // Another scan may win after our transaction read. Resolve that race
+        // against the committed row below rather than reporting a false error.
+        if (!updated.count) return null;
+        await auditSupplyEvent(tx, collectorId, 'COLLECTOR', 'HOUSEHOLD_PICKUP_QR_SCANNED', 'PICKUP_REQUEST', pickupId, { scannedAt: scannedAt.toISOString() });
+        return tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
       });
-      if (!updated.count) throw new AppError('CONFLICT', 'Pickup changed before the household QR was confirmed', 409, { code: 'PICKUP_QR_SCAN_CONFLICT' });
-      await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'HOUSEHOLD_PICKUP_QR_SCANNED', 'PICKUP_REQUEST', pickupId, { scannedAt: scannedAt.toISOString() });
-      return tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
-    });
-    res.json({ success: true, data: result });
+      const resolved = result ?? await getAlreadyScannedPickup();
+      if (!resolved?.householdQrScannedAt) throw new AppError('CONFLICT', 'Pickup changed before the household QR was confirmed', 409, { code: 'PICKUP_QR_SCAN_CONFLICT' });
+      res.json({ success: true, data: resolved });
+    } catch (error) {
+      // Mongo transactions may also surface the same concurrent write race as
+      // a transaction conflict. Return success only when the committed row
+      // proves that this pickup's QR was already recorded.
+      const latest = await getAlreadyScannedPickup().catch(() => null);
+      if (latest?.householdQrScannedAt) {
+        res.json({ success: true, data: latest });
+        return;
+      }
+      throw error;
+    }
   });
   router.post('/kabadiwala/pickups/:pickupId/complete', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);

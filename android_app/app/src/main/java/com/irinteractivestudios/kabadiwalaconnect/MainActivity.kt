@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -239,15 +240,21 @@ class MainActivity : ComponentActivity() {
 
                 val unreadNotifications by app.container.unreadNotificationCount(cachedAccount?.profileId.orEmpty())
                     .collectAsStateWithLifecycle(initialValue = 0)
+                var lastObservedConnection by remember { mutableStateOf(connection) }
                 LaunchedEffect(connection, bootstrap.restorable) {
+                    val regainedConnection = lastObservedConnection != ConnectionState.ONLINE && connection == ConnectionState.ONLINE
+                    lastObservedConnection = connection
                     if (!householdLivePreview && connection == ConnectionState.ONLINE && bootstrap.restorable) {
                         val restoredAccount = withContext(Dispatchers.IO) {
-                            // A locally expired access token is not an
-                            // automatic logout. Try the rotating refresh token
-                            // first; the previous implementation checked only
-                            // local expiry here and cleared valid accounts as
-                            // soon as connectivity returned.
-                            val account = app.container.restoreAuthenticatedSession()
+                            // The initial bootstrap and fresh sign-in already
+                            // validated the account before exposing its route.
+                            // Revalidate here only when the network comes back
+                            // after the app was offline.
+                            val account = if (regainedConnection) {
+                                app.container.restoreAuthenticatedSession()
+                            } else {
+                                app.container.currentAccount()
+                            }
                             if (account != null) {
                                 // Pull server deltas only after restoration has
                                 // established a valid authenticated session.
@@ -433,15 +440,38 @@ class MainActivity : ComponentActivity() {
                                 role = renderedRole,
                                 sessionAuthenticated = bootstrap.restorable || demoMode,
                                 onAuthFinished = {
-                                    val account = app.container.currentAccount()
-                                    app.container.markAuthenticatedBackgroundWorkReady(account)
-                                    app.container.syncScheduler.requestSync()
-                                    app.container.startPushTokenRegistration()
-                                    requestNotificationPermissionIfNeeded()
-                                    sessionBootstrap = app.container.sessionCoordinator.snapshot.value
-                                    activeRole = account?.role ?: AccountRole.COLLECTOR
-                                    val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account?.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
-                                    navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }
+                                    // Treat a successful credential response as the start of session
+                                    // restoration, not as proof that the cached access token is still
+                                    // locally valid. Some devices have clock skew or receive a token
+                                    // close to expiry; restoreAuthenticatedSession refreshes it before
+                                    // the route guard can send the user straight back to sign-in.
+                                    uiScope.launch {
+                                        val account = withContext(Dispatchers.IO) {
+                                            runCatching { app.container.restoreAuthenticatedSession() }.getOrNull()
+                                        }
+                                        if (account == null) {
+                                            sessionBootstrap = app.container.sessionCoordinator.snapshot.value
+                                            activeRole = AccountRole.COLLECTOR
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                getString(com.irinteractivestudios.kabadiwalaconnect.R.string.auth_session_restore_failed),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            navController.navigate(Destinations.AUTH) {
+                                                popUpTo(0)
+                                                launchSingleTop = true
+                                            }
+                                            return@launch
+                                        }
+
+                                        app.container.syncScheduler.requestSync()
+                                        app.container.startPushTokenRegistration()
+                                        requestNotificationPermissionIfNeeded()
+                                        sessionBootstrap = app.container.sessionCoordinator.snapshot.value
+                                        activeRole = account.role
+                                        val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                                        navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }
+                                    }
                                 },
                                 modifier = Modifier.fillMaxSize()
                             )

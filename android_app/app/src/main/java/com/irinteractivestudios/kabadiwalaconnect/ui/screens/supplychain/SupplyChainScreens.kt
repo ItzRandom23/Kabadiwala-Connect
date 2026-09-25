@@ -116,6 +116,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import java.io.File
 import java.util.Locale
 
@@ -264,14 +265,22 @@ fun HouseholdKabadiwalasScreen(
     var radiusKm by remember(state.kabadiwalaRadiusKm) { mutableStateOf(state.kabadiwalaRadiusKm) }
     var locationBusy by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf(false) }
+    var gpsAccuracyMeters by remember { mutableStateOf<Float?>(null) }
+    var gpsStreetAddressUnavailable by remember { mutableStateOf(false) }
     var showLocationRationale by remember { mutableStateOf(false) }
     fun loadCurrentLocation() {
         scope.launch {
             locationBusy = true
             locationError = false
             val current = runCatching { locationProvider.current() }.getOrNull()
-            if (current == null) locationError = true else {
-                current.areaName?.let { area = it }
+            if (current == null) {
+                locationError = true
+                gpsAccuracyMeters = null
+                gpsStreetAddressUnavailable = false
+            } else {
+                gpsAccuracyMeters = current.accuracyMeters
+                gpsStreetAddressUnavailable = current.formattedAddress == null
+                (current.formattedAddress ?: current.areaName)?.let { area = it }
                 onUseLocation(current, radiusKm)
             }
             locationBusy = false
@@ -304,7 +313,11 @@ fun HouseholdKabadiwalasScreen(
         item {
             OutlinedTextField(
                 value = area,
-                onValueChange = { area = it.take(160) },
+                onValueChange = {
+                    area = it.take(160)
+                    gpsAccuracyMeters = null
+                    gpsStreetAddressUnavailable = false
+                },
                 label = { Text("Area, city, state or PIN code") },
                 leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
                 singleLine = true,
@@ -330,7 +343,11 @@ fun HouseholdKabadiwalasScreen(
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { onSearch(area.trim(), radiusKm) }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
+                Button(onClick = {
+                    gpsAccuracyMeters = null
+                    gpsStreetAddressUnavailable = false
+                    onSearch(area.trim(), radiusKm)
+                }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
                 OutlinedButton(onClick = {
                     val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (hasLocation) loadCurrentLocation() else showLocationRationale = true
@@ -341,6 +358,10 @@ fun HouseholdKabadiwalasScreen(
                 }
             }
             if (locationError) Text("Location unavailable. Search by area or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+            gpsAccuracyMeters?.let { accuracy ->
+                Text("GPS fix accuracy: about ±${accuracy.roundToInt().coerceAtLeast(1)} m. Partner distance uses coordinates.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (gpsStreetAddressUnavailable) Text("Street address is missing from map data; GPS coordinates are still used for this search.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         if (state.kabadiwalaLoading) item { CircularProgressIndicator(Modifier.size(26.dp)) }

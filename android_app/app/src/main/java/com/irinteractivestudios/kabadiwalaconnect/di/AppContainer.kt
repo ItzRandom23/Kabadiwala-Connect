@@ -192,33 +192,48 @@ class AppContainer(context: Context) {
     suspend fun restoreAuthenticatedSession(): AccountProfile? {
         sessionCoordinator.beginRestoration()
         revokeAuthenticatedBackgroundWork()
-        if (!hasValidSession()) {
-            if (secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) {
-                sessionCoordinator.unauthenticated()
-                return null
+        val cachedAccount = currentAccount()
+        val hasRefreshToken = !secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()
+        val restoredAccount = when {
+            !hasValidSession() -> {
+                if (hasRefreshToken) authenticationRepository.refreshAccount() else null
             }
-            return authenticationRepository.refreshAccount().also {
-                if (it == null) {
-                    // A rotating refresh credential that the backend has
-                    // rejected is no longer a recoverable session. Remove
-                    // the cached identity as well as the token so a stale
-                    // profile cannot keep WorkManager looking for an account
-                    // that is no longer authenticated. Room/outbox data is
-                    // intentionally retained and remains keyed to its owner
-                    // for recovery after a fresh sign-in.
-                    if (!hasValidSession() && secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) {
-                        expireAccountSession()
-                    } else {
-                        sessionCoordinator.unauthenticated()
-                    }
+            cachedAccount == null -> authenticationRepository.refreshAccount()
+            cachedAccount.role == AccountRole.ADMIN -> {
+                // Admins do not have an /auth/profile endpoint. Validate their
+                // rotating server session before rendering the cached console.
+                // Keep an unexpired local session usable if the refresh call
+                // only failed because the network/backend is unavailable.
+                if (hasRefreshToken && authenticationRepository.refreshAccessToken(force = true) == null) {
+                    cachedAccount.takeIf { hasValidSession() && currentAccount()?.profileId == it.profileId }
+                } else {
+                    cachedAccount
                 }
-                markAuthenticatedBackgroundWorkReady(it)
+            }
+            else -> {
+                // refreshAccount fetches the server-owned role/profile. The
+                // prior local-only shortcut let a revoked token briefly open
+                // Household/Kabadiwala screens before the first API request
+                // bounced the user back to sign-in.
+                authenticationRepository.refreshAccount()
+                    ?: cachedAccount.takeIf { hasValidSession() && currentAccount()?.profileId == it.profileId }
             }
         }
-        return (currentAccount() ?: authenticationRepository.refreshAccount()).also {
-            if (it == null) sessionCoordinator.unauthenticated()
-            markAuthenticatedBackgroundWorkReady(it)
+
+        if (restoredAccount == null) {
+            // A rejected rotating refresh credential is not recoverable.
+            // Remove the stale identity so later launches cannot briefly
+            // expose an account screen. Keep Room/outbox data for recovery.
+            if (!hasValidSession() && secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()) {
+                expireAccountSession()
+            } else {
+                sessionCoordinator.unauthenticated()
+            }
+            return null
         }
+
+        markAuthenticatedBackgroundWorkReady(restoredAccount)
+        return restoredAccount
     }
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()

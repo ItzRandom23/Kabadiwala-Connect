@@ -55,6 +55,8 @@ data class LotDraftState(
     val locationSource: String = "manual",
     val locationLatitude: Double? = null,
     val locationLongitude: Double? = null,
+    val locationAccuracyMeters: Float? = null,
+    val locationNeedsStreetDetails: Boolean = false,
     val locationStatus: LotLocationStatus = LotLocationStatus.IDLE,
     val locationError: Boolean = false,
     val notes: String = "",
@@ -226,21 +228,25 @@ class LotManagementViewModel(
             // Editing the readable label does not discard coordinates captured
             // by GPS; it only changes the label shown to the user.
             locationSource = if (current.locationSource == "gps") "gps" else source,
+            locationNeedsStreetDetails = if (value != current.location) false else current.locationNeedsStreetDetails,
             locationStatus = if (value.isBlank()) LotLocationStatus.IDLE else current.locationStatus
         )
     }
     fun beginLocationRequest() { _state.value = _state.value.copy(locationStatus = LotLocationStatus.REQUESTING, locationError = false) }
     fun setGpsLocation(current: CurrentLocation?) {
         if (current == null) {
-            _state.value = _state.value.copy(locationStatus = LotLocationStatus.ERROR, locationError = true)
+            _state.value = _state.value.copy(locationStatus = LotLocationStatus.ERROR, locationAccuracyMeters = null, locationError = true)
             return
         }
-        val area = current.areaName?.takeIf(String::isNotBlank) ?: _state.value.location
+        val address = current.formattedAddress?.takeIf(String::isNotBlank)
+        val area = address ?: current.areaName?.takeIf(String::isNotBlank) ?: _state.value.location
         _state.value = _state.value.copy(
             location = area,
             locationSource = "gps",
             locationLatitude = current.latitude,
             locationLongitude = current.longitude,
+            locationAccuracyMeters = current.accuracyMeters,
+            locationNeedsStreetDetails = address == null,
             locationStatus = if (area.isNullOrBlank()) LotLocationStatus.NEEDS_AREA else LotLocationStatus.SAVED,
             locationError = false
         )
