@@ -2,7 +2,7 @@
   "versionCode": 56,
   "versionName": "0.0.55-beta",
   "apkUrl": "kabadiwala-connect-0.0.55-beta-debug.apk",
-  "sha256": "CB2103CD944B5FC1DB8A0E4B4FF4A1B8710C1007C20D429FA4394C5539BE71C1",
-  "sizeBytes": 28661941,
+  "sha256": "789E9B2D01F2C03923D13B831E47D250956D3B960831414C496328A0226346FD",
+  "sizeBytes": 29607787,
   "releaseNotes": "Fixes account type preselection, starts material detection after upload, adds Gemini Lite fallback, and shows indicative price ranges."
 }

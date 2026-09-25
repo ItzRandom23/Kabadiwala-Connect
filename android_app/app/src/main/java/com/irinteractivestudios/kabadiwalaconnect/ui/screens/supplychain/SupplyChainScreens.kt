@@ -894,6 +894,15 @@ fun HouseholdListingCreateScreen(
                     HouseholdMaterialDetectionStatus.SUCCESS -> state.materialSuggestion?.let {
                         val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
                         Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        val minPerKg = it.estimatedPriceMinPerKg
+                        val maxPerKg = it.estimatedPriceMaxPerKg
+                        if (minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
+                            Text(
+                                "AI indicative rate: ₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", minPerKg)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", maxPerKg)}/kg. Add weight for a total estimate.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                     HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> {
                         state.materialSuggestion?.let { suggestion ->
