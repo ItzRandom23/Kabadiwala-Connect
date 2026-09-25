@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -39,6 +40,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -86,6 +88,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -93,6 +96,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
@@ -626,6 +630,26 @@ private fun HouseholdListingCard(
 }
 
 @Composable
+private fun HouseholdPhotoActionButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 52.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        MaterialText(localizedSupplyChainText(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun HouseholdListingCreateScreen(
     state: SupplyChainState,
@@ -827,7 +851,12 @@ fun HouseholdListingCreateScreen(
                 )
             }
             item {
-                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Show the scrap clearly", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("Add up to 6 photos from different angles. Clear photos help your Kabadiwala prepare.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -835,41 +864,55 @@ fun HouseholdListingCreateScreen(
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(photoPaths, key = { it }) { path ->
                                     val bitmap = remember(path) { runCatching { BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull() }
-                                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(96.dp)) {
-                                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                                    Surface(
+                                        shape = MaterialTheme.shapes.medium,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        modifier = Modifier.size(96.dp)
+                                    ) {
+                                        Box(Modifier.fillMaxSize()) {
                                             if (bitmap != null) Image(bitmap, "Scrap photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                                             IconButton(onClick = {
                                                 val remaining = photoPaths - path
                                                 val removedFirstPhoto = path == firstPhotoPath
                                                 photoPaths = remaining
                                                 if (remaining.isEmpty() || removedFirstPhoto) onClearMaterialSuggestion()
-                                            }, modifier = Modifier.size(36.dp).align(Alignment.TopEnd)) { Icon(Icons.Filled.Close, "Remove photo") }
+                                            }, modifier = Modifier.size(48.dp).align(Alignment.TopEnd)) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.inverseSurface,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Filled.Close,
+                                                        contentDescription = "Remove photo",
+                                                        tint = MaterialTheme.colorScheme.inverseOnSurface,
+                                                        modifier = Modifier.padding(5.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = requestCamera,
-                                enabled = photoPaths.size < 6,
-                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                            ) {
-                                Icon(Icons.Filled.CameraAlt, contentDescription = "Open camera")
-                                Spacer(Modifier.width(6.dp))
-                                Text("Camera")
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val photosEnabled = photoPaths.size < 6
+                            val openGallery = {
+                                runCatching { gallery.launch("image/*") }
+                                    .onFailure { photoError = true }
+                                Unit
                             }
-                            OutlinedButton(
-                                onClick = {
-                                    runCatching { gallery.launch("image/*") }
-                                        .onFailure { photoError = true }
-                                },
-                                enabled = photoPaths.size < 6,
-                                modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                            ) {
-                                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Choose from gallery")
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (photoPaths.isEmpty()) "Gallery" else "Add more")
+                            if (maxWidth < 280.dp) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    HouseholdPhotoActionButton(requestCamera, photosEnabled, Icons.Filled.CameraAlt, "Camera", Modifier.fillMaxWidth())
+                                    HouseholdPhotoActionButton(openGallery, photosEnabled, Icons.Filled.AddPhotoAlternate, if (photoPaths.isEmpty()) "Gallery" else "Add more", Modifier.fillMaxWidth())
+                                }
+                            } else {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    HouseholdPhotoActionButton(requestCamera, photosEnabled, Icons.Filled.CameraAlt, "Camera", Modifier.weight(1f))
+                                    HouseholdPhotoActionButton(openGallery, photosEnabled, Icons.Filled.AddPhotoAlternate, if (photoPaths.isEmpty()) "Gallery" else "Add more", Modifier.weight(1f))
+                                }
                             }
                         }
                         if (photoPaths.isEmpty()) Text("Add at least one clear photo to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,8 +1,8 @@
 {
-  "versionCode": 56,
-  "versionName": "0.0.55-beta",
-  "apkUrl": "kabadiwala-connect-0.0.55-beta-debug.apk",
-  "sha256": "789E9B2D01F2C03923D13B831E47D250956D3B960831414C496328A0226346FD",
-  "sizeBytes": 29607787,
-  "releaseNotes": "Fixes account type preselection, starts material detection after upload, adds Gemini Lite fallback, and shows indicative price ranges."
+  "versionCode": 57,
+  "versionName": "0.0.56-beta",
+  "apkUrl": "kabadiwala-connect-0.0.56-beta-debug.apk",
+  "sha256": "E2DF77EF978D69F0D483BD0B41718B266195A1E1FF39113D8B1FAD1417E042B7",
+  "sizeBytes": 28661939,
+  "releaseNotes": "Improves the household photo card with readable photo actions and a clearer remove control."
 }
