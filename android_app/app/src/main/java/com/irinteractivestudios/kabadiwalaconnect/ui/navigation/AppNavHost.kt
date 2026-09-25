@@ -178,27 +178,32 @@ fun AppNavHost(
         }
     }
     LaunchedEffect(currentRoute, role, factory.currentAccount?.verificationStatus) {
-        val collectorRoute = (currentRoute in collectorRoutes && currentRoute !in sharedAccountRoutes) || currentRoute?.startsWith("lots/") == true || currentRoute?.startsWith("quotes/") == true || currentRoute?.startsWith("handovers/") == true
-        val recyclerRoute = currentRoute in recyclerRoutes
+        // NavHost publishes its start destination after the first composition.
+        // A null route during that initialization is not a role violation;
+        // treating it as one sends signed-out users to Home before MainActivity
+        // can keep them on the auth start destination.
+        val route = currentRoute ?: return@LaunchedEffect
+        val collectorRoute = (route in collectorRoutes && route !in sharedAccountRoutes) || route.startsWith("lots/") || route.startsWith("quotes/") || route.startsWith("handovers/")
+        val recyclerRoute = route in recyclerRoutes
         if (role == AccountRole.RECYCLER && collectorRoute) {
             navController.navigate(if (demoMode || factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
-        } else if (role == AccountRole.RECYCLER && !demoMode && factory.currentAccount?.verificationStatus?.name != "VERIFIED" && currentRoute in recyclerProtectedRoutes) {
+        } else if (role == AccountRole.RECYCLER && !demoMode && factory.currentAccount?.verificationStatus?.name != "VERIFIED" && route in recyclerProtectedRoutes) {
             // Pending Recycler accounts may manage their account and submit
             // evidence, but marketplace operations remain closed until the
             // server marks the facility as verified.
             navController.navigate(Destinations.RECYCLER_VERIFY) { popUpTo(0) }
         } else if ((role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD) && recyclerRoute) {
             navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.COLLECTOR && !demoMode && currentRoute != Destinations.AUTH && currentRoute !in liveCollectorRoutes) {
+        } else if (role == AccountRole.COLLECTOR && !demoMode && route != Destinations.AUTH && route !in liveCollectorRoutes) {
             // Live Kabadiwala sessions use only the supply-chain workspace;
             // old lot/quote/handover/payment routes remain demo-only.
             navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.HOUSEHOLD && currentRoute != Destinations.AUTH && currentRoute !in householdRoutes) {
+        } else if (role == AccountRole.HOUSEHOLD && route != Destinations.AUTH && route !in householdRoutes) {
             // A deep link must not turn a household session into the legacy
             // kabadiwala operating console. Backend authorization enforces
             // this too; the guard keeps the client truthful and unsurprising.
             navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.ADMIN && currentRoute != Destinations.AUTH && currentRoute !in adminRoutes) {
+        } else if (role == AccountRole.ADMIN && route != Destinations.AUTH && route !in adminRoutes) {
             navController.navigate(Destinations.ADMIN_DASHBOARD) { popUpTo(0) }
         }
     }

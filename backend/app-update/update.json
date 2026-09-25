@@ -1,8 +1,8 @@
 {
-  "versionCode": 51,
-  "versionName": "0.0.50-beta",
-  "apkUrl": "kabadiwala-connect-0.0.50-beta-debug.apk",
-  "sha256": "32CA8B06DD68681D31564A792D42B32D4CADDF1B49B4180CA0B059B4685C03E2",
-  "sizeBytes": 28645023,
-  "releaseNotes": "Fixed the account screen flashing before sign-in on app launch, improved session restoration, and stopped Admin activity requests from receiving permission errors."
+  "versionCode": 52,
+  "versionName": "0.0.51-beta",
+  "apkUrl": "kabadiwala-connect-0.0.51-beta-debug.apk",
+  "sha256": "C0D92096399189B9ECC64D80B532CCF602CF912D37201CA012D62E000C19A2C3",
+  "sizeBytes": 28645035,
+  "releaseNotes": "Fixed a startup navigation race that could briefly show a role home screen to signed-out users."
 }
