@@ -169,7 +169,8 @@ fun AppNavHost(
     val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS, Destinations.CREATE_HOUSEHOLD_LISTING) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
     val adminRoutes = setOf(Destinations.ADMIN_DASHBOARD)
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated) {
-        if (sessionAuthenticated && !demoMode && factory.currentAccount?.profileId?.isNotBlank() == true) {
+        val activityFeedRole = role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD || role == AccountRole.RECYCLER
+        if (sessionAuthenticated && !demoMode && activityFeedRole && factory.currentAccount?.profileId?.isNotBlank() == true) {
             while (true) {
                 runCatching { factory.refreshActivity() }
                 delay(30_000)

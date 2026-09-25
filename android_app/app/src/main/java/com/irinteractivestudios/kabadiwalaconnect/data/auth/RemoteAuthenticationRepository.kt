@@ -214,6 +214,8 @@ class RemoteAuthenticationRepository(
             // A rejected rotating token is not recoverable. Clear it so
             // repeated requests cannot create a refresh loop with stale
             // credentials.
+            val remote = it as? RemoteApiException
+            Log.w(TAG, "Session refresh failed: type=${it::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
             if (it is RemoteApiException && it.httpCode == 401) session.clear()
             null
         }
@@ -231,6 +233,9 @@ class RemoteAuthenticationRepository(
         // or synthesize a local presentation role across refreshes.
         storage?.saveAccount(remote)
         remote
+    }.onFailure {
+        val remote = it as? RemoteApiException
+        Log.w(TAG, "Account restore failed: type=${it::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
     }.getOrNull()
 
     override suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile {

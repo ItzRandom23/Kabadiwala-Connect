@@ -200,15 +200,13 @@ class AppContainer(context: Context) {
             }
             cachedAccount == null -> authenticationRepository.refreshAccount()
             cachedAccount.role == AccountRole.ADMIN -> {
-                // Admins do not have an /auth/profile endpoint. Validate their
-                // rotating server session before rendering the cached console.
-                // Keep an unexpired local session usable if the refresh call
-                // only failed because the network/backend is unavailable.
-                if (hasRefreshToken && authenticationRepository.refreshAccessToken(force = true) == null) {
-                    cachedAccount.takeIf { hasValidSession() && currentAccount()?.profileId == it.profileId }
-                } else {
-                    cachedAccount
-                }
+                // Admins do not have an /auth/profile endpoint, so use the
+                // profile returned by admin-login while its access token is
+                // still valid. Forcing a single-use refresh-token rotation on
+                // every cold start made ordinary app reloads fragile. Expired
+                // tokens are refreshed by the branch above; a server 401 is
+                // handled by the HTTP authenticator.
+                cachedAccount
             }
             else -> {
                 // refreshAccount fetches the server-owned role/profile. The
@@ -234,6 +232,28 @@ class AppContainer(context: Context) {
 
         markAuthenticatedBackgroundWorkReady(restoredAccount)
         return restoredAccount
+    }
+
+    /**
+     * Completes a fresh login using the server-issued profile already saved by
+     * the authentication repository. Cold-start restoration must fetch the
+     * current profile, but repeating that request immediately after a
+     * successful login made sign-in depend on a second network round trip.
+     * Rotate only when the newly issued access token is already expired
+     * according to the device clock.
+     */
+    suspend fun completeFreshAuthentication(): AccountProfile? {
+        sessionCoordinator.beginRestoration()
+        revokeAuthenticatedBackgroundWork()
+        val account = currentAccount() ?: return restoreAuthenticatedSession()
+        if (!hasValidSession()) {
+            if (authenticationRepository.refreshAccessToken(force = true) == null || !hasValidSession()) {
+                sessionCoordinator.unauthenticated()
+                return null
+            }
+        }
+        markAuthenticatedBackgroundWorkReady(account)
+        return account.takeIf { isAuthenticatedBackgroundWorkReady() }
     }
 
     fun currentAccount(): AccountProfile? = secureStorage.readAccount()
@@ -491,6 +511,7 @@ class AppContainer(context: Context) {
     /** Pulls durable cross-role events without requiring push infrastructure. */
     suspend fun refreshActivity(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
+        if (currentAccount()?.role !in setOf(AccountRole.COLLECTOR, AccountRole.HOUSEHOLD, AccountRole.RECYCLER)) return false
         val response = apiService.getActivityChanges(secureStorage.get(SecureStorage.ACTIVITY_CURSOR)).requireData()
         val accountId = currentAccount()?.profileId
         if (response.notifications.isNotEmpty()) {

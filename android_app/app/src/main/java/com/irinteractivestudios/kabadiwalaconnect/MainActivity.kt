@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -124,7 +125,6 @@ class MainActivity : ComponentActivity() {
                 darkTheme = AppearanceManager.isDark(appearanceMode),
                 role = activeRole
             ) {
-                val navController = rememberNavController()
                 val uiScope = rememberCoroutineScope()
                 // Demo mode is a deliberate, debug-only entry point. It must
                 // never be restored from an old Activity/task snapshot after
@@ -170,6 +170,22 @@ class MainActivity : ComponentActivity() {
                     }
                     return@KabadiwalaConnectTheme
                 }
+                // A NavController saved by Android can contain a protected route
+                // from a previous Activity. Create it only after authentication
+                // has been decided, and give each Activity instance its own
+                // navigation state so a signed-out launch cannot render that
+                // old route before the navigation guard reaches sign-in.
+                val navigationInstance = remember { java.util.UUID.randomUUID().toString() }
+                val navigationScope = if (demoMode) {
+                    "demo:$demoRoleName"
+                } else if (householdLivePreview) {
+                    "preview:household"
+                } else if (bootstrap.restorable) {
+                    "account:${bootstrap.account?.profileId}"
+                } else {
+                    "signed-out"
+                }
+                val navController = key(navigationInstance, navigationScope) { rememberNavController() }
                 // The persisted/server-issued role is authoritative as soon as
                 // bootstrap completes. Using it for this composition prevents
                 // a restored Household account from briefly rendering the
@@ -190,7 +206,7 @@ class MainActivity : ComponentActivity() {
                 val isTopLevel = route in Destinations.topLevelFor(renderedRole, newNavigation = !demoMode || kabadiwalaDemo) ||
                     (recyclerPendingShell && route in setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_PROFILE, Destinations.SETTINGS))
                 val languageSelected = languageWasSelected
-                var navGuardReady by remember { mutableStateOf(false) }
+                var navGuardReady by remember(navController) { mutableStateOf(false) }
 
                 // A failed refresh (including a rotated-token reuse response)
                 // can invalidate a session after the initial bootstrap. Keep
@@ -440,14 +456,14 @@ class MainActivity : ComponentActivity() {
                                 role = renderedRole,
                                 sessionAuthenticated = bootstrap.restorable || demoMode,
                                 onAuthFinished = {
-                                    // Treat a successful credential response as the start of session
-                                    // restoration, not as proof that the cached access token is still
-                                    // locally valid. Some devices have clock skew or receive a token
-                                    // close to expiry; restoreAuthenticatedSession refreshes it before
-                                    // the route guard can send the user straight back to sign-in.
+                                    // The authentication response already carries the server-issued
+                                    // account profile. Complete this fresh session directly instead
+                                    // of immediately making a second profile request that can fail
+                                    // after credentials were accepted. Refresh only if the access
+                                    // token is already expired on this device.
                                     uiScope.launch {
                                         val account = withContext(Dispatchers.IO) {
-                                            runCatching { app.container.restoreAuthenticatedSession() }.getOrNull()
+                                            runCatching { app.container.completeFreshAuthentication() }.getOrNull()
                                         }
                                         if (account == null) {
                                             sessionBootstrap = app.container.sessionCoordinator.snapshot.value

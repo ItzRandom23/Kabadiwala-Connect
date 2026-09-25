@@ -1,8 +1,8 @@
 {
-  "versionCode": 50,
-  "versionName": "0.0.49-beta",
-  "apkUrl": "kabadiwala-connect-0.0.49-beta-debug.apk",
-  "sha256": "59BFCBEC96C9425BD308D22FACD312D29745DF19CE8E7BF268555DC1865E8C70",
-  "sizeBytes": 28628658,
-  "releaseNotes": "Active Kabadiwalas now appear in household discovery without admin approval, with service-area fallback when GPS is unavailable. Recycler account authorization remains admin-managed."
+  "versionCode": 51,
+  "versionName": "0.0.50-beta",
+  "apkUrl": "kabadiwala-connect-0.0.50-beta-debug.apk",
+  "sha256": "32CA8B06DD68681D31564A792D42B32D4CADDF1B49B4180CA0B059B4685C03E2",
+  "sizeBytes": 28645023,
+  "releaseNotes": "Fixed the account screen flashing before sign-in on app launch, improved session restoration, and stopped Admin activity requests from receiving permission errors."
 }

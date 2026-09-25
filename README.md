@@ -149,8 +149,8 @@ handover photo failures are surfaced as recoverable UI states.
 The app checks the backend-hosted `/app/update.json` and compares its
 `versionCode` with the installed version. Each published entry must reference
 an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.0.47-beta` with
-`versionCode 48`.
+SHA-256 and byte size. The current manifest publishes `0.0.50-beta` with
+`versionCode 51`.
 
 The user confirms the download and Android separately confirms installation;
 updates are never installed silently. After changing the manifest or APK,
