@@ -824,7 +824,9 @@ fun HouseholdListingCreateScreen(
             )
         } else null
     }
-    val currentPriceEstimate = localPriceEstimate ?: aiPriceEstimate
+    // OTHER mixes very different items; a detected device's own AI range is
+    // more relevant than a generic OTHER price-board row.
+    val currentPriceEstimate = if (material == "OTHER") aiPriceEstimate ?: localPriceEstimate else localPriceEstimate ?: aiPriceEstimate
     LaunchedEffect(material, parsedWeight, condition, priceArea) {
         if (material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500) {
             onEstimateHouseholdPrice(material, parsedWeight, condition, priceArea)
@@ -941,7 +943,7 @@ fun HouseholdListingCreateScreen(
                         val maxPerKg = it.estimatedPriceMaxPerKg
                         if (minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
                             Text(
-                                "AI indicative rate: ₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", minPerKg)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", maxPerKg)}/kg. Add weight for a total estimate.",
+                                "AI indicative rate: ₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", minPerKg)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", maxPerKg)}/kg. ${if (parsedWeight == null) "Add weight for a total estimate." else "See the total estimate below."}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.secondary
                             )
@@ -991,10 +993,6 @@ fun HouseholdListingCreateScreen(
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Estimated price range", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         when {
-                            state.householdPriceEstimateLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Text("Checking current local prices…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
-                            }
                             currentPriceEstimate != null -> {
                                 Text(
                                     "₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", currentPriceEstimate.minimum)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", currentPriceEstimate.maximum)}",
@@ -1005,8 +1003,19 @@ fun HouseholdListingCreateScreen(
                                 Text(if (currentPriceEstimate.source == "AI_INDICATIVE") "AI indicative estimate for ${currentPriceEstimate.weightKg} kg. Use it as a rough guide." else "Based on ${currentPriceEstimate.weightKg} kg, condition, and current ${if (currentPriceEstimate.areaName.isBlank()) "material" else "local"} buying rates.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                                 Text(currentPriceEstimate.disclaimer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                             }
+                            state.householdPriceEstimateLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Checking current local prices…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                            }
                             else -> Text(
-                                state.householdPriceEstimateMessage ?: "Enter an approximate weight to see an available local price range. This estimate does not affect whether you can post.",
+                                if (state.materialSuggestion?.source.equals("AI", ignoreCase = true) &&
+                                    state.materialSuggestion?.materialCategory == material &&
+                                    state.householdPriceEstimateMessage?.startsWith("No current verified price range") == true
+                                ) {
+                                    "AI identified the item, but could not estimate a scrap range from this photo. Your Kabadiwala can quote after weighing."
+                                } else {
+                                    state.householdPriceEstimateMessage ?: "Enter an approximate weight to see an available local price range. This estimate does not affect whether you can post."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

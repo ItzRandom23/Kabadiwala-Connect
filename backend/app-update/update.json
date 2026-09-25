@@ -1,8 +1,8 @@
 {
-  "versionCode": 57,
-  "versionName": "0.0.56-beta",
-  "apkUrl": "kabadiwala-connect-0.0.56-beta-debug.apk",
-  "sha256": "E2DF77EF978D69F0D483BD0B41718B266195A1E1FF39113D8B1FAD1417E042B7",
-  "sizeBytes": 28661939,
-  "releaseNotes": "Improves the household photo card with readable photo actions and a clearer remove control."
+  "versionCode": 58,
+  "versionName": "0.0.57-beta",
+  "apkUrl": "kabadiwala-connect-0.0.57-beta-debug.apk",
+  "sha256": "CA6022B1AA14A4AA599A427DDCF28FC30FA476B7A3DBAC8F9E15CFD17318D6FF",
+  "sizeBytes": 28661936,
+  "releaseNotes": "Shows an AI indicative scrap price range for identified phones and other whole devices when local prices are unavailable."
 }

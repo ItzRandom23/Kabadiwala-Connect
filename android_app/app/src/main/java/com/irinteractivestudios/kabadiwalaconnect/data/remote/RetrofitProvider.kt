@@ -44,6 +44,13 @@ object RetrofitProvider {
         }
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor { chain ->
+                // A photo classification may need one additional Lite-model
+                // request to estimate the scrap range after identifying the item.
+                val request = chain.request()
+                val photoDetection = request.url.encodedPath.endsWith("/future/lots/material-suggestion")
+                (if (photoDetection) chain.withReadTimeout(45, TimeUnit.SECONDS) else chain).proceed(request)
+            }
             .authenticator { _, response ->
                 if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint()) {
                     null
