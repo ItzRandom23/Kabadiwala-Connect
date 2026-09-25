@@ -9,6 +9,7 @@ data class FriendlyMaterial(
 )
 
 val friendlyMaterials = listOf(
+    FriendlyMaterial("OTHER", "Other (phones & electronics)", "Phones, tablets, cameras, or items not listed above"),
     FriendlyMaterial("PLASTIC", "Plastic bottles & containers", "Bottles, cans, tubs, packaging"),
     FriendlyMaterial("CABLE", "Wires & cables", "Charging wires, extension cords, copper wire"),
     FriendlyMaterial("COPPER", "Copper metal & pipes", "Copper wire, pipes, utensils"),
@@ -17,8 +18,7 @@ val friendlyMaterials = listOf(
     FriendlyMaterial("MOTOR", "Motors, fans & pumps", "Old motors, fans, pumps, compressors"),
     FriendlyMaterial("MAGNET", "Magnets", "Speaker or motor magnets"),
     FriendlyMaterial("CRT", "Old TV / monitor (thick glass)", "Box-style TV or computer monitor", hazardous = true),
-    FriendlyMaterial("LCD_PANEL", "Flat TV / monitor screen", "LCD, LED or flat-panel display"),
-    FriendlyMaterial("OTHER", "Phones, electronics & other scrap", "Phones, tablets, cameras, or items not listed above")
+    FriendlyMaterial("LCD_PANEL", "Flat TV / monitor screen", "LCD, LED or flat-panel display")
 )
 
 fun friendlyMaterial(key: String): FriendlyMaterial = friendlyMaterials.firstOrNull { it.key == key } ?: friendlyMaterials.last()

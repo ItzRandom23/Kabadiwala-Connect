@@ -1,8 +1,8 @@
 {
-  "versionCode": 60,
-  "versionName": "0.0.59-beta",
-  "apkUrl": "kabadiwala-connect-0.0.59-beta-debug.apk",
-  "sha256": "30678EC05B9CC6F979F6D33AD98D2484192F153D470A78540371FF3D09BCE320",
-  "sizeBytes": 28661929,
-  "releaseNotes": "Starts AI photo detection as soon as the first photo is imported and restores a visible retry when detection is idle."
+  "versionCode": 61,
+  "versionName": "0.0.60-beta",
+  "apkUrl": "kabadiwala-connect-0.0.60-beta-debug.apk",
+  "sha256": "1D6AE24EA4B2504B85E2892717D2647A18C5A5B15F2F3215AFFC0C85F2813D5E",
+  "sizeBytes": 28661931,
+  "releaseNotes": "Shows Other (phones & electronics) first in the scrap category list."
 }
