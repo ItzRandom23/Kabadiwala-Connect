@@ -1,8 +1,8 @@
 {
-  "versionCode": 59,
-  "versionName": "0.0.58-beta",
-  "apkUrl": "kabadiwala-connect-0.0.58-beta-debug.apk",
-  "sha256": "D74368A4BCFB9446826E6B69D892235C94BA372D987583BC98799E28784C06CA",
-  "sizeBytes": 28807288,
-  "releaseNotes": "Prevents concurrent session refreshes and temporary refresh failures from signing users out during photo detection."
+  "versionCode": 60,
+  "versionName": "0.0.59-beta",
+  "apkUrl": "kabadiwala-connect-0.0.59-beta-debug.apk",
+  "sha256": "30678EC05B9CC6F979F6D33AD98D2484192F153D470A78540371FF3D09BCE320",
+  "sizeBytes": 28661929,
+  "releaseNotes": "Starts AI photo detection as soon as the first photo is imported and restores a visible retry when detection is idle."
 }

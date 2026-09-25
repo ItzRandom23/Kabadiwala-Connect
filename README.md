@@ -4,7 +4,7 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Current release
 
-- Android testing release: `0.0.58-beta` (`versionCode 59`)
+- Android testing release: `0.0.59-beta` (`versionCode 60`)
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`
@@ -153,8 +153,8 @@ handover photo failures are surfaced as recoverable UI states.
 The app checks the backend-hosted `/app/update.json` and compares its
 `versionCode` with the installed version. Each published entry must reference
 an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.0.58-beta` with
-`versionCode 59`.
+SHA-256 and byte size. The current manifest publishes `0.0.59-beta` with
+`versionCode 60`.
 
 The user confirms the download and Android separately confirms installation;
 updates are never installed silently. After changing the manifest or APK,

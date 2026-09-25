@@ -700,11 +700,14 @@ fun HouseholdListingCreateScreen(
                 File(capturedPath).delete()
                 withContext(Dispatchers.Main.immediate) {
                     if (normalized != null) {
-                        photoPaths = (photoPaths + normalized.absolutePath).distinct().take(6)
+                        val previousFirstPhoto = photoPaths.firstOrNull()
+                        val updatedPaths = (photoPaths + normalized.absolutePath).distinct().take(6)
+                        photoPaths = updatedPaths
                         photoError = false
                         cameraError = false
                         cameraPermissionDenied = false
                         cameraPermissionBlocked = false
+                        updatedPaths.firstOrNull()?.takeIf { it != previousFirstPhoto }?.let(onSuggestMaterial)
                     } else {
                         cameraError = true
                     }
@@ -769,16 +772,19 @@ fun HouseholdListingCreateScreen(
                 }.getOrNull()
             }
             withContext(Dispatchers.Main.immediate) {
-                photoPaths = (photoPaths + paths).distinct().take(6)
+                val previousFirstPhoto = photoPaths.firstOrNull()
+                val updatedPaths = (photoPaths + paths).distinct().take(6)
+                photoPaths = updatedPaths
                 photoError = paths.size < uris.size
                 cameraError = false
                 cameraPermissionDenied = false
                 cameraPermissionBlocked = false
+                updatedPaths.firstOrNull()?.takeIf { it != previousFirstPhoto }?.let(onSuggestMaterial)
             }
         }
     }
     val firstPhotoPath = photoPaths.firstOrNull()
-    LaunchedEffect(firstPhotoPath, state.materialDetectionPath) {
+    LaunchedEffect(firstPhotoPath, state.materialDetectionPath, state.materialDetectionStatus) {
         if (firstPhotoPath != lastDetectionPhotoPath) {
             lastDetectionPhotoPath = firstPhotoPath
             materialChosenManually = false
@@ -789,7 +795,7 @@ fun HouseholdListingCreateScreen(
             if (state.materialDetectionPath != null || state.materialSuggestion != null || state.materialDetectionStatus != HouseholdMaterialDetectionStatus.IDLE) {
                 onClearMaterialSuggestion()
             }
-        } else if (state.materialDetectionPath != firstPhotoPath) {
+        } else if (state.materialDetectionPath != firstPhotoPath || state.materialDetectionStatus == HouseholdMaterialDetectionStatus.IDLE) {
             onSuggestMaterial(firstPhotoPath)
         }
     }
@@ -936,18 +942,20 @@ fun HouseholdListingCreateScreen(
                 Text("Pick the closest everyday description. You can change the AI suggestion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (state.materialDetectionStatus) {
                     HouseholdMaterialDetectionStatus.PROCESSING -> Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Checking the first photo…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall) }
-                    HouseholdMaterialDetectionStatus.SUCCESS -> state.materialSuggestion?.let {
-                        val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
-                        Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        val minPerKg = it.estimatedPriceMinPerKg
-                        val maxPerKg = it.estimatedPriceMaxPerKg
-                        if (minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
-                            Text(
-                                "AI indicative rate: ₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", minPerKg)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", maxPerKg)}/kg. ${if (parsedWeight == null) "Add weight for a total estimate." else "See the total estimate below."}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
+                    HouseholdMaterialDetectionStatus.SUCCESS -> {
+                        state.materialSuggestion?.let {
+                            val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
+                            Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            val minPerKg = it.estimatedPriceMinPerKg
+                            val maxPerKg = it.estimatedPriceMaxPerKg
+                            if (minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
+                                Text(
+                                    "AI indicative rate: ₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", minPerKg)}–₹${String.format(Locale.forLanguageTag("en-IN"), "%,.0f", maxPerKg)}/kg. ${if (parsedWeight == null) "Add weight for a total estimate." else "See the total estimate below."}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        } ?: Text("AI returned no suggestion. Try detection again.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                     HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> {
                         state.materialSuggestion?.let { suggestion ->
@@ -955,9 +963,14 @@ fun HouseholdListingCreateScreen(
                         } ?: Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     }
                     HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text(state.materialDetectionMessage ?: "Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    HouseholdMaterialDetectionStatus.IDLE -> Unit
+                    HouseholdMaterialDetectionStatus.IDLE -> if (photoPaths.isNotEmpty()) {
+                        Text("Preparing AI photo check…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text("Add a photo to start AI detection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                if (state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) && photoPaths.isNotEmpty()) {
+                if ((state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.IDLE, HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) ||
+                        state.materialDetectionStatus == HouseholdMaterialDetectionStatus.SUCCESS && state.materialSuggestion == null) && photoPaths.isNotEmpty()) {
                     OutlinedButton(
                         onClick = { photoPaths.firstOrNull()?.let(onSuggestMaterial) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
