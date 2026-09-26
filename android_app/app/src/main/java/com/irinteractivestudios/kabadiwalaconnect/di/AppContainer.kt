@@ -55,6 +55,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.PaymentSyncState
 import kotlinx.coroutines.flow.first
 import com.irinteractivestudios.kabadiwalaconnect.data.sync.SyncScheduler
 import com.irinteractivestudios.kabadiwalaconnect.util.ConnectivityObserver
+import com.irinteractivestudios.kabadiwalaconnect.util.ConnectionState
 import com.irinteractivestudios.kabadiwalaconnect.util.KeystoreSecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.SystemConnectivityObserver
@@ -214,7 +215,10 @@ class AppContainer(context: Context) {
                 // Household/Kabadiwala screens before the first API request
                 // bounced the user back to sign-in.
                 authenticationRepository.refreshAccount()
-                    ?: cachedAccount.takeIf { hasValidSession() && currentAccount()?.profileId == it.profileId }
+                    ?: cachedAccount.takeIf {
+                        connectivityObserver.state.value == ConnectionState.OFFLINE &&
+                            hasValidSession() && currentAccount()?.profileId == it.profileId
+                    }
             }
         }
 
@@ -629,7 +633,7 @@ class AppContainer(context: Context) {
      */
     suspend fun clearAccount() {
         revokeAuthenticatedBackgroundWork()
-        sessionCoordinator.unauthenticated()
+        sessionCoordinator.beginRestoration()
         val accountId = currentAccount()?.profileId
         IdempotencyKeyStore(appContext).clearAccount(accountId)
         FormalisationCacheStore(appContext).clear(accountId)
@@ -668,6 +672,7 @@ class AppContainer(context: Context) {
         secureStorage.remove(SecureStorage.SYNC_CURSOR)
         secureStorage.remove(SecureStorage.ACTIVITY_CURSOR)
         secureStorage.remove(SecureStorage.PENDING_PUSH_TOKEN)
+        sessionCoordinator.unauthenticated()
     }
 
     /**

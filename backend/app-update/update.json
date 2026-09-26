@@ -1,8 +1,8 @@
 {
-  "versionCode": 62,
-  "versionName": "0.0.61-beta",
-  "apkUrl": "kabadiwala-connect-0.0.61-beta-debug.apk",
-  "sha256": "90DCF433D67B0E3DC77377D2ED4F202FE62E06ACFDC07A6992FCFD9EF13A2139",
-  "sizeBytes": 28678326,
-  "releaseNotes": "Improves photo detection and pickup reliability, clarifies Collector availability and scheduling, and fixes pickup photo loading feedback."
+  "versionCode": 63,
+  "versionName": "0.0.62-beta",
+  "apkUrl": "kabadiwala-connect-0.0.62-beta-debug.apk",
+  "sha256": "C70C8BC1C7706C0EC1AA617B2E8A4E3DBA94D3645B83348ED9B1805CEE5029AE",
+  "sizeBytes": 28678317,
+  "releaseNotes": "Improves account role and session recovery, and prevents empty-state flashes while account data loads."
 }

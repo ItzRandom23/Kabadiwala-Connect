@@ -356,7 +356,10 @@ fun AppNavHost(
             if (role == AccountRole.HOUSEHOLD && !demoMode) {
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                LaunchedEffect(currentRoute) { if (currentRoute == Destinations.HOME) vm.refreshHousehold() }
+                // The NavHost destination can compose before its back-stack
+                // entry is published. Start the first fetch from the screen's
+                // own lifecycle, independent of that navigation timing.
+                LaunchedEffect(Unit) { vm.refreshHousehold() }
                 HouseholdSupplyScreen(
                     state = state,
                     onRefresh = vm::refreshHousehold,

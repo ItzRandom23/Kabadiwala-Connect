@@ -4,6 +4,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,5 +61,15 @@ class DestinationsTest {
     @Test
     fun lotEdit_routeKeepsLotId() {
         assertEquals("lots/edit/LOT-123", Destinations.lotEdit("LOT-123"))
+    }
+
+    @Test
+    fun resolvedAccountSelectsItsOwnFirstScreen() {
+        assertEquals(Destinations.AUTH, Destinations.startForSession(null))
+        assertEquals(Destinations.HOME, Destinations.startForSession(AccountProfile("h", "h@example.com", AccountRole.HOUSEHOLD)))
+        assertEquals(Destinations.HOME, Destinations.startForSession(AccountProfile("c", "c@example.com", AccountRole.COLLECTOR)))
+        assertEquals(Destinations.RECYCLER_MARKETPLACE, Destinations.startForSession(AccountProfile("r", "r@example.com", AccountRole.RECYCLER)))
+        assertEquals(Destinations.RECYCLER_VERIFY, Destinations.startForSession(AccountProfile("p", "p@example.com", AccountRole.RECYCLER, verificationStatus = RecyclerVerificationStatus.PENDING)))
+        assertEquals(Destinations.ADMIN_DASHBOARD, Destinations.startForSession(AccountProfile("a", "a@example.com", AccountRole.ADMIN)))
     }
 }

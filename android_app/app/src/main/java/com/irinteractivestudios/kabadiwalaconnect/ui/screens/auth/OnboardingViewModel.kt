@@ -86,6 +86,11 @@ class OnboardingViewModel(
     fun useEmailSignIn() {
         _state.value = _state.value.copy(
             returningUser = true,
+            // Operator sign-in is a separate credential endpoint. Going back
+            // to ordinary email sign-in must clear that transient choice;
+            // the server resolves the actual marketplace role after login.
+            role = AccountRole.COLLECTOR,
+            roleSelected = false,
             step = OnboardingStep.EMAIL,
             roleRequiredAfterSignIn = false,
             authError = null,

@@ -165,7 +165,7 @@ fun HouseholdSupplyScreen(
                 onCreateListing = onCreateListing
             )
         }
-        item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
+        if (state.initialLoadComplete || state.listings.isNotEmpty() || state.pickups.isNotEmpty()) item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
         if (state.pendingPhotoUpload != null) item {
             OutlinedButton(onClick = onRetryPhoto, enabled = "upload-listing-photo" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -174,7 +174,7 @@ fun HouseholdSupplyScreen(
         }
         item { Text("My listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.loading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
-        if (!state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
+        if (state.initialLoadComplete && !state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
         items(state.listings, key = { it.id }) { listing ->
             HouseholdListingCard(
                 listing = listing,
@@ -373,7 +373,7 @@ fun HouseholdKabadiwalasScreen(
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         if (state.kabadiwalaLoading) item { CircularProgressIndicator(Modifier.size(26.dp)) }
-        if (!state.loading && !state.kabadiwalaLoading && state.kabadiwalas.isEmpty()) item {
+        if (state.initialLoadComplete && !state.loading && !state.kabadiwalaLoading && state.kabadiwalas.isEmpty()) item {
             EmptyPanel(
                 if (state.kabadiwalaRequiresLocation && area.isBlank()) "Choose an area to begin" else "No active Kabadiwalas serving this area yet",
                 if (state.kabadiwalaRequiresLocation && area.isBlank()) "Use your location or enter a locality, city, state or PIN code." else "Try a nearby area or a wider radius."
@@ -1137,7 +1137,9 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
             else if (section == KabadiwalaSection.TOOLS) FieldToolsHeader(onRefresh, state.loading)
             else RoleHeader(title, subtitle, Icons.Filled.Inventory2, onRefresh, state.loading)
         }
-        if (section == KabadiwalaSection.HOME) item {
+        val hasCollectorSnapshot = state.initialLoadComplete || state.cachedAtEpochMs > 0L || state.pickups.isNotEmpty() || state.inventory.isNotEmpty()
+        if (!hasCollectorSnapshot && state.loading) item { LoadingPanel("Loading your collection desk…") }
+        if (section == KabadiwalaSection.HOME && hasCollectorSnapshot) item {
             CollectorOverview(state, onCreateCapturedLot)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
@@ -1147,7 +1149,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                     item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }} waiting", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled") }
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                if (!state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
+                if (state.initialLoadComplete && !state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
                 items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -1157,7 +1159,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
             }
             KabadiwalaSection.INVENTORY -> {
                 item { InventoryTotals(state.inventory) }
-                if (!state.loading && state.inventory.isEmpty()) item { EmptyPanel("Inventory is empty", "Complete a pickup to add weighed material.") }
+                if (state.initialLoadComplete && !state.loading && state.inventory.isEmpty()) item { EmptyPanel("Inventory is empty", "Complete a pickup to add weighed material.") }
                 items(state.inventory, key = { it.id }) { InventoryCard(it) }
                 item { Button(onClick = { showBulk = true }, enabled = state.inventory.any { it.availableKg > 0 }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Storefront, null); Spacer(Modifier.width(8.dp)); Text("Create recycler lot") } }
             }
@@ -1172,12 +1174,12 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 when (lotsMode) {
                     "LOTS" -> {
                         item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
+                        if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
                         items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk) }
                     }
                     "OFFERS" -> {
                         item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
+                        if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
                         items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer) }
                     }
                     else -> {
@@ -1967,20 +1969,21 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
         item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (!state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
+        if (!state.initialLoadComplete && state.loading) item { LoadingPanel("Loading recycler marketplace…") }
+        if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
         items(state.bulkLots, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive) }
         item { Text("My offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
+        if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
         items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer) }
         item { Text("My demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement, onUpdate = onUpdateRequirement) }
         item { Text("Pools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.pools.isEmpty()) item { EmptyPanel("No pools yet", "Collectors can combine reserved stock for your demand.") }
+        if (state.initialLoadComplete && state.pools.isEmpty()) item { EmptyPanel("No pools yet", "Collectors can combine reserved stock for your demand.") }
         items(state.pools, key = { "pool-${it.id}" }) { pool ->
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("${materialName(pool.materialCategory)} · ${"%.1f".format(pool.totalReservedKg)} kg", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${statusName(pool.status)} · ${pool.contributions.size} collector contributions", style = MaterialTheme.typography.bodySmall); Text("The QR handover and per-contribution settlement remain visible to the participating parties.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) } }
         }
         item { Text("Awaiting receipts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.handovers.isEmpty()) item { EmptyPanel("No handovers yet", "Confirmed QR handovers will appear here.") }
+        if (state.initialLoadComplete && state.handovers.isEmpty()) item { EmptyPanel("No handovers yet", "Confirmed QR handovers will appear here.") }
         items(state.handovers, key = { "supply-${it.id}" }) { handover ->
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg · ${statusName(handover.status)}", style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onOpenHandoverScanner, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Scan QR") } } }
         }

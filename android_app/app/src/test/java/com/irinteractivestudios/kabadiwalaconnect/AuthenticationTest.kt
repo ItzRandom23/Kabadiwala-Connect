@@ -31,6 +31,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthenticationTest {
+    @Test fun ordinaryEmailSignInClearsPreviousOperatorChoice() {
+        val vm = TestAuth.onboarding()
+        vm.useAdminSignIn()
+        assertEquals(AccountRole.ADMIN, vm.state.value.role)
+        vm.useEmailSignIn()
+        assertEquals(AccountRole.COLLECTOR, vm.state.value.role)
+        assertEquals(OnboardingStep.EMAIL, vm.state.value.step)
+        assertTrue(vm.state.value.returningUser)
+    }
+
     @Test fun operatorSignInUsesDedicatedAdminAuthenticationPath() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)

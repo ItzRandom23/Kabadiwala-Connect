@@ -116,7 +116,7 @@ class KcViewModelFactory(
                 val latitude = account?.latitude
                 val longitude = account?.longitude
                 if (latitude != null && longitude != null) CurrentLocation(latitude, longitude, account.areaName) else null
-            })
+            }, container.sessionCoordinator.snapshot)
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService)
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

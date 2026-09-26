@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 
 /** All app destinations. Bottom tabs are the 5 [BottomTab] routes. */
 object Destinations {
@@ -86,6 +88,14 @@ object Destinations {
     val KABADIWALA_TOP_LEVEL = listOf(HOME, KABADIWALA_INVENTORY, KABADIWALA_PICKUPS, KABADIWALA_LOTS, SETTINGS)
     val RECYCLER_TOP_LEVEL = listOf(RECYCLER_MARKETPLACE, RECYCLER_ORDERS, RECYCLER_PICKUPS, RECYCLER_RATES, RECYCLER_PROFILE)
     const val START = HOME
+
+    /** Select the first protected screen only from a resolved session profile. */
+    fun startForSession(account: AccountProfile?): String = when (account?.role) {
+        null -> AUTH
+        AccountRole.ADMIN -> ADMIN_DASHBOARD
+        AccountRole.RECYCLER -> if (account.verificationStatus == RecyclerVerificationStatus.VERIFIED) RECYCLER_MARKETPLACE else RECYCLER_VERIFY
+        AccountRole.HOUSEHOLD, AccountRole.COLLECTOR -> HOME
+    }
 
     fun topLevelFor(role: AccountRole, newNavigation: Boolean = false) = when (role) {
         AccountRole.RECYCLER -> RECYCLER_TOP_LEVEL

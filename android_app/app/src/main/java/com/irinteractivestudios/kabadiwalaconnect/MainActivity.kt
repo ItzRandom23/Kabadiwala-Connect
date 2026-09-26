@@ -123,9 +123,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             var appearanceMode by remember { mutableStateOf(AppearanceManager.load(this@MainActivity)) }
             var activeRole by remember { mutableStateOf(forcedDemoRole ?: if (householdLivePreview) AccountRole.HOUSEHOLD else AccountRole.COLLECTOR) }
+            val liveSession by app.container.sessionCoordinator.snapshot.collectAsStateWithLifecycle()
             KabadiwalaConnectTheme(
                 darkTheme = AppearanceManager.isDark(appearanceMode),
-                role = activeRole
+                role = if (demoPreviewMode || householdLivePreview) activeRole else liveSession.account?.role ?: activeRole
             ) {
                 val uiScope = rememberCoroutineScope()
                 // Demo mode is a deliberate, debug-only entry point. It must
@@ -168,9 +169,40 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                val bootstrap = sessionBootstrap
-                val liveSession by app.container.sessionCoordinator.snapshot.collectAsStateWithLifecycle()
-                if (bootstrap == null) {
+                // The bootstrap marker only records that the first restoration
+                // finished. Thereafter the coordinator is the single source of
+                // truth, including fresh login, logout and reconnect hydration.
+                val bootstrap = sessionBootstrap?.let { marker ->
+                    if (previewMode || !languageWasSelected) marker
+                    else if (liveSession.restorable && marker.account?.profileId != liveSession.account?.profileId)
+                        SessionSnapshot(SessionState.RESTORING, null)
+                    else liveSession
+                }
+                var lastObservedConnection by remember { mutableStateOf(connection) }
+                // This effect must live above the restoring screen. A reconnect
+                // changes the coordinator to RESTORING; placing the effect in
+                // the authenticated graph cancels its own restore request.
+                LaunchedEffect(connection, sessionBootstrap?.account?.profileId) {
+                    val regainedConnection = lastObservedConnection != ConnectionState.ONLINE && connection == ConnectionState.ONLINE
+                    lastObservedConnection = connection
+                    if (!previewMode && connection == ConnectionState.ONLINE && liveSession.restorable) {
+                        val restoredAccount = withContext(Dispatchers.IO) {
+                            val account = if (regainedConnection) app.container.restoreAuthenticatedSession()
+                                else app.container.currentAccount()
+                            if (account != null) {
+                                runCatching { app.container.reconcileChanges() }
+                                app.container.syncScheduler.requestSync()
+                                app.container.startPushTokenRegistration()
+                            }
+                            account
+                        }
+                        if (restoredAccount == null) {
+                            sessionBootstrap = app.container.sessionCoordinator.snapshot.value
+                            activeRole = AccountRole.COLLECTOR
+                        }
+                    }
+                }
+                if (bootstrap == null || bootstrap.state == SessionState.RESTORING) {
                     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                         LoadingContent(Modifier.fillMaxSize())
                     }
@@ -201,7 +233,7 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val defaultInitialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val defaultInitialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else Destinations.startForSession(cachedAccount.takeIf { bootstrap.restorable })
                 val restoreSettingsAfterLocaleChange = routeToRestoreAfterRecreation == Destinations.SETTINGS &&
                     renderedRole != AccountRole.ADMIN &&
                     (demoMode || (bootstrap.restorable && cachedAccount != null))
@@ -271,48 +303,6 @@ class MainActivity : ComponentActivity() {
 
                 val unreadNotifications by app.container.unreadNotificationCount(cachedAccount?.profileId.orEmpty())
                     .collectAsStateWithLifecycle(initialValue = 0)
-                var lastObservedConnection by remember { mutableStateOf(connection) }
-                LaunchedEffect(connection, bootstrap.restorable) {
-                    val regainedConnection = lastObservedConnection != ConnectionState.ONLINE && connection == ConnectionState.ONLINE
-                    lastObservedConnection = connection
-                    if (!householdLivePreview && connection == ConnectionState.ONLINE && bootstrap.restorable) {
-                        val restoredAccount = withContext(Dispatchers.IO) {
-                            // The initial bootstrap and fresh sign-in already
-                            // validated the account before exposing its route.
-                            // Revalidate here only when the network comes back
-                            // after the app was offline.
-                            val account = if (regainedConnection) {
-                                app.container.restoreAuthenticatedSession()
-                            } else {
-                                app.container.currentAccount()
-                            }
-                            if (account != null) {
-                                // Pull server deltas only after restoration has
-                                // established a valid authenticated session.
-                                runCatching { app.container.reconcileChanges() }
-                                app.container.refreshCatalogs()
-                                // Re-arm durable offline work only after the
-                                // process-local session gate has opened.
-                                app.container.syncScheduler.requestSync()
-                                app.container.startPushTokenRegistration()
-                            }
-                            account
-                        }
-                        if (restoredAccount == null) {
-                            // Restoration has already classified the session
-                            // as unauthenticated/expired. Return to the real
-                            // sign-in route without issuing protected calls.
-                            sessionBootstrap = app.container.sessionCoordinator.snapshot.value
-                            activeRole = AccountRole.COLLECTOR
-                            if (route != Destinations.AUTH) {
-                                navController.navigate(Destinations.AUTH) {
-                                    popUpTo(0)
-                                    launchSingleTop = true
-                                }
-                            }
-                        }
-                    }
-                }
                 val title = when (route) {
                     Destinations.MY_LOTS -> stringResource(R.string.home_my_lots)
                     Destinations.LOT_DETAIL -> stringResource(R.string.lot_review_title)
@@ -410,7 +400,10 @@ class MainActivity : ComponentActivity() {
                             if (BuildConfig.APP_ENVIRONMENT == "TESTING") {
                                 TestingEnvironmentIndicator(Modifier.padding(vertical = 4.dp))
                             }
-                            AppNavHost(
+                            // Navigation Compose keeps lifecycle state inside
+                            // NavHost. Replace the host together with its
+                            // controller at every account boundary.
+                            key(navigationInstance, navigationScope) { AppNavHost(
                                 navController = navController,
                                 factory = factory,
                                 onLanguageChange = {
@@ -427,6 +420,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 startDestination = initialRoute,
                                 onLogout = {
+                                    app.container.revokeAuthenticatedBackgroundWork()
+                                    app.container.sessionCoordinator.beginRestoration()
                                     // Push-token revocation is best effort. It
                                     // must never block the local logout flow
                                     // behind a slow/offline network request
@@ -442,7 +437,8 @@ class MainActivity : ComponentActivity() {
                                         activeRole = AccountRole.COLLECTOR
                                         demoMode = false
                                         demoRoleName = ""
-                                        navController.navigate(Destinations.AUTH) { popUpTo(0) }
+                                        // The account-scoped NavController is replaced by
+                                        // the signed-out graph as soon as the session changes.
                                     }
                                 },
                                 onDemo = {
@@ -503,12 +499,13 @@ class MainActivity : ComponentActivity() {
                                         requestNotificationPermissionIfNeeded()
                                         sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                         activeRole = account.role
-                                        val target = if (activeRole == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (activeRole == AccountRole.RECYCLER && account.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (activeRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
-                                        navController.navigate(target) { popUpTo(Destinations.AUTH) { inclusive = true } }
+                                        // The authenticated graph starts directly at the
+                                        // server-issued role's destination. Navigating the
+                                        // old sign-in controller races that graph replacement.
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()
-                            )
+                            ) }
                         }
                     }
                 }

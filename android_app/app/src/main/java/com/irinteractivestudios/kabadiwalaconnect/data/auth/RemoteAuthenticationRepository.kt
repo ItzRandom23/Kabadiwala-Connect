@@ -85,8 +85,6 @@ class RemoteAuthenticationRepository(
                     longitude = account?.longitude
                 )
             ).requireData()
-            val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(auth.token, expiry, auth.refreshToken)
             val profile = auth.user?.toDomain() ?: auth.collector?.let { collector ->
                 AccountProfile(
                     id = collector.id,
@@ -101,8 +99,14 @@ class RemoteAuthenticationRepository(
                     address = collector.address
                 )
             }
-            profile?.let { storage?.saveAccount(it) }
-            OtpVerification.Success(auth.token, expiry, profile?.profileId.orEmpty(), profile)
+            // A token without a server-issued identity cannot safely choose a
+            // role. Keep the previous session untouched if the response is
+            // incomplete, so the UI never guesses from the onboarding form.
+            if (profile == null) return OtpVerification.ServerError
+            val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
+            session.save(auth.token, expiry, auth.refreshToken)
+            storage?.saveAccount(profile)
+            OtpVerification.Success(auth.token, expiry, profile.profileId, profile)
         } catch (error: Exception) {
             if ((error as? RemoteApiException)?.detailsCode == "ROLE_REQUIRED") return OtpVerification.RoleRequired
             when (errorCode(error)) {
@@ -336,7 +340,13 @@ class RemoteAuthenticationRepository(
 private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfileDto.toDomain() = AccountProfile(
     id = id,
     email = email.orEmpty(),
-    role = when (role) { "RECYCLER" -> AccountRole.RECYCLER; "HOUSEHOLD" -> AccountRole.HOUSEHOLD; "ADMIN" -> AccountRole.ADMIN; else -> AccountRole.COLLECTOR },
+    role = when (role) {
+        "RECYCLER" -> AccountRole.RECYCLER
+        "HOUSEHOLD" -> AccountRole.HOUSEHOLD
+        "COLLECTOR" -> AccountRole.COLLECTOR
+        "ADMIN" -> AccountRole.ADMIN
+        else -> throw IllegalArgumentException("Unrecognized account role")
+    },
     preferredLanguage = LocaleManager.fromBackendName(preferredLanguage),
     accountStatus = accountStatus,
     verificationStatus = runCatching { RecyclerVerificationStatus.valueOf(verificationStatus) }.getOrDefault(RecyclerVerificationStatus.VERIFIED),

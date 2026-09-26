@@ -14,6 +14,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadD
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
@@ -26,6 +27,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,7 +40,8 @@ import java.io.IOException
 import java.util.UUID
 
 data class SupplyChainState(
-    val loading: Boolean = false,
+    val loading: Boolean = true,
+    val initialLoadComplete: Boolean = false,
     val error: String? = null,
     val listings: List<HouseholdListingDto> = emptyList(),
     val kabadiwalas: List<KabadiwalaProfileDto> = emptyList(),
@@ -123,7 +126,8 @@ class SupplyChainViewModel(
     private val authenticatedSessionReady: () -> Boolean = { true },
     private val languageProvider: () -> String = { LocaleManager.ENGLISH },
     private val initialHouseholdArea: () -> String? = { null },
-    private val initialHouseholdLocation: () -> CurrentLocation? = { null }
+    private val initialHouseholdLocation: () -> CurrentLocation? = { null },
+    private val sessionSnapshots: StateFlow<SessionSnapshot>? = null
 ) : ViewModel() {
     private fun newHouseholdSearchState() = initialHouseholdLocation().let { location ->
         SupplyChainState(
@@ -136,8 +140,37 @@ class SupplyChainViewModel(
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
+    private var householdRefreshJob: Job? = null
+    private var supplyRefreshGeneration = 0L
+    private var supplyRefreshJob: Job? = null
     private var materialDetectionJob: Job? = null
     private var householdPriceEstimateJob: Job? = null
+
+    init {
+        // Screen effects can run while a reconnect is closing the session
+        // gate, then never run again on the same nav entry. A new authenticated
+        // snapshot always starts the role's first request from the ViewModel.
+        sessionSnapshots?.let { snapshots ->
+            viewModelScope.launch {
+                snapshots.collect { snapshot ->
+                    val account = snapshot.account
+                    if (!snapshot.restorable || account == null) {
+                        householdRefreshGeneration++
+                        householdRefreshJob?.cancel()
+                        supplyRefreshGeneration++
+                        supplyRefreshJob?.cancel()
+                    } else if ((stateAccountId == null || stateAccountId == account.profileId) && accountId() == account.profileId) {
+                        when (account.role) {
+                            AccountRole.HOUSEHOLD -> refreshHousehold()
+                            AccountRole.COLLECTOR -> refreshKabadiwala()
+                            AccountRole.RECYCLER -> refreshRecycler()
+                            AccountRole.ADMIN -> Unit
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private fun friendly(error: Throwable): String {
         val remote = error as? RemoteApiException
@@ -187,6 +220,10 @@ class SupplyChainViewModel(
     private fun resetForAccountChange() {
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
+        householdRefreshGeneration++
+        householdRefreshJob?.cancel()
+        supplyRefreshGeneration++
+        supplyRefreshJob?.cancel()
         materialDetectionJob?.cancel()
         householdPriceEstimateJob?.cancel()
         materialDetectionJob = null
@@ -263,43 +300,55 @@ class SupplyChainViewModel(
     fun refreshHousehold(radiusKm: Int? = null, areaQuery: String? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         resetForAccountChange()
+        if (householdRefreshJob?.isActive == true) return
         val generation = ++householdRefreshGeneration
+        val refreshAccount = accountId()
         val requestedRadiusKm = radiusKm ?: _state.value.kabadiwalaRadiusKm
         val requestedArea = areaQuery ?: _state.value.kabadiwalaAreaQuery
-        viewModelScope.launch {
+        householdRefreshJob = viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null, notice = null)
             val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
             if (cached.isNotEmpty()) {
                 _state.value = _state.value.copy(listings = cached)
             }
-            var activeSection = "your listings"
-            runCatching {
-                restorePendingPhotoUpload()
-                val listings = mergeHouseholdListings(api.getHouseholdListings().requireData())
-                activeSection = "your pickup history"
-                val pickups = api.getHouseholdPickups().requireData()
-                activeSection = "nearby Kabadiwalas"
-                val directory = api.getHouseholdKabadiwalas(
+            fun current() = generation == householdRefreshGeneration && accountId() == refreshAccount && protectedSessionReady()
+            val failures = mutableListOf<String>()
+            fetch { restorePendingPhotoUpload() }
+            val listingsResult = fetch { mergeHouseholdListings(api.getHouseholdListings().requireData()) }
+            if (!current()) return@launch
+            listingsResult.onSuccess { _state.value = _state.value.copy(listings = it) }
+                .onFailure { error ->
+                    Log.e("HouseholdRefresh", "Failed loading listings (${error::class.java.simpleName})")
+                    failures += householdRefreshError(error, "your listings")
+                }
+            val pickupsResult = fetch { api.getHouseholdPickups().requireData() }
+            if (!current()) return@launch
+            pickupsResult.onSuccess { _state.value = _state.value.copy(pickups = it) }
+                .onFailure { error ->
+                    Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
+                    failures += householdRefreshError(error, "your pickup history")
+                }
+            val directoryResult = fetch {
+                api.getHouseholdKabadiwalas(
                     _state.value.kabadiwalaLatitude,
                     _state.value.kabadiwalaLongitude,
                     requestedRadiusKm,
                     requestedArea.ifBlank { null }
                 ).requireData().toKabadiwalaDirectoryDto()
-                if (generation != householdRefreshGeneration) return@launch
-                _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, error = null)
-            }.onFailure { error ->
-                if (generation != householdRefreshGeneration) return@onFailure
-                Log.e("HouseholdRefresh", "Failed loading $activeSection (${error::class.java.simpleName})")
-                // Keep the durable account-scoped cache visible when the
-                // request fails after process death or during an offline
-                // transition. The error remains actionable via Retry.
-                val latestCached = runCatching { cachedHouseholdListings() }.getOrDefault(cached)
-                _state.value = _state.value.copy(
-                    loading = false,
-                    listings = latestCached.ifEmpty { _state.value.listings },
-                    error = householdRefreshError(error, activeSection)
-                )
             }
+            if (!current()) return@launch
+            directoryResult.onSuccess { directory ->
+                _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
+            }.onFailure { error ->
+                Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
+                failures += householdRefreshError(error, "nearby Kabadiwalas")
+            }
+            _state.value = _state.value.copy(
+                loading = false,
+                initialLoadComplete = failures.isEmpty() || _state.value.initialLoadComplete,
+                listings = if (listingsResult.isFailure) runCatching { cachedHouseholdListings() }.getOrDefault(cached).ifEmpty { _state.value.listings } else _state.value.listings,
+                error = failures.joinToString(" ").takeIf { it.isNotEmpty() }
+            )
         }
     }
     fun searchHouseholdKabadiwalas(area: String, radiusKm: Int = _state.value.kabadiwalaRadiusKm, location: CurrentLocation? = null) {
@@ -348,10 +397,11 @@ class SupplyChainViewModel(
     fun refreshKabadiwala() {
         if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
         resetForAccountChange()
+        if (supplyRefreshJob?.isActive == true) return
         cache?.load(accountId())?.let(::applyCached)
-        load {
+        load { current ->
         var partialFailure = false
-        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (_: Exception) { partialFailure = true; fallback }
+        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
         val previous = _state.value
         val listings = optional(previous.listings) { api.getKabadiwalaListings().requireData() }
         val pickups = optional(previous.pickups) { api.getKabadiwalaPickups().requireData() }
@@ -367,31 +417,52 @@ class SupplyChainViewModel(
         val handovers = optional(previous.handovers) { api.getKabadiwalaHandovers().requireData() }
         val passport = optional(previous.passport) { api.getCollectorPassport().requireData() }
         val safety = optional(previous.safety) { api.getSafety().requireData() }
-        _state.value = _state.value.copy(loading = false, listings = listings, pickups = pickups, inventory = inventory, inventoryMovements = inventoryMovements, bulkLots = bulkLots, offers = offers, requirements = requirements, poolOpportunities = opportunities, poolSuggestions = suggestions, demandIntelligence = demandIntelligence, pools = pools, handovers = handovers, passport = passport, safety = safety, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Some saved evidence is shown because the network is unavailable." else null)
-        saveCache()
+        if (!current()) return@load
+        _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, listings = listings, pickups = pickups, inventory = inventory, inventoryMovements = inventoryMovements, bulkLots = bulkLots, offers = offers, requirements = requirements, poolOpportunities = opportunities, poolSuggestions = suggestions, demandIntelligence = demandIntelligence, pools = pools, handovers = handovers, passport = passport, safety = safety, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
+        if (!partialFailure) saveCache()
         }
     }
     fun refreshRecycler() {
         if (!allowed(AccountRole.RECYCLER) || !protectedSessionReady()) return
         resetForAccountChange()
+        if (supplyRefreshJob?.isActive == true) return
         cache?.load(accountId())?.let(::applyCached)
-        load {
+        load { current ->
         var partialFailure = false
-        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (_: Exception) { partialFailure = true; fallback }
+        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
         val previous = _state.value
         val lots = optional(previous.bulkLots) { api.getRecyclerBulkLots().requireData() }
         val offers = optional(previous.offers) { api.getRecyclerBulkOffers().requireData() }
         val requirements = optional(previous.requirements) { api.getRecyclerProcurementRequirements().requireData() }
         val pools = optional(previous.pools) { api.getRecyclerPools().requireData() }
         val handovers = optional(previous.handovers) { api.getSupplyHandovers().requireData() }
-        _state.value = _state.value.copy(loading = false, bulkLots = lots, offers = offers, requirements = requirements, pools = pools, handovers = handovers, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Some saved evidence is shown because the network is unavailable." else null)
-        saveCache()
+        if (!current()) return@load
+        _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, bulkLots = lots, offers = offers, requirements = requirements, pools = pools, handovers = handovers, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
+        if (!partialFailure) saveCache()
         }
     }
-    private fun load(block: suspend () -> Unit) {
-        viewModelScope.launch {
+    private suspend fun <T> fetch(block: suspend () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Result.failure(error)
+    }
+
+    private fun load(block: suspend (isCurrent: () -> Boolean) -> Unit) {
+        val generation = ++supplyRefreshGeneration
+        val refreshAccount = accountId()
+        supplyRefreshJob?.cancel()
+        supplyRefreshJob = viewModelScope.launch {
+            val isCurrent = { generation == supplyRefreshGeneration && accountId() == refreshAccount && protectedSessionReady() }
             _state.value = _state.value.copy(loading = true, error = null, notice = null)
-            runCatching { block() }.onFailure { _state.value = _state.value.copy(loading = false, error = friendly(it)) }
+            try {
+                block(isCurrent)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (isCurrent()) _state.value = _state.value.copy(loading = false, error = friendly(error))
+            }
         }
     }
     private fun action(key: String, requiredRole: AccountRole? = null, block: suspend () -> String = { "Done" }) {
