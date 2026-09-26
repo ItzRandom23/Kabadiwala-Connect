@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -123,6 +124,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 
 private fun Double.roundMoneyForUi(): Double = (this * 100.0).roundToInt() / 100.0
 
@@ -660,7 +662,7 @@ fun HouseholdListingCreateScreen(
     onBack: () -> Unit,
     onSuggestMaterial: (String) -> Unit,
     onClearMaterialSuggestion: () -> Unit,
-    onCreateListing: (HouseholdListingCreateDto, List<String>) -> Unit,
+    onCreateListing: (HouseholdListingCreateDto, List<String>, String) -> Unit,
     busy: Set<String> = emptySet(),
     onEstimateHouseholdPrice: (String, Double, String, String) -> Unit = { _, _, _, _ -> },
     onClearHouseholdPriceEstimate: () -> Unit = {}
@@ -679,6 +681,9 @@ fun HouseholdListingCreateScreen(
     var ownerPreparationCompleted by rememberSaveable { mutableStateOf(false) }
     var dataDestructionRequested by rememberSaveable { mutableStateOf(false) }
     var photoPaths by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    // Stable for this draft (including retries and Activity recreation), unique
+    // for the next listing form so idempotency keys never collide across lots.
+    var listingDraftId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var lastDetectionPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var photoError by rememberSaveable { mutableStateOf(false) }
     var cameraError by rememberSaveable { mutableStateOf(false) }
@@ -765,6 +770,7 @@ fun HouseholdListingCreateScreen(
     }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        Log.d("HouseholdMaterialAI", "Gallery returned ${uris.size} photo(s)")
         ioScope.launch(Dispatchers.IO) {
             val paths = uris.mapNotNull { uri ->
                 runCatching {
@@ -779,7 +785,9 @@ fun HouseholdListingCreateScreen(
                 cameraError = false
                 cameraPermissionDenied = false
                 cameraPermissionBlocked = false
-                updatedPaths.firstOrNull()?.takeIf { it != previousFirstPhoto }?.let(onSuggestMaterial)
+                val detectionPath = updatedPaths.firstOrNull()?.takeIf { it != previousFirstPhoto }
+                Log.d("HouseholdMaterialAI", "Imported ${paths.size} photo(s); new first photo=${detectionPath != null}")
+                detectionPath?.let(onSuggestMaterial)
             }
         }
     }
@@ -796,6 +804,7 @@ fun HouseholdListingCreateScreen(
                 onClearMaterialSuggestion()
             }
         } else if (state.materialDetectionPath != firstPhotoPath || state.materialDetectionStatus == HouseholdMaterialDetectionStatus.IDLE) {
+            Log.d("HouseholdMaterialAI", "Auto-detection requested for selected photo; status=${state.materialDetectionStatus}")
             onSuggestMaterial(firstPhotoPath)
         }
     }
@@ -972,7 +981,10 @@ fun HouseholdListingCreateScreen(
                 if ((state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.IDLE, HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) ||
                         state.materialDetectionStatus == HouseholdMaterialDetectionStatus.SUCCESS && state.materialSuggestion == null) && photoPaths.isNotEmpty()) {
                     OutlinedButton(
-                        onClick = { photoPaths.firstOrNull()?.let(onSuggestMaterial) },
+                        onClick = {
+                            Log.d("HouseholdMaterialAI", "Manual photo-detection retry tapped")
+                            photoPaths.firstOrNull()?.let(onSuggestMaterial)
+                        },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
@@ -1068,7 +1080,7 @@ fun HouseholdListingCreateScreen(
                  dataBearingDevice = dataBearingDevice,
                  ownerPreparationCompleted = ownerPreparationCompleted,
                  dataDestructionRequested = dataDestructionRequested
-             ), photoPaths) }
+             ), photoPaths, listingDraftId) }
          }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
      }
      if (showCameraPermissionDialog) {
@@ -1355,7 +1367,6 @@ enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
-    var showAvailability by remember { mutableStateOf(false) }
     var showReject by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showReassign by remember { mutableStateOf(false) }
@@ -1408,9 +1419,13 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     Spacer(Modifier.width(8.dp))
                     Text(if (photoCount == 1) "View scrap photo" else "View $photoCount scrap angles")
                 }
-                if (showPhotos) ListingPhotoStrip(loadedPhotos, photoCount, photoError) { index ->
-                    selectedPhotoIndex = index
-                }
+                if (showPhotos) ListingPhotoStrip(
+                    loadedPhotos,
+                    photoCount,
+                    photoError,
+                    onRetry = { onLoadPhotos(pickup.listingId, photoCount) },
+                    onPhotoClick = { index -> selectedPhotoIndex = index }
+                )
             }
             when (pickup.status) {
                 "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Claim pickup") }
@@ -1421,10 +1436,22 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     }
                 }
                 "ACCEPTED" -> {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { showAvailability = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Confirm time") }
-                        OutlinedButton(onClick = { showSchedule = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Schedule") }
+                    if (pickup.availabilityConfirmedAt == null) {
+                        OutlinedButton(
+                            onClick = { onConfirmAvailability(pickup.id, null) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                        ) { Text("Confirm availability") }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text("Availability confirmed", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
+                    Button(onClick = { showSchedule = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Schedule pickup") }
                     if (isPickupWorkTimeNow()) {
                         Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
                     } else {
@@ -1473,10 +1500,10 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     }
     if (showSchedule) SchedulePickupDialog(
         onDismiss = { showSchedule = false },
+        confirmLabel = "Schedule pickup",
         onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
     )
     if (showComplete && pickup.householdQrScannedAt != null) CompletionDialog(pickup, listing, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
-    if (showAvailability) SchedulePickupDialog(onDismiss = { showAvailability = false }, onSubmit = { onConfirmAvailability(pickup.id, it); showAvailability = false })
     if (showReject) ReasonDialog(title = "Decline pickup", confirmLabel = "Decline", onDismiss = { showReject = false }, onSubmit = { onReject(pickup.id, it); showReject = false })
     if (showCancel) ReasonDialog(title = "Cancel pickup", confirmLabel = "Cancel", onDismiss = { showCancel = false }, onSubmit = { onCancel(pickup.id, it); showCancel = false })
     if (showReassign) ReassignDialog(onDismiss = { showReassign = false }, onSubmit = { reason, noShow -> onReassign(pickup.id, reason, noShow); showReassign = false })
@@ -1530,12 +1557,19 @@ private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: (
 }
 
 @Composable
-private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, onPhotoClick: (Int) -> Unit) {
+private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, onRetry: () -> Unit, onPhotoClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (photos.isEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                Text("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (photoError != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(photoError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry) { Text("Retry") }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1547,9 +1581,12 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
                 }
             }
             if (photoError != null) {
-                Text(photoError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(photoError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry) { Text("Retry") }
+                }
             } else {
-                Text("${photos.size} angle${if (photos.size == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${photos.size} of $expectedCount angle${if (expectedCount == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1622,7 +1659,8 @@ private fun FullScreenListingPhotoDialog(
 @Composable
 private fun SchedulePickupDialog(
     onDismiss: () -> Unit,
-    onSubmit: (String) -> Unit
+    onSubmit: (String) -> Unit,
+    confirmLabel: String = "Confirm time"
 ) {
     // Offer the next three half-hour slots inside the server's India-time
     // operating window and 90-minute lead time.
@@ -1671,7 +1709,7 @@ private fun SchedulePickupDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSubmit(selected.toString()) }) { Text("Confirm time") } },
+        confirmButton = { TextButton(onClick = { onSubmit(selected.toString()) }) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

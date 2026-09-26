@@ -1,8 +1,8 @@
 {
-  "versionCode": 61,
-  "versionName": "0.0.60-beta",
-  "apkUrl": "kabadiwala-connect-0.0.60-beta-debug.apk",
-  "sha256": "1D6AE24EA4B2504B85E2892717D2647A18C5A5B15F2F3215AFFC0C85F2813D5E",
-  "sizeBytes": 28661931,
-  "releaseNotes": "Shows Other (phones & electronics) first in the scrap category list."
+  "versionCode": 62,
+  "versionName": "0.0.61-beta",
+  "apkUrl": "kabadiwala-connect-0.0.61-beta-debug.apk",
+  "sha256": "90DCF433D67B0E3DC77377D2ED4F202FE62E06ACFDC07A6992FCFD9EF13A2139",
+  "sizeBytes": 28678326,
+  "releaseNotes": "Improves photo detection and pickup reliability, clarifies Collector availability and scheduling, and fixes pickup photo loading feedback."
 }

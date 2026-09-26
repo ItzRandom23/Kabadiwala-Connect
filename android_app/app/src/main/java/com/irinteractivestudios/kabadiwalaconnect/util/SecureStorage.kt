@@ -87,7 +87,11 @@ class KeystoreSecureStorage(context: Context) : SecureStorage {
     }
 
     override fun put(key: String, value: String) {
-        prefs?.edit()?.putString(key, value)?.apply() ?: processOnlyValues.put(key, value)
+        // Keep the process cache aligned with encrypted preferences. Reads are
+        // served from this map first, so leaving an earlier value here would
+        // keep returning a rotated refresh token after it had been persisted.
+        processOnlyValues[key] = value
+        prefs?.edit()?.putString(key, value)?.apply()
     }
 
     override fun get(key: String): String? {

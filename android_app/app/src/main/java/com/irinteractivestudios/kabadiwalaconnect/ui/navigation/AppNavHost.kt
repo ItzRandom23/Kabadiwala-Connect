@@ -282,7 +282,7 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onSuggestMaterial = vm::suggestHouseholdMaterial,
                 onClearMaterialSuggestion = vm::clearHouseholdMaterialSuggestion,
-                onCreateListing = { input, paths -> vm.createListing(input, paths) },
+                onCreateListing = { input, paths, draftId -> vm.createListing(input, paths, draftId) },
                 onEstimateHouseholdPrice = vm::estimateHouseholdPrice,
                 onClearHouseholdPriceEstimate = vm::clearHouseholdPriceEstimate
             )

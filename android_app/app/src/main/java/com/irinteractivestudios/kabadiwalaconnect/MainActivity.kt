@@ -25,6 +25,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val restoringActivityState = savedInstanceState != null
         enableEdgeToEdge()
         // Set system-bar icon contrast before the first Compose frame. The
         // theme repeats this when the user changes appearance in Settings,
@@ -133,6 +135,10 @@ class MainActivity : ComponentActivity() {
                 // restored. Keep it process-local and intent-driven.
                 var demoMode by remember { mutableStateOf(demoPreviewMode) }
                 var demoRoleName by remember { mutableStateOf(forcedDemoRole?.name.orEmpty()) }
+                // Locale changes recreate this Activity. Preserve the current
+                // Settings tab for that one recreation instead of restarting
+                // a valid session at its default destination.
+                var routeToRestoreAfterRecreation by rememberSaveable { mutableStateOf<String?>(null) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
@@ -195,7 +201,11 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val initialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val defaultInitialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else if (!bootstrap.restorable || cachedAccount == null) Destinations.AUTH else if (cachedAccount.role == AccountRole.ADMIN) Destinations.ADMIN_DASHBOARD else if (cachedAccount.role == AccountRole.RECYCLER && cachedAccount.verificationStatus != RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_VERIFY else if (cachedAccount.role == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else Destinations.HOME
+                val restoreSettingsAfterLocaleChange = routeToRestoreAfterRecreation == Destinations.SETTINGS &&
+                    renderedRole != AccountRole.ADMIN &&
+                    (demoMode || (bootstrap.restorable && cachedAccount != null))
+                val initialRoute = if (restoreSettingsAfterLocaleChange) Destinations.SETTINGS else defaultInitialRoute
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
                 val kabadiwalaDemo = demoMode && renderedRole == AccountRole.COLLECTOR && demoRoleName == AccountRole.COLLECTOR.name
@@ -243,6 +253,11 @@ class MainActivity : ComponentActivity() {
                                 launchSingleTop = true
                             }
                         }
+                    }
+                }
+                LaunchedEffect(route, routeToRestoreAfterRecreation) {
+                    if (restoringActivityState && routeToRestoreAfterRecreation != null && route == routeToRestoreAfterRecreation) {
+                        routeToRestoreAfterRecreation = null
                     }
                 }
                 LaunchedEffect(languageSelected, route, demoMode, householdLivePreview, bootstrap.restorable) {
@@ -398,7 +413,10 @@ class MainActivity : ComponentActivity() {
                             AppNavHost(
                                 navController = navController,
                                 factory = factory,
-                                onLanguageChange = { recreate() },
+                                onLanguageChange = {
+                                    routeToRestoreAfterRecreation = route?.takeIf { it == Destinations.SETTINGS }
+                                    recreate()
+                                },
                                 onAppearanceChange = { appearanceMode = AppearanceManager.normalize(it) },
                                 onCheckForUpdates = {
                                     uiScope.launch {

@@ -27,9 +27,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.gson.Gson
 import java.io.File
 import java.io.IOException
@@ -412,15 +414,22 @@ class SupplyChainViewModel(
         api.uploadHouseholdListingPhotos(listingId, photos).requireData()
         localPaths.forEach { File(it).delete() }
     }
-    fun createListing(input: HouseholdListingCreateDto, localPhotoPath: String? = null) = createListing(input, listOfNotNull(localPhotoPath))
-    fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>) = action("create-listing", AccountRole.HOUSEHOLD, {
+    fun createListing(input: HouseholdListingCreateDto, localPhotoPath: String? = null) =
+        createListing(input, listOfNotNull(localPhotoPath), UUID.randomUUID().toString())
+    fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>) =
+        createListing(input, localPhotoPaths, UUID.randomUUID().toString())
+    fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>, draftId: String) = action("create-listing", AccountRole.HOUSEHOLD, {
         require(localPhotoPaths.any { it.isNotBlank() && File(it).isFile }) { "Add at least one photo before posting." }
-        val operation = "listing-${input.materialCategory}-${input.areaName}-${input.estimatedWeight}"
+        val operation = "listing-${draftId.ifBlank { UUID.randomUUID().toString() }.take(112)}"
         val operationKey = idempotencyKeys?.getOrCreate(operation)
         val created = try {
             api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
         } catch (error: Throwable) {
             val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
+            // A definitive rejection means this draft will be corrected and
+            // retried as a new request. Release its key so the retry cannot be
+            // blocked by an old key bound to another payload.
+            if (!transient) idempotencyKeys?.clear(operation)
             if (!transient || syncQueue == null) throw error
             val account = accountId()?.takeIf { it.isNotBlank() }
             val localListingId = "local-${operationKey ?: UUID.nameUUIDFromBytes(operation.toByteArray()).toString()}"
@@ -581,8 +590,13 @@ class SupplyChainViewModel(
         _state.value = _state.value.copy(materialSuggestion = null, materialDetectionPath = null, materialDetectionStatus = HouseholdMaterialDetectionStatus.IDLE, materialDetectionMessage = null)
     }
     fun suggestHouseholdMaterial(path: String) {
-        if (path.isBlank()) return
+        if (path.isBlank()) {
+            Log.w("HouseholdMaterialAI", "Detection skipped: photo path is blank")
+            return
+        }
+        Log.d("HouseholdMaterialAI", "Detection requested; photo file exists=${File(path).isFile}")
         if (!allowed(AccountRole.HOUSEHOLD)) {
+            Log.w("HouseholdMaterialAI", "Detection blocked: active account is not Household")
             _state.value = _state.value.copy(
                 materialSuggestion = null,
                 materialDetectionPath = path,
@@ -594,10 +608,17 @@ class SupplyChainViewModel(
         if (_state.value.materialDetectionStatus == HouseholdMaterialDetectionStatus.PROCESSING && _state.value.materialDetectionPath == path) return
         materialDetectionJob?.cancel()
         _state.value = _state.value.copy(materialSuggestion = null, materialDetectionPath = path, materialDetectionStatus = HouseholdMaterialDetectionStatus.PROCESSING, materialDetectionMessage = null)
+        Log.d("HouseholdMaterialAI", "Detection entered processing state")
         materialDetectionJob = viewModelScope.launch {
             try {
                 val source = File(path)
-                val prepared = ImagePipeline.prepareForUpload(source, source.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
+                // Image decoding, resizing, and JPEG compression are CPU and disk
+                // work. Keep them off Main so the form can render its loading
+                // state and continue accepting input while detection starts.
+                val prepared = withContext(Dispatchers.IO) {
+                    ImagePipeline.prepareForUpload(source, source.parentFile ?: File(System.getProperty("java.io.tmpdir").orEmpty()))
+                }
+                Log.d("HouseholdMaterialAI", "Photo prepared on IO (${prepared.length()} bytes); sending request")
                 val suggestion = try {
                     val body = prepared.asRequestBody(prepared.imageMimeType().toMediaTypeOrNull())
                     val language = LocaleManager.toBackendName(languageProvider()).toRequestBody("text/plain".toMediaTypeOrNull())
@@ -609,10 +630,13 @@ class SupplyChainViewModel(
                 // tablet, camera, or an item outside the short material list.
                 // Do not hide it just because the provider omitted itemName.
                 val confident = suggestion.source.equals("AI", ignoreCase = true) && suggestion.confidence >= 0.6
+                Log.d("HouseholdMaterialAI", "Detection completed: category=${suggestion.materialCategory}, confidence=${suggestion.confidence}")
                 _state.value = _state.value.copy(materialSuggestion = suggestion, materialDetectionStatus = if (confident) HouseholdMaterialDetectionStatus.SUCCESS else HouseholdMaterialDetectionStatus.LOW_CONFIDENCE)
-            } catch (_: IllegalArgumentException) {
+            } catch (error: IllegalArgumentException) {
+                Log.w("HouseholdMaterialAI", "Photo preprocessing rejected the image (${error.javaClass.simpleName})")
                 _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, materialDetectionMessage = "This photo could not be processed. Choose a clear JPEG, PNG, or WebP image and try again.")
             } catch (error: RemoteApiException) {
+                Log.w("HouseholdMaterialAI", "Detection request failed (http=${error.httpCode}, code=${error.code})")
                 val serviceFailure = error.httpCode == null || error.httpCode >= 500 || error.code == "SERVICE_UNAVAILABLE" || error.code == "GEMINI_UNAVAILABLE"
                 val status = when { error.httpCode == 422 || error.code == "VALIDATION_ERROR" -> HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE; serviceFailure -> HouseholdMaterialDetectionStatus.SERVICE_ERROR; else -> HouseholdMaterialDetectionStatus.NETWORK_ERROR }
                 val message = when {
@@ -626,9 +650,11 @@ class SupplyChainViewModel(
                 _state.value = _state.value.copy(materialDetectionStatus = status, materialDetectionMessage = message)
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: IOException) {
+            } catch (error: IOException) {
+                Log.w("HouseholdMaterialAI", "Detection network error (${error.javaClass.simpleName})")
                 _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.NETWORK_ERROR, materialDetectionMessage = "Photo detection could not connect. Check your connection and retry.")
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.e("HouseholdMaterialAI", "Unexpected detection failure (${error.javaClass.simpleName})")
                 _state.value = _state.value.copy(materialDetectionStatus = HouseholdMaterialDetectionStatus.SERVICE_ERROR, materialDetectionMessage = "Photo detection failed unexpectedly. You can choose the material below or retry.")
             }
         }
@@ -713,6 +739,13 @@ class SupplyChainViewModel(
                 }
                 photos += response.requireBody().bytes()
             } catch (error: Throwable) {
+                if (photos.isEmpty()) {
+                    _state.value = _state.value.copy(
+                        listingPhotoErrors = _state.value.listingPhotoErrors +
+                            (listingId to "Couldn't load scrap photos. Check the connection and retry.")
+                    )
+                    throw error
+                }
                 partialFailure = true
                 firstFailure = firstFailure ?: error
                 break
@@ -746,9 +779,29 @@ class SupplyChainViewModel(
         }
     })
     fun rejectPickup(pickupId: String, reason: String? = null) = action("reject-$pickupId", AccountRole.COLLECTOR, { api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup declined and returned to the network." })
-    fun confirmAvailability(pickupId: String, slot: String? = null) = action("availability-$pickupId", AccountRole.COLLECTOR, { api.confirmPickupAvailability(pickupId, PickupAvailabilityDto(true, slot)).requireData(); refreshKabadiwala(); "Availability confirmed." })
+    fun confirmAvailability(pickupId: String, slot: String? = null) = action("availability-$pickupId", AccountRole.COLLECTOR, {
+        val updated = api.confirmPickupAvailability(pickupId, PickupAvailabilityDto(true, slot)).requireData()
+        _state.value = _state.value.copy(
+            pickups = _state.value.pickups.map { pickup -> if (pickup.id == pickupId) updated else pickup }
+        )
+        "Availability confirmed."
+    })
     fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireSuccess(); refreshKabadiwala(); "Pickup scheduled." })
-    fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", AccountRole.COLLECTOR, { api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireSuccess(); refreshKabadiwala(); "Pickup updated." })
+    fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", AccountRole.COLLECTOR, {
+        api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireSuccess()
+        val changedAt = java.time.Instant.now().toString()
+        _state.value = _state.value.copy(
+            pickups = _state.value.pickups.map { pickup ->
+                if (pickup.id != pickupId) pickup else pickup.copy(
+                    status = status,
+                    updatedAt = changedAt,
+                    inTransitAt = if (status == "IN_TRANSIT") changedAt else pickup.inTransitAt,
+                    arrivedAt = if (status == "ARRIVED") changedAt else pickup.arrivedAt
+                )
+            }
+        )
+        "Pickup updated."
+    })
     fun cancelKabadiwalaPickup(pickupId: String, reason: String? = null) = action("cancel-collector-$pickupId", AccountRole.COLLECTOR, { api.cancelKabadiwalaPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup cancelled." })
     fun reassignPickup(pickupId: String, reason: String, noShow: Boolean = false) = action("reassign-$pickupId", AccountRole.COLLECTOR, { api.reassignPickup(pickupId, PickupReassignDto(reason, noShow)).requireData(); refreshKabadiwala(); "Pickup returned to the network for reassignment." })
     fun completePickup(pickupId: String, input: PickupCompletionDto) = action("complete-$pickupId", AccountRole.COLLECTOR, { api.completePickup(pickupId, input).requireData(); refreshKabadiwala(); "Purchase completed and inventory updated." })

@@ -19,13 +19,20 @@ async function main() {
   const demoCollector = existingCollector
     ? await prisma.collector.update({ where: { id: existingCollector.id }, data: { email: 'dev-collector@kabadiwala.example' } })
     : await prisma.collector.create({ data: { phone: '9876543210', email: 'dev-collector@kabadiwala.example', preferredLanguage: PreferredLanguage.HINDI, areaName: 'Development Area', accountStatus: AccountStatus.ACTIVE } });
-  const existingCollectorUser = await prisma.user.findFirst({ where: { email: 'dev-collector@kabadiwala.example' } });
+  // The collector profile is unique per account. A previous partial seed or an
+  // app-created account can already own this profile under a different email,
+  // so adopt that account instead of failing with a unique-constraint error.
+  const existingCollectorUser = await prisma.user.findFirst({ where: { collectorProfileId: demoCollector.id } })
+    ?? await prisma.user.findFirst({ where: { email: 'dev-collector@kabadiwala.example' } });
   if (existingCollectorUser) await prisma.user.update({ where: { id: existingCollectorUser.id }, data: { collectorProfileId: demoCollector.id, role: 'COLLECTOR', preferredLanguage: PreferredLanguage.HINDI, accountStatus: AccountStatus.ACTIVE } });
   else await prisma.user.create({ data: { email: 'dev-collector@kabadiwala.example', passwordHash: demoPasswordHash, role: 'COLLECTOR', preferredLanguage: PreferredLanguage.HINDI, collectorProfileId: demoCollector.id, accountStatus: AccountStatus.ACTIVE } });
   const ensureCollectorAccount = async (email: string, phone: string, role: 'HOUSEHOLD' | 'COLLECTOR', displayName: string, areaName: string) => {
     const found = await prisma.collector.findFirst({ where: { phone } });
     const profile = found ? await prisma.collector.update({ where: { id: found.id }, data: { email, displayName, areaName, accountStatus: AccountStatus.ACTIVE } }) : await prisma.collector.create({ data: { phone, email, displayName, areaName, preferredLanguage: PreferredLanguage.ENGLISH, accountStatus: AccountStatus.ACTIVE } });
-    const existing = await prisma.user.findFirst({ where: { email } });
+    // The collector profile is unique per account, so prefer the account that
+    // already owns this profile and fall back to the fixture email.
+    const existing = await prisma.user.findFirst({ where: { collectorProfileId: profile.id } })
+      ?? await prisma.user.findFirst({ where: { email } });
     if (existing) await prisma.user.update({ where: { id: existing.id }, data: { role, collectorProfileId: profile.id, preferredLanguage: PreferredLanguage.ENGLISH, accountStatus: AccountStatus.ACTIVE } });
     else await prisma.user.create({ data: { email, passwordHash: demoPasswordHash, role, preferredLanguage: PreferredLanguage.ENGLISH, collectorProfileId: profile.id, accountStatus: AccountStatus.ACTIVE } });
     return profile;
