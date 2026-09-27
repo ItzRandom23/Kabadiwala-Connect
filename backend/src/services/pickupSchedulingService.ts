@@ -1,7 +1,7 @@
 import { AppError } from '../utils/errors.js';
 
 export const DEFAULT_DAILY_PICKUP_CAPACITY = 8;
-export const PICKUP_MIN_LEAD_MS = 90 * 60 * 1000;
+export const PICKUP_MIN_LEAD_MS = 15 * 60 * 1000;
 export const PICKUP_MAX_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
 export const PICKUP_TIME_ZONE = 'Asia/Kolkata';
 export const PICKUP_WORK_START_MINUTES = 10 * 60 + 30;
@@ -35,26 +35,25 @@ export function validatePickupSlot(value: string, now = new Date()) {
   const slot = new Date(value);
   if (Number.isNaN(slot.getTime())) throw new AppError('VALIDATION_ERROR', 'Pickup time is invalid', 422, { code: 'PICKUP_SLOT_INVALID' });
   assertPickupWorkTime(slot);
-  if (slot.getTime() < now.getTime() + PICKUP_MIN_LEAD_MS) throw new AppError('CONFLICT', 'Choose a pickup time at least 90 minutes from now', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
+  if (slot.getTime() < now.getTime() + PICKUP_MIN_LEAD_MS) throw new AppError('CONFLICT', 'Choose a pickup time at least 15 minutes from now', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
   if (slot.getTime() > now.getTime() + PICKUP_MAX_HORIZON_MS) throw new AppError('CONFLICT', 'Pickup time must be within the next 14 days', 409, { code: 'PICKUP_SLOT_TOO_FAR' });
-  if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || ![0, 30].includes(slot.getUTCMinutes())) {
-    throw new AppError('VALIDATION_ERROR', 'Pickup time must start on the hour or half-hour', 422, { code: 'PICKUP_SLOT_ALIGNMENT' });
+  if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || slot.getUTCMinutes() % 15 !== 0) {
+    throw new AppError('VALIDATION_ERROR', 'Pickup time must use a 15-minute interval', 422, { code: 'PICKUP_SLOT_ALIGNMENT' });
   }
   return slot;
 }
 
-/** Collector pickups can be scheduled shortly after acceptance. Household
- * requested slots keep the existing 90-minute lead policy above. */
+/** Both household and collector scheduling use the same 15-minute minimum. */
 export function validateCollectorPickupSlot(value: string, acceptedAt?: Date | null, now = new Date()) {
   const slot = new Date(value);
   if (Number.isNaN(slot.getTime())) throw new AppError('VALIDATION_ERROR', 'Pickup time is invalid', 422, { code: 'PICKUP_SLOT_INVALID' });
   assertPickupWorkTime(slot);
   const acceptedOrNow = acceptedAt && acceptedAt.getTime() > now.getTime() ? acceptedAt.getTime() : now.getTime();
-  const earliest = acceptedOrNow + 5 * 60 * 1000;
-  if (slot.getTime() < earliest) throw new AppError('CONFLICT', 'Choose a pickup time at least 5 minutes after accepting the order', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
+  const earliest = acceptedOrNow + PICKUP_MIN_LEAD_MS;
+  if (slot.getTime() < earliest) throw new AppError('CONFLICT', 'Choose a pickup time at least 15 minutes from now', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
   if (slot.getTime() > now.getTime() + PICKUP_MAX_HORIZON_MS) throw new AppError('CONFLICT', 'Pickup time must be within the next 14 days', 409, { code: 'PICKUP_SLOT_TOO_FAR' });
-  if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || slot.getUTCMinutes() % 5 !== 0) {
-    throw new AppError('VALIDATION_ERROR', 'Pickup time must use a 5-minute interval', 422, { code: 'PICKUP_SLOT_ALIGNMENT' });
+  if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || slot.getUTCMinutes() % 15 !== 0) {
+    throw new AppError('VALIDATION_ERROR', 'Pickup time must use a 15-minute interval', 422, { code: 'PICKUP_SLOT_ALIGNMENT' });
   }
   return slot;
 }

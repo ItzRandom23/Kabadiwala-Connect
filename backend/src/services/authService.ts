@@ -237,26 +237,14 @@ export class AuthService {
       if (user) {
         if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
         if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
-        // A verified phone may not silently replace an existing recovery email
-        // during login. Email changes belong to an explicit account-settings
-        // flow; this prevents a conflicting optional field from hijacking an
-        // established identity.
-        const accountEmail = user.email && email !== user.email ? null : await usableEmail(email, user.id, user.collectorProfileId ?? undefined);
-        if (accountEmail && accountEmail !== user.email) {
-          user = await tx.user.update({ where: { id: user.id }, data: { email: accountEmail } });
-        }
-
+        // OTP verification for an existing phone is sign-in, even if the app
+        // sends registration fields (for example after reinstalling and
+        // choosing the wrong entry path). Never replace an established
+        // profile with those fields here; profile edits use account settings.
         if (user.role === 'COLLECTOR' || user.role === 'HOUSEHOLD') {
           await tx.collector.update({
             where: { id: user.collectorProfileId ?? '' },
             data: {
-              ...(accountEmail ? { email: accountEmail } : {}),
-              ...(displayName ? { displayName } : {}),
-              ...(areaName ? { areaName } : {}),
-              ...(address ? { address } : {}),
-              ...(latitude !== undefined ? { latitude } : {}),
-              ...(longitude !== undefined ? { longitude } : {}),
-              preferredLanguage: preferredLanguage as any,
               lastLoginAt: new Date()
             }
           });

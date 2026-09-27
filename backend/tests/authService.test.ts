@@ -141,6 +141,7 @@ describe('collector authentication service', () => {
       createdAt: new Date(),
       lastLoginAt: new Date()
     };
+    let collectorUpdateData: Record<string, unknown> | null = null;
     const tx = {
       user: {
         findUnique: async ({ where }: any) => 'phone' in where ? existingUser : { id: 'other-user' },
@@ -150,7 +151,7 @@ describe('collector authentication service', () => {
       collector: {
         findFirst: async ({ where }: any) => 'email' in where ? { id: 'other-collector' } : null,
         findUnique: async ({ where }: any) => 'email' in where ? { id: 'other-collector' } : existingProfile,
-        update: async () => existingProfile
+        update: async ({ data }: any) => { collectorUpdateData = data; return existingProfile; }
       }
     };
     const db = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as any;
@@ -161,11 +162,16 @@ describe('collector authentication service', () => {
       role: 'COLLECTOR',
       preferredLanguage: 'ENGLISH',
       areaName: 'Pune',
-      email: 'other@example.com'
+      email: 'other@example.com',
+      displayName: 'Replacement name',
+      address: 'Replacement address',
+      latitude: 12.5,
+      longitude: 13.5
     });
 
     expect(result.user?.profileId).toBe('collector-1');
     expect(result.user?.email).toBe('old@example.com');
+    expect(collectorUpdateData).toEqual({ lastLoginAt: expect.any(Date) });
   });
 
   it('requires a name when creating a new collector phone account', async () => {

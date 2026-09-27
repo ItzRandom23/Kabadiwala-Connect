@@ -65,6 +65,7 @@ data class AccountProfileUpdate(
     val address: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    val clearCoordinates: Boolean = false,
     val preferredLanguage: String? = null
 )
 

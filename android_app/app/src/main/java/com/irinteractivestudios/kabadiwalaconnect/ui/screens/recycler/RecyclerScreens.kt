@@ -40,11 +40,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -597,6 +599,7 @@ fun RecyclerOrdersScreen(
                 if (!demoMode) TextButton(onClick = onRefresh) { Text(stringResource(R.string.future_refresh)) }
             }
         }
+        item { Text("Recycler handovers are arranged with the Kabadiwala; no fixed recycler shift is enforced. Scan the signed QR within 2 hours after it is prepared.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (demoMode) {
             item { DemoDataBanner() }
             item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text("Copper Cable · 12.4 kg", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text("Pulkit · Kothrud, Pune", style = MaterialTheme.typography.bodyMedium); Text("₹535/kg · Pickup arranged", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text("  Scan handover QR") } } } }
@@ -616,6 +619,15 @@ fun RecyclerOrdersScreen(
 @Composable
 private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
     val status = handover.status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+    val expiresAtMs = handover.expiresAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+    var nowEpochMs by remember(handover.id) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(handover.id, expiresAtMs) {
+        if (expiresAtMs != null && expiresAtMs > nowEpochMs) {
+            delay(expiresAtMs - nowEpochMs)
+            nowEpochMs = System.currentTimeMillis()
+        }
+    }
+    val qrExpired = expiresAtMs != null && expiresAtMs <= nowEpochMs
     OperationalSurface {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -625,7 +637,9 @@ private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
             Text(stringResource(R.string.recycler_order_weight, handover.finalAcceptedKg ?: handover.quotedWeightKg), style = MaterialTheme.typography.bodyLarge)
             Text("${handover.materialCategory.replace('_', ' ')} · ₹${"%.0f".format(handover.finalRatePerKg ?: handover.quotedRatePerKg)}/kg", style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.recycler_order_status, status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
+            handover.expiresAt?.let { Text("QR expires: ${com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (qrExpired) Text("QR expired. Ask the Kabadiwala to prepare a fresh handover QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
         }
     }
 }

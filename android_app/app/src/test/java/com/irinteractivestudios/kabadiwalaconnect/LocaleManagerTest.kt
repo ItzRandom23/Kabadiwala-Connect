@@ -39,4 +39,12 @@ class LocaleManagerTest {
         assertEquals("HINDI", LocaleManager.toBackendName("hi"))
         assertEquals("MARATHI", LocaleManager.toBackendName("mr"))
     }
+
+    @Test
+    fun everyAdvertisedLanguageRoundTripsThroughBackendName() {
+        assertEquals(23, LocaleManager.SUPPORTED.distinct().size)
+        LocaleManager.SUPPORTED.forEach { tag ->
+            assertEquals(tag, LocaleManager.fromBackendName(LocaleManager.toBackendName(tag)))
+        }
+    }
 }

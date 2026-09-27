@@ -23,7 +23,6 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.SupplyChainView
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
-import com.irinteractivestudios.kabadiwalaconnect.data.local.HouseholdPickupPointStore
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.LotWriter
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.RecyclerRepository
@@ -67,10 +66,6 @@ class KcViewModelFactory(
         return container.database.syncQueueDao().resetForRetry(uid, accountId) > 0
     }
     val currentAccount: AccountProfile? get() = container.currentAccount()
-    private val householdPickupPointStore by lazy { HouseholdPickupPointStore(app) }
-    fun householdPickupPoint(address: String) = householdPickupPointStore.get(currentAccount?.profileId, address)
-    fun saveHouseholdPickupPoint(address: String, latitude: Double, longitude: Double) =
-        householdPickupPointStore.save(currentAccount?.profileId, address, latitude, longitude)
     fun updateStoredAccountLanguage(tag: String) = container.updateStoredAccountLanguage(tag)
     suspend fun refreshCatalogs(location: String? = null, current: CurrentLocation? = null, force: Boolean = false) =
         container.refreshCatalogs(location, current?.latitude, current?.longitude, force)

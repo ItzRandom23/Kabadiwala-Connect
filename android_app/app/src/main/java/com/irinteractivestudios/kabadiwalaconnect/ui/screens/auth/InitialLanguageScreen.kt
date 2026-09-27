@@ -75,7 +75,7 @@ fun InitialLanguageScreen(onLanguageSelected: (String) -> Unit) {
         LazyColumn(
             contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding).testTag("first_language_list")
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

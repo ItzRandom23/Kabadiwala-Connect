@@ -281,13 +281,17 @@ class LotManagementViewModel(
     }
     fun setLocation(value: String, source: String = "manual") {
         val current = _state.value
+        val editedGpsAddress = current.locationSource == "gps" && value != current.location
         _state.value = current.copy(
             location = value,
-            // Editing the readable label does not discard coordinates captured
-            // by GPS; it only changes the label shown to the user.
-            locationSource = if (current.locationSource == "gps") "gps" else source,
+            // A manually edited address may be elsewhere. Never attach the
+            // phone's old GPS point to that new address.
+            locationSource = if (editedGpsAddress) "manual" else current.locationSource.takeIf { it == "gps" } ?: source,
+            locationLatitude = if (editedGpsAddress) null else current.locationLatitude,
+            locationLongitude = if (editedGpsAddress) null else current.locationLongitude,
+            locationAccuracyMeters = if (editedGpsAddress) null else current.locationAccuracyMeters,
             locationNeedsStreetDetails = if (value != current.location) false else current.locationNeedsStreetDetails,
-            locationStatus = if (value.isBlank()) LotLocationStatus.IDLE else current.locationStatus
+            locationStatus = if (value.isBlank() || editedGpsAddress) LotLocationStatus.IDLE else current.locationStatus
         )
     }
     fun beginLocationRequest() { _state.value = _state.value.copy(locationStatus = LotLocationStatus.REQUESTING, locationError = false) }

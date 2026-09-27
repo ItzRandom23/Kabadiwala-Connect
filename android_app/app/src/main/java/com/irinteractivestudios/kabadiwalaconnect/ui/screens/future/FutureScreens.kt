@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
@@ -168,7 +169,7 @@ fun DiyActivitiesScreen(activities: List<DiyActivityDto>, modifier: Modifier = M
 }
 
 @Composable
-fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Unit, onRefresh: () -> Unit, modifier: Modifier = Modifier) {
+fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Unit, onRefresh: () -> Unit, currentAccountId: String = "", modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { FeatureHeader(stringResource(R.string.future_messages_title), stringResource(R.string.future_messages_subtitle), Icons.AutoMirrored.Filled.Chat, onRefresh) }
         if (conversations.isEmpty()) item { EmptyFeatureCard(stringResource(R.string.future_no_messages_title), stringResource(R.string.future_no_messages_detail)) }
@@ -180,7 +181,7 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
                     Column(Modifier.weight(1f)) {
                         Text(
                             if (conversation.type == "PICKUP") "Household pickup · ${conversation.pickupRequestId?.takeLast(8).orEmpty()}"
-                            else stringResource(R.string.future_transaction, conversation.lotId.takeLast(8)),
+                            else "${if (conversation.collectorId == currentAccountId) "Recycler" else "Kabadiwala"} · lot ${conversation.lotId.takeLast(8)}",
                             fontWeight = FontWeight.Bold
                         )
                         Text(conversation.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -192,30 +193,41 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 }
 
 @Composable
-fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     var draft by remember { mutableStateOf("") }
     LaunchedEffect(draftSuggestion) { if (!draftSuggestion.isNullOrBlank()) draft = draftSuggestion }
-    Column(modifier.fillMaxSize().padding(16.dp)) {
-        Text(if (conversation.type == "PICKUP") "Pickup chat" else stringResource(R.string.future_transaction_chat), style = MaterialTheme.typography.headlineMedium)
+    Column(modifier.fillMaxSize().imePadding().padding(16.dp)) {
+        Text(if (conversation.type == "PICKUP") "Pickup chat" else "Chat with ${if (conversation.collectorId == currentAccountId) "Recycler" else "Kabadiwala"}", style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages, key = { it.id }) { message ->
                 val isMine = message.senderId.isBlank() || message.senderId == currentAccountId
-                Surface(color = if (isMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(message.body)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(message.status.chatStatusLabel(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                            if (message.status != "SENT" && message.status != "READ") {
-                                TextButton(onClick = { onRetryMessage(message.clientMessageId) }, enabled = !sending) { Text(stringResource(R.string.future_retry)) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start) {
+                    Surface(color = if (isMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(0.88f)) {
+                        Column(Modifier.padding(12.dp)) {
+                            val senderLabel = if (isMine) R.string.future_chat_sender_you else when (message.senderRole.uppercase(Locale.ROOT)) {
+                                "HOUSEHOLD" -> R.string.auth_demo_household
+                                "COLLECTOR" -> R.string.auth_demo_kabadiwala
+                                "RECYCLER" -> R.string.auth_demo_recycler
+                                else -> R.string.future_chat_sender_partner
+                            }
+                            Text(stringResource(senderLabel), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                            Text(message.body)
+                            if (isMine) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(message.status.chatStatusLabel(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                    if (message.status != "SENT" && message.status != "READ") {
+                                        TextButton(onClick = { onRetryMessage(message.clientMessageId) }, enabled = !sending) { Text(stringResource(R.string.future_retry)) }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        if (drafting || draftSuggestion != null) {
+        if (drafting || (!draftSuggestion.isNullOrBlank() && draft.isNotBlank())) {
             Text(stringResource(if (drafting) R.string.future_chat_drafting else R.string.future_chat_draft_note), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         onProceedToHandover?.let { proceed ->
@@ -223,7 +235,10 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
             Spacer(Modifier.height(8.dp))
         }
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = draft, onValueChange = { draft = it.take(1000) }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.future_message)) }, maxLines = 4)
+            OutlinedTextField(value = draft, onValueChange = {
+                draft = it.take(1000)
+                if (draft.isBlank() && !draftSuggestion.isNullOrBlank()) onDraftCleared()
+            }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.future_message)) }, maxLines = 4)
             IconButton(onClick = onDraftReply, enabled = !sending && !drafting) { Icon(Icons.Filled.AutoAwesome, contentDescription = stringResource(R.string.future_chat_draft)) }
             Button(enabled = draft.isNotBlank() && !sending, onClick = { onSend(draft); draft = "" }) { Text(stringResource(R.string.future_send)) }
         }

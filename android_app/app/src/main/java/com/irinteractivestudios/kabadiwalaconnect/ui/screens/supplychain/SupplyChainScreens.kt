@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOn
@@ -92,6 +94,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -113,6 +116,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
+import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
@@ -126,6 +130,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -134,6 +139,8 @@ import java.util.Locale
 import java.util.UUID
 
 private fun Double.roundMoneyForUi(): Double = (this * 100.0).roundToInt() / 100.0
+
+private const val PICKUP_MIN_LEAD_MINUTES = 15
 
 // Keep this list identical to the backend MaterialCategory enum. Paper/newspaper
 // is not currently a first-class backend category, so it is represented by
@@ -168,6 +175,7 @@ fun HouseholdSupplyScreen(
     val layout = rememberKcResponsiveLayout()
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         item { HouseholdWelcomeHeader(initialArea, onRefresh, state.loading, layout.isCompact) }
+        item { Text("Household pickup hours: 10:30 AM–6:00 PM India time. Your pickup QR appears after the Kabadiwala starts the trip and marks Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item {
             HouseholdSalePanel(
                 busy = "create-listing" in busy,
@@ -552,6 +560,9 @@ private fun HouseholdListingCard(
             pickup?.let { item ->
                 Text("Pickup: ${statusName(item.status)}", fontWeight = FontWeight.SemiBold)
                 Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item.scheduledSlot?.let { Text("Scheduled: ${IndiaFormat.dateTimeIso(it) ?: "Time unavailable"}") }
+                if (item.status == "SCHEDULED") Text("The Kabadiwala can start the trip during pickup hours (10:30 AM–6:00 PM India time). The QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == "IN_TRANSIT") Text("The Kabadiwala is on the way. Your QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.kabadiwalaId != null && item.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED", "COMPLETED")) {
                     OutlinedButton(onClick = { onOpenPickupChat(item.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
@@ -578,7 +589,6 @@ private fun HouseholdListingCard(
                         }
                     }
                 }
-                item.scheduledSlot?.let { Text("Scheduled: ${it.take(16).replace('T', ' ')}") }
                 if (item.finalAmount != null) Text("Final settlement: ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 if (item.status in setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED")) {
                     OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
@@ -680,14 +690,12 @@ fun HouseholdListingCreateScreen(
     state: SupplyChainState,
     initialArea: String,
     initialPickupAddress: String = "",
-    initialPickupLatitude: Double? = null,
-    initialPickupLongitude: Double? = null,
-    hasSavedHomePickupPoint: Boolean = false,
+    savedAccountLatitude: Double? = null,
+    savedAccountLongitude: Double? = null,
     onBack: () -> Unit,
     onSuggestMaterial: (String) -> Unit,
     onClearMaterialSuggestion: () -> Unit,
     onCreateListing: (HouseholdListingCreateDto, List<String>, String) -> Unit,
-    onPickupPointConfirmed: (String, Double, Double) -> Unit = { _, _, _ -> },
     busy: Set<String> = emptySet(),
     onEstimateHouseholdPrice: (String, Double, String, String) -> Unit = { _, _, _, _ -> },
     onClearHouseholdPriceEstimate: () -> Unit = {}
@@ -699,10 +707,13 @@ fun HouseholdListingCreateScreen(
     var materialChosenManually by rememberSaveable { mutableStateOf(false) }
     var weight by rememberSaveable { mutableStateOf("") }
     var pickupAddress by rememberSaveable(initialPickupAddress, initialArea) { mutableStateOf(initialPickupAddress.ifBlank { initialArea }) }
-    var pickupLatitude by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(initialPickupLatitude) }
-    var pickupLongitude by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(initialPickupLongitude) }
-    var pickupPointIsSavedOffline by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(hasSavedHomePickupPoint) }
-    var showPickupPointPicker by rememberSaveable { mutableStateOf(false) }
+    var pickupAreaName by rememberSaveable(initialArea) { mutableStateOf(initialArea) }
+    var pickupLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var pickupLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var pickupLocationConfirmed by rememberSaveable { mutableStateOf(false) }
+    var pickupLocationAccuracy by rememberSaveable { mutableStateOf<Float?>(null) }
+    var locationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var detectingPickupLocation by rememberSaveable { mutableStateOf(false) }
     var notes by rememberSaveable { mutableStateOf("") }
     var condition by rememberSaveable { mutableStateOf("INTACT") }
     var safetyAcknowledged by rememberSaveable { mutableStateOf(false) }
@@ -723,6 +734,53 @@ fun HouseholdListingCreateScreen(
     var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val ioScope = rememberCoroutineScope()
+    val pickupLocationProvider = remember(context) { AndroidLocationProvider(context) }
+    val detectPickupLocation: () -> Unit = {
+        if (!detectingPickupLocation) {
+            detectingPickupLocation = true
+            locationError = null
+            ioScope.launch {
+                val fix = runCatching { pickupLocationProvider.current() }.getOrNull()
+                detectingPickupLocation = false
+                if (fix == null) {
+                    locationError = "Couldn't get a location. Turn on Location and try again, or use the saved account location if available."
+                    pickupLocationConfirmed = false
+                    pickupLatitude = null
+                    pickupLongitude = null
+                } else {
+                    val detectedAddress = fix.formattedAddress?.takeIf(String::isNotBlank)
+                        ?: fix.areaName?.takeIf(String::isNotBlank)
+                    if (detectedAddress == null) {
+                        locationError = "Location found, but Android couldn't find its address. Add the pickup address below and retry GPS at the pickup place."
+                        pickupLatitude = null
+                        pickupLongitude = null
+                        pickupLocationConfirmed = false
+                    } else {
+                        pickupAddress = detectedAddress
+                        pickupAreaName = fix.areaName?.takeIf(String::isNotBlank) ?: detectedAddress
+                        pickupLatitude = fix.latitude
+                        pickupLongitude = fix.longitude
+                        pickupLocationAccuracy = fix.accuracyMeters
+                        pickupLocationConfirmed = false
+                    }
+                }
+            }
+        }
+        Unit
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions.values.any { it } ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (granted) detectPickupLocation() else locationError = "Location permission is needed to attach the pickup coordinates."
+    }
+    val requestPickupLocation = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (granted) detectPickupLocation()
+        else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        Unit
+    }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
         val capturedPath = pendingCameraPath
         pendingCameraPath = null
@@ -888,13 +946,14 @@ fun HouseholdListingCreateScreen(
             onClearHouseholdPriceEstimate()
         }
     }
-    val canSubmit = photoPaths.isNotEmpty() && material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && pickupLatitude != null && pickupLongitude != null && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val canSubmit = photoPaths.isNotEmpty() && material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && pickupLatitude != null && pickupLongitude != null && pickupLocationConfirmed && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
     val missingPostRequirements = buildList {
         if (photoPaths.isEmpty()) add("add a photo")
         if (material.isBlank()) add("choose a material")
         if (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500) add("enter a weight from 0–500 kg")
         if (pickupAddress.trim().isEmpty()) add("add a pickup address")
-        if (pickupLatitude == null || pickupLongitude == null) add("set and confirm the pickup point on the India map")
+        if (pickupLatitude == null || pickupLongitude == null) add("choose GPS or your saved account location")
+        else if (!pickupLocationConfirmed) add("confirm this is where the scrap will be collected")
         if (isHazardous && !safetyAcknowledged) add("confirm safe handling")
     }
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -1096,9 +1155,7 @@ fun HouseholdListingCreateScreen(
                         val updated = value.take(240)
                         if (updated != pickupAddress) {
                             pickupAddress = updated
-                            pickupLatitude = null
-                            pickupLongitude = null
-                            pickupPointIsSavedOffline = false
+                            pickupLocationConfirmed = false
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -1107,7 +1164,7 @@ fun HouseholdListingCreateScreen(
                     supportingText = {
                         if (imeVisible) Text(if (addressError) "Add a complete address" else "Street/block and house number", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         else if (addressError) Text("Add a complete pickup address")
-                        else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.")
+                        else Text("Add house or unit details. For a different pickup place, use GPS while there.")
                     },
                     isError = addressError,
                     minLines = if (imeVisible) 1 else 2,
@@ -1115,22 +1172,59 @@ fun HouseholdListingCreateScreen(
                 )
             }
             item {
-                OutlinedButton(
-                    onClick = { showPickupPointPicker = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                ) {
-                    Icon(Icons.Filled.LocationOn, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (pickupLatitude != null && pickupLongitude != null) "Change pickup point" else "Pin pickup point on map")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Where is the scrap right now?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Your account address is kept separately. Use GPS while you are at the pickup place, or choose your saved account location if the scrap is there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(
+                        onClick = requestPickupLocation,
+                        enabled = !detectingPickupLocation,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                    ) {
+                        if (detectingPickupLocation) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Filled.LocationOn, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (detectingPickupLocation) "Finding current location…" else "Use current GPS location")
+                    }
+                    if (savedAccountLatitude != null && savedAccountLongitude != null && initialPickupAddress.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = {
+                                pickupAddress = initialPickupAddress
+                                pickupAreaName = initialArea
+                                pickupLatitude = savedAccountLatitude
+                                pickupLongitude = savedAccountLongitude
+                                pickupLocationAccuracy = null
+                                locationError = null
+                                pickupLocationConfirmed = false
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        ) {
+                            Text("Use saved account location · ${initialPickupAddress.take(64)}")
+                        }
+                    }
+                    if (pickupLatitude != null && pickupLongitude != null) {
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(
+                                    if (pickupLocationAccuracy != null) "Location attached · accuracy about ${pickupLocationAccuracy!!.toInt()} m"
+                                    else "Saved account coordinates attached",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = pickupLocationConfirmed, onCheckedChange = { pickupLocationConfirmed = it })
+                                    Text("Yes, this is where the scrap will be picked up.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
+                            }
+                        }
+                    }
+                    locationError?.let { error ->
+                        Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
                 }
-                Text(
-                    if (pickupLatitude != null && pickupLongitude != null && pickupPointIsSavedOffline) "Saved home pickup pin · available offline · %.5f, %.5f".format(Locale.US, pickupLatitude, pickupLongitude)
-                    else if (pickupLatitude != null && pickupLongitude != null) "Pickup pin confirmed · %.5f, %.5f".format(Locale.US, pickupLatitude, pickupLongitude)
-                    else "Pin your home or pickup address. Your phone's current location is not used.",
-                    Modifier.padding(top = 4.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
@@ -1156,7 +1250,7 @@ fun HouseholdListingCreateScreen(
                  estimatedWeight = value,
                  condition = condition,
                  notes = notes.trim().ifBlank { null },
-                 areaName = initialArea.ifBlank { pickupAddress.trim() },
+                 areaName = pickupAreaName.ifBlank { pickupAddress.trim() },
                  pickupAddress = pickupAddress.trim(),
                  latitude = pickupLatitude,
                  longitude = pickupLongitude,
@@ -1167,21 +1261,6 @@ fun HouseholdListingCreateScreen(
                  dataDestructionRequested = dataDestructionRequested
              ), photoPaths, listingDraftId) }
          }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
-     }
-     if (showPickupPointPicker) {
-         PickupPointPickerDialog(
-             initialAddress = pickupAddress,
-             selectedLatitude = pickupLatitude,
-             selectedLongitude = pickupLongitude,
-             onDismiss = { showPickupPointPicker = false },
-             onConfirm = { lat, lon ->
-                 pickupLatitude = lat
-                 pickupLongitude = lon
-                 onPickupPointConfirmed(pickupAddress.trim(), lat, lon)
-                 pickupPointIsSavedOffline = true
-                 showPickupPointPicker = false
-             }
-         )
      }
      if (showCameraPermissionDialog) {
          AlertDialog(
@@ -1214,7 +1293,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
     val layout = rememberKcResponsiveLayout()
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
@@ -1242,6 +1321,9 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         if (!hasCollectorSnapshot && state.loading) item { LoadingPanel("Loading your collection desk…") }
         if (section == KabadiwalaSection.HOME && hasCollectorSnapshot) item {
             CollectorOverview(state, onCreateCapturedLot)
+        }
+        if (section == KabadiwalaSection.HOME || section == KabadiwalaSection.PICKUPS) item {
+            Text("Pickup shift: 10:30 AM–6:00 PM India time. Start trip during this shift, then mark Arrived at the household to unlock its QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         when (section) {
@@ -1276,12 +1358,17 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                     "LOTS" -> {
                         item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
-                        items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk) }
+                        items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk, onPrepareBulkHandover, onOpenBulkChat) }
+                        val bulkHandovers = state.handovers.filter { it.bulkLotId != null && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED") }
+                        if (bulkHandovers.isNotEmpty()) item { Text("Recycler handovers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        items(bulkHandovers, key = { "bulk-handover-${it.id}" }) { handover ->
+                            SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement)
+                        }
                     }
                     "OFFERS" -> {
                         item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
-                        items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer) }
+                        items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat) }
                     }
                     else -> {
                         item { Text("Captured lot records", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -1388,6 +1475,7 @@ private fun CollectorOverview(state: SupplyChainState, onCreateCapturedLot: () -
                 Spacer(Modifier.width(8.dp))
                 Text("Record collected scrap")
             }
+            Text("Saves a field record for recycler quotes. It does not add stock to bulk inventory. Bulk recycler lots use stock from completed household pickups.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
         }
     }
 }
@@ -1469,12 +1557,14 @@ enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 
 @Composable
 private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, photoLoading: Boolean, busy: Set<String>, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit, onOpenPickupChat: (String) -> Unit) {
+    val context = LocalContext.current
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showReject by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showReassign by remember { mutableStateOf(false) }
     var showPhotos by remember(pickup.id) { mutableStateOf(false) }
+    var photoLoadAttempted by remember(pickup.id) { mutableStateOf(false) }
     var selectedPhotoIndex by remember(pickup.id) { mutableStateOf<Int?>(null) }
     var showPayment by remember(pickup.id) { mutableStateOf(false) }
     var showMoreActions by remember(pickup.id) { mutableStateOf(false) }
@@ -1516,6 +1606,21 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             val confirmedPickupAddress = listing?.pickupAddress?.takeIf { it.isNotBlank() && pickup.status != "WAITING_FOR_PICKUP" }
             val pickupLocation = confirmedPickupAddress ?: listing?.areaName ?: "Area unavailable"
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · $pickupLocation")
+            val directionsDestination = if (pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED")) pickupDirectionsDestination(listing) else null
+            if (directionsDestination != null) {
+                OutlinedButton(
+                    onClick = {
+                        if (!openPickupDirections(context, directionsDestination)) {
+                            Toast.makeText(context, "Google Maps directions could not be opened.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) {
+                    Icon(Icons.Filled.Directions, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Show directions")
+                }
+            }
             if (pickup.kabadiwalaId != null && pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED", "COMPLETED")) {
                 OutlinedButton(onClick = { onOpenPickupChat(pickup.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
@@ -1525,7 +1630,16 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             }
             val photoCount = listing?.photoCount ?: 0
             if (photoCount > 0 && pickup.status != "WAITING_FOR_PICKUP") {
-                OutlinedButton(onClick = { showPhotos = true; if (loadedPhotos.size < photoCount) onLoadPhotos(pickup.listingId, photoCount) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        showPhotos = true
+                        if (loadedPhotos.isEmpty() && !photoLoading && photoError == null) {
+                            photoLoadAttempted = true
+                            onLoadPhotos(pickup.listingId, photoCount)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                ) {
                     Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "View scrap photos")
                     Spacer(Modifier.width(8.dp))
                     Text(if (photoCount == 1) "View scrap photo" else "View $photoCount scrap angles")
@@ -1535,7 +1649,11 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     photoCount,
                     photoError,
                     photoLoading,
-                    onRetry = { onLoadPhotos(pickup.listingId, photoCount) },
+                    photoLoadAttempted,
+                    onRetry = {
+                        photoLoadAttempted = true
+                        onLoadPhotos(pickup.listingId, photoCount)
+                    },
                     onPhotoClick = { index -> selectedPhotoIndex = index }
                 )
             }
@@ -1562,7 +1680,10 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 } else {
                     Text("Start trip during pickup hours: 10:30 AM–6:00 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                "IN_TRANSIT" -> Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
+                "IN_TRANSIT" -> {
+                    Text("At the household? Mark Arrived to unlock their one-time QR. Ask them to show it before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
+                }
                 "ARRIVED" -> {
                     if (pickup.householdQrScannedAt == null) {
                         Text("Scan the household’s one-time pickup QR before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1600,7 +1721,6 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     if (showSchedule) SchedulePickupDialog(
         onDismiss = { showSchedule = false },
         confirmLabel = "Schedule pickup",
-        minLeadMinutes = 5,
         acceptedAt = pickup.acceptedAt,
         onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
     )
@@ -1658,7 +1778,7 @@ private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: (
 }
 
 @Composable
-private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, loading: Boolean, onRetry: () -> Unit, onPhotoClick: (Int) -> Unit) {
+private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, loading: Boolean, loadAttempted: Boolean, onRetry: () -> Unit, onPhotoClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (photos.isEmpty()) {
             if (photoError != null) {
@@ -1673,14 +1793,19 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Scrap photos are ready to load.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = onRetry) { Text("Load") }
+                    Text(
+                        if (loadAttempted) "The photo did not appear. Try again." else "Photo is ready to view.",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onRetry) { Text("Retry") }
                 }
             }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(photos) { index, bytes ->
-                    val bitmap = remember(bytes) { runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() }
+                    val bitmap = remember(bytes) { decodeListingPhoto(bytes, 512) }
                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(width = 144.dp, height = 112.dp).clickable { onPhotoClick(index) }) {
                         if (bitmap != null) Image(bitmap, "Open scrap photo ${index + 1} full screen", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     }
@@ -1706,7 +1831,7 @@ private fun FullScreenListingPhotoDialog(
     onDismiss: () -> Unit
 ) {
     val bitmap = remember(photo) {
-        runCatching { BitmapFactory.decodeByteArray(photo, 0, photo.size)?.asImageBitmap() }.getOrNull()
+        decodeListingPhoto(photo, 2048)
     }
     var scale by remember(photo) { mutableStateOf(1f) }
     var offsetX by remember(photo) { mutableStateOf(0f) }
@@ -1762,22 +1887,31 @@ private fun FullScreenListingPhotoDialog(
     }
 }
 
+private fun decodeListingPhoto(bytes: ByteArray, maxSidePx: Int): ImageBitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+    var sampleSize = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > maxSidePx) sampleSize *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+}.getOrNull()
+
 @Composable
 private fun SchedulePickupDialog(
     onDismiss: () -> Unit,
     onSubmit: (String) -> Unit,
     confirmLabel: String = "Confirm time",
-    minLeadMinutes: Int = 90,
     acceptedAt: String? = null
 ) {
     // Offer the next three valid slots inside the server's India-time window.
     val slots = remember {
         val indiaTimeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
         val now = java.util.Calendar.getInstance(indiaTimeZone)
-        val leadMillis = minLeadMinutes * 60_000L
+        val leadMillis = PICKUP_MIN_LEAD_MINUTES * 60_000L
         val nowMillis = System.currentTimeMillis()
         val acceptedMillis = acceptedAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: nowMillis
-        val clockSkewBufferMillis = if (minLeadMinutes == 5) 60_000L else 0L
+        val clockSkewBufferMillis = 60_000L
         val earliestAllowedTime = maxOf(nowMillis, acceptedMillis) + leadMillis + clockSkewBufferMillis
         val candidates = mutableListOf<java.util.Date>()
         for (dayOffset in 0..14) {
@@ -1785,14 +1919,14 @@ private fun SchedulePickupDialog(
                 timeInMillis = now.timeInMillis
                 add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
             }
-            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 5) {
+            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 15) {
                 val slot = (day.clone() as java.util.Calendar).apply {
                     set(java.util.Calendar.HOUR_OF_DAY, minutesOfDay / 60)
                     set(java.util.Calendar.MINUTE, minutesOfDay % 60)
                     set(java.util.Calendar.SECOND, 0)
                     set(java.util.Calendar.MILLISECOND, 0)
                 }
-                if (slot.timeInMillis >= earliestAllowedTime && (minLeadMinutes != 90 || minutesOfDay % 30 == 0)) candidates += slot.time
+                if (slot.timeInMillis >= earliestAllowedTime) candidates += slot.time
                 if (candidates.size == 3) break
             }
             if (candidates.size == 3) break
@@ -1812,11 +1946,7 @@ private fun SchedulePickupDialog(
         title = { Text("Schedule collection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    if (minLeadMinutes == 5) "Pickups run 10:30 AM–6:00 PM. Choose a time at least 5 minutes after accepting."
-                    else "Pickups run 10:30 AM–6:00 PM. Choose a time at least $minLeadMinutes minutes from now.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Pickups run 10:30 AM–6:00 PM. Choose a time at least $PICKUP_MIN_LEAD_MINUTES minutes from now.", style = MaterialTheme.typography.bodyMedium)
                 if (slots.isEmpty()) Text("No pickup times are available in the next 14 days.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
@@ -2008,15 +2138,18 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
         }
     }
 }
-@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") } } } }
+@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit, onPrepareHandover: (String) -> Unit, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") }; if (lot.status == "RESERVED") { Text("Recycler offer accepted. Prepare a signed QR, confirm your side, then let the Recycler scan it within 2 hours.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Button(onClick = { onPrepareHandover(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Prepare handover QR") }; if (!lot.reservedForId.isNullOrBlank()) OutlinedButton(onClick = { onOpenBulkChat(lot.id, lot.reservedForId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Recycler") } } } } }
 @Composable
-private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject: (String, String) -> Unit = { _, _ -> }, onCounter: (String, Double, String?) -> Unit = { _, _, _ -> }) {
+private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject: (String, String) -> Unit = { _, _ -> }, onCounter: (String, Double, String?) -> Unit = { _, _, _ -> }, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
     var showReject by remember(offer.id) { mutableStateOf(false) }
     var showCounter by remember(offer.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
+            if (offer.status == "ACCEPTED") {
+                OutlinedButton(onClick = { onOpenBulkChat(offer.bulkLotId, offer.recyclerId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Recycler") }
+            }
             if (offer.status == "PENDING") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { onAccept(offer.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Accept") }
@@ -2077,13 +2210,14 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
 }
 
 @Composable
-fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}) {
+fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
     var showDemand by remember { mutableStateOf(false) }
     LaunchedEffect(state.notice) {
         if (state.notice == "Requirement published to Kabadiwalas.") showDemand = false
     }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
+        item { Text("Recycler handovers are arranged with the Kabadiwala; this flow has no fixed shift. The separate household pickup shift is 10:30 AM–6:00 PM India time. Scan the collector's signed QR within 2 hours of preparation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -2092,7 +2226,7 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
         items(state.bulkLots, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive) }
         item { Text("My offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
-        items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer) }
+        items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer, onOpenBulkChat = { onOpenBulkChat(it.bulkLotId, state.bulkLots.firstOrNull { lot -> lot.id == it.bulkLotId }?.kabadiwalaId.orEmpty()) }) }
         item { Text("My demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement, onUpdate = onUpdateRequirement) }
         item { Text("Pools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -2116,12 +2250,13 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
 
 @Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · ${money(lot.askingRatePerKg)}/kg asking"); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("${lot.areaName} · collector lot", Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Make offer") }; if (offer != null) { Text("Your offer: ${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text("Accepted · waiting for QR handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
 @Composable
-private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?) -> Unit) {
+private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?) -> Unit, onOpenBulkChat: () -> Unit = {}) {
     var showWithdraw by remember(offer.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Your offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
+            if (offer.status == "ACCEPTED") OutlinedButton(onClick = onOpenBulkChat, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Kabadiwala") }
             if (offer.status == "PENDING") OutlinedButton(onClick = { showWithdraw = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Withdraw offer") }
         }
     }
@@ -2294,22 +2429,31 @@ private fun FormalisationDashboard(
 private fun jsonText(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.asString
 private fun jsonNumber(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.let { element -> runCatching { "${"%.1f".format(element.asDouble)} kg" }.getOrNull() }
 
-@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Pool · ${materialName(pool.materialCategory)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text("${"%.1f".format(pool.totalReservedKg)} / ${"%.1f".format(pool.minimumQuantityKg)} kg · ${pool.contributions.size} contributors", style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Lock pool") }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "THRESHOLD_MET")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Leave") } } } } }
+@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Pool · ${materialName(pool.materialCategory)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text("${"%.1f".format(pool.totalReservedKg)} / ${"%.1f".format(pool.minimumQuantityKg)} kg · ${pool.contributions.size} contributors", style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Lock pool") }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "PICKUP_SCHEDULED")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(if (pool.status == "PICKUP_SCHEDULED") "Refresh handover QR" else "Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Leave") } } } } }
 
 @Composable private fun JoinPoolDialog(opportunity: PoolOpportunityDto, onDismiss: () -> Unit, onSubmit: (Double, String, Double?) -> Unit) { var quantity by remember { mutableStateOf("") }; var rate by remember { mutableStateOf(opportunity.requirement.maxRatePerKg?.toString().orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Join ${materialName(opportunity.requirement.materialCategory)} pool") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Reserved until the pooled handover is settled.", style = MaterialTheme.typography.bodySmall); OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Expected rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { quantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(it, opportunity.requirement.preferredGrade ?: "UNSPECIFIED", rate.toDoubleOrNull()) } }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true) { Text("Reserve stock") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
 
 @Composable
 private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPassportResponseDto?, anomaly: AnomalyResponseDto?, onPrepareBulk: (String) -> Unit, onConfirmCollector: (String) -> Unit, onLoadPassport: (String) -> Unit, onLoadAnomalies: (String) -> Unit, onDecideSettlement: (String, String, String?, String?, String?) -> Unit) {
     var showSettlement by remember(handover.id) { mutableStateOf(false) }
-    val qrBitmap = remember(handover.status, handover.qrCodeData) { if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
+    var nowEpochMs by remember(handover.id) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(handover.id, handover.expiresAt) {
+        while (true) { delay(30_000); nowEpochMs = System.currentTimeMillis() }
+    }
+    val expiresEpochMs = remember(handover.expiresAt) { handover.expiresAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } }
+    val qrExpired = expiresEpochMs != null && nowEpochMs >= expiresEpochMs
+    val qrBitmap = remember(handover.status, handover.qrCodeData, qrExpired) { if (!qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
     Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .45f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text("Material passport handover", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("${handover.referenceId} · ${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg", style = MaterialTheme.typography.bodyLarge)
             Text("Quoted value ₹${"%.0f".format(handover.quotedValue)} · ${statusName(handover.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            handover.expiresAt?.let { Text("QR expires: ${IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text("This QR has expired. Prepare a fresh handover QR before the Recycler scans it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             qrBitmap?.let { Image(it.asImageBitmap(), "One-time handover QR", Modifier.size(190.dp).align(Alignment.CenterHorizontally)) }
-            if (handover.status == "PREPARED") Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Confirm collector side") }
-            if (handover.status == "COLLECTOR_CONFIRMED") Text("Show this one-time QR to the verified Recycler for scan and receipt.", style = MaterialTheme.typography.bodySmall)
+            if (handover.status == "PREPARED" && !qrExpired) Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Confirm collector side") }
+            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Text("Show this one-time QR to the verified Recycler for scan and receipt.", style = MaterialTheme.typography.bodySmall)
+            if (qrExpired && handover.bulkLotId != null) Button(onClick = { onPrepareBulk(handover.bulkLotId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Prepare fresh QR") }
             if (handover.status == "REVIEW_REQUIRED") {
                 Text("Settlement needs review: ${handover.reviewReason ?: "variance recorded"}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { showSettlement = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review settlement") }

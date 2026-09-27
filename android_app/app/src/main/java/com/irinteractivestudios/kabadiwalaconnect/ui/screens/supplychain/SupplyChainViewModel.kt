@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
@@ -574,7 +575,14 @@ class SupplyChainViewModel(
         }
     }
     private fun action(key: String, requiredRole: AccountRole? = null, block: suspend () -> String = { "Done" }) {
-        if (!protectedSessionReady() || (requiredRole != null && !allowed(requiredRole))) return
+        if (!protectedSessionReady()) {
+            _state.value = _state.value.copy(error = "Your sign-in is no longer active. Sign in again, then retry.")
+            return
+        }
+        if (requiredRole != null && !allowed(requiredRole)) {
+            _state.value = _state.value.copy(error = "This action is not available for the signed-in account.")
+            return
+        }
         resetForAccountChange()
         if (key in _state.value.busy) return
         _state.value = _state.value.copy(busy = _state.value.busy + key, error = null, notice = null)
@@ -924,47 +932,83 @@ class SupplyChainViewModel(
 
     private fun Double.roundMoney(): Double = kotlin.math.round(this * 100.0) / 100.0
 
-    fun loadKabadiwalaListingPhotos(listingId: String, photoCount: Int) = action("photos-$listingId", AccountRole.COLLECTOR, {
-        val count = photoCount.coerceIn(1, 6)
-        _state.value = _state.value.copy(listingPhotoErrors = _state.value.listingPhotoErrors - listingId)
-        val results = coroutineScope {
-            (0 until count).map { index ->
-                async {
-                    try {
-                val response = if (index == 0) {
-                    api.getKabadiwalaListingPhoto(listingId)
-                } else {
-                    api.getKabadiwalaListingPhotoAtIndex(listingId, index)
-                }
-                        Result.success(withContext(Dispatchers.IO) { response.requireBody().bytes() })
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        Result.failure(error)
-                    }
-                }
-            }
-                .awaitAll()
-        }
-        val photos = results.mapNotNull { it.getOrNull() }
-        val partialFailure = photos.size < count
-        if (photos.isEmpty()) {
-            _state.value = _state.value.copy(
-                listingPhotoErrors = _state.value.listingPhotoErrors +
-                    (listingId to "Couldn't load scrap photos. Check the connection and retry.")
-            )
-            return@action "Couldn't load scrap photos. Check the connection and retry."
-        }
-        _state.value = _state.value.copy(
-            listingPhotos = _state.value.listingPhotos + (listingId to photos),
-            listingPhotoErrors = if (partialFailure) {
-                _state.value.listingPhotoErrors + (listingId to "Some angles are unavailable right now. You can retry.")
+    fun loadKabadiwalaListingPhotos(listingId: String, photoCount: Int) {
+        if (!protectedSessionReady() || !allowed(AccountRole.COLLECTOR)) {
+            val message = if (!protectedSessionReady()) {
+                "Your sign-in is no longer active. Sign in again to view these photos."
             } else {
-                _state.value.listingPhotoErrors - listingId
+                "Only the assigned Kabadiwala account can view these photos."
             }
+            _state.value = _state.value.copy(listingPhotoErrors = _state.value.listingPhotoErrors + (listingId to message))
+            return
+        }
+        resetForAccountChange()
+        val count = photoCount.coerceIn(1, 6)
+        if (_state.value.listingPhotos[listingId].orEmpty().size >= count && listingId !in _state.value.listingPhotoErrors) return
+        val key = "photos-$listingId"
+        if (key in _state.value.busy) return
+        val requestAccount = accountId()
+        _state.value = _state.value.copy(
+            busy = _state.value.busy + key,
+            listingPhotoErrors = _state.value.listingPhotoErrors - listingId
         )
-        if (partialFailure) "Loaded ${photos.size} of $count scrap photos. You can retry for the remaining angles." else "${photos.size} scrap photo${if (photos.size == 1) "" else "s"} loaded."
-    })
+        viewModelScope.launch {
+            try {
+                val results = coroutineScope {
+                    (0 until count).map { index ->
+                        async {
+                            try {
+                                val response = if (index == 0) api.getKabadiwalaListingPhoto(listingId)
+                                else api.getKabadiwalaListingPhotoAtIndex(listingId, index)
+                                val bytes = withContext(Dispatchers.IO) {
+                                    val downloaded = response.requireBody().bytes()
+                                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeByteArray(downloaded, 0, downloaded.size, bounds)
+                                    check(bounds.outWidth > 0 && bounds.outHeight > 0) { "The server returned an unreadable photo." }
+                                    downloaded
+                                }
+                                Result.success(bytes)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Result.failure(error)
+                            }
+                        }
+                    }.awaitAll()
+                }
+                if (accountId() != requestAccount || !protectedSessionReady() || !allowed(AccountRole.COLLECTOR)) return@launch
+                val photos = results.mapNotNull { it.getOrNull() }
+                val firstFailure = results.firstOrNull { it.isFailure }?.exceptionOrNull()
+                val photoError = when {
+                    firstFailure == null -> null
+                    firstFailure is IOException -> "Photo download was interrupted. Retry when your connection is stable."
+                    firstFailure is IllegalStateException -> firstFailure.message ?: "The server returned an unreadable photo."
+                    else -> "Couldn't load the scrap photo. ${friendly(firstFailure)}"
+                }
+                if (photoError == null) Log.d("CollectorListingPhoto", "Loaded $count photo(s) for listing $listingId")
+                else Log.w("CollectorListingPhoto", "Loaded ${photos.size}/$count photo(s) for listing $listingId: ${firstFailure?.javaClass?.simpleName}")
+                _state.value = _state.value.copy(
+                    listingPhotos = if (photos.isEmpty()) _state.value.listingPhotos else _state.value.listingPhotos + (listingId to photos),
+                    listingPhotoErrors = if (photoError == null) _state.value.listingPhotoErrors - listingId
+                    else _state.value.listingPhotoErrors + (listingId to photoError)
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e("CollectorListingPhoto", "Failed loading listing $listingId", error)
+                if (accountId() == requestAccount) {
+                    _state.value = _state.value.copy(
+                        listingPhotoErrors = _state.value.listingPhotoErrors +
+                            (listingId to "Couldn't display the scrap photo. ${friendly(error)}")
+                    )
+                }
+            } finally {
+                if (accountId() == requestAccount) {
+                    _state.value = _state.value.copy(busy = _state.value.busy - key)
+                }
+            }
+        }
+    }
     fun cancelListing(listingId: String, reason: String? = null) = action("cancel-listing-$listingId", AccountRole.HOUSEHOLD, { api.cancelHouseholdListing(listingId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Listing cancelled." })
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })
@@ -1094,8 +1138,8 @@ class SupplyChainViewModel(
     fun joinPool(poolId: String, quantityKg: Double, grade: String, expectedRatePerKg: Double?) = action("pool-join-$poolId", AccountRole.COLLECTOR) { api.joinPool(poolId, PoolJoinRequestDto(quantityKg, grade, expectedRatePerKg)).requireData(); refreshKabadiwala(); "Stock reserved in the cooperative pool." }
     fun leavePool(poolId: String) = action("pool-leave-$poolId", AccountRole.COLLECTOR) { api.leavePool(poolId).requireData(); refreshKabadiwala(); "Contribution released back to available stock." }
     fun lockPool(poolId: String) = action("pool-lock-$poolId", AccountRole.COLLECTOR) { val pool = api.lockPool(poolId).requireData(); _state.value = _state.value.copy(pools = listOf(pool) + _state.value.pools.filterNot { it.id == pool.id }); saveCache(); "Pool locked at threshold. Prepare the one-time handover QR." }
-    fun preparePoolHandover(poolId: String) = action("handover-pool-$poolId", AccountRole.COLLECTOR) { val handover = api.preparePoolHandover(poolId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
-    fun prepareBulkHandover(lotId: String) = action("handover-bulk-$lotId", AccountRole.COLLECTOR) { val handover = api.prepareBulkHandover(lotId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
+    fun preparePoolHandover(poolId: String) = action("handover-pool-$poolId", AccountRole.COLLECTOR) { val handover = api.preparePoolHandover(poolId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id || (it.poolId == poolId && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
+    fun prepareBulkHandover(lotId: String) = action("handover-bulk-$lotId", AccountRole.COLLECTOR) { val handover = api.prepareBulkHandover(lotId, JsonObject()).requireData(); _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot { it.id == handover.id || (it.bulkLotId == lotId && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) }); saveCache(); "One-time handover QR prepared: ${handover.referenceId}." }
     fun confirmCollectorHandover(handoverId: String) = action("collector-confirm-$handoverId", AccountRole.COLLECTOR) {
         val operation = "collector-handover-$handoverId"
         val handover = api.confirmCollectorHandover(handoverId, idempotencyKeys?.getOrCreate(operation)).requireData()

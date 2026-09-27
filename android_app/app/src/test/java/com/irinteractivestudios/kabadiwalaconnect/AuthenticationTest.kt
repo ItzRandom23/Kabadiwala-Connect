@@ -4,6 +4,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.IndianPhoneValidator
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticationRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailAuthentication
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.MockOtpService
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpChallenge
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
@@ -34,6 +35,37 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthenticationTest {
+    @Test fun returningEmailSignInKeepsSelectedLanguage() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            var sentLanguage: String? = null
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun authenticateEmail(request: EmailAccountRequest): EmailAuthentication {
+                    sentLanguage = request.preferredLanguage
+                    return EmailAuthentication.InvalidCredentials
+                }
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            }, initialLanguage = "hi")
+            vm.useEmailSignIn()
+            vm.setEmail("user@example.com")
+            vm.setPassword("password123")
+            vm.signIn()
+            advanceUntilIdle()
+            assertEquals("hi", sentLanguage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun startOverMakesFailedSessionCompletionRetryable() {
         val vm = TestAuth.onboarding()
         vm.useEmailSignIn()

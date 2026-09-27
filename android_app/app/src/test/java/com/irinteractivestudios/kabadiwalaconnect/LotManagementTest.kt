@@ -139,7 +139,7 @@ class LotManagementTest {
         assertEquals(1250.0, saved.single().quoteRupees!!, 0.0001)
     }
 
-    @Test fun gpsLocation_keepsCoordinatesWhenAreaLabelIsEdited() = runTest {
+    @Test fun gpsLocation_clearsCoordinatesWhenAddressIsEdited() = runTest {
         val saved = mutableListOf<Lot>()
         val vm = LotManagementViewModel(writer(saved), "collector-gps", now = { 777L }, photoValidator = { PhotoValidation(true) })
         vm.photoCaptured("test-photo.webp")
@@ -150,15 +150,15 @@ class LotManagementTest {
         vm.setGpsLocation(CurrentLocation(latitude = 18.5204, longitude = 73.8567, areaName = "Pune"))
         vm.setLocation("Shivajinagar")
         assertEquals("Shivajinagar", vm.state.value.location)
-        assertEquals("gps", vm.state.value.locationSource)
-        assertEquals(18.5204, vm.state.value.locationLatitude!!, 0.000001)
-        assertEquals(73.8567, vm.state.value.locationLongitude!!, 0.000001)
+        assertEquals("manual", vm.state.value.locationSource)
+        assertEquals(null, vm.state.value.locationLatitude)
+        assertEquals(null, vm.state.value.locationLongitude)
         vm.confirmLocation()
         vm.save()
         advanceUntilIdle()
-        assertEquals("GPS", saved.single().locationPrecision)
-        assertEquals(18.5204, saved.single().locationLatitude!!, 0.000001)
-        assertEquals(73.8567, saved.single().locationLongitude!!, 0.000001)
+        assertEquals("MANUAL", saved.single().locationPrecision)
+        assertEquals(null, saved.single().locationLatitude)
+        assertEquals(null, saved.single().locationLongitude)
         assertEquals("Shivajinagar", saved.single().location)
     }
 

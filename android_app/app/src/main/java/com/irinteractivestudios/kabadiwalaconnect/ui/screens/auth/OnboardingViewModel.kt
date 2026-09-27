@@ -209,7 +209,7 @@ class OnboardingViewModel(
             try {
                 val result = try {
                     if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password)
-                    else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, LocaleManager.ENGLISH, isReturning = true))
+                    else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, current.language, isReturning = true))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -531,13 +531,16 @@ class OnboardingViewModel(
     fun setAddress(value: String) {
         val address = value.take(240)
         val current = _state.value
+        val addressChanged = address.trim() != current.address.trim()
         _state.value = current.copy(
             address = address,
-            // Keep the reverse-geocoded service area for GPS locations. For a
-            // manually entered address, use the full address as the matching
-            // fallback so registration still has a useful location value.
-            area = current.area.takeIf { current.locationChoice == LocationChoice.GPS && it.isNotBlank() }
-                ?: address.trim()
+            // Coordinates and address must describe the same place. If the
+            // user edits the detected address, stop treating the old GPS fix
+            // as coordinates for that manually entered address.
+            locationChoice = if (addressChanged) LocationChoice.MANUAL else current.locationChoice,
+            latitude = if (addressChanged) null else current.latitude,
+            longitude = if (addressChanged) null else current.longitude,
+            area = if (addressChanged) address.trim() else current.area
         )
     }
     fun continueToPhone() {

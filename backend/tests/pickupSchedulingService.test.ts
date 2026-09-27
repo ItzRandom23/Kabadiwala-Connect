@@ -4,26 +4,26 @@ import { movePickupDay, pickupDayKey, validateCollectorPickupSlot, validatePicku
 describe('pickup scheduling policy', () => {
   it('accepts aligned near-term slots and rejects unsafe windows', () => {
     const now = new Date('2026-09-18T08:00:00.000Z');
-    expect(validatePickupSlot('2026-09-18T10:00:00.000Z', now)).toEqual(new Date('2026-09-18T10:00:00.000Z'));
-    expect(() => validatePickupSlot('2026-09-18T09:00:00.000Z', now)).toThrow(/90 minutes/);
+    expect(validatePickupSlot('2026-09-18T08:15:00.000Z', now)).toEqual(new Date('2026-09-18T08:15:00.000Z'));
+    expect(() => validatePickupSlot('2026-09-18T08:14:00.000Z', now)).toThrow(/15 minutes/);
     expect(() => validatePickupSlot('2026-10-03T10:00:00.000Z', now)).toThrow(/14 days/);
-    expect(() => validatePickupSlot('2026-09-18T10:15:00.000Z', now)).toThrow(/hour or half-hour/);
+    expect(() => validatePickupSlot('2026-09-18T08:20:00.000Z', now)).toThrow(/15-minute interval/);
   });
 
-  it('allows collector scheduling five minutes after acceptance while retaining work-hour and interval rules', () => {
+  it('allows collector scheduling 15 minutes after acceptance while retaining work-hour and interval rules', () => {
     const now = new Date('2026-09-18T08:00:00.000Z');
     const acceptedAt = new Date('2026-09-18T08:00:00.000Z');
-    expect(validateCollectorPickupSlot('2026-09-18T08:05:00.000Z', acceptedAt, now)).toEqual(new Date('2026-09-18T08:05:00.000Z'));
-    expect(() => validateCollectorPickupSlot('2026-09-18T08:04:00.000Z', acceptedAt, now)).toThrow(/5 minutes/);
-    expect(() => validateCollectorPickupSlot('2026-09-18T08:06:00.000Z', acceptedAt, now)).toThrow(/5-minute interval/);
+    expect(validateCollectorPickupSlot('2026-09-18T08:15:00.000Z', acceptedAt, now)).toEqual(new Date('2026-09-18T08:15:00.000Z'));
+    expect(() => validateCollectorPickupSlot('2026-09-18T08:14:00.000Z', acceptedAt, now)).toThrow(/15 minutes/);
+    expect(() => validateCollectorPickupSlot('2026-09-18T08:16:00.000Z', acceptedAt, now)).toThrow(/15-minute interval/);
     expect(() => validateCollectorPickupSlot('2026-09-18T12:35:00.000Z', acceptedAt, now)).toThrow(/10:30 AM/);
   });
 
-  it('requires at least five minutes from now when an old accepted pickup is rescheduled', () => {
+  it('requires at least 15 minutes from now when an old accepted pickup is rescheduled', () => {
     const now = new Date('2026-09-18T08:00:00.000Z');
     const acceptedAt = new Date('2026-09-18T07:00:00.000Z');
-    expect(validateCollectorPickupSlot('2026-09-18T08:05:00.000Z', acceptedAt, now)).toEqual(new Date('2026-09-18T08:05:00.000Z'));
-    expect(() => validateCollectorPickupSlot('2026-09-18T08:00:00.000Z', acceptedAt, now)).toThrow(/5 minutes/);
+    expect(validateCollectorPickupSlot('2026-09-18T08:15:00.000Z', acceptedAt, now)).toEqual(new Date('2026-09-18T08:15:00.000Z'));
+    expect(() => validateCollectorPickupSlot('2026-09-18T08:00:00.000Z', acceptedAt, now)).toThrow(/15 minutes/);
   });
 
   it('moves one reservation between operating days and enforces capacity', async () => {

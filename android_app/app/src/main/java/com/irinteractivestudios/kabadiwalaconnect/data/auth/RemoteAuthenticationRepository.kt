@@ -307,6 +307,7 @@ class RemoteAuthenticationRepository(
                 address = update.address?.trim(),
                 latitude = update.latitude,
                 longitude = update.longitude,
+                clearCoordinates = update.clearCoordinates,
                 preferredLanguage = update.preferredLanguage?.let(LocaleManager::toBackendName)
             )
         ).requireData().toDomain()

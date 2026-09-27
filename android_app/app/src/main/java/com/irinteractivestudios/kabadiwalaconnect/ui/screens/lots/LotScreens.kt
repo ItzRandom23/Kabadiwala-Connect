@@ -307,6 +307,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     Icon(Icons.Filled.CameraAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(58.dp))
     Text(stringResource(R.string.lot_photo_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_photo_detail), style = MaterialTheme.typography.bodyLarge)
+    Text("This saves a collected scrap record for recycler quotes. It does not add stock to bulk inventory or publish a bulk recycler lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isNotEmpty()) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             items(s.photoPaths, key = { it }) { path ->
@@ -518,6 +519,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 }
 @Composable private fun ReviewStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_review_title), style = MaterialTheme.typography.headlineMedium)
+    Text("Saving creates a field record for recycler quotes. Bulk recycler lots use inventory added after a household pickup's QR scan and final weight.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isEmpty()) {
         Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
@@ -579,6 +581,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
+            Text("Field record saved for recycler quotes. Bulk inventory is updated separately after a household pickup's QR scan and final weight.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             KcPrimaryButton(stringResource(R.string.lot_view_saved), onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
             OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("lot_back_home")) {
                 Text(stringResource(R.string.lot_back_home))

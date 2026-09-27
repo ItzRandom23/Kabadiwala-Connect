@@ -39,7 +39,6 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBottomBar
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcTopBar
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.OfflineBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.AppUpdatePrompt
-import com.irinteractivestudios.kabadiwalaconnect.ui.components.TestingEnvironmentIndicator
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.AppNavHost
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
@@ -415,9 +414,6 @@ class MainActivity : ComponentActivity() {
                                 .padding(innerPadding)
                         ) {
                             OfflineBanner(state = connection)
-                            if (BuildConfig.APP_ENVIRONMENT == "TESTING") {
-                                TestingEnvironmentIndicator(Modifier.padding(vertical = 4.dp))
-                            }
                             // Navigation Compose keeps lifecycle state inside
                             // NavHost. Replace the host together with its
                             // controller at every account boundary.

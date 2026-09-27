@@ -218,7 +218,12 @@ class FutureFeatureViewModel(
     fun sendMessage(conversationId: String, body: String) {
         val trimmed = body.trim()
         if (trimmed.isEmpty() || _state.value.sending) return
+        clearDraft(conversationId)
         sendMessageWithClientId(conversationId, trimmed, UUID.randomUUID().toString())
+    }
+
+    fun clearDraft(conversationId: String) {
+        _state.value = _state.value.copy(drafts = _state.value.drafts - conversationId)
     }
 
     fun draftReply(conversationId: String, instruction: String? = null) {

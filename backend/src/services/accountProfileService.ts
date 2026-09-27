@@ -8,6 +8,7 @@ export type AccountProfileUpdate = {
   address?: string;
   latitude?: number | null;
   longitude?: number | null;
+  clearCoordinates?: boolean;
   preferredLanguage?: string;
 };
 
@@ -59,8 +60,9 @@ export class AccountProfileService {
             ...(input.displayName !== undefined ? { name: input.displayName } : {}),
             ...(input.areaName !== undefined ? { areaName: input.areaName } : {}),
             ...(input.address ? { address: input.address } : {}),
-            ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
-            ...(input.longitude !== undefined ? { longitude: input.longitude } : {})
+            ...(input.clearCoordinates ? { latitude: null, longitude: null } : {}),
+            ...(!input.clearCoordinates && input.latitude !== undefined ? { latitude: input.latitude } : {}),
+            ...(!input.clearCoordinates && input.longitude !== undefined ? { longitude: input.longitude } : {})
           },
           include: { materials: true, rates: true }
         });
@@ -74,8 +76,9 @@ export class AccountProfileService {
           ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
           ...(input.areaName !== undefined ? { areaName: input.areaName } : {}),
           ...(input.address !== undefined ? { address: input.address || null } : {}),
-          ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
-          ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
+          ...(input.clearCoordinates ? { latitude: null, longitude: null } : {}),
+          ...(!input.clearCoordinates && input.latitude !== undefined ? { latitude: input.latitude } : {}),
+          ...(!input.clearCoordinates && input.longitude !== undefined ? { longitude: input.longitude } : {}),
           ...(input.preferredLanguage ? { preferredLanguage: input.preferredLanguage as any } : {})
         }
       });

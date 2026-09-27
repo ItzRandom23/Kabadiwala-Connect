@@ -626,6 +626,8 @@
     <string name="future_chat_draft">Draft with Gemini</string>
     <string name="future_chat_drafting">Drafting…</string>
     <string name="future_chat_draft_note">Review the draft before sending.</string>
+    <string name="future_chat_sender_you">You</string>
+    <string name="future_chat_sender_partner">Partner</string>
     <string name="future_confirm_handover">Price agreed — continue to handover</string>
     <string name="household_home_title">Turn clutter into value.</string>
     <string name="household_home_subtitle">A local kabadiwala collects at your doorstep.</string>

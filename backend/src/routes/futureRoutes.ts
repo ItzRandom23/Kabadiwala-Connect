@@ -545,18 +545,29 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
 
   router.post('/conversations', async (req, res) => {
     const identity = requireLegacyTransactionParticipant(req);
-    const parsed = z.object({ lotId: z.string().min(1), quoteId: z.string().optional(), collectorId: z.string().optional(), recyclerId: z.string().optional() }).safeParse(req.body);
+    const parsed = z.object({ lotId: z.string().min(1).optional(), bulkLotId: z.string().min(1).optional(), quoteId: z.string().optional(), collectorId: z.string().optional(), recyclerId: z.string().optional() }).refine(value => Boolean(value.lotId) !== Boolean(value.bulkLotId)).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Conversation details are invalid', 422);
-    const collectorId = identity.role === 'COLLECTOR' ? identity.collectorId : parsed.data.collectorId;
+    if (parsed.data.bulkLotId && parsed.data.quoteId) throw new AppError('VALIDATION_ERROR', 'A bulk offer chat cannot reference a legacy quote', 422);
+    let collectorId = identity.role === 'COLLECTOR' ? identity.collectorId : parsed.data.collectorId;
     const recyclerId = identity.role === 'RECYCLER' ? identity.collectorId : parsed.data.recyclerId;
-    if (!collectorId || !recyclerId) throw new AppError('VALIDATION_ERROR', 'Both transaction participants are required', 422);
-    const lot = await db.lot.findFirst({ where: { id: parsed.data.lotId, ...(identity.role === 'COLLECTOR' ? { collectorId } : {}) } });
-    if (!lot) throw new AppError('NOT_FOUND', 'Lot not found', 404);
+    if ((!collectorId && !parsed.data.bulkLotId) || !recyclerId) throw new AppError('VALIDATION_ERROR', 'Both transaction participants are required', 422);
     const recycler = await db.recycler.findFirst({ where: { id: recyclerId, authorizationStatus: 'VERIFIED' }, select: { id: true } });
     if (!recycler) throw new AppError('CONFLICT', 'A verified recycler is required for this conversation', 409);
-    const relatedQuote = await db.quote.findFirst({ where: { lotId: lot.id, recyclerId, ...(parsed.data.quoteId ? { id: parsed.data.quoteId } : {}), lot: { collectorId } }, select: { id: true } });
-    if (!relatedQuote) throw new AppError('CONFLICT', 'A quote for this lot is required before messaging', 409);
-    const conversation = await db.conversation.upsert({ where: { lotId_collectorId_recyclerId: { lotId: parsed.data.lotId, collectorId, recyclerId } }, update: { quoteId: parsed.data.quoteId ?? undefined, status: 'OPEN' }, create: { lotId: parsed.data.lotId, quoteId: parsed.data.quoteId, collectorId, recyclerId } });
+    const lotId = parsed.data.bulkLotId ?? parsed.data.lotId!;
+    if (parsed.data.bulkLotId) {
+      const bulkLot = await db.bulkLot.findFirst({ where: { id: lotId, reservedForId: recyclerId, ...(collectorId ? { kabadiwalaId: collectorId } : {}) } });
+      if (!bulkLot) throw new AppError('NOT_FOUND', 'Accepted bulk lot not found', 404);
+      collectorId = bulkLot.kabadiwalaId;
+      const acceptedOffer = await db.bulkOffer.findFirst({ where: { bulkLotId: lotId, recyclerId, status: 'ACCEPTED' }, select: { id: true } });
+      if (!acceptedOffer) throw new AppError('CONFLICT', 'An accepted offer is required before messaging', 409);
+    } else {
+      const lot = await db.lot.findFirst({ where: { id: lotId, ...(identity.role === 'COLLECTOR' ? { collectorId } : {}) } });
+      if (!lot) throw new AppError('NOT_FOUND', 'Lot not found', 404);
+      const relatedQuote = await db.quote.findFirst({ where: { lotId, recyclerId, ...(parsed.data.quoteId ? { id: parsed.data.quoteId } : {}), lot: { collectorId } }, select: { id: true } });
+      if (!relatedQuote) throw new AppError('CONFLICT', 'A quote for this lot is required before messaging', 409);
+    }
+    if (!collectorId) throw new AppError('VALIDATION_ERROR', 'Kabadiwala is required', 422);
+    const conversation = await db.conversation.upsert({ where: { lotId_collectorId_recyclerId: { lotId, collectorId, recyclerId } }, update: { quoteId: parsed.data.quoteId ?? undefined, status: 'OPEN' }, create: { lotId, quoteId: parsed.data.quoteId, collectorId, recyclerId } });
     return res.status(201).json({ success: true, data: conversation, message: 'Conversation ready' });
   });
 

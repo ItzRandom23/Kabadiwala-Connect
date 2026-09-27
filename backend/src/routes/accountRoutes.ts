@@ -14,6 +14,7 @@ const updateSchema = z.object({
   address: z.string().trim().max(240).optional(),
   latitude: z.number().finite().min(-90).max(90).nullable().optional(),
   longitude: z.number().finite().min(-180).max(180).nullable().optional(),
+  clearCoordinates: z.boolean().optional(),
   preferredLanguage: z.string().trim().transform(value => value.toUpperCase()).pipe(languageSchema).optional()
 });
 

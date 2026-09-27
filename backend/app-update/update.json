@@ -1,8 +1,8 @@
 {
-  "versionCode": 66,
-  "versionName": "0.1.2-beta",
-  "apkUrl": "kabadiwala-connect-0.1.2-beta-debug.apk",
-  "sha256": "8EEA1CAA0C888EBA41FE06B096392CCC3BA0CF2030F2D463B9EF9EE54ED39DCE",
-  "sizeBytes": 28859662,
-  "releaseNotes": "India-bounded household pickup pins with saved offline home locations, plus pickup chat and stability improvements."
+  "versionCode": 67,
+  "versionName": "0.1.3-beta",
+  "apkUrl": "kabadiwala-connect-0.1.3-beta-debug.apk",
+  "sha256": "34088AECEF88EAF29CE58BC61580BFB53E488739FCC423728AF7BD5CAD6F33E8",
+  "sizeBytes": 28819651,
+  "releaseNotes": "Household and Kabadiwala GPS pickup-location improvements, Kabadiwala–Recycler chat, language preference fixes, and pickup stability updates."
 }

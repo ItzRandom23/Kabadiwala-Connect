@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Ensures every language advertised by the picker resolves to its own pack. */
+/** Checks locale selection and a small resource sample; it is not a translation coverage test. */
 @RunWith(AndroidJUnit4::class)
 class LocaleResourceTest {
 
@@ -50,6 +50,23 @@ class LocaleResourceTest {
         required.forEach { id ->
             assertNotEquals("Hindi fell back to English for $id", english.getString(id), hindi.getString(id))
             assertNotEquals("Marathi fell back to English for $id", english.getString(id), marathi.getString(id))
+        }
+    }
+
+    @Test
+    fun savedLanguageSurvivesFreshContextWrap() {
+        val original = LocaleManager.persistedTag(context)
+        val hadSelection = LocaleManager.hasPersistedTag(context)
+        try {
+            listOf(LocaleManager.HINDI, LocaleManager.MARATHI, LocaleManager.TAMIL, LocaleManager.ENGLISH).forEach { tag ->
+                LocaleManager.persistTag(context, tag)
+                val fresh = LocaleManager.wrap(context)
+                assertEquals(tag, fresh.resources.configuration.locales[0].language)
+                assertEquals(tag, LocaleManager.persistedTag(fresh))
+            }
+        } finally {
+            if (hadSelection) LocaleManager.persistTag(context, original)
+            else context.getSharedPreferences("kc_locale_prefs", Context.MODE_PRIVATE).edit().remove("language_tag").commit()
         }
     }
 }

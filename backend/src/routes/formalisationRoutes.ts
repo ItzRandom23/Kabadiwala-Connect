@@ -682,7 +682,8 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       let materialCategory: string; let quotedWeightKg: number; let quotedRatePerKg: number; let recyclerId: string; let poolId: string | null = null; let bulkLotId: string | null = null; let contributions: any[] = []; let sourceStatus: string; let sourceListingIds: string[] = [];
       if (target === 'POOL') {
         const pool = await tx.pooledConsignment.findFirst({ where: { id: targetId, createdByCollectorId: req.identity!.collectorId }, include: undefined });
-        if (!pool || pool.status !== 'LOCKED' || pool.totalReservedKg < pool.minimumQuantityKg) throw new AppError('CONFLICT', 'Pool must be locked at its threshold before handover', 409, { code: 'POOL_NOT_READY_FOR_HANDOVER' });
+        const priorPoolHandover = pool?.status === 'PICKUP_SCHEDULED' ? await tx.supplyHandover.findUnique({ where: { sourceKey: `POOL:${targetId}` } }) : null;
+        if (!pool || !['LOCKED', 'PICKUP_SCHEDULED'].includes(pool.status) || (pool.status === 'PICKUP_SCHEDULED' && !priorPoolHandover) || pool.totalReservedKg < pool.minimumQuantityKg) throw new AppError('CONFLICT', 'Pool must be locked at its threshold before handover', 409, { code: 'POOL_NOT_READY_FOR_HANDOVER' });
         materialCategory = pool.materialCategory; quotedWeightKg = pool.totalReservedKg; recyclerId = pool.recyclerId; poolId = pool.id; sourceStatus = pool.status;
         const demand = pool.requirementId ? await tx.procurementRequirement.findUnique({ where: { id: pool.requirementId } }) : null;
         quotedRatePerKg = demand?.maxRatePerKg ?? 0;
@@ -708,8 +709,12 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       const sourceKey = `${target}:${targetId}`;
       const prior = await tx.supplyHandover.findUnique({ where: { sourceKey } });
       if (prior) {
-        if (prior.status !== 'EXPIRED' && prior.status !== 'CANCELLED') return { ...prior, payload: null, replayed: true };
-        throw new AppError('CONFLICT', 'This source already has an expired handover record; operator re-preparation is required', 409, { code: 'HANDOVER_SOURCE_EXPIRED' });
+        if (prior.expiresAt > new Date() && prior.status !== 'EXPIRED' && prior.status !== 'CANCELLED') return { ...prior, payload: null, replayed: true };
+        // A QR that expired before the Recycler scanned it must be replaced
+        // without releasing the already reserved stock or accepted offer.
+        // The old signed QR remains invalid because its expiry is in the payload.
+        await tx.supplyHandover.update({ where: { id: prior.id }, data: { status: 'EXPIRED', sourceKey: `${sourceKey}:expired:${prior.id}` } });
+        await audit(tx, req.identity!.collectorId, 'COLLECTOR', 'HANDOVER_EXPIRED', 'SUPPLY_HANDOVER', prior.id, { sourceKey });
       }
       const referenceId = `KC-HO-${Date.now()}-${randomBytes(4).toString('hex').toUpperCase()}`;
       const nonce = randomBytes(18).toString('base64url');

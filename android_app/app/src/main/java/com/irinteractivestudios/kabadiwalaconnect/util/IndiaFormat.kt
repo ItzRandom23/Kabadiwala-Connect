@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.util
 
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -19,6 +20,9 @@ object IndiaFormat {
 
     fun dateTime(epochMs: Long, locale: Locale = Locale.getDefault()): String =
         SimpleDateFormat("d MMM yyyy, h:mm a", locale).apply { timeZone = zone }.format(Date(epochMs))
+
+    fun dateTimeIso(value: String, locale: Locale = Locale.getDefault()): String? =
+        runCatching { dateTime(Instant.parse(value).toEpochMilli(), locale) }.getOrNull()
 
     fun number(value: Double, decimals: Int = 0): String =
         NumberFormat.getNumberInstance(numberLocale).apply {
