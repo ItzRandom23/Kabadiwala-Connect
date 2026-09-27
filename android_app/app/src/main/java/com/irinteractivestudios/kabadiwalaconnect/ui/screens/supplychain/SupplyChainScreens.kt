@@ -48,6 +48,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
@@ -160,6 +161,7 @@ fun HouseholdSupplyScreen(
     pickupQrError: String? = null,
     onLoadPickupQr: (String) -> Unit = {},
     onClearPickupQr: () -> Unit = {},
+    onOpenPickupChat: (String) -> Unit = {},
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
@@ -201,7 +203,8 @@ fun HouseholdSupplyScreen(
                 pickupQrLoadingId = pickupQrLoadingId,
                 pickupQrError = pickupQrError,
                 onLoadPickupQr = onLoadPickupQr,
-                onClearPickupQr = onClearPickupQr
+                onClearPickupQr = onClearPickupQr,
+                onOpenPickupChat = onOpenPickupChat
             )
         }
     }
@@ -502,7 +505,8 @@ private fun HouseholdListingCard(
     pickupQrLoadingId: String?,
     pickupQrError: String?,
     onLoadPickupQr: (String) -> Unit,
-    onClearPickupQr: () -> Unit
+    onClearPickupQr: () -> Unit,
+    onOpenPickupChat: (String) -> Unit
 ) {
     val activePickupStatuses = setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
     val pickup = pickups.firstOrNull { it.status in activePickupStatuses }
@@ -548,6 +552,13 @@ private fun HouseholdListingCard(
             pickup?.let { item ->
                 Text("Pickup: ${statusName(item.status)}", fontWeight = FontWeight.SemiBold)
                 Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.kabadiwalaId != null && item.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED", "COMPLETED")) {
+                    OutlinedButton(onClick = { onOpenPickupChat(item.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Message Kabadiwala")
+                    }
+                }
                 if (item.status == "ARRIVED") {
                     if (item.householdQrScannedAt != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -669,12 +680,14 @@ fun HouseholdListingCreateScreen(
     state: SupplyChainState,
     initialArea: String,
     initialPickupAddress: String = "",
-    latitude: Double? = null,
-    longitude: Double? = null,
+    initialPickupLatitude: Double? = null,
+    initialPickupLongitude: Double? = null,
+    hasSavedHomePickupPoint: Boolean = false,
     onBack: () -> Unit,
     onSuggestMaterial: (String) -> Unit,
     onClearMaterialSuggestion: () -> Unit,
     onCreateListing: (HouseholdListingCreateDto, List<String>, String) -> Unit,
+    onPickupPointConfirmed: (String, Double, Double) -> Unit = { _, _, _ -> },
     busy: Set<String> = emptySet(),
     onEstimateHouseholdPrice: (String, Double, String, String) -> Unit = { _, _, _, _ -> },
     onClearHouseholdPriceEstimate: () -> Unit = {}
@@ -686,6 +699,10 @@ fun HouseholdListingCreateScreen(
     var materialChosenManually by rememberSaveable { mutableStateOf(false) }
     var weight by rememberSaveable { mutableStateOf("") }
     var pickupAddress by rememberSaveable(initialPickupAddress, initialArea) { mutableStateOf(initialPickupAddress.ifBlank { initialArea }) }
+    var pickupLatitude by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(initialPickupLatitude) }
+    var pickupLongitude by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(initialPickupLongitude) }
+    var pickupPointIsSavedOffline by rememberSaveable(initialPickupLatitude, initialPickupLongitude) { mutableStateOf(hasSavedHomePickupPoint) }
+    var showPickupPointPicker by rememberSaveable { mutableStateOf(false) }
     var notes by rememberSaveable { mutableStateOf("") }
     var condition by rememberSaveable { mutableStateOf("INTACT") }
     var safetyAcknowledged by rememberSaveable { mutableStateOf(false) }
@@ -871,12 +888,13 @@ fun HouseholdListingCreateScreen(
             onClearHouseholdPriceEstimate()
         }
     }
-    val canSubmit = photoPaths.isNotEmpty() && material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
+    val canSubmit = photoPaths.isNotEmpty() && material.isNotBlank() && parsedWeight != null && parsedWeight > 0 && parsedWeight <= 500 && pickupAddress.trim().isNotEmpty() && pickupLatitude != null && pickupLongitude != null && (!isHazardous || safetyAcknowledged) && "create-listing" !in busy
     val missingPostRequirements = buildList {
         if (photoPaths.isEmpty()) add("add a photo")
         if (material.isBlank()) add("choose a material")
         if (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500) add("enter a weight from 0–500 kg")
         if (pickupAddress.trim().isEmpty()) add("add a pickup address")
+        if (pickupLatitude == null || pickupLongitude == null) add("set and confirm the pickup point on the India map")
         if (isHazardous && !safetyAcknowledged) add("confirm safe handling")
     }
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -1071,7 +1089,49 @@ fun HouseholdListingCreateScreen(
                     }
                 }
             }
-            item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { if (!imeVisible) Text("Full pickup address") }, placeholder = { if (imeVisible) Text("Full pickup address") }, supportingText = { if (imeVisible) Text(if (addressError) "Add a complete address" else "Street/block and house number", maxLines = 1, overflow = TextOverflow.Ellipsis) else if (addressError) Text("Add a complete pickup address") else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.") }, isError = addressError, minLines = if (imeVisible) 1 else 2, maxLines = 3) }
+            item {
+                OutlinedTextField(
+                    value = pickupAddress,
+                    onValueChange = { value ->
+                        val updated = value.take(240)
+                        if (updated != pickupAddress) {
+                            pickupAddress = updated
+                            pickupLatitude = null
+                            pickupLongitude = null
+                            pickupPointIsSavedOffline = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { if (!imeVisible) Text("Full pickup address") },
+                    placeholder = { if (imeVisible) Text("Full pickup address") },
+                    supportingText = {
+                        if (imeVisible) Text(if (addressError) "Add a complete address" else "Street/block and house number", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        else if (addressError) Text("Add a complete pickup address")
+                        else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.")
+                    },
+                    isError = addressError,
+                    minLines = if (imeVisible) 1 else 2,
+                    maxLines = 3
+                )
+            }
+            item {
+                OutlinedButton(
+                    onClick = { showPickupPointPicker = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                ) {
+                    Icon(Icons.Filled.LocationOn, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (pickupLatitude != null && pickupLongitude != null) "Change pickup point" else "Pin pickup point on map")
+                }
+                Text(
+                    if (pickupLatitude != null && pickupLongitude != null && pickupPointIsSavedOffline) "Saved home pickup pin · available offline · %.5f, %.5f".format(Locale.US, pickupLatitude, pickupLongitude)
+                    else if (pickupLatitude != null && pickupLongitude != null) "Pickup pin confirmed · %.5f, %.5f".format(Locale.US, pickupLatitude, pickupLongitude)
+                    else "Pin your home or pickup address. Your phone's current location is not used.",
+                    Modifier.padding(top = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
@@ -1098,8 +1158,8 @@ fun HouseholdListingCreateScreen(
                  notes = notes.trim().ifBlank { null },
                  areaName = initialArea.ifBlank { pickupAddress.trim() },
                  pickupAddress = pickupAddress.trim(),
-                 latitude = latitude,
-                 longitude = longitude,
+                 latitude = pickupLatitude,
+                 longitude = pickupLongitude,
                  estimatedPriceMin = currentPriceEstimate?.minimum,
                  estimatedPriceMax = currentPriceEstimate?.maximum,
                  dataBearingDevice = dataBearingDevice,
@@ -1107,6 +1167,21 @@ fun HouseholdListingCreateScreen(
                  dataDestructionRequested = dataDestructionRequested
              ), photoPaths, listingDraftId) }
          }, enabled = canSubmit, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp)) { Text(if ("create-listing" in busy) "Posting…" else "Post scrap listing") }
+     }
+     if (showPickupPointPicker) {
+         PickupPointPickerDialog(
+             initialAddress = pickupAddress,
+             selectedLatitude = pickupLatitude,
+             selectedLongitude = pickupLongitude,
+             onDismiss = { showPickupPointPicker = false },
+             onConfirm = { lat, lon ->
+                 pickupLatitude = lat
+                 pickupLongitude = lon
+                 onPickupPointConfirmed(pickupAddress.trim(), lat, lon)
+                 pickupPointIsSavedOffline = true
+                 showPickupPointPicker = false
+             }
+         )
      }
      if (showCameraPermissionDialog) {
          AlertDialog(
@@ -1139,7 +1214,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}) {
     val layout = rememberKcResponsiveLayout()
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
@@ -1176,7 +1251,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (state.initialLoadComplete && !state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr) }
+                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr, onOpenPickupChat) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Text("View all ${state.pickups.size} pickups")
@@ -1393,7 +1468,7 @@ private fun SupplyChainToolsShortcut(onClick: () -> Unit) {
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, photoLoading: Boolean, busy: Set<String>, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, photoLoading: Boolean, busy: Set<String>, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit, onOpenPickupChat: (String) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showReject by remember { mutableStateOf(false) }
@@ -1441,6 +1516,13 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             val confirmedPickupAddress = listing?.pickupAddress?.takeIf { it.isNotBlank() && pickup.status != "WAITING_FOR_PICKUP" }
             val pickupLocation = confirmedPickupAddress ?: listing?.areaName ?: "Area unavailable"
             Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · $pickupLocation")
+            if (pickup.kabadiwalaId != null && pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED", "COMPLETED")) {
+                OutlinedButton(onClick = { onOpenPickupChat(pickup.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Message household")
+                }
+            }
             val photoCount = listing?.photoCount ?: 0
             if (photoCount > 0 && pickup.status != "WAITING_FOR_PICKUP") {
                 OutlinedButton(onClick = { showPhotos = true; if (loadedPhotos.size < photoCount) onLoadPhotos(pickup.listingId, photoCount) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {

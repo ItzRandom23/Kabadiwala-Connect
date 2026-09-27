@@ -317,10 +317,36 @@ export async function maybeAiDescription(input: { material?: string; condition?:
   }
 }
 
-async function assertConversationParticipant(db: PrismaClient, conversationId: string, accountId: string) {
+async function assertConversationParticipant(db: PrismaClient, conversationId: string, identity: ReturnType<typeof actor>) {
+  const pickupConversation = await db.pickupConversation.findUnique({ where: { id: conversationId } });
+  if (pickupConversation) {
+    const isHousehold = identity.role === 'HOUSEHOLD' && pickupConversation.householdId === identity.collectorId;
+    const isKabadiwala = identity.role === 'COLLECTOR' && pickupConversation.kabadiwalaId === identity.collectorId;
+    if (!isHousehold && !isKabadiwala) throw new AppError('NOT_FOUND', 'Conversation not found', 404);
+    return { kind: 'PICKUP' as const, conversation: pickupConversation };
+  }
   const conversation = await db.conversation.findUnique({ where: { id: conversationId } });
-  if (!conversation || (conversation.collectorId !== accountId && conversation.recyclerId !== accountId)) throw new AppError('NOT_FOUND', 'Conversation not found', 404);
-  return conversation;
+  const isTradeParticipant = (identity.role === 'COLLECTOR' && conversation?.collectorId === identity.collectorId)
+    || (identity.role === 'RECYCLER' && conversation?.recyclerId === identity.collectorId);
+  if (!conversation || !isTradeParticipant) throw new AppError('NOT_FOUND', 'Conversation not found', 404);
+  return { kind: 'TRADE' as const, conversation };
+}
+
+function pickupConversationDto(conversation: {
+  id: string; pickupRequestId: string; householdId: string; kabadiwalaId: string;
+  status: string; lastMessageAt: Date | null;
+}, listingId: string) {
+  return {
+    id: conversation.id,
+    lotId: listingId,
+    quoteId: null,
+    collectorId: conversation.kabadiwalaId,
+    recyclerId: conversation.householdId,
+    status: conversation.status,
+    lastMessageAt: conversation.lastMessageAt,
+    type: 'PICKUP',
+    pickupRequestId: conversation.pickupRequestId
+  };
 }
 
 export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
@@ -497,8 +523,23 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
   });
 
   router.get('/conversations', async (req, res) => {
-    const identity = requireLegacyTransactionParticipant(req);
-    const conversations = await db.conversation.findMany({ where: identity.role === 'COLLECTOR' ? { collectorId: identity.collectorId } : { recyclerId: identity.collectorId }, orderBy: { lastMessageAt: 'desc' } });
+    const identity = actor(req);
+    if (!['COLLECTOR', 'RECYCLER', 'HOUSEHOLD'].includes(identity.role)) throw new AppError('AUTHORIZATION_ERROR', 'Chat is unavailable for this account', 403);
+    const trades = identity.role === 'COLLECTOR' || identity.role === 'RECYCLER'
+      ? await db.conversation.findMany({ where: identity.role === 'COLLECTOR' ? { collectorId: identity.collectorId } : { recyclerId: identity.collectorId } })
+      : [];
+    const pickupChats = identity.role === 'HOUSEHOLD' || identity.role === 'COLLECTOR'
+      ? await db.pickupConversation.findMany({ where: identity.role === 'HOUSEHOLD' ? { householdId: identity.collectorId } : { kabadiwalaId: identity.collectorId } })
+      : [];
+    const listingIds = [...new Set(pickupChats.map(chat => chat.pickupRequestId))];
+    const pickupRows = listingIds.length
+      ? await db.pickupRequest.findMany({ where: { id: { in: listingIds } }, select: { id: true, listingId: true } })
+      : [];
+    const listingByPickup = new Map(pickupRows.map(row => [row.id, row.listingId]));
+    const conversations = [
+      ...trades.map(conversation => ({ ...conversation, type: 'TRADE', pickupRequestId: null })),
+      ...pickupChats.map(conversation => pickupConversationDto(conversation, listingByPickup.get(conversation.pickupRequestId) ?? ''))
+    ].sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
     return res.json({ success: true, data: conversations, message: 'Conversations retrieved' });
   });
 
@@ -519,34 +560,73 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     return res.status(201).json({ success: true, data: conversation, message: 'Conversation ready' });
   });
 
+  router.post('/pickup-conversations', async (req, res) => {
+    const identity = requireRole(req, 'HOUSEHOLD', 'COLLECTOR');
+    const parsed = z.object({ pickupRequestId: z.string().trim().min(1).max(120) }).safeParse(req.body);
+    if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Pickup conversation details are invalid', 422);
+    const pickup = await db.pickupRequest.findUnique({ where: { id: parsed.data.pickupRequestId } });
+    if (!pickup || !pickup.kabadiwalaId) throw new AppError('NOT_FOUND', 'Assigned pickup not found', 404);
+    const isHousehold = req.identity!.role === 'HOUSEHOLD' && pickup.householdId === identity;
+    const isKabadiwala = req.identity!.role === 'COLLECTOR' && pickup.kabadiwalaId === identity;
+    if (!isHousehold && !isKabadiwala) throw new AppError('NOT_FOUND', 'Assigned pickup not found', 404);
+    if (!['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED', 'COMPLETED'].includes(pickup.status)) {
+      throw new AppError('CONFLICT', 'Chat opens after the Kabadiwala accepts the pickup', 409);
+    }
+    const conversation = await db.pickupConversation.upsert({
+      where: { pickupRequestId_kabadiwalaId: { pickupRequestId: pickup.id, kabadiwalaId: pickup.kabadiwalaId } },
+      update: { status: 'OPEN' },
+      create: { pickupRequestId: pickup.id, householdId: pickup.householdId, kabadiwalaId: pickup.kabadiwalaId, status: 'OPEN' }
+    });
+    return res.status(201).json({
+      success: true,
+      data: pickupConversationDto(conversation, pickup.listingId),
+      message: 'Pickup chat ready'
+    });
+  });
+
   router.get('/conversations/:conversationId/messages', async (req, res) => {
-    const identity = requireLegacyTransactionParticipant(req);
-    await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
+    const identity = actor(req);
+    const context = await assertConversationParticipant(db, req.params.conversationId, identity);
     const limit = pageNumber(req.query.limit, 50, 100);
-    const messages = await db.chatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit });
-    await db.chatMessage.updateMany({ where: { conversationId: req.params.conversationId, senderId: { not: identity.collectorId }, readAt: null }, data: { status: MessageStatus.READ, readAt: new Date() } });
+    const messages = context.kind === 'PICKUP'
+      ? await db.pickupChatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit })
+      : await db.chatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit });
+    const unreadFilter = { conversationId: req.params.conversationId, senderId: { not: identity.collectorId }, readAt: null };
+    const readUpdate = { status: MessageStatus.READ, readAt: new Date() };
+    if (context.kind === 'PICKUP') await db.pickupChatMessage.updateMany({ where: unreadFilter, data: readUpdate });
+    else await db.chatMessage.updateMany({ where: unreadFilter, data: readUpdate });
     return res.json({ success: true, data: messages.reverse(), message: 'Messages retrieved' });
   });
 
   router.post('/conversations/:conversationId/messages', async (req, res) => {
-    const identity = requireLegacyTransactionParticipant(req);
-    const conversation = await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
+    const identity = actor(req);
+    const context = await assertConversationParticipant(db, req.params.conversationId, identity);
+    const conversation = context.conversation;
     if (conversation.status !== 'OPEN') throw new AppError('CONFLICT', 'This conversation is closed', 409);
     const parsed = z.object({ clientMessageId: z.string().min(8).max(120), body: z.string().trim().min(1).max(1000) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Message must be between 1 and 1000 characters', 422);
-    const existing = await db.chatMessage.findFirst({ where: { conversationId: conversation.id, clientMessageId: parsed.data.clientMessageId } });
+    const messageInput = { conversationId: conversation.id, senderId: identity.collectorId, senderRole: identity.role as AccountRoleType, clientMessageId: parsed.data.clientMessageId, body: parsed.data.body, status: MessageStatus.SENT };
+    const existing = context.kind === 'PICKUP'
+      ? await db.pickupChatMessage.findFirst({ where: { conversationId: conversation.id, clientMessageId: parsed.data.clientMessageId } })
+      : await db.chatMessage.findFirst({ where: { conversationId: conversation.id, clientMessageId: parsed.data.clientMessageId } });
     if (existing) return res.json({ success: true, data: existing, message: 'Message already sent' });
-    const message = await db.chatMessage.create({ data: { conversationId: conversation.id, senderId: identity.collectorId, senderRole: identity.role as AccountRoleType, clientMessageId: parsed.data.clientMessageId, body: parsed.data.body, status: MessageStatus.SENT } });
-    await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
+    const message = context.kind === 'PICKUP'
+      ? await db.pickupChatMessage.create({ data: messageInput })
+      : await db.chatMessage.create({ data: messageInput });
+    if (context.kind === 'PICKUP') await db.pickupConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
+    else await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
     return res.status(201).json({ success: true, data: message, message: 'Message sent' });
   });
 
   router.post('/conversations/:conversationId/draft-reply', async (req, res) => {
-    const identity = requireLegacyTransactionParticipant(req);
-    const conversation = await assertConversationParticipant(db, req.params.conversationId, identity.collectorId);
+    const identity = actor(req);
+    const context = await assertConversationParticipant(db, req.params.conversationId, identity);
+    const conversation = context.conversation;
     const parsed = z.object({ language: z.string().max(24).optional(), instruction: z.string().trim().max(240).optional() }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Draft instructions are invalid', 422);
-    const messages = await db.chatMessage.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: 'desc' }, take: 20 });
+    const messages = context.kind === 'PICKUP'
+      ? await db.pickupChatMessage.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: 'desc' }, take: 20 })
+      : await db.chatMessage.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: 'desc' }, take: 20 });
     const transcript = messages.reverse().map(message => `${message.senderRole}: ${message.body.slice(0, 600)}`).join('\n');
     const fallback = { text: 'Please confirm the material, weight, pickup time, and payment details before we proceed.', source: 'TEMPLATE', model: null };
     const result = await callGemini([{ text: [

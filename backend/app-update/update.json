@@ -1,8 +1,8 @@
 {
-  "versionCode": 65,
-  "versionName": "0.1.1-beta",
-  "apkUrl": "kabadiwala-connect-0.1.1-beta-debug.apk",
-  "sha256": "8DE125902B0FD2B425050CCD7CFE0D2E17C7D49CA31BF80ACE288D4220146728",
-  "sizeBytes": 28769596,
-  "releaseNotes": "Firebase-enabled testing build with heads-up notification support, notification navigation fixes, and pickup workflow stability updates."
+  "versionCode": 66,
+  "versionName": "0.1.2-beta",
+  "apkUrl": "kabadiwala-connect-0.1.2-beta-debug.apk",
+  "sha256": "8EEA1CAA0C888EBA41FE06B096392CCC3BA0CF2030F2D463B9EF9EE54ED39DCE",
+  "sizeBytes": 28859662,
+  "releaseNotes": "India-bounded household pickup pins with saved offline home locations, plus pickup chat and stability improvements."
 }

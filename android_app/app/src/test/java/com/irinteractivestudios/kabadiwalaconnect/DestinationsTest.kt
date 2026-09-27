@@ -104,6 +104,14 @@ class DestinationsTest {
     }
 
     @Test
+    fun privateMessages_areAvailableToLiveHouseholdCollectorAndRecyclerAccounts() {
+        listOf(AccountRole.HOUSEHOLD, AccountRole.COLLECTOR, AccountRole.RECYCLER).forEach { role ->
+            assertTrue(Destinations.isAllowedForSession(role, Destinations.CHAT, false, null, null))
+            assertTrue(Destinations.isAllowedForSession(role, Destinations.CHAT_DETAIL, false, null, null))
+        }
+    }
+
+    @Test
     fun liveKabadiwalaNavigation_usesSupplyChainTabs() {
         assertEquals(5, KABADIWALA_BOTTOM_TABS.size)
         assertEquals(KABADIWALA_BOTTOM_TABS.map { it.route }, Destinations.topLevelFor(AccountRole.COLLECTOR, newNavigation = true))

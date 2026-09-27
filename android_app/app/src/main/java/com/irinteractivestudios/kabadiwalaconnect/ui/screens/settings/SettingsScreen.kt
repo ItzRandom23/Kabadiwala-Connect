@@ -82,6 +82,7 @@ fun SettingsScreen(
     onOpenNotifications: () -> Unit = {},
     onOpenDisputes: () -> Unit = {},
     showRoleTools: Boolean = true,
+    showMessaging: Boolean = showRoleTools,
     syncItems: List<SyncQueueItemEntity> = emptyList(),
     syncPendingCount: Int = 0,
     onRetrySync: () -> Unit = {},
@@ -160,9 +161,9 @@ fun SettingsScreen(
         SectionCard(title = stringResource(R.string.settings_trust_tools)) {
             SettingsRow(Icons.Filled.Notifications, stringResource(R.string.notifications_title), onOpenNotifications, "settings_notifications")
             SettingsRow(Icons.Filled.School, stringResource(R.string.settings_schemes), onOpenSchemes, "settings_schemes")
+            if (showMessaging) SettingsRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.settings_messages), onOpenChat, "settings_messages")
             if (showRoleTools) {
                 SettingsRow(Icons.Filled.AutoAwesome, stringResource(R.string.settings_rewards), onOpenRewards, "settings_rewards")
-                SettingsRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.settings_messages), onOpenChat, "settings_messages")
                 SettingsRow(Icons.Filled.Gavel, stringResource(R.string.settings_disputes), onOpenDisputes, "settings_disputes")
             }
         }

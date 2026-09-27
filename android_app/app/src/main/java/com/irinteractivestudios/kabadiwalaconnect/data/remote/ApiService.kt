@@ -427,6 +427,9 @@ interface ApiService {
     @POST("future/conversations")
     suspend fun createConversation(@Body body: CreateConversationRequestDto): Response<ApiEnvelope<ConversationDto>>
 
+    @POST("future/pickup-conversations")
+    suspend fun createPickupConversation(@Body body: CreatePickupConversationRequestDto): Response<ApiEnvelope<ConversationDto>>
+
     @GET("future/conversations/{conversationId}/messages")
     suspend fun getMessages(@Path("conversationId") conversationId: String, @Query("limit") limit: Int = 50): Response<ApiEnvelope<List<ChatMessageDto>>>
 

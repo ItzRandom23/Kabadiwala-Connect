@@ -1046,6 +1046,40 @@ model ChatMessage {
   @@index([senderId, createdAt])
 }
 
+// Private messages for an accepted household pickup. Kept separate from the
+// collector↔recycler bulk-trade conversation so account roles and membership
+// checks stay explicit.
+model PickupConversation {
+  id              String             @id @default(cuid()) @map("_id")
+  pickupRequestId String
+  householdId     String
+  kabadiwalaId    String
+  status          ConversationStatus @default(OPEN)
+  lastMessageAt   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([pickupRequestId, kabadiwalaId])
+  @@index([householdId, status, lastMessageAt])
+  @@index([kabadiwalaId, status, lastMessageAt])
+}
+
+model PickupChatMessage {
+  id              String        @id @default(cuid()) @map("_id")
+  conversationId  String
+  senderId        String
+  senderRole      AccountRole
+  clientMessageId String
+  body            String
+  status          MessageStatus @default(SENT)
+  createdAt       DateTime      @default(now())
+  readAt          DateTime?
+
+  @@unique([conversationId, clientMessageId])
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
 model NotificationEvent {
   id        String    @id @default(cuid()) @map("_id")
   accountId String

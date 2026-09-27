@@ -177,7 +177,14 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Filled.Chat, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.size(12.dp))
-                    Column(Modifier.weight(1f)) { Text(stringResource(R.string.future_transaction, conversation.lotId.takeLast(8)), fontWeight = FontWeight.Bold); Text(conversation.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (conversation.type == "PICKUP") "Household pickup · ${conversation.pickupRequestId?.takeLast(8).orEmpty()}"
+                            else stringResource(R.string.future_transaction, conversation.lotId.takeLast(8)),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(conversation.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
@@ -185,16 +192,16 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 }
 
 @Composable
-fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     var draft by remember { mutableStateOf("") }
     LaunchedEffect(draftSuggestion) { if (!draftSuggestion.isNullOrBlank()) draft = draftSuggestion }
     Column(modifier.fillMaxSize().padding(16.dp)) {
-        Text(stringResource(R.string.future_transaction_chat), style = MaterialTheme.typography.headlineMedium)
+        Text(if (conversation.type == "PICKUP") "Pickup chat" else stringResource(R.string.future_transaction_chat), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages, key = { it.id }) { message ->
-                val isMine = message.senderId.isBlank() || message.senderId == conversation.collectorId
+                val isMine = message.senderId.isBlank() || message.senderId == currentAccountId
                 Surface(color = if (isMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text(message.body)
