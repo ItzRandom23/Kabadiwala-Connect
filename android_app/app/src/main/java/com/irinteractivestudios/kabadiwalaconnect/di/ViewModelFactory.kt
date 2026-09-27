@@ -35,6 +35,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverReposi
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.PriceCatalogRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.AccountProfileUpdate
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 
@@ -70,6 +71,8 @@ class KcViewModelFactory(
         container.refreshCatalogs(location, current?.latitude, current?.longitude, force)
     suspend fun refreshEarnings() = container.refreshEarnings()
     suspend fun refreshAccount() = container.refreshAccount()
+    fun reconcileRecyclerAuthorization(profile: RecyclerDto) =
+        container.reconcileRecyclerAuthorization(profile.id, profile.authorizationStatus)
     suspend fun updateAccountProfile(update: AccountProfileUpdate) = container.updateAccountProfile(update)
     suspend fun refreshActivity() = container.refreshActivity()
     suspend fun exportAccount() = container.authenticationRepository.exportAccount()
@@ -118,7 +121,7 @@ class KcViewModelFactory(
                 if (latitude != null && longitude != null) CurrentLocation(latitude, longitude, account.areaName) else null
             }, container.sessionCoordinator.snapshot)
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
-            AdminConsoleViewModel(container.apiService)
+            AdminConsoleViewModel(container.apiService, container.currentAccount()?.permissions.orEmpty())
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")
     } as T
 

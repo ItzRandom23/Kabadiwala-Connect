@@ -1174,6 +1174,11 @@ model HouseholdListing {
   dataDestructionRequested  Boolean                @default(false)
   destructionEvidenceStatus DataDestructionStatus @default(NOT_APPLICABLE)
   recyclerEvidenceReference String?
+  // Set atomically when a completed pickup is consumed into formal stock.
+  // The API claims these fields in the same transaction as the lot/pool write
+  // so concurrent allocations cannot both use the same household material.
+  formalAllocationId String?
+  formalAllocationType String?
   status          HouseholdListingStatus @default(DRAFT)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt

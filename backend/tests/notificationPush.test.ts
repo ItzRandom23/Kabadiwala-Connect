@@ -30,7 +30,7 @@ describe('FCM push delivery', () => {
       return new Response(JSON.stringify({ name: 'projects/kabadiwala-staging/messages/1' }), { status: 200 });
     }));
 
-    const result = await new FcmPushProvider(pushConfig).send({ token: 'fcm-device-token', title: 'Pickup', body: 'Confirmed', route: 'home', type: 'PICKUP_CONFIRMED', notificationId: 'event-1' });
+    const result = await new FcmPushProvider(pushConfig).send({ token: 'fcm-device-token', title: 'Private pickup', body: 'Address: 1 Example Lane', route: 'handovers/document/private-id', type: 'PICKUP_CONFIRMED', notificationId: 'event-1' });
 
     expect(result).toEqual({ providerMessageId: 'projects/kabadiwala-staging/messages/1' });
     expect(requestBodies[0]).toContain('assertion=');
@@ -38,10 +38,12 @@ describe('FCM push delivery', () => {
     expect(JSON.parse(requestBodies[1])).toEqual({
       message: {
         token: 'fcm-device-token',
-        notification: { title: 'Pickup', body: 'Confirmed' },
-        data: { notificationId: 'event-1', type: 'PICKUP_CONFIRMED', route: 'home' }
+        data: { notificationId: 'event-1' }
       }
     });
+    expect(requestBodies[1]).not.toContain('Private pickup');
+    expect(requestBodies[1]).not.toContain('Example Lane');
+    expect(requestBodies[1]).not.toContain('private-id');
   });
 
   it('fans out once per device and records independent target state', async () => {

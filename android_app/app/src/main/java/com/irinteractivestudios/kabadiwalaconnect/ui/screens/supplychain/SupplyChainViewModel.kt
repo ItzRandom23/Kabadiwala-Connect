@@ -28,19 +28,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import java.io.File
 import java.io.IOException
 import java.util.UUID
 
 data class SupplyChainState(
     val loading: Boolean = true,
+    val householdListingsLoading: Boolean = true,
+    val householdListingsLoaded: Boolean = false,
     val initialLoadComplete: Boolean = false,
     val error: String? = null,
     val listings: List<HouseholdListingDto> = emptyList(),
@@ -60,6 +65,7 @@ data class SupplyChainState(
     val householdPickupQr: HouseholdPickupQrDto? = null,
     val householdPickupQrLoadingId: String? = null,
     val householdPickupQrError: String? = null,
+    val pendingPickupListingIds: Set<String> = emptySet(),
     val inventory: List<InventoryBalanceDto> = emptyList(),
     val inventoryMovements: List<InventoryMovementDto> = emptyList(),
     val bulkLots: List<BulkLotDto> = emptyList(),
@@ -141,12 +147,18 @@ class SupplyChainViewModel(
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
     private var householdRefreshJob: Job? = null
+    private var pendingHouseholdRefresh: HouseholdRefreshRequest? = null
+    private var householdQueueObservationJob: Job? = null
+    private var householdQueueObservationAccountId: String? = null
     private var supplyRefreshGeneration = 0L
     private var supplyRefreshJob: Job? = null
     private var materialDetectionJob: Job? = null
     private var householdPriceEstimateJob: Job? = null
 
+    private data class HouseholdRefreshRequest(val radiusKm: Int, val areaQuery: String)
+
     init {
+        observePendingPickupQueue(accountId())
         // Screen effects can run while a reconnect is closing the session
         // gate, then never run again on the same nav entry. A new authenticated
         // snapshot always starts the role's first request from the ViewModel.
@@ -155,11 +167,15 @@ class SupplyChainViewModel(
                 snapshots.collect { snapshot ->
                     val account = snapshot.account
                     if (!snapshot.restorable || account == null) {
+                        observePendingPickupQueue(null)
                         householdRefreshGeneration++
+                        pendingHouseholdRefresh = null
                         householdRefreshJob?.cancel()
+                        householdRefreshJob = null
                         supplyRefreshGeneration++
                         supplyRefreshJob?.cancel()
                     } else if ((stateAccountId == null || stateAccountId == account.profileId) && accountId() == account.profileId) {
+                        observePendingPickupQueue(account.profileId.takeIf { account.role == AccountRole.HOUSEHOLD })
                         when (account.role) {
                             AccountRole.HOUSEHOLD -> refreshHousehold()
                             AccountRole.COLLECTOR -> refreshKabadiwala()
@@ -214,6 +230,33 @@ class SupplyChainViewModel(
 
     private fun accountId() = accountIdProvider()
 
+    private fun observePendingPickupQueue(account: String?) {
+        val normalized = account?.takeIf { it.isNotBlank() }
+        if (normalized == householdQueueObservationAccountId) return
+        householdQueueObservationAccountId = normalized
+        householdQueueObservationJob?.cancel()
+        householdQueueObservationJob = null
+        if (normalized == null || syncQueue == null) {
+            _state.value = _state.value.copy(pendingPickupListingIds = emptySet())
+            return
+        }
+        householdQueueObservationJob = viewModelScope.launch {
+            syncQueue.observeForAccount(normalized).collect { items ->
+                val pending = items.asSequence()
+                    .filter { it.operation == "REQUEST_HOUSEHOLD_PICKUP" && (it.lastErrorCode == null || it.attempts < 3) }
+                    .mapNotNull { item ->
+                        runCatching {
+                            JsonParser.parseString(item.payloadJson).asJsonObject.get("listingId")?.asString
+                        }.getOrNull()?.takeIf { it.isNotBlank() }
+                    }
+                    .toSet()
+                if (accountId() == normalized) {
+                    _state.value = _state.value.copy(pendingPickupListingIds = pending)
+                }
+            }
+        }
+    }
+
     /** A ViewModel can outlive a logout/account switch while its nav entry is
      * still retained. Never let account-scoped photos, errors, or lists bleed
      * into the next authenticated identity. */
@@ -221,7 +264,9 @@ class SupplyChainViewModel(
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
         householdRefreshGeneration++
+        pendingHouseholdRefresh = null
         householdRefreshJob?.cancel()
+        householdRefreshJob = null
         supplyRefreshGeneration++
         supplyRefreshJob?.cancel()
         materialDetectionJob?.cancel()
@@ -230,6 +275,7 @@ class SupplyChainViewModel(
         householdPriceEstimateJob = null
         stateAccountId = current
         _state.value = newHouseholdSearchState()
+        observePendingPickupQueue(current.takeIf { roleProvider() == AccountRole.HOUSEHOLD })
     }
 
     private suspend fun cachedHouseholdListings(): List<HouseholdListingDto> {
@@ -300,55 +346,99 @@ class SupplyChainViewModel(
     fun refreshHousehold(radiusKm: Int? = null, areaQuery: String? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         resetForAccountChange()
-        if (householdRefreshJob?.isActive == true) return
-        val generation = ++householdRefreshGeneration
-        val refreshAccount = accountId()
         val requestedRadiusKm = radiusKm ?: _state.value.kabadiwalaRadiusKm
         val requestedArea = areaQuery ?: _state.value.kabadiwalaAreaQuery
+        if (householdRefreshJob?.isActive == true) {
+            // Keep the newest requested filters and guarantee one trailing
+            // refresh after the in-flight listings/pickups/directory pass.
+            pendingHouseholdRefresh = HouseholdRefreshRequest(requestedRadiusKm, requestedArea)
+            return
+        }
+        val generation = ++householdRefreshGeneration
+        val refreshAccount = accountId()
         householdRefreshJob = viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null, notice = null)
-            val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
-            if (cached.isNotEmpty()) {
-                _state.value = _state.value.copy(listings = cached)
-            }
-            fun current() = generation == householdRefreshGeneration && accountId() == refreshAccount && protectedSessionReady()
-            val failures = mutableListOf<String>()
-            fetch { restorePendingPhotoUpload() }
-            val listingsResult = fetch { mergeHouseholdListings(api.getHouseholdListings().requireData()) }
-            if (!current()) return@launch
-            listingsResult.onSuccess { _state.value = _state.value.copy(listings = it) }
-                .onFailure { error ->
-                    Log.e("HouseholdRefresh", "Failed loading listings (${error::class.java.simpleName})")
-                    failures += householdRefreshError(error, "your listings")
+            try {
+                _state.value = _state.value.copy(
+                    loading = true,
+                    householdListingsLoading = _state.value.listings.isEmpty(),
+                    householdListingsLoaded = _state.value.listings.isNotEmpty(),
+                    error = null,
+                    notice = null
+                )
+                val cached = runCatching { cachedHouseholdListings() }.getOrDefault(emptyList())
+                if (cached.isNotEmpty()) {
+                    _state.value = _state.value.copy(
+                        listings = cached,
+                        householdListingsLoading = false,
+                        householdListingsLoaded = true
+                    )
                 }
-            val pickupsResult = fetch { api.getHouseholdPickups().requireData() }
-            if (!current()) return@launch
-            pickupsResult.onSuccess { _state.value = _state.value.copy(pickups = it) }
-                .onFailure { error ->
-                    Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
-                    failures += householdRefreshError(error, "your pickup history")
+                fun current() = generation == householdRefreshGeneration && accountId() == refreshAccount && protectedSessionReady()
+                val failures = mutableListOf<String>()
+                fetch { restorePendingPhotoUpload() }
+                // These reads are independent. Starting them together means a
+                // slow pickup or directory response cannot delay the listing
+                // result that the Household is waiting to see.
+                val listingsRequest = async { fetch { mergeHouseholdListings(api.getHouseholdListings().requireData()) } }
+                val pickupsRequest = async { fetch { api.getHouseholdPickups().requireData() } }
+                val directoryRequest = async {
+                    fetch {
+                        api.getHouseholdKabadiwalas(
+                            _state.value.kabadiwalaLatitude,
+                            _state.value.kabadiwalaLongitude,
+                            requestedRadiusKm,
+                            requestedArea.ifBlank { null }
+                        ).requireData().toKabadiwalaDirectoryDto()
+                    }
                 }
-            val directoryResult = fetch {
-                api.getHouseholdKabadiwalas(
-                    _state.value.kabadiwalaLatitude,
-                    _state.value.kabadiwalaLongitude,
-                    requestedRadiusKm,
-                    requestedArea.ifBlank { null }
-                ).requireData().toKabadiwalaDirectoryDto()
+                val listingsResult = listingsRequest.await()
+                if (!current()) return@launch
+                listingsResult.onSuccess {
+                    _state.value = _state.value.copy(
+                        listings = it,
+                        householdListingsLoading = false,
+                        householdListingsLoaded = true
+                    )
+                }
+                    .onFailure { error ->
+                        Log.e("HouseholdRefresh", "Failed loading listings (${error::class.java.simpleName})")
+                        val message = householdRefreshError(error, "your listings")
+                        failures += message
+                        _state.value = _state.value.copy(
+                            householdListingsLoading = false,
+                            householdListingsLoaded = true,
+                            error = message
+                        )
+                    }
+                val pickupsResult = pickupsRequest.await()
+                if (!current()) return@launch
+                pickupsResult.onSuccess { _state.value = _state.value.copy(pickups = it) }
+                    .onFailure { error ->
+                        Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
+                        failures += householdRefreshError(error, "your pickup history")
+                    }
+                val directoryResult = directoryRequest.await()
+                if (!current()) return@launch
+                directoryResult.onSuccess { directory ->
+                    _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
+                }.onFailure { error ->
+                    Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
+                    failures += householdRefreshError(error, "nearby Kabadiwalas")
+                }
+                _state.value = _state.value.copy(
+                    loading = false,
+                    initialLoadComplete = failures.isEmpty() || _state.value.initialLoadComplete,
+                    listings = if (listingsResult.isFailure) runCatching { cachedHouseholdListings() }.getOrDefault(cached).ifEmpty { _state.value.listings } else _state.value.listings,
+                    error = failures.joinToString(" ").takeIf { it.isNotEmpty() }
+                )
+            } finally {
+                if (generation == householdRefreshGeneration && accountId() == refreshAccount) {
+                    householdRefreshJob = null
+                    val trailing = pendingHouseholdRefresh
+                    pendingHouseholdRefresh = null
+                    if (trailing != null && protectedSessionReady()) refreshHousehold(trailing.radiusKm, trailing.areaQuery)
+                }
             }
-            if (!current()) return@launch
-            directoryResult.onSuccess { directory ->
-                _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
-            }.onFailure { error ->
-                Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
-                failures += householdRefreshError(error, "nearby Kabadiwalas")
-            }
-            _state.value = _state.value.copy(
-                loading = false,
-                initialLoadComplete = failures.isEmpty() || _state.value.initialLoadComplete,
-                listings = if (listingsResult.isFailure) runCatching { cachedHouseholdListings() }.getOrDefault(cached).ifEmpty { _state.value.listings } else _state.value.listings,
-                error = failures.joinToString(" ").takeIf { it.isNotEmpty() }
-            )
         }
     }
     fun searchHouseholdKabadiwalas(area: String, radiusKm: Int = _state.value.kabadiwalaRadiusKm, location: CurrentLocation? = null) {
@@ -471,8 +561,15 @@ class SupplyChainViewModel(
         if (key in _state.value.busy) return
         _state.value = _state.value.copy(busy = _state.value.busy + key, error = null, notice = null)
         viewModelScope.launch {
-            runCatching { block() }.onSuccess { _state.value = _state.value.copy(notice = it) }.onFailure { _state.value = _state.value.copy(error = friendly(it)) }
-            _state.value = _state.value.copy(busy = _state.value.busy - key)
+            try {
+                _state.value = _state.value.copy(notice = block())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.value = _state.value.copy(error = friendly(error))
+            } finally {
+                _state.value = _state.value.copy(busy = _state.value.busy - key)
+            }
         }
     }
     private suspend fun uploadListingPhotos(listingId: String, localPaths: List<String>) {
@@ -496,7 +593,8 @@ class SupplyChainViewModel(
         val created = try {
             api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
         } catch (error: Throwable) {
-            val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
+            if (error is CancellationException) throw error
+            val transient = error.isRetryableTransportFailure()
             // A definitive rejection means this draft will be corrected and
             // retried as a new request. Release its key so the retry cannot be
             // blocked by an old key bound to another payload.
@@ -584,6 +682,17 @@ class SupplyChainViewModel(
         "Photo uploaded securely."
     })
     fun requestPickup(listingId: String, kabadiwalaId: String? = null) = action("pickup-$listingId", AccountRole.HOUSEHOLD, {
+        val queueAccount = accountId()?.takeIf { it.isNotBlank() }
+        val alreadyPendingForListing = if (queueAccount != null && syncQueue != null) {
+            syncQueue.observeForAccount(queueAccount).first().any { item ->
+                item.operation == "REQUEST_HOUSEHOLD_PICKUP" && (item.lastErrorCode == null || item.attempts < 3) &&
+                    runCatching { JsonParser.parseString(item.payloadJson).asJsonObject.get("listingId")?.asString == listingId }.getOrDefault(false)
+            }
+        } else false
+        if (alreadyPendingForListing) {
+            requestSync?.invoke()
+            return@action "Pickup is already saved offline and will sync when connected."
+        }
         val operation = "pickup-$listingId-${kabadiwalaId ?: "waiting"}"
         val key = idempotencyKeys?.getOrCreate(operation) ?: "pickup-$listingId-${kabadiwalaId ?: "waiting"}"
         try {
@@ -592,7 +701,8 @@ class SupplyChainViewModel(
             refreshHousehold()
             if (kabadiwalaId == null) "Pickup saved. We’ll notify nearby Kabadiwalas." else "Pickup request sent."
         } catch (error: Throwable) {
-            val transient = error is IOException || ((error as? RemoteApiException)?.httpCode ?: 0) >= 500
+            if (error is CancellationException) throw error
+            val transient = error.isRetryableTransportFailure()
             if (!transient || syncQueue == null) throw error
             val queueAccount = accountId()?.takeIf { it.isNotBlank() }
                 ?: throw error

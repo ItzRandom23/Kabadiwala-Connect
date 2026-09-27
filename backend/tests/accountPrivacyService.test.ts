@@ -40,7 +40,7 @@ describe('account privacy service', () => {
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { email: null, phone: null, passwordHash: null, accountStatus: 'DELETED' } });
     expect(collectorUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'profile-1' }, data: expect.objectContaining({ accountStatus: 'DELETED', areaName: 'WITHDRAWN_ACCOUNT' }) }));
     expect(listingAddressRedaction).toHaveBeenCalledWith({ where: { householdId: 'profile-1' }, data: { pickupAddress: null, latitude: null, longitude: null } });
-    expect(revoke).toHaveBeenCalledWith({ where: { actorId: 'profile-1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(revoke).toHaveBeenCalledWith({ where: { actorId: 'profile-1', OR: [{ revokedAt: null }, { revokedAt: { isSet: false } }] }, data: { revokedAt: expect.any(Date) } });
     expect(notificationDelete).toHaveBeenCalledWith({ where: { accountId: 'profile-1' } });
     expect(deviceDelete).toHaveBeenCalledWith({ where: { accountId: 'profile-1' } });
     expect(otpDelete).toHaveBeenCalledWith({ where: { phone: '919876543210' } });

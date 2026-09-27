@@ -23,6 +23,8 @@ import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -81,9 +83,48 @@ class OnboardingViewModel(
     )
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
     private var authenticatedCollectorId: String? = null
+    private var signInGeneration = 0L
+    private var signInJob: Job? = null
+    private var otpFlowGeneration = 0L
+    private var otpFlowJob: Job? = null
+    private var locationGeneration = 0L
+    private var locationJob: Job? = null
+    private var profileGeneration = 0L
+    private var profileJob: Job? = null
+
+    private fun invalidateSignIn() {
+        signInGeneration++
+        signInJob?.cancel()
+        signInJob = null
+        if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+    }
+
+    private fun invalidateOtpFlow() {
+        otpFlowGeneration++
+        otpFlowJob?.cancel()
+        otpFlowJob = null
+        if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+    }
+
+    private fun invalidateLocationLookup() {
+        locationGeneration++
+        locationJob?.cancel()
+        locationJob = null
+        if (_state.value.isLocationBusy) _state.value = _state.value.copy(isLocationBusy = false)
+    }
+
+    private fun invalidateProfileSave() {
+        profileGeneration++
+        profileJob?.cancel()
+        profileJob = null
+        if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+    }
 
     fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE, roleRequiredAfterSignIn = false) }
     fun useEmailSignIn() {
+        invalidateSignIn()
+        invalidateOtpFlow()
+        invalidateLocationLookup()
         _state.value = _state.value.copy(
             returningUser = true,
             // Operator sign-in is a separate credential endpoint. Going back
@@ -99,6 +140,9 @@ class OnboardingViewModel(
         )
     }
     fun useAdminSignIn() {
+        invalidateSignIn()
+        invalidateOtpFlow()
+        invalidateLocationLookup()
         _state.value = _state.value.copy(
             returningUser = true,
             role = AccountRole.ADMIN,
@@ -108,8 +152,12 @@ class OnboardingViewModel(
             phoneError = false
         )
     }
-    fun toggleReturning() { _state.value = _state.value.copy(returningUser = !_state.value.returningUser, roleRequiredAfterSignIn = false, authError = null) }
+    fun toggleReturning() { invalidateSignIn(); _state.value = _state.value.copy(returningUser = !_state.value.returningUser, roleRequiredAfterSignIn = false, authError = null) }
     fun goBack() {
+        invalidateSignIn()
+        invalidateOtpFlow()
+        invalidateLocationLookup()
+        invalidateProfileSave()
         val current = _state.value
         val previous = when (current.step) {
             OnboardingStep.EMAIL -> OnboardingStep.WELCOME
@@ -134,12 +182,16 @@ class OnboardingViewModel(
         )
     }
     fun startOver() {
+        invalidateSignIn()
+        invalidateOtpFlow()
+        invalidateLocationLookup()
+        invalidateProfileSave()
         val language = _state.value.language
         authenticatedCollectorId = null
         _state.value = OnboardingState(language = language)
     }
-    fun setEmail(value: String) { _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = null) }
-    fun setPassword(value: String) { _state.value = _state.value.copy(password = value, passwordError = false, authError = null) }
+    fun setEmail(value: String) { invalidateSignIn(); _state.value = _state.value.copy(email = value.trim(), emailError = false, authError = null) }
+    fun setPassword(value: String) { invalidateSignIn(); _state.value = _state.value.copy(password = value, passwordError = false, authError = null) }
     fun continueEmail() {
         val current = _state.value
         val validEmail = EmailValidator.isValid(current.email)
@@ -149,13 +201,39 @@ class OnboardingViewModel(
     }
     fun signIn() {
         val current = _state.value
+        if (current.isBusy) return
         if (!EmailValidator.isValid(current.email) || current.password.length < 8) { continueEmail(); return }
-        viewModelScope.launch {
-            _state.value = current.copy(isBusy = true, authError = null)
-            when (val result = if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password) else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, LocaleManager.ENGLISH, isReturning = true))) {
-                is EmailAuthentication.Success -> { secureStorage?.saveAccount(result.profile); saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role); _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true) }
-                is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
-                else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)
+        val generation = ++signInGeneration
+        _state.value = current.copy(isBusy = true, authError = null)
+        signInJob = viewModelScope.launch {
+            try {
+                val result = try {
+                    if (current.role == AccountRole.ADMIN) auth.authenticateAdmin(current.email, current.password)
+                    else auth.authenticateEmail(EmailAccountRequest(current.email, current.password, current.role, LocaleManager.ENGLISH, isReturning = true))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    EmailAuthentication.NetworkError
+                }
+                if (generation != signInGeneration) return@launch
+                when (result) {
+                    is EmailAuthentication.Success -> {
+                        secureStorage?.saveAccount(result.profile)
+                        saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
+                        if (generation == signInGeneration) _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true)
+                    }
+                    is EmailAuthentication.InvalidCredentials -> _state.value = _state.value.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
+                    else -> _state.value = _state.value.copy(isBusy = false, authError = AuthError.NETWORK)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == signInGeneration) _state.value = _state.value.copy(isBusy = false, authError = AuthError.NETWORK)
+            } finally {
+                if (generation == signInGeneration) {
+                    if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+                    signInJob = null
+                }
             }
         }
     }
@@ -181,6 +259,7 @@ class OnboardingViewModel(
 
     // Legacy phone OTP boundary remains available for older backend/dev flows.
     fun setPhone(value: String) {
+        invalidateOtpFlow()
         _state.value = _state.value.copy(
             // Keep the field itself strict: exactly the value the user can
             // submit is stored, with no punctuation, spaces, or country code.
@@ -199,31 +278,42 @@ class OnboardingViewModel(
         val phone = IndianPhoneValidator.normalize(current.phone)
         _state.value = _state.value.copy(phone = phone)
         if (phone.length != 10 || !IndianPhoneValidator.isValid(phone)) { _state.value = _state.value.copy(phoneError = true); return }
+        val generation = ++otpFlowGeneration
         _state.value = _state.value.copy(isBusy = true, phoneError = false)
-        viewModelScope.launch {
+        otpFlowJob = viewModelScope.launch {
             try {
                 val challenge = auth.requestOtp(phone)
-                _state.value = _state.value.copy(
-                    step = OnboardingStep.OTP,
-                    challenge = challenge,
-                    otp = challenge.developmentCodeHint.orEmpty(),
-                    isBusy = false,
-                    authError = null,
-                    otpRetryAfterSeconds = null
-                )
+                if (generation == otpFlowGeneration) {
+                    _state.value = _state.value.copy(
+                        step = OnboardingStep.OTP,
+                        challenge = challenge,
+                        otp = challenge.developmentCodeHint.orEmpty(),
+                        isBusy = false,
+                        authError = null,
+                        otpRetryAfterSeconds = null
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 val remote = error as? RemoteApiException
-                _state.value = _state.value.copy(
+                if (generation == otpFlowGeneration) _state.value = _state.value.copy(
                     isBusy = false,
                     authError = if (remote?.code == "OTP_RATE_LIMITED" || remote?.code == "OTP_COOLDOWN") AuthError.OTP_RATE_LIMITED else AuthError.NETWORK,
                     otpRetryAfterSeconds = remote?.retryAfterSeconds
                 )
+            } finally {
+                if (generation == otpFlowGeneration) {
+                    if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+                    otpFlowJob = null
+                }
             }
         }
     }
-    fun setOtp(value: String) { _state.value = _state.value.copy(otp = value.filter(Char::isDigit).take(6), otpError = null) }
+    fun setOtp(value: String) { invalidateOtpFlow(); _state.value = _state.value.copy(otp = value.filter(Char::isDigit).take(6), otpError = null) }
     fun verifyOtp() {
         val current = _state.value
+        if (current.isBusy) return
         if (current.otp.length != 6) return
         val useLegacyPhoneOnlyVerification = current.isPhoneOnlyVerification()
         if (!useLegacyPhoneOnlyVerification && !current.hasRequiredRegistrationFields()) {
@@ -243,53 +333,57 @@ class OnboardingViewModel(
         val businessName = current.businessName.trim()
         val authorizationNumber = current.authorizationNumber.trim()
         val materialsAccepted = current.materialsAccepted.map { it.trim() }.filter { it.isNotEmpty() }
-        viewModelScope.launch {
-            _state.value = current.copy(isBusy = true)
-            val registrationResult = try {
-                if (useLegacyPhoneOnlyVerification) {
-                    auth.verifyOtp(current.phone, current.otp)
-                } else {
-                    auth.verifyOtp(
-                        current.phone,
-                        current.otp,
-                        PhoneAccountRequest(
-                            phoneNumber = current.phone,
-                            role = current.role,
-                            preferredLanguage = current.language,
-                            areaName = area,
-                            address = current.address.trim(),
-                            displayName = displayName,
-                            email = email,
-                            businessName = businessName,
-                            authorizationNumber = authorizationNumber,
-                            materialsAccepted = materialsAccepted,
-                            pickupAvailable = current.pickupAvailable,
-                            serviceRadiusKm = current.serviceRadiusKm,
-                            latitude = current.latitude,
-                            longitude = current.longitude
+        val generation = ++otpFlowGeneration
+        _state.value = current.copy(isBusy = true)
+        otpFlowJob = viewModelScope.launch {
+            try {
+                val registrationResult = try {
+                    if (useLegacyPhoneOnlyVerification) {
+                        auth.verifyOtp(current.phone, current.otp)
+                    } else {
+                        auth.verifyOtp(
+                            current.phone,
+                            current.otp,
+                            PhoneAccountRequest(
+                                phoneNumber = current.phone,
+                                role = current.role,
+                                preferredLanguage = current.language,
+                                areaName = area,
+                                address = current.address.trim(),
+                                displayName = displayName,
+                                email = email,
+                                businessName = businessName,
+                                authorizationNumber = authorizationNumber,
+                                materialsAccepted = materialsAccepted,
+                                pickupAvailable = current.pickupAvailable,
+                                serviceRadiusKm = current.serviceRadiusKm,
+                                latitude = current.latitude,
+                                longitude = current.longitude
+                            )
                         )
-                    )
-                }
-            } catch (_: Exception) { OtpVerification.NetworkError }
-            // Older test deployments can have a phone profile without its
-            // matching account identity. A verified phone is enough to safely
-            // retry through the existing-phone sign-in path; this avoids
-            // trapping a user on an erroneous duplicate-account message.
-            val result = if (registrationResult == OtpVerification.AccountConflict) {
-                try {
-                    // A verified phone is the identity boundary. Retry once
-                    // through the phone-only path so an existing Household,
-                    // Kabadiwala, or Recycler account is signed in instead of
-                    // being treated as a failed new registration. The server
-                    // still decides the role and account status.
-                    auth.verifyOtp(current.phone, current.otp)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     OtpVerification.NetworkError
                 }
-            } else {
-                registrationResult
-            }
-            _state.value = when (result) {
+                if (generation != otpFlowGeneration) return@launch
+                // Older test deployments can have a phone profile without its
+                // matching account identity. A verified phone is enough to safely
+                // retry through the existing-phone sign-in path.
+                val result = if (registrationResult == OtpVerification.AccountConflict) {
+                    try {
+                        auth.verifyOtp(current.phone, current.otp)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        OtpVerification.NetworkError
+                    }
+                } else {
+                    registrationResult
+                }
+                if (generation != otpFlowGeneration) return@launch
+                _state.value = when (result) {
                 is OtpVerification.Success -> {
                     val profileId = result.collectorId.takeIf { it.isNotBlank() }
                         ?: result.profile?.profileId?.takeIf { it.isNotBlank() }
@@ -342,10 +436,21 @@ class OnboardingViewModel(
                 )
                 OtpVerification.ServerError -> current.copy(isBusy = false, otpError = OtpError.SERVER)
                 OtpVerification.NetworkError -> current.copy(isBusy = false, otpError = OtpError.NETWORK)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == otpFlowGeneration) _state.value = _state.value.copy(isBusy = false, otpError = OtpError.SERVER)
+            } finally {
+                if (generation == otpFlowGeneration) {
+                    if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+                    otpFlowJob = null
+                }
             }
         }
     }
     fun resetOtp() {
+        invalidateOtpFlow()
         _state.value = _state.value.copy(
             step = OnboardingStep.PHONE,
             otp = "",
@@ -364,6 +469,7 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(language = LocaleManager.normalizeTag(tag), step = next)
     }
     fun locationPermissionResult(granted: Boolean) {
+        invalidateLocationLookup()
         if (!granted) {
             chooseManualLocation()
             return
@@ -374,24 +480,43 @@ class OnboardingViewModel(
             return
         }
 
+        val generation = ++locationGeneration
         _state.value = _state.value.copy(isLocationBusy = true, locationError = false)
-        viewModelScope.launch {
-            val detected = runCatching { provider.current() }.getOrNull()
-            val current = _state.value
-            _state.value = current.copy(
-                locationChoice = if (detected == null) LocationChoice.MANUAL else LocationChoice.GPS,
-                latitude = detected?.latitude,
-                longitude = detected?.longitude,
-                area = detected?.areaName.orEmpty().ifBlank { detected?.formattedAddress.orEmpty() },
-                address = detected?.formattedAddress.orEmpty(),
-                locationError = detected == null,
-                isLocationBusy = false,
-                step = OnboardingStep.AREA
-            )
+        locationJob = viewModelScope.launch {
+            try {
+                val detected = try {
+                    provider.current()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                if (generation != locationGeneration) return@launch
+                val current = _state.value
+                _state.value = current.copy(
+                    locationChoice = if (detected == null) LocationChoice.MANUAL else LocationChoice.GPS,
+                    latitude = detected?.latitude,
+                    longitude = detected?.longitude,
+                    area = detected?.areaName.orEmpty().ifBlank { detected?.formattedAddress.orEmpty() },
+                    address = detected?.formattedAddress.orEmpty(),
+                    locationError = detected == null,
+                    isLocationBusy = false,
+                    step = OnboardingStep.AREA
+                )
+            } catch (cancelled: CancellationException) {
+                if (generation == locationGeneration && _state.value.isLocationBusy) _state.value = _state.value.copy(isLocationBusy = false)
+                throw cancelled
+            } finally {
+                if (generation == locationGeneration) {
+                    if (_state.value.isLocationBusy) _state.value = _state.value.copy(isLocationBusy = false)
+                    locationJob = null
+                }
+            }
         }
     }
 
     fun chooseManualLocation() {
+        invalidateLocationLookup()
         _state.value = _state.value.copy(
             locationChoice = LocationChoice.MANUAL,
             latitude = null,
@@ -453,42 +578,62 @@ class OnboardingViewModel(
 
     fun saveProfile() {
         val current = _state.value
+        if (current.isBusy) return
         if (!current.returningUser && !current.roleSelected) {
             _state.value = current.copy(step = OnboardingStep.ROLE)
             return
         }
         if (current.address.isBlank() && current.role != AccountRole.RECYCLER) return
-        viewModelScope.launch {
-            _state.value = current.copy(isBusy = true, authError = null)
-            if (current.email.isNotBlank() && authenticatedCollectorId == null) {
-                val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, address = current.address.trim(), latitude = current.latitude, longitude = current.longitude, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
-                when (val result = auth.authenticateEmail(request)) {
-                    is EmailAuthentication.Success -> {
-                        secureStorage?.saveAccount(result.profile)
-                        saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
-                        _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true)
+        val generation = ++profileGeneration
+        _state.value = current.copy(isBusy = true, authError = null)
+        profileJob = viewModelScope.launch {
+            try {
+                if (current.email.isNotBlank() && authenticatedCollectorId == null) {
+                    val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, address = current.address.trim(), latitude = current.latitude, longitude = current.longitude, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
+                    when (val result = auth.authenticateEmail(request)) {
+                        is EmailAuthentication.Success -> {
+                            secureStorage?.saveAccount(result.profile)
+                            saveCollectorCacheIfNeeded(result.profile.profileId, current, result.profile.role)
+                            if (generation == profileGeneration) _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false, role = result.profile.role, roleSelected = true)
+                        }
+                        is EmailAuthentication.InvalidCredentials -> _state.value = _state.value.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
+                        else -> _state.value = _state.value.copy(isBusy = false, authError = AuthError.NETWORK)
                     }
-                    is EmailAuthentication.InvalidCredentials -> _state.value = current.copy(isBusy = false, authError = AuthError.INVALID_CREDENTIALS)
-                    else -> _state.value = current.copy(isBusy = false, authError = AuthError.NETWORK)
+                } else {
+                    val timestamp = now()
+                    val id = authenticatedCollectorId ?: "KC-${UUID.randomUUID().toString().take(8).uppercase()}"
+                    val profile = CollectorProfile(
+                        id = id,
+                        phoneNumber = current.phone,
+                        preferredLanguage = current.language,
+                        primaryLocation = current.area,
+                        locationSource = current.locationChoice.name.lowercase(),
+                        createdAtEpochMs = timestamp,
+                        lastLoginEpochMs = timestamp,
+                        latitude = current.latitude,
+                        longitude = current.longitude
+                    )
+                    profiles.save(profile)
+                    try {
+                        auth.updateProfile(profile)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Profile updates are best effort for the legacy
+                        // offline phone-only registration path.
+                    }
+                    secureStorage?.put(SecureStorage.COLLECTOR_ID, id)
+                    if (generation == profileGeneration) _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false)
                 }
-            } else {
-                val timestamp = now()
-                val id = authenticatedCollectorId ?: "KC-${UUID.randomUUID().toString().take(8).uppercase()}"
-                val profile = CollectorProfile(
-                    id = id,
-                    phoneNumber = current.phone,
-                    preferredLanguage = current.language,
-                    primaryLocation = current.area,
-                    locationSource = current.locationChoice.name.lowercase(),
-                    createdAtEpochMs = timestamp,
-                    lastLoginEpochMs = timestamp,
-                    latitude = current.latitude,
-                    longitude = current.longitude
-                )
-                profiles.save(profile)
-                try { auth.updateProfile(profile) } catch (_: Exception) { }
-                secureStorage?.put(SecureStorage.COLLECTOR_ID, id)
-                _state.value = current.copy(step = OnboardingStep.COMPLETE, completed = true, isBusy = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == profileGeneration) _state.value = _state.value.copy(isBusy = false, authError = AuthError.NETWORK)
+            } finally {
+                if (generation == profileGeneration) {
+                    if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
+                    profileJob = null
+                }
             }
         }
     }

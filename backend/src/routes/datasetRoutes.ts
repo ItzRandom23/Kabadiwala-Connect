@@ -16,16 +16,19 @@ const priceRow = z.object({
 }).refine(row => row.priceMin <= row.marketPrice && row.marketPrice <= row.priceMax, { message: 'Market price must be within the range' });
 
 export const datasetRoutes = (jwt: JwtService, db: PrismaClient) => Router()
-  .post('/admin/datasets/prices/import', requireAdmin(jwt, db, 'DATASET_EXPORT'), async (req: Request, res: Response) => {
+  .post('/admin/datasets/prices/import', requireAdmin(jwt, db, 'PRICE_MANAGEMENT'), async (req: Request, res: Response) => {
     const parsed = z.object({ rows: z.array(priceRow).min(1).max(500) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Price import contains invalid rows', 422, { code: 'INVALID_PRICE_IMPORT', details: parsed.error.flatten() });
-    const imported: string[] = [];
-    for (const row of parsed.data.rows) {
-      const { externalId, effectiveAt, ...data } = row;
-      const current = await db.price.upsert({ where: { id: externalId }, update: { ...data, source: 'ADMIN', qualityStatus: 'VALIDATED', ingestedAt: new Date(), effectiveAt: new Date(effectiveAt) }, create: { id: externalId, ...data, source: 'ADMIN', qualityStatus: 'VALIDATED', ingestedAt: new Date(), effectiveAt: new Date(effectiveAt) } });
-      await db.priceHistory.create({ data: { priceId: current.id, materialCategory: current.materialCategory, city: current.city, areaName: current.areaName, priceMin: current.priceMin, priceMax: current.priceMax, marketPrice: current.marketPrice, unit: current.unit, source: current.source, sourceOrganization: current.sourceOrganization, sourceReference: current.sourceReference, ingestedAt: current.ingestedAt, qualityStatus: current.qualityStatus, effectiveAt: current.effectiveAt } });
-      imported.push(current.id);
-    }
+    const imported = await db.$transaction(async tx => {
+      const ids: string[] = [];
+      for (const row of parsed.data.rows) {
+        const { externalId, effectiveAt, ...data } = row;
+        const current = await tx.price.upsert({ where: { id: externalId }, update: { ...data, source: 'ADMIN', qualityStatus: 'VALIDATED', ingestedAt: new Date(), effectiveAt: new Date(effectiveAt) }, create: { id: externalId, ...data, source: 'ADMIN', qualityStatus: 'VALIDATED', ingestedAt: new Date(), effectiveAt: new Date(effectiveAt) } });
+        await tx.priceHistory.create({ data: { priceId: current.id, materialCategory: current.materialCategory, city: current.city, areaName: current.areaName, priceMin: current.priceMin, priceMax: current.priceMax, marketPrice: current.marketPrice, unit: current.unit, source: current.source, sourceOrganization: current.sourceOrganization, sourceReference: current.sourceReference, ingestedAt: current.ingestedAt, qualityStatus: current.qualityStatus, effectiveAt: current.effectiveAt } });
+        ids.push(current.id);
+      }
+      return ids;
+    });
     return res.status(201).json({ success: true, data: { imported, count: imported.length }, message: 'Validated price rows imported' });
   })
   .get('/admin/datasets/export', requireAdmin(jwt, db, 'DATASET_EXPORT'), async (req: Request, res: Response) => {
@@ -50,6 +53,23 @@ export const datasetRoutes = (jwt: JwtService, db: PrismaClient) => Router()
     const anonymizedTransactions = transactions.map(({ id, collectorId, quotes, ...row }) => ({ lotKey: pseudonym('lot', id), collectorKey: pseudonym('collector', collectorId), ...row, quotes: quotes.map(({ recyclerId, ...quote }) => ({ recyclerKey: pseudonym('recycler', recyclerId), ...quote })) }));
     const anonymizedTraceability = traceability.map(({ lotId, recyclerId, photoReference, actualWeightPhotoReference, ...row }) => ({ lotKey: pseudonym('lot', lotId), recyclerKey: pseudonym('recycler', recyclerId), hasCollectionPhoto: Boolean(photoReference), hasScalePhoto: Boolean(actualWeightPhotoReference), ...row }));
     const anonymizedCollectors = collectors.map(({ id, lots, payments, ...row }) => ({ collectorKey: pseudonym('collector', id), ...row, lots: lots.map(({ id: lotId, ...lot }) => ({ lotKey: pseudonym('lot', lotId), ...lot })), payments }));
-    const anonymizedAi = ai.map(({ inputProvenance, ...row }) => ({ ...row, inputProvenance: { hasImageHash: Boolean((inputProvenance as any)?.imageSha256), mimeType: (inputProvenance as any)?.mimeType ?? null } }));
+    const anonymizedAi = ai.map((row: any) => ({
+      inferenceKey: pseudonym('ai', row.id),
+      ...(row.lotId ? { lotKey: pseudonym('lot', row.lotId) } : {}),
+      feature: row.feature,
+      modelProvider: row.modelProvider,
+      modelVersion: row.modelVersion,
+      prediction: row.prediction,
+      confidence: row.confidence,
+      correctedAt: row.correctedAt,
+      consentForTraining: row.consentForTraining,
+      createdAt: row.createdAt,
+      // Keep only coarse input metadata. Raw hashes, image details, notes, and
+      // human corrections can identify or reproduce a person's contribution.
+      inputProvenance: {
+        hasImageHash: Boolean((row.inputProvenance as any)?.imageSha256),
+        mimeType: (row.inputProvenance as any)?.mimeType ?? null
+      }
+    }));
     return res.json({ success: true, data: { schemaVersion: 2, generatedAt: new Date().toISOString(), from: from.toISOString(), materials: anonymizedMaterials, prices, recyclers: anonymizedRecyclers, transactions: anonymizedTransactions, traceability: anonymizedTraceability, collectors: anonymizedCollectors, ai: anonymizedAi }, message: 'Pseudonymized operational dataset exported' });
   });

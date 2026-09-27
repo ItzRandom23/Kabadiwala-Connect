@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
@@ -71,7 +72,8 @@ fun OfflineBanner(state: ConnectionState, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(10.dp))
             Text(
                 text = stringResource(R.string.offline_banner),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -308,18 +310,55 @@ fun KcMetric(
 }
 
 /** A small status surface whose color remains paired with explicit text. */
+enum class KcStatusTone { NEUTRAL, INFO, PENDING, SUCCESS, WARNING, ERROR }
+
+private fun statusToneForLabel(text: String): KcStatusTone {
+    val label = text.trim().lowercase()
+    return when {
+        label.contains("not verified") || label.contains("failed") || label.contains("failure") ||
+            label.contains("rejected") || label.contains("suspended") || label.contains("error") -> KcStatusTone.ERROR
+        label.contains("pending") || label.contains("in progress") || label.contains("waiting") ||
+            label.contains("queued") || label.contains("review") || label.contains("scheduled") -> KcStatusTone.PENDING
+        label.contains("cancelled") || label.contains("canceled") || label.contains("expired") ||
+            label.contains("reversed") -> KcStatusTone.NEUTRAL
+        label.contains("hazard") || label.contains("warning") || label.contains("offline") ||
+            label.contains("sample") || label.contains("attention") -> KcStatusTone.WARNING
+        label.contains("verified") || label.contains("completed") || label.contains("complete") ||
+            label.contains("accepted") || label.contains("confirmed") || label.contains("resolved") ||
+            label.contains("matched") || label.contains("ready") || label.contains("saved") -> KcStatusTone.SUCCESS
+        label.isBlank() -> KcStatusTone.NEUTRAL
+        else -> KcStatusTone.INFO
+    }
+}
+
 @Composable
 fun KcStatusPill(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tone: KcStatusTone? = null,
+    compact: Boolean = false
 ) {
+    val colors = MaterialTheme.colorScheme
+    val extended = KcTheme.extended
+    val resolvedTone = tone ?: statusToneForLabel(text)
+    val (container, foreground) = when (resolvedTone) {
+        KcStatusTone.NEUTRAL -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+        KcStatusTone.INFO -> extended.infoContainer to extended.onInfoContainer
+        KcStatusTone.PENDING, KcStatusTone.WARNING -> extended.warningContainer to extended.onWarningContainer
+        KcStatusTone.SUCCESS -> extended.successContainer to extended.onSuccessContainer
+        KcStatusTone.ERROR -> colors.errorContainer to colors.onErrorContainer
+    }
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .78f),
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = MaterialTheme.shapes.small,
+        color = container,
+        contentColor = foreground,
+        shape = if (compact) RoundedCornerShape(percent = 50) else MaterialTheme.shapes.small,
         modifier = modifier
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = if (compact) 9.dp else 10.dp, vertical = if (compact) 5.dp else 6.dp)
+        )
     }
 }
 

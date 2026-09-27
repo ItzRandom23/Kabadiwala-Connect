@@ -4,7 +4,8 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Current release
 
-- Android testing release: `0.0.60-beta` (`versionCode 61`)
+- Android source/build version: `0.1.0-beta` (`versionCode 64`)
+- Latest OTA artifact in `backend/app-update`: `0.0.62-beta` (`versionCode 63`); a production-host APK and signing key were unavailable for a verified OTA release.
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`
@@ -62,11 +63,10 @@ The backend owns role, recycler authorization, ownership, lot/offer/handover tra
 The supply-chain boundary is explicit: a Household posts material and requests a
 Kabadiwala pickup; only a Kabadiwala can weigh it into inventory and reserve
 that inventory in a bulk lot; only a verified Recycler can offer on and receive
-that lot. See [the role architecture audit](docs/ROLE_ARCHITECTURE_AUDIT.md)
-for the route-level capability matrix and inventory/state invariants. After
-pulling schema changes into a testing database, run `npm run db:push` before
-starting the API. The seeded end-to-end accounts and conflict checks are
-documented in [the supply-chain test runbook](docs/SUPPLY_CHAIN_TEST_RUNBOOK.md).
+that lot. The consolidated [project and verification guide](docs/README.md)
+contains the role/state boundaries, safe database guidance, testing evidence,
+and remaining integration gates. Use a disposable test database for schema
+changes; the guide documents the deployment index-preparation path.
 
 ### Authentication
 
@@ -95,8 +95,9 @@ cd android_app
 Android uses product flavors for environment selection. `envTesting` is the
 disposable testing flavor and `production` is the release flavor; environment
 values are generated into `BuildConfig` rather than scattered through source.
-The testing endpoint can be set with `-PtestingApiBaseUrl=...` (the checked-in
-developer properties file points at the current testing service). Production
+The testing endpoint can be set with `-PtestingApiBaseUrl=...`. HTTPS is
+required except for local loopback or the Android emulator host alias
+(`10.0.2.2`). No remote testing host is configured by default. Production
 variants require an explicit HTTPS `-PproductionApiBaseUrl` and release builds
 also require signing properties supplied by CI or local secret configuration.
 Never put production credentials, Gemini keys, storage credentials, or signing
@@ -143,18 +144,20 @@ cd ../android_app
 
 The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote rematching/idempotency, handover recovery, notification isolation, Room-backed state, and ViewModel transitions. Device validation remains important for camera permissions, QR scanning, TalkBack, GPS, and real network loss/recovery.
 
-The latest testing pass also verified a 1,200-event rapid-tap run and camera
-recovery after deliberately killing the app while the external camera Activity
-was open. The crash buffer remained empty. Camera, gallery, QR, share, and
-handover photo failures are surfaced as recoverable UI states.
+A historical device pass (2026-09-22) recorded a 1,200-event rapid-tap run and
+camera recovery after deliberately killing the app while the external camera
+Activity was open. That older result is not a current-build regression test;
+the current audit evidence and device coverage are summarized in
+`docs/README.md`.
 
 ## OTA Android updates
 
 The app checks the backend-hosted `/app/update.json` and compares its
 `versionCode` with the installed version. Each published entry must reference
 an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.0.60-beta` with
-`versionCode 61`.
+SHA-256 and byte size. The current manifest publishes `0.0.62-beta` with
+`versionCode 63`; the latest source build uses `0.1.0-beta` with
+`versionCode 64` and has only been built for the isolated envTesting API.
 
 The user confirms the download and Android separately confirms installation;
 updates are never installed silently. After changing the manifest or APK,
@@ -162,7 +165,10 @@ redeploy the backend `app-update` directory to the VPS.
 
 ## Submission evidence
 
-See `docs/REQUIREMENTS_EVIDENCE.md`, `docs/DEMO_RUNBOOK.md`, `docs/FIELD_RESEARCH_PROTOCOL.md`, `docs/UNIT_ECONOMICS.md`, `docs/AI_DATASET_CARD.md`, and `docs/PRIVACY_RETENTION.md`.
+See the consolidated [project and verification guide](docs/README.md) for
+requirements evidence, demo and field-research boundaries, unit-economics
+assumptions, AI/data limits, privacy guidance, and the current App Verification
+Map.
 
 ## Known limitations
 

@@ -116,6 +116,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.demo.DemoSessionStore
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SubmitReviewRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.PreferencesUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Dispute
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.DisputeStatus
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
@@ -146,28 +147,15 @@ fun AppNavHost(
     demoRole: AccountRole? = null,
     role: AccountRole = AccountRole.COLLECTOR,
     sessionAuthenticated: Boolean = false,
-    onAuthFinished: () -> Unit = {},
+    onAuthFinished: (OnboardingViewModel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Demo is a debug/testing surface only. Enforce the boundary here as well
     // as at the onboarding entry so a release deep link or caller cannot
     // activate fixture routes by passing demoMode=true.
     val demoMode = DemoModePolicy.enabled(BuildConfig.DEBUG, requestedDemoMode)
-    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val recyclerRoutes = setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_PROFILE, Destinations.RECYCLER_SCAN)
-    val demoCollectorRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.EARNINGS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.REWARDS, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.CHAT, Destinations.NOTIFICATIONS, Destinations.DISPUTE_ANALYTICS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.RECYCLER_DETAIL, Destinations.RECYCLERS_FOR_LOT, Destinations.QUOTE_REQUEST, Destinations.QUOTE_COMPARE, Destinations.HANDOVER_CREATE, Destinations.HANDOVER_DOCUMENT, Destinations.HANDOVER_DISPUTE, Destinations.RATE_HANDOVER, Destinations.PAYMENT_CREATE, Destinations.HOUSEHOLD_DEAL, Destinations.TRANSACTION_TIMELINE)
-    val liveCollectorRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.KABADIWALA_TOOLS, Destinations.CREATE_LOT, Destinations.MY_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
-    val sharedAccountRoutes = setOf(Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS)
-    val recyclerProtectedRoutes = setOf(Destinations.RECYCLER_MARKETPLACE, Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_PICKUPS, Destinations.RECYCLER_RATES, Destinations.RECYCLER_SCAN)
-    val kabadiwalaDemoRoutes = setOf(Destinations.HOME, Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_PICKUPS, Destinations.KABADIWALA_LOTS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.NOTIFICATIONS, Destinations.ACTIVITIES)
     val kabadiwalaDemo = demoMode && role == AccountRole.COLLECTOR && demoRole == AccountRole.COLLECTOR
-    val collectorRoutes = when {
-        kabadiwalaDemo -> kabadiwalaDemoRoutes
-        demoMode -> demoCollectorRoutes
-        else -> liveCollectorRoutes
-    }
-    val householdRoutes = setOf(Destinations.HOME, Destinations.PRICES, Destinations.RECYCLERS, Destinations.SETTINGS, Destinations.PROFILE, Destinations.SAFETY, Destinations.HELP, Destinations.SCHEMES, Destinations.ACTIVITIES, Destinations.NOTIFICATIONS, Destinations.CREATE_HOUSEHOLD_LISTING) + if (demoMode) setOf(Destinations.HOUSEHOLD_DEAL) else emptySet()
-    val adminRoutes = setOf(Destinations.ADMIN_DASHBOARD)
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated) {
         val activityFeedRole = role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD || role == AccountRole.RECYCLER
         if (sessionAuthenticated && !demoMode && activityFeedRole && factory.currentAccount?.profileId?.isNotBlank() == true) {
@@ -177,34 +165,30 @@ fun AppNavHost(
             }
         }
     }
-    LaunchedEffect(currentRoute, role, factory.currentAccount?.verificationStatus) {
+    LaunchedEffect(currentRoute, role, demoRole, demoMode, factory.currentAccount?.verificationStatus) {
         // NavHost publishes its start destination after the first composition.
         // A null route during that initialization is not a role violation;
         // treating it as one sends signed-out users to Home before MainActivity
         // can keep them on the auth start destination.
         val route = currentRoute ?: return@LaunchedEffect
-        val collectorRoute = (route in collectorRoutes && route !in sharedAccountRoutes) || route.startsWith("lots/") || route.startsWith("quotes/") || route.startsWith("handovers/")
-        val recyclerRoute = route in recyclerRoutes
-        if (role == AccountRole.RECYCLER && collectorRoute) {
-            navController.navigate(if (demoMode || factory.currentAccount?.verificationStatus?.name == "VERIFIED") Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY) { popUpTo(0) }
-        } else if (role == AccountRole.RECYCLER && !demoMode && factory.currentAccount?.verificationStatus?.name != "VERIFIED" && route in recyclerProtectedRoutes) {
-            // Pending Recycler accounts may manage their account and submit
-            // evidence, but marketplace operations remain closed until the
-            // server marks the facility as verified.
-            navController.navigate(Destinations.RECYCLER_VERIFY) { popUpTo(0) }
-        } else if ((role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD) && recyclerRoute) {
-            navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.COLLECTOR && !demoMode && route != Destinations.AUTH && route !in liveCollectorRoutes) {
-            // Live Kabadiwala sessions use only the supply-chain workspace;
-            // old lot/quote/handover/payment routes remain demo-only.
-            navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.HOUSEHOLD && route != Destinations.AUTH && route !in householdRoutes) {
-            // A deep link must not turn a household session into the legacy
-            // kabadiwala operating console. Backend authorization enforces
-            // this too; the guard keeps the client truthful and unsurprising.
-            navController.navigate(Destinations.HOME) { popUpTo(0) }
-        } else if (role == AccountRole.ADMIN && route != Destinations.AUTH && route !in adminRoutes) {
-            navController.navigate(Destinations.ADMIN_DASHBOARD) { popUpTo(0) }
+        val verificationStatus = factory.currentAccount?.verificationStatus
+        val verifiedRecyclerLanding = if (!demoMode && role == AccountRole.RECYCLER) {
+            Destinations.verifiedRecyclerLanding(route, verificationStatus)
+        } else null
+        if (verifiedRecyclerLanding != null) {
+            navController.navigate(verifiedRecyclerLanding) {
+                popUpTo(Destinations.RECYCLER_VERIFY) { inclusive = true }
+                launchSingleTop = true
+            }
+            return@LaunchedEffect
+        }
+        if (!Destinations.isAllowedForSession(role, route, demoMode, demoRole, verificationStatus)) {
+            val safeDestination = when (role) {
+                AccountRole.RECYCLER -> if (demoMode || verificationStatus == RecyclerVerificationStatus.VERIFIED) Destinations.RECYCLER_MARKETPLACE else Destinations.RECYCLER_VERIFY
+                AccountRole.ADMIN -> Destinations.ADMIN_DASHBOARD
+                AccountRole.COLLECTOR, AccountRole.HOUSEHOLD -> Destinations.HOME
+            }
+            navController.navigate(safeDestination) { popUpTo(0) }
         }
     }
     NavHost(
@@ -225,7 +209,7 @@ fun AppNavHost(
                 viewModel = vm,
                 onDemo = onDemo,
                 onDemoRole = { onDemoRole(it) },
-                onFinished = { onAuthFinished() }
+                onFinished = onAuthFinished
             )
         }
         composable(Destinations.ADMIN_DASHBOARD) {
@@ -956,8 +940,13 @@ fun AppNavHost(
                     onRefresh = vm::refresh,
                     onOpen = { notification ->
                         vm.markNotificationRead(notification.id)
-                        notification.route?.takeIf { isSafeNotificationRoute(it, role, demoMode) }
-                            ?.let { route -> navController.navigate(route) }
+                        Destinations.notificationDestination(
+                            notification.route,
+                            role,
+                            demoMode,
+                            demoRole,
+                            factory.currentAccount?.verificationStatus
+                        )?.let(navController::navigate)
                     },
                     onMarkAllRead = vm::markAllNotificationsRead
                 )
@@ -1045,8 +1034,24 @@ fun AppNavHost(
             } else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                val scope = rememberCoroutineScope()
-                LaunchedEffect(Unit) { vm.refresh() }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        vm.refresh()
+                        delay(30_000)
+                    }
+                }
+                LaunchedEffect(state.profile?.id, state.profile?.authorizationStatus) {
+                    val profile = state.profile ?: return@LaunchedEffect
+                    val account = factory.reconcileRecyclerAuthorization(profile) ?: return@LaunchedEffect
+                    if (account.verificationStatus == RecyclerVerificationStatus.VERIFIED &&
+                        navController.currentDestination?.route == Destinations.RECYCLER_VERIFY
+                    ) {
+                        navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
+                            popUpTo(Destinations.RECYCLER_VERIFY) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                }
                 RecyclerVerificationScreen(
                     profile = factory.currentAccount,
                     recyclerProfile = state.profile,
@@ -1054,10 +1059,7 @@ fun AppNavHost(
                     saving = state.saving,
                     error = state.error,
                     saved = state.saved,
-                    onRefresh = {
-                        vm.refresh()
-                        scope.launch { factory.refreshAccount() }
-                    },
+                    onRefresh = vm::refresh,
                     onSubmit = vm::submitVerification,
                     onLogout = onLogout,
                     onOpenMarketplace = {
@@ -1143,22 +1145,5 @@ fun AppNavHost(
                 RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset)
             }
         }
-    }
-}
-
-private fun isSafeNotificationRoute(route: String, role: AccountRole, demoMode: Boolean): Boolean {
-    if (route.length > 120 || !route.matches(Regex("^[A-Za-z0-9_/-]+$"))) return false
-    val collectorRoute = if (demoMode) route == Destinations.EARNINGS ||
-        route == Destinations.DISPUTE_ANALYTICS ||
-        route.startsWith("quotes/compare/") ||
-        route.startsWith("handovers/create/") ||
-        route.startsWith("handovers/document/") ||
-        route.startsWith("handovers/dispute/") else route == Destinations.HOME || route == Destinations.KABADIWALA_INVENTORY || route == Destinations.KABADIWALA_PICKUPS || route == Destinations.KABADIWALA_LOTS
-    val recyclerRoute = route == Destinations.RECYCLER_MARKETPLACE || route == Destinations.RECYCLER_ORDERS
-    return when (role) {
-        AccountRole.RECYCLER -> recyclerRoute
-        AccountRole.COLLECTOR -> collectorRoute
-        AccountRole.HOUSEHOLD -> if (demoMode) route == Destinations.DISPUTE_ANALYTICS else route == Destinations.HOME || route == Destinations.PRICES || route == Destinations.RECYCLERS
-        AccountRole.ADMIN -> route == Destinations.ADMIN_DASHBOARD
     }
 }

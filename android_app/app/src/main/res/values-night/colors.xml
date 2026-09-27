@@ -1,0 +1,4 @@
+<resources>
+    <!-- Framework-backed widgets use the soft green accent in night mode. -->
+    <color name="kc_native_accent">#9DD67D</color>
+</resources>

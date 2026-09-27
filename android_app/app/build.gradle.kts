@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     // NOTE: AGP 9 has built-in Kotlin — do NOT apply org.jetbrains.kotlin.android
     // (it conflicts with the pre-registered 'kotlin' extension).
@@ -22,6 +24,13 @@ android {
         .orElse("https://api.invalid/api/v1/")
         .get()
         .let { if (it.endsWith('/')) it else "$it/" }
+    val testingApiUri = URI(testingApiBaseUrl)
+    // The user-authorized VPS is allowed over cleartext only for the testing
+    // flavor. Production URLs remain HTTPS-only below.
+    val cleartextTestingHosts = setOf("localhost", "127.0.0.1", "::1", "10.0.2.2", "140.245.232.208")
+    require(testingApiUri.scheme == "https" || (testingApiUri.scheme == "http" && testingApiUri.host in cleartextTestingHosts)) {
+        "testingApiBaseUrl must use HTTPS, except for loopback or the Android emulator host alias (10.0.2.2)"
+    }
     // A release build must be pointed at an explicitly provisioned production
     // API. Keeping an invalid fallback here makes it too easy to distribute a
     // signed APK that starts successfully but can never reach the backend.
@@ -128,8 +137,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 63
-        versionName = "0.0.62-beta"
+        versionCode = 64
+        versionName = "0.1.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

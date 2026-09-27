@@ -18,7 +18,9 @@ object RetrofitProvider {
         baseUrl: String = PLACEHOLDER_BASE_URL,
         tokenProvider: () -> String? = { null },
         tokenRefresher: ((failedAccessToken: String?) -> String?)? = null,
-        onAuthenticationFailure: ((failedToken: String?) -> Unit)? = null
+        onAuthenticationFailure: ((failedToken: String?) -> Unit)? = null,
+        sessionGenerationProvider: (() -> Long)? = null,
+        requestSessionGenerationProvider: (() -> Long)? = sessionGenerationProvider
     ): ApiService {
         val authInterceptor = Interceptor { chain ->
             val original = chain.request()
@@ -38,7 +40,10 @@ object RetrofitProvider {
             val request: Request = if (token.isNullOrBlank() || isPublicAuthEndpoint) {
                 original
             } else {
-                original.newBuilder().header("Authorization", "Bearer $token").build()
+                original.newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .tag(SessionGeneration::class.java, requestSessionGenerationProvider?.invoke()?.let(::SessionGeneration))
+                    .build()
             }
             chain.proceed(request)
         }
@@ -54,6 +59,11 @@ object RetrofitProvider {
             .authenticator { _, response ->
                 if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint()) {
                     null
+                } else if (!response.request.belongsToCurrentSession(sessionGenerationProvider)) {
+                    // An old request can finish after logout or another
+                    // account signs in. It must never borrow that account's
+                    // fresh bearer token in an OkHttp retry.
+                    null
                 } else if (response.retryCount() >= 2) {
                     // The refreshed credential was also rejected. Clear the
                     // session, but let the owner compare the failed token
@@ -68,7 +78,8 @@ object RetrofitProvider {
                         val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
                         val current = tokenProvider()
                         val fresh = if (!current.isNullOrBlank() && current != requestToken) current else tokenRefresher(requestToken)
-                    fresh?.let { response.request.newBuilder().header("Authorization", "Bearer $it").build() }
+                        if (!response.request.belongsToCurrentSession(sessionGenerationProvider)) return@synchronized null
+                        fresh?.let { response.request.newBuilder().header("Authorization", "Bearer $it").build() }
                         ?: run {
                             // A rotated refresh token can be rejected when a
                             // stale process/device presents it after another
@@ -109,6 +120,14 @@ object RetrofitProvider {
     private fun Request.bearerToken(): String? =
         header("Authorization")?.removePrefix("Bearer ")?.takeIf { it.isNotBlank() }
 
+    private fun Request.belongsToCurrentSession(generationProvider: (() -> Long)?): Boolean =
+        sessionRetryAllowed(tag(SessionGeneration::class.java)?.value, generationProvider?.invoke())
+
+    internal data class SessionGeneration(val value: Long)
+
+    internal fun sessionRetryAllowed(requestGeneration: Long?, currentGeneration: Long?): Boolean =
+        requestGeneration == currentGeneration
+
     private fun String.isPublicAuthEndpoint(): Boolean =
             endsWith("/auth/request-otp") ||
             endsWith("/auth/verify-otp") ||
@@ -118,7 +137,8 @@ object RetrofitProvider {
             endsWith("/auth/login") ||
             endsWith("/auth/admin-login")
 
-    private object ProtectedRequestBlockedException : IOException(
-        "Protected request blocked until an authenticated session is available"
-    )
 }
+
+internal object ProtectedRequestBlockedException : IOException(
+    "Protected request blocked until an authenticated session is available"
+)

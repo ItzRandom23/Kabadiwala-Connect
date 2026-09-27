@@ -10,6 +10,30 @@ const production = {
 };
 
 describe('production configuration boundary', () => {
+  it('treats literal false environment values as disabled providers and non-public uploads', () => {
+    const config = loadConfig({
+      APP_ENV: 'testing',
+      NODE_ENV: 'development',
+      PORT: '4300',
+      DATABASE_URL: 'mongodb://127.0.0.1:27017/kc_env_boolean_test',
+      JWT_SECRET: 'local-test-jwt-secret-with-more-than-32-chars',
+      TRACEABILITY_SIGNING_SECRET: 'separate-local-signing-secret-with-more-than-32-chars',
+      CORS_ORIGIN: '*',
+      OTP_PROVIDER: 'development',
+      NOTIFICATION_SMS_PROVIDER: 'disabled',
+      NOTIFICATION_SMS_ENABLED: 'false',
+      NOTIFICATION_PUSH_PROVIDER: 'disabled',
+      NOTIFICATION_PUSH_ENABLED: 'false',
+      STORAGE_PROVIDER: 'local',
+      LOCAL_UPLOAD_PUBLIC: 'false',
+      RATE_LIMIT_STORE: 'memory'
+    });
+
+    expect(config.NOTIFICATION_SMS_ENABLED).toBe(false);
+    expect(config.NOTIFICATION_PUSH_ENABLED).toBe(false);
+    expect(config.LOCAL_UPLOAD_PUBLIC).toBe(false);
+  });
+
   it('defaults OTP request rate-limit recovery to two minutes and rejects longer windows', () => {
     expect(loadConfig(production).OTP_REQUEST_WINDOW_MINUTES).toBe(2);
     expect(() => loadConfig({ ...production, OTP_REQUEST_WINDOW_MINUTES: '3' })).toThrow();

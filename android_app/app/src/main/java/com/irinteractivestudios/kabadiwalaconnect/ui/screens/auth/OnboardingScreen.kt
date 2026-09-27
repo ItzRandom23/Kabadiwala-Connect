@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -78,12 +79,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun OnboardingRoute(
     viewModel: OnboardingViewModel,
-    onFinished: () -> Unit,
+    onFinished: (OnboardingViewModel) -> Unit,
     onDemo: () -> Unit = {},
     onDemoRole: (AccountRole) -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    LaunchedEffect(state.completed) { if (state.completed) onFinished() }
+    LaunchedEffect(state.completed) { if (state.completed) onFinished(viewModel) }
     OnboardingScreen(state, viewModel, onDemo, onDemoRole)
 }
 
@@ -133,8 +134,20 @@ fun OnboardingScreen(
             OnboardingStep.AREA -> AreaEntry(state, vm)
             OnboardingStep.PHONE -> PhoneEntry(state, vm)
             OnboardingStep.OTP -> OtpEntry(state, vm)
-            OnboardingStep.COMPLETE -> Complete(state)
+            OnboardingStep.COMPLETE -> if (state.returningUser) FinishingSignIn() else Complete(state)
         }
+    }
+}
+
+@Composable
+private fun FinishingSignIn() {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CircularProgressIndicator()
+        Text(stringResource(R.string.auth_signin_finishing), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
     }
 }
 

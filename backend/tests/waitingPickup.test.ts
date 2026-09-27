@@ -51,6 +51,116 @@ describe('waiting pickup lifecycle', () => {
     expect(db.notificationEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ accountId: 'collector-1', type: 'PICKUP_WAITING_FOR_PICKUP' }) });
   });
 
+  it('retries a transaction conflict and returns the concurrent waiting request', async () => {
+    const winner = { id: 'pickup-waiting-winner', listingId: 'listing-race', householdId: 'household-1', kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' };
+    let winnerCommitted = false;
+    const create = vi.fn();
+    const updateMany = vi.fn(async () => {
+      winnerCommitted = true;
+      const conflict = new Error('Transaction failed due to a write conflict') as Error & { code?: string };
+      conflict.code = 'P2034';
+      throw conflict;
+    });
+    const db: any = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
+      householdListing: { findFirst: vi.fn().mockResolvedValue({ areaName: 'Sector 12', photoReference: 'listing-photo.jpg', photoReferences: ['listing-photo.jpg'] }) },
+      $transaction: vi.fn(async (callback: (value: any) => unknown) => callback({
+        ...auditMocks(),
+        pickupRequest: {
+          findFirst: vi.fn(async () => winnerCommitted ? winner : null),
+          create
+        },
+        householdListing: { updateMany }
+      }))
+    };
+    const jwt = new JwtService(config);
+    const response = await request(appFor(db, jwt))
+      .post('/api/v1/household/listings/listing-race/pickups')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ id: winner.id, status: 'WAITING_FOR_PICKUP' });
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('notifies both accounts when the household requests a specific collector', async () => {
+    const pickup = { id: 'pickup-assigned-1', listingId: 'listing-assigned-1', householdId: 'household-1', kabadiwalaId: 'collector-1', status: 'REQUESTED' };
+    const tx = {
+      ...auditMocks(),
+      idempotencyRecord: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+      pickupRequest: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue(pickup)
+      },
+      householdListing: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }
+    };
+    const notificationCreate = vi.fn().mockResolvedValue({ id: 'notification-1' });
+    const db: any = {
+      user: {
+        findFirst: vi.fn(async ({ where }: any) => where.collectorProfileId === 'household-1'
+          ? { role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }
+          : { id: 'collector-user', role: 'COLLECTOR', accountStatus: 'ACTIVE' })
+      },
+      householdListing: { findFirst: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: null, longitude: null, photoReference: 'listing-photo.jpg', photoReferences: ['listing-photo.jpg'] }) },
+      collector: { findFirst: vi.fn().mockResolvedValue({ id: 'collector-1', accountStatus: 'ACTIVE' }) },
+      notificationEvent: { create: notificationCreate },
+      $transaction: vi.fn(async (callback: (value: any) => unknown) => callback(tx))
+    };
+    const jwt = new JwtService(config);
+
+    const response = await request(appFor(db, jwt))
+      .post('/api/v1/household/listings/listing-assigned-1/pickups')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .send({ kabadiwalaId: 'collector-1' });
+
+    expect(response.status).toBe(201);
+    expect(notificationCreate).toHaveBeenCalledTimes(2);
+    expect(notificationCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      accountId: 'collector-1', type: 'PICKUP_REQUESTED', route: 'kabadiwala/pickups/pickup-assigned-1'
+    }) });
+    expect(notificationCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      accountId: 'household-1', type: 'PICKUP_REQUESTED', route: 'household/pickups/pickup-assigned-1'
+    }) });
+  });
+
+  it('returns the active assigned pickup after a concurrent targeted-request conflict', async () => {
+    const winner = { id: 'pickup-assigned-winner', listingId: 'listing-assigned-race', householdId: 'household-1', kabadiwalaId: 'collector-1', status: 'REQUESTED' };
+    let winnerCommitted = false;
+    const updateMany = vi.fn(async () => {
+      winnerCommitted = true;
+      const conflict = new Error('Transaction failed due to a write conflict') as Error & { code?: string };
+      conflict.code = 'P2034';
+      throw conflict;
+    });
+    const notificationCreate = vi.fn();
+    const db: any = {
+      user: { findFirst: vi.fn(async ({ where }: any) => ({ role: where.collectorProfileId === 'household-1' ? 'HOUSEHOLD' : 'COLLECTOR', accountStatus: 'ACTIVE' })) },
+      householdListing: { findFirst: vi.fn().mockResolvedValue({ photoReference: 'listing-photo.jpg', photoReferences: ['listing-photo.jpg'] }) },
+      collector: { findFirst: vi.fn().mockResolvedValue({ id: 'collector-1', accountStatus: 'ACTIVE' }) },
+      notificationEvent: { create: notificationCreate },
+      $transaction: vi.fn(async (callback: (value: any) => unknown) => callback({
+        ...auditMocks(),
+        idempotencyRecord: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+        pickupRequest: { findUnique: vi.fn(async () => winnerCommitted ? winner : null), upsert: vi.fn() },
+        householdListing: { updateMany }
+      }))
+    };
+    const jwt = new JwtService(config);
+    const response = await request(appFor(db, jwt))
+      .post('/api/v1/household/listings/listing-assigned-race/pickups')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .send({ kabadiwalaId: 'collector-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ id: winner.id, status: 'REQUESTED' });
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(notificationCreate).not.toHaveBeenCalled();
+  });
+
   it('claims a waiting request atomically for the accepting collector', async () => {
     const claimed = { id: 'pickup-waiting-2', listingId: 'listing-2', kabadiwalaId: 'collector-2', status: 'ACCEPTED' };
     const tx = {

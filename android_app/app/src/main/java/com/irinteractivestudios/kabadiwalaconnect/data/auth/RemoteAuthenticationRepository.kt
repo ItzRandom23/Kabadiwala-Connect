@@ -25,6 +25,7 @@ import java.io.IOException
 import com.irinteractivestudios.kabadiwalaconnect.util.SecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -32,7 +33,9 @@ import kotlinx.coroutines.sync.withLock
 class RemoteAuthenticationRepository(
     private val api: ApiService,
     private val session: SessionRepository,
-    private val storage: SecureStorage? = null
+    private val storage: SecureStorage? = null,
+    private val onSessionWillChange: () -> Unit = {},
+    private val sessionGenerationProvider: () -> Long = { 0L }
 ) : AuthenticationRepository {
 
     // Access-token expiry can make several in-flight requests enter OkHttp's
@@ -40,6 +43,21 @@ class RemoteAuthenticationRepository(
     // rotation and let waiters reuse the newly saved access token instead of
     // sending the same refresh token a second time.
     private val refreshMutex = Mutex()
+    // Login and refresh can overlap while the old account still has requests
+    // in flight. Serialize credential replacement so an old refresh response
+    // cannot overwrite credentials issued by a newer login.
+    private val credentialMutex = Mutex()
+
+    private suspend fun persistAuthenticatedSession(
+        token: String,
+        expiry: Long,
+        refreshToken: String?,
+        profile: AccountProfile
+    ) = credentialMutex.withLock {
+        onSessionWillChange()
+        session.save(token, expiry, refreshToken)
+        storage?.saveAccount(profile)
+    }
 
     override suspend fun requestOtp(phoneNumber: String): OtpChallenge {
         api.requestOtp(OtpRequestDto(phoneNumber)).requireData()
@@ -104,9 +122,10 @@ class RemoteAuthenticationRepository(
             // incomplete, so the UI never guesses from the onboarding form.
             if (profile == null) return OtpVerification.ServerError
             val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(auth.token, expiry, auth.refreshToken)
-            storage?.saveAccount(profile)
+            persistAuthenticatedSession(auth.token, expiry, auth.refreshToken, profile)
             OtpVerification.Success(auth.token, expiry, profile.profileId, profile)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             if ((error as? RemoteApiException)?.detailsCode == "ROLE_REQUIRED") return OtpVerification.RoleRequired
             when (errorCode(error)) {
@@ -157,10 +176,11 @@ class RemoteAuthenticationRepository(
             val auth = if (request.isReturning) api.login(body) else api.signup(body)
             val result = auth.requireData()
             val expiry = jwtExpiry(result.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(result.token, expiry, result.refreshToken)
             val profile = result.user.toDomain()
-            storage?.saveAccount(profile)
+            persistAuthenticatedSession(result.token, expiry, result.refreshToken, profile)
             EmailAuthentication.Success(result.token, expiry, profile)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             if (BuildConfig.DEBUG) {
                 val remote = error as? RemoteApiException
@@ -180,7 +200,6 @@ class RemoteAuthenticationRepository(
         return try {
             val result = api.adminLogin(EmailAuthRequestDto(email = email.trim(), password = password)).requireData()
             val expiry = jwtExpiry(result.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(result.token, expiry, result.refreshToken)
             val profile = AccountProfile(
                 id = result.user.id,
                 email = result.user.email,
@@ -192,9 +211,15 @@ class RemoteAuthenticationRepository(
                 displayName = result.user.displayName,
                 permissions = result.user.permissions.toSet()
             )
-            storage?.saveAccount(profile)
+            persistAuthenticatedSession(result.token, expiry, result.refreshToken, profile)
             EmailAuthentication.Success(result.token, expiry, profile)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
+            if (BuildConfig.DEBUG) {
+                val remote = error as? RemoteApiException
+                Log.w(TAG, "Admin authentication failed: type=${error::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
+            }
             when {
                 error is IOException -> EmailAuthentication.NetworkError
                 errorCode(error) == "INVALID_CREDENTIALS" || error is RemoteApiException && error.httpCode == 401 -> EmailAuthentication.InvalidCredentials
@@ -220,9 +245,22 @@ class RemoteAuthenticationRepository(
         runCatching {
             val refreshed = api.refreshSession(RefreshTokenRequestDto(attemptedRefreshToken)).requireData()
             val expiry = jwtExpiry(refreshed.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
-            session.save(refreshed.token, expiry, refreshed.refreshToken)
-            refreshed.token
+            credentialMutex.withLock {
+                // A login/logout may have replaced the credential pair while
+                // this single-use refresh request was in flight. Discard its
+                // response instead of reviving or overwriting that session.
+                if (storage != null && (
+                        storage.get(SecureStorage.AUTH_TOKEN) != current ||
+                            storage.get(SecureStorage.REFRESH_TOKEN) != attemptedRefreshToken
+                        )) {
+                    null
+                } else {
+                    session.save(refreshed.token, expiry, refreshed.refreshToken)
+                    refreshed.token
+                }
+            }
         }.getOrElse {
+            if (it is CancellationException) throw it
             // A rejected rotating token is not recoverable. Clear it so
             // repeated requests cannot create a refresh loop with stale
             // credentials.
@@ -230,29 +268,37 @@ class RemoteAuthenticationRepository(
             Log.w(TAG, "Session refresh failed: type=${it::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
             // Another login or refresh may have replaced the credential while
             // this request was in flight. Never erase that newer session.
-            if (it is RemoteApiException && it.httpCode == 401 && storage.get(SecureStorage.REFRESH_TOKEN) == attemptedRefreshToken) session.clear()
+            if (it is RemoteApiException && it.httpCode == 401 &&
+                storage.get(SecureStorage.AUTH_TOKEN) == current &&
+                storage.get(SecureStorage.REFRESH_TOKEN) == attemptedRefreshToken
+            ) session.clear()
             null
         }
     }
 
     override suspend fun refreshAccount(): AccountProfile? = runCatching {
+        val stamp = AuthenticatedSessionStamp(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))
         if (!session.isSessionValid() && refreshAccessToken() == null) return@runCatching null
+        if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) return@runCatching storage?.readAccount()
         // Admin tokens are issued by /auth/admin-login and intentionally do
         // not use the role-profile endpoint, which is reserved for the three
         // marketplace account roles. Keep the server-issued operator profile
         // from encrypted storage while the rotating session is refreshed.
         storage?.readAccount()?.takeIf { it.role == AccountRole.ADMIN }?.let { return@runCatching it }
         val remote = api.getAccountProfile().requireData().toDomain()
+        if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) return@runCatching storage?.readAccount()
         // Role is an authorization result owned by the server. Never preserve
         // or synthesize a local presentation role across refreshes.
         storage?.saveAccount(remote)
         remote
     }.onFailure {
+        if (it is CancellationException) throw it
         val remote = it as? RemoteApiException
         Log.w(TAG, "Account restore failed: type=${it::class.java.simpleName}, code=${remote?.code ?: "IO_OR_PARSE"}, http=${remote?.httpCode ?: "-"}")
     }.getOrNull()
 
     override suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile {
+        val stamp = AuthenticatedSessionStamp(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))
         val result = api.updateAccountProfile(
             AccountProfileUpdateRequestDto(
                 displayName = update.displayName?.trim()?.takeIf { it.isNotEmpty() },
@@ -264,6 +310,9 @@ class RemoteAuthenticationRepository(
                 preferredLanguage = update.preferredLanguage?.let(LocaleManager::toBackendName)
             )
         ).requireData().toDomain()
+        if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) {
+            return storage?.readAccount() ?: result
+        }
         storage?.saveAccount(result)
         return result
     }
@@ -337,6 +386,10 @@ class RemoteAuthenticationRepository(
     }
 }
 
+internal fun String?.toRecyclerVerificationStatusOrPending(): RecyclerVerificationStatus =
+    this?.let { value -> runCatching { RecyclerVerificationStatus.valueOf(value.trim().uppercase()) }.getOrNull() }
+        ?: RecyclerVerificationStatus.PENDING
+
 private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfileDto.toDomain() = AccountProfile(
     id = id,
     email = email.orEmpty(),
@@ -349,7 +402,7 @@ private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.AccountProfil
     },
     preferredLanguage = LocaleManager.fromBackendName(preferredLanguage),
     accountStatus = accountStatus,
-    verificationStatus = runCatching { RecyclerVerificationStatus.valueOf(verificationStatus) }.getOrDefault(RecyclerVerificationStatus.VERIFIED),
+    verificationStatus = verificationStatus.toRecyclerVerificationStatusOrPending(),
     profileId = profileId.ifBlank { id },
     businessName = profile?.name,
     phoneNumber = phone ?: profile?.contact?.phone.orEmpty(),

@@ -1,8 +1,42 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { SyncService, decodeSyncCursor, encodeSyncCursor } from '../src/services/syncService.js';
 import { createSupplyHandoverQr } from '../src/routes/formalisationRoutes.js';
 
 describe('formal handover offline sync', () => {
+  it.each([
+    { status: 'REJECTED', errorCode: 'INVALID_WEIGHT' },
+    { status: 'INVALID', errorCode: 'UNSUPPORTED_SYNC_OPERATION' }
+  ])('preserves a prior $status result when the same offline operation is retried', async ({ status, errorCode }) => {
+    const operation = {
+      operationId: 'offline-lot-retry',
+      operationType: 'CREATE',
+      entityType: 'LOT',
+      entityId: 'lot-invalid-weight',
+      payload: { weight: -1, materialCategory: 'OTHER', condition: 'INTACT' }
+    };
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify({ operationType: operation.operationType, entityType: operation.entityType, entityId: operation.entityId, payload: operation.payload }))
+      .digest('hex');
+    const db = {
+      syncOperation: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...operation,
+          collectorId: 'collector-1',
+          requestHash,
+          status,
+          errorCode
+        })
+      }
+    } as any;
+    const service = new SyncService(db, {} as any);
+
+    const result = await service.batch('collector-1', [operation]);
+
+    expect(result.results[0]).toMatchObject({ operationId: operation.operationId, status, errorCode });
+    expect(db.syncOperation.findUnique).toHaveBeenCalledOnce();
+  });
+
   it('round-trips an opaque per-feed cursor and rejects tampering', () => {
     const cursor = encodeSyncCursor({ formalHandovers: { at: '2026-09-15T10:00:00.000Z', id: 'handover-1' } });
     expect(cursor).not.toContain('2026-09-15');

@@ -4,6 +4,31 @@ enum class AccountRole { HOUSEHOLD, COLLECTOR, RECYCLER, ADMIN }
 
 enum class RecyclerVerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
 
+/** Maps the backend's richer authorization lifecycle onto app access states. */
+fun recyclerVerificationStatusFromAuthorization(value: String?): RecyclerVerificationStatus? =
+    when (value?.trim()?.uppercase()) {
+        "VERIFIED" -> RecyclerVerificationStatus.VERIFIED
+        "REJECTED", "REVIEW_REQUIRED", "REVOKED" -> RecyclerVerificationStatus.REJECTED
+        "SUSPENDED" -> RecyclerVerificationStatus.SUSPENDED
+        "PENDING", "UNDER_REVIEW", "EXPIRED" -> RecyclerVerificationStatus.PENDING
+        else -> null
+    }
+
+/** Returns an updated session account only for its matching recycler profile. */
+fun reconcileRecyclerAccountAuthorization(
+    account: AccountProfile?,
+    recyclerProfileId: String,
+    authorizationStatus: String?
+): AccountProfile? {
+    if (account?.role != AccountRole.RECYCLER || account.profileId != recyclerProfileId) return null
+    // An absent or new backend state must never leave a stale VERIFIED
+    // session active. Recycler operations stay gated until the server returns
+    // a recognized authorization state.
+    val status = recyclerVerificationStatusFromAuthorization(authorizationStatus)
+        ?: RecyclerVerificationStatus.PENDING
+    return account.copy(verificationStatus = status)
+}
+
 data class AccountProfile(
     val id: String,
     val email: String,

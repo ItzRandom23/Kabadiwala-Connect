@@ -96,7 +96,7 @@ private fun ProfileEditorDialog(profile: AccountProfile, saving: Boolean, onDism
         onDismissRequest = onDismiss,
         title = { Text("Edit account details") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Your mobile number and account type stay verified and cannot be changed here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(name, { name = it.take(160) }, label = { Text(stringResource(R.string.profile_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it.take(254) }, label = { Text("Security email") }, singleLine = true, supportingText = { Text("Optional recovery and sign-in email") }, modifier = Modifier.fillMaxWidth())

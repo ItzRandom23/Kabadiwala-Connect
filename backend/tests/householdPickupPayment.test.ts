@@ -17,7 +17,10 @@ describe('operator-reconciled household pickup payments', () => {
       $transaction: vi.fn(async (callback: (tx: any) => unknown) => callback({
         idempotencyRecord: { findUnique: vi.fn(), create: vi.fn() },
         pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue(null), create: paymentCreate },
-        pickupRequest: { updateMany: pickupUpdate },
+        pickupRequest: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'pickup-1', householdId: 'household-1', finalAmount: 250, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }),
+          updateMany: pickupUpdate
+        },
         anomalyFlag: { create: vi.fn() },
         auditEvent: { create: vi.fn().mockResolvedValue({}) },
         materialPassportEvent: { create: vi.fn().mockResolvedValue({}) }
@@ -37,6 +40,44 @@ describe('operator-reconciled household pickup payments', () => {
     expect(response.status).toBe(201);
     expect(paymentCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentMethod: 'UPI', reference: 'upi-reference-1', status: 'RECORDED' }) }));
     expect(pickupUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { settlementStatus: 'ACCEPTED' } }));
+  });
+
+  it.each([
+    { settlementStatus: 'DISPUTED', amount: 200 },
+    { settlementStatus: 'DISPUTED', amount: 250 },
+    { settlementStatus: 'COMPLETED', amount: 200 },
+    { settlementStatus: 'COMPLETED', amount: 250 }
+  ])('rejects payment for a $settlementStatus settlement with amount $amount', async ({ settlementStatus, amount }) => {
+    const paymentCreate = vi.fn();
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
+      pickupRequest: { findFirst: vi.fn().mockResolvedValue({ id: 'pickup-1', householdId: 'household-1', finalAmount: 250, status: 'COMPLETED', settlementStatus }) },
+      $transaction: vi.fn(async (callback: (tx: any) => unknown) => callback({
+        idempotencyRecord: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+        pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue(null), create: paymentCreate },
+        pickupRequest: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 })
+        },
+        anomalyFlag: { create: vi.fn() },
+        auditEvent: { create: vi.fn().mockResolvedValue({}) },
+        materialPassportEvent: { create: vi.fn().mockResolvedValue({}) }
+      }))
+    } as any;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', supplyChainRoutes(jwt, { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never, db));
+    app.use(errorHandler);
+
+    const response = await request(app)
+      .post('/api/v1/kabadiwala/pickups/pickup-1/settlement-payment')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-1')}`)
+      .send({ amount, method: 'CASH' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toMatch(/must accept.*before payment/i);
+    expect(paymentCreate).not.toHaveBeenCalled();
   });
 
   it('lets only a payment-verification operator reconcile a recorded pickup payment', async () => {

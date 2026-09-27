@@ -26,6 +26,10 @@ enum class AdminSection(val label: String) {
 
 data class AdminConsoleState(
     val section: AdminSection = AdminSection.RECYCLERS,
+    val availableSections: List<AdminSection> = emptyList(),
+    val canAuthorizeRecyclers: Boolean = false,
+    val canManagePrices: Boolean = false,
+    val canExportDataset: Boolean = false,
     val items: List<JsonObject> = emptyList(),
     val selected: JsonObject? = null,
     val loading: Boolean = false,
@@ -34,18 +38,43 @@ data class AdminConsoleState(
     val message: String? = null
 )
 
-class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
-    private val _state = MutableStateFlow(AdminConsoleState())
+fun adminSectionsForPermissions(permissions: Set<String>): List<AdminSection> {
+    val has = { permission: String -> permissions.contains("*") || permission in permissions }
+    return buildList {
+        if (has("RECYCLER_REVIEW")) add(AdminSection.RECYCLERS)
+        if (has("DISPUTE_RESOLUTION")) add(AdminSection.DISPUTES)
+        if (has("PAYMENT_VERIFICATION")) add(AdminSection.PAYMENTS)
+        if (has("DISPUTE_RESOLUTION")) add(AdminSection.ANOMALIES)
+        if (has("PRICE_MANAGEMENT") || has("DATASET_EXPORT")) add(AdminSection.TOOLS)
+    }
+}
+
+class AdminConsoleViewModel(
+    private val api: ApiService,
+    private val permissions: Set<String> = emptySet()
+) : ViewModel() {
+    private fun hasPermission(permission: String) = permissions.contains("*") || permission in permissions
+    private val availableSections = adminSectionsForPermissions(permissions)
+    private val _state = MutableStateFlow(
+        AdminConsoleState(
+            section = availableSections.firstOrNull() ?: AdminSection.TOOLS,
+            availableSections = availableSections,
+            canAuthorizeRecyclers = hasPermission("RECYCLER_AUTHORIZATION"),
+            canManagePrices = hasPermission("PRICE_MANAGEMENT"),
+            canExportDataset = hasPermission("DATASET_EXPORT")
+        )
+    )
     val state: StateFlow<AdminConsoleState> = _state.asStateFlow()
 
     fun selectSection(section: AdminSection) {
+        if (section !in availableSections) return
         _state.update { it.copy(section = section, items = emptyList(), selected = null, error = null, message = null) }
         if (section != AdminSection.TOOLS) refresh()
     }
 
     fun refresh() {
         val section = _state.value.section
-        if (section == AdminSection.TOOLS) return
+        if (section == AdminSection.TOOLS || section !in availableSections) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, message = null) }
             runCatching {
@@ -81,7 +110,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         evidenceReference: String?,
         verificationSource: String?,
         validUntil: String?
-    ) = action {
+    ) = action("RECYCLER_AUTHORIZATION") {
         val body = JsonObject().apply {
             addProperty("status", status)
             reason?.takeIf { it.isNotBlank() }?.let { addProperty("reason", it) }
@@ -95,7 +124,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminAuthorizeRecycler(recyclerId, body).requireData()
     }
 
-    fun resolveDispute(disputeId: String, resolution: String, notes: String?) = action {
+    fun resolveDispute(disputeId: String, resolution: String, notes: String?) = action("DISPUTE_RESOLUTION") {
         val body = JsonObject().apply {
             addProperty("resolution", resolution)
             notes?.takeIf { it.isNotBlank() }?.let { addProperty("notes", it) }
@@ -103,21 +132,21 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminResolveDispute(disputeId, body).requireData()
     }
 
-    fun verifyPayment(paymentId: String) = action {
+    fun verifyPayment(paymentId: String) = action("PAYMENT_VERIFICATION") {
         val pickupPayment = _state.value.items.firstOrNull { it.get("id")?.asString == paymentId }
             ?.get("kind")?.asString == "HOUSEHOLD_PICKUP_SETTLEMENT"
         if (pickupPayment) api.adminReconcileHouseholdPickupPayment(paymentId, JsonObject().apply { addProperty("decision", "VERIFY") }).requireData()
         else api.adminVerifyPayment(paymentId, JsonObject()).requireData()
     }
 
-    fun disputePickupPayment(paymentId: String, notes: String) = action {
+    fun disputePickupPayment(paymentId: String, notes: String) = action("PAYMENT_VERIFICATION") {
         api.adminReconcileHouseholdPickupPayment(paymentId, JsonObject().apply {
             addProperty("decision", "DISPUTE")
             addProperty("notes", notes)
         }).requireData()
     }
 
-    fun reversePayment(paymentId: String, reason: String, provider: String?, externalReference: String?, evidenceReference: String?) = action {
+    fun reversePayment(paymentId: String, reason: String, provider: String?, externalReference: String?, evidenceReference: String?) = action("PAYMENT_VERIFICATION") {
         val body = JsonObject().apply {
             addProperty("reason", reason)
             provider?.takeIf { it.isNotBlank() }?.let { addProperty("provider", it) }
@@ -127,7 +156,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminReversePayment(paymentId, body).requireData()
     }
 
-    fun resolveAnomaly(flagId: String, resolutionAction: String, resolution: String, evidenceReference: String?) = action {
+    fun resolveAnomaly(flagId: String, resolutionAction: String, resolution: String, evidenceReference: String?) = action("DISPUTE_RESOLUTION") {
         val body = JsonObject().apply {
             addProperty("action", resolutionAction)
             addProperty("resolution", resolution)
@@ -145,7 +174,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         marketPrice: Double,
         sourceOrganization: String,
         sourceReference: String
-    ) = action {
+    ) = action("PRICE_MANAGEMENT") {
         val row = JsonObject().apply {
             addProperty("externalId", externalId)
             addProperty("materialCategory", materialCategory)
@@ -162,7 +191,7 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminImportPrices(body).requireData()
     }
 
-    fun updatePrice(priceId: String, priceMin: Double, priceMax: Double, marketPrice: Double, reason: String) = action {
+    fun updatePrice(priceId: String, priceMin: Double, priceMax: Double, marketPrice: Double, reason: String) = action("PRICE_MANAGEMENT") {
         val body = JsonObject().apply {
             addProperty("priceMin", priceMin)
             addProperty("priceMax", priceMax)
@@ -172,9 +201,13 @@ class AdminConsoleViewModel(private val api: ApiService) : ViewModel() {
         api.adminUpdatePrice(priceId, body).requireData()
     }
 
-    fun exportDataset() = action { api.adminExportDataset().requireData() }
+    fun exportDataset() = action("DATASET_EXPORT") { api.adminExportDataset().requireData() }
 
-    private fun action(block: suspend () -> Any?) {
+    private fun action(permission: String, block: suspend () -> Any?) {
+        if (!hasPermission(permission)) {
+            _state.update { it.copy(error = "Your operator account is not authorized for this action.") }
+            return
+        }
         if (_state.value.actionBusy) return
         viewModelScope.launch {
             _state.update { it.copy(actionBusy = true, error = null, message = null) }

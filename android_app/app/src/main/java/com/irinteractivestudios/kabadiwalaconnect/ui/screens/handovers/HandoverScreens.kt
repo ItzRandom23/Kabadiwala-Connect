@@ -4,6 +4,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,14 +28,17 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DealSheetCard
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ProofRow
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun HandoverCreateScreen(lot: Lot, quote: Quote, collectorId: String, saving: Boolean = false, saveError: Boolean = false, onSave: (HandoverLocationType, String, Long) -> Unit) {
+    val layout = rememberKcResponsiveLayout()
     var type by remember { mutableStateOf(HandoverLocationType.RECYCLER_FACILITY) }
     var location by remember { mutableStateOf(quote.recyclerName) }
     val label = when (type) { HandoverLocationType.COLLECTOR_LOCATION -> stringResource(R.string.handover_collector); HandoverLocationType.RECYCLER_FACILITY -> stringResource(R.string.handover_recycler); HandoverLocationType.THIRD_PARTY -> stringResource(R.string.handover_third_party) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(stringResource(R.string.handover_create_title), style = MaterialTheme.typography.headlineMedium)
         EvidenceSection(title = stringResource(R.string.quote_summary), status = stringResource(R.string.quote_status, quote.status.name)) {
                 ProofRow(stringResource(R.string.handover_material), lot.materialLabel)
@@ -40,7 +47,7 @@ fun HandoverCreateScreen(lot: Lot, quote: Quote, collectorId: String, saving: Bo
                 Text("₹%.0f".format(quote.amountRupees), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
         }
         Text(stringResource(R.string.handover_choose_location), style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { HandoverLocationType.entries.forEach { item -> FilterChip(selected = type == item, onClick = { type = item; location = if (item == HandoverLocationType.RECYCLER_FACILITY) quote.recyclerName else "" }, label = { Text(when (item) { HandoverLocationType.COLLECTOR_LOCATION -> stringResource(R.string.handover_collector); HandoverLocationType.RECYCLER_FACILITY -> stringResource(R.string.handover_recycler); HandoverLocationType.THIRD_PARTY -> stringResource(R.string.handover_third_party) }) }) } }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { HandoverLocationType.entries.forEach { item -> FilterChip(selected = type == item, onClick = { type = item; location = if (item == HandoverLocationType.RECYCLER_FACILITY) quote.recyclerName else "" }, label = { Text(when (item) { HandoverLocationType.COLLECTOR_LOCATION -> stringResource(R.string.handover_collector); HandoverLocationType.RECYCLER_FACILITY -> stringResource(R.string.handover_recycler); HandoverLocationType.THIRD_PARTY -> stringResource(R.string.handover_third_party) }) }) } }
         OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.handover_location_label, label)) }, minLines = 2)
         Text(stringResource(R.string.handover_time_review, IndiaFormat.dateTime(System.currentTimeMillis())), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.handover_offline_note))

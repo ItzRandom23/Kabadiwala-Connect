@@ -27,6 +27,7 @@ import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.TransactionEventDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.TransactionTimelineDto
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,10 +53,11 @@ class TransactionTimelineViewModel(private val api: ApiService) : ViewModel() {
 @Composable
 fun TransactionTimelineScreen(lotId: String, vm: TransactionTimelineViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val layout = rememberKcResponsiveLayout()
     LaunchedEffect(lotId) { vm.refresh(lotId) }
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.transaction_passport_title), style = MaterialTheme.typography.headlineMedium)
+    Column(modifier.fillMaxSize().padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(stringResource(R.string.transaction_passport_title), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium, maxLines = if (layout.isCompact) 2 else 1)
             OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_back)) }
         }
         when {
@@ -64,14 +66,14 @@ fun TransactionTimelineScreen(lotId: String, vm: TransactionTimelineViewModel, o
                 Text(stringResource(R.string.transaction_passport_error), color = MaterialTheme.colorScheme.error)
                 Button(onClick = { vm.refresh(lotId) }) { Text(stringResource(R.string.future_retry)) }
             }
-            state.data != null -> TimelineContent(state.data!!, state.error, onRefresh = { vm.refresh(lotId) })
+            state.data != null -> TimelineContent(state.data!!, state.error, onRefresh = { vm.refresh(lotId) }, modifier = Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun TimelineContent(data: TransactionTimelineDto, hasRefreshError: Boolean, onRefresh: () -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun TimelineContent(data: TransactionTimelineDto, hasRefreshError: Boolean, onRefresh: () -> Unit, modifier: Modifier = Modifier) {
+    LazyColumn(modifier, contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

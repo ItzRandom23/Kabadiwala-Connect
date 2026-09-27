@@ -16,6 +16,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.RemoteAuthentication
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.RoomCollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionCoordinator
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticatedSessionStamp
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RetrofitProvider
@@ -68,6 +69,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.reconcileRecyclerAccountAuthorization
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -77,6 +79,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.Flow
@@ -86,6 +89,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Manual service locator for the app's local and remote repositories.
@@ -100,6 +105,7 @@ class AppContainer(context: Context) {
     private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val catalogRefreshMutex = Mutex()
     private val authenticatedBackgroundWorkReady = AtomicBoolean(false)
+    private val authenticatedSessionGeneration = AtomicLong(0L)
     private var lastCatalogRefreshKey: String? = null
     private var lastCatalogRefreshElapsedMs: Long = 0L
 
@@ -112,7 +118,8 @@ class AppContainer(context: Context) {
             baseUrl = BuildConfig.API_BASE_URL,
             tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
             tokenRefresher = { failedToken -> runBlocking { authenticationRepository.refreshAccessToken(force = true, failedAccessToken = failedToken) } },
-            onAuthenticationFailure = { failedToken -> expireAccountSessionIfCurrentToken(failedToken) }
+            onAuthenticationFailure = { failedToken -> expireAccountSessionIfCurrentToken(failedToken) },
+            sessionGenerationProvider = { authenticatedSessionGeneration() }
         )
     }
 
@@ -156,7 +163,13 @@ class AppContainer(context: Context) {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) {
             MockAuthenticationRepository(MockOtpService(), sessionRepository, secureStorage)
         } else {
-            RemoteAuthenticationRepository(apiService, sessionRepository, secureStorage)
+            RemoteAuthenticationRepository(
+                apiService,
+                sessionRepository,
+                secureStorage,
+                onSessionWillChange = ::revokeAuthenticatedBackgroundWork,
+                sessionGenerationProvider = ::authenticatedSessionGeneration
+            )
         }
     }
     val collectorProfileRepository: CollectorProfileRepository by lazy { RoomCollectorProfileRepository(database.collectorProfileDao()) }
@@ -173,7 +186,44 @@ class AppContainer(context: Context) {
      */
     fun isAuthenticatedBackgroundWorkReady(): Boolean = authenticatedBackgroundWorkReady.get()
 
+    fun authenticatedSessionGeneration(): Long = authenticatedSessionGeneration.get()
+
+    /** True only while this exact authenticated account/session still owns work. */
+    fun isAuthenticatedSessionCurrent(generation: Long, accountId: String): Boolean =
+        authenticatedBackgroundWorkReady.get() &&
+            authenticatedSessionGeneration.get() == generation &&
+            hasValidSession() &&
+            currentAccount()?.profileId == accountId &&
+            secureStorage.get(SecureStorage.ACCOUNT_PROFILE_ID) == accountId
+
+    /**
+     * Builds a request client for one background run. The captured token can
+     * refresh only while its account/session generation remains current, so
+     * a queued mutation can never pick up a later login's bearer token.
+     */
+    fun apiServiceForBackgroundSession(accountId: String, generation: Long, accessToken: String): ApiService {
+        val token = AtomicReference(accessToken)
+        fun isCurrent() = isAuthenticatedSessionCurrent(generation, accountId)
+        return RetrofitProvider.create(
+            baseUrl = BuildConfig.API_BASE_URL,
+            tokenProvider = { token.get() },
+            tokenRefresher = { failedToken ->
+                if (!isCurrent()) null
+                else runBlocking {
+                    authenticationRepository.refreshAccessToken(force = true, failedAccessToken = failedToken)
+                }?.takeIf { isCurrent() }?.also(token::set)
+            },
+            onAuthenticationFailure = { failedToken ->
+                if (isCurrent()) expireAccountSessionIfCurrentToken(failedToken)
+            },
+            sessionGenerationProvider = { authenticatedSessionGeneration() },
+            requestSessionGenerationProvider = { generation }
+        )
+    }
+
+    @Synchronized
     fun markAuthenticatedBackgroundWorkReady(account: AccountProfile?) {
+        authenticatedSessionGeneration.incrementAndGet()
         authenticatedBackgroundWorkReady.set(
             account != null && hasValidSession() && currentAccount()?.profileId == account.profileId
         )
@@ -181,7 +231,9 @@ class AppContainer(context: Context) {
         else sessionCoordinator.unauthenticated()
     }
 
+    @Synchronized
     fun revokeAuthenticatedBackgroundWork() {
+        authenticatedSessionGeneration.incrementAndGet()
         authenticatedBackgroundWorkReady.set(false)
     }
 
@@ -305,11 +357,16 @@ class AppContainer(context: Context) {
     suspend fun unregisterCurrentPushToken(): Boolean {
         val token = secureStorage.get(SecureStorage.PUSH_TOKEN) ?: secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return true
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
-        return runCatching {
+        return try {
             apiService.unregisterNotificationDevice(NotificationDeviceRequestDto(token = token)).requireData()
             secureStorage.remove(SecureStorage.PUSH_TOKEN)
             secureStorage.remove(SecureStorage.PENDING_PUSH_TOKEN)
-        }.isSuccess
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** Keeps the cached account snapshot aligned with the app language setting. */
@@ -338,6 +395,28 @@ class AppContainer(context: Context) {
 
     suspend fun refreshAccount(): AccountProfile? = authenticationRepository.refreshAccount()
 
+    /**
+     * The authenticated recycler profile is the server's source of truth for
+     * marketplace access. Mirror its status into the cached account/session so
+     * navigation, the shell, and a cold start cannot disagree after review.
+     */
+    fun reconcileRecyclerAuthorization(profileId: String, authorizationStatus: String?): AccountProfile? {
+        val current = currentAccount()?.takeIf {
+            it.role == AccountRole.RECYCLER && it.profileId == profileId && hasValidSession()
+        } ?: return null
+        val updated = reconcileRecyclerAccountAuthorization(current, profileId, authorizationStatus) ?: return null
+        if (updated == current) {
+            sessionCoordinator.authenticated(current)
+            return current
+        }
+        // This function has no suspension point: logout/account replacement
+        // cannot interleave between the identity check and this local write.
+        if (currentAccount()?.profileId != current.profileId || !hasValidSession()) return null
+        secureStorage.saveAccount(updated)
+        sessionCoordinator.authenticated(updated)
+        return updated
+    }
+
     suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile? =
         authenticationRepository.updateAccountProfile(update)
 
@@ -349,6 +428,9 @@ class AppContainer(context: Context) {
         // never enter collector-only lot/payment sync below.
         if (account?.role == AccountRole.RECYCLER) return@withLock
         if (account == null) return@withLock
+        val stamp = AuthenticatedSessionStamp(authenticatedSessionGeneration(), account.profileId)
+        fun sessionStillCurrent() = stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId) &&
+            isAuthenticatedSessionCurrent(stamp.generation, account.profileId)
         val resolvedLocation = location?.trim()?.takeIf { it.isNotBlank() }
             ?: account.areaName?.trim()?.takeIf { it.isNotBlank() }
             ?: return@withLock
@@ -395,10 +477,13 @@ class AppContainer(context: Context) {
                 }.getOrNull()
             }
         }
+        if (!sessionStillCurrent()) return@withLock
         // An authoritative empty response removes outdated local rates; a
         // network failure leaves the existing offline cache untouched.
         if (boardResults.all { it.second.isSuccess }) database.priceDao().replaceLocation(resolvedLocation, prices)
-        val recyclers = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account.latitude, longitude ?: account.longitude).requireData() }.getOrNull()?.items.orEmpty().map { recycler ->
+        val recyclerResponse = runCatching { apiService.getRecyclers(resolvedLocation, 50, null, null, "proximity", 1, 100, latitude ?: account.latitude, longitude ?: account.longitude).requireData() }.getOrNull()
+        if (!sessionStillCurrent()) return@withLock
+        val recyclers = recyclerResponse?.items.orEmpty().map { recycler ->
             RecyclerEntity(
                 id = recycler.id,
                 name = recycler.name,
@@ -433,9 +518,20 @@ class AppContainer(context: Context) {
 
         if (account.role == AccountRole.HOUSEHOLD) return@withLock
 
-        val remoteLots = runCatching { apiService.getLots(page = 1, limit = 100).requireData() }.getOrNull()?.items.orEmpty()
+        val lotsResponse = runCatching { apiService.getLots(page = 1, limit = 100).requireData() }.getOrNull()
+        if (!sessionStillCurrent()) return@withLock
+        val remoteLots = lotsResponse?.let { firstPage ->
+            val allPages = firstPage.items.toMutableList()
+            for (page in 2..firstPage.pagination.totalPages.coerceAtLeast(1)) {
+                if (!sessionStillCurrent()) return@withLock
+                val nextPage = runCatching { apiService.getLots(page = page, limit = 100).requireData() }.getOrNull() ?: break
+                if (nextPage.items.isEmpty()) break
+                allPages += nextPage.items
+            }
+            allPages.distinctBy { it.id }
+        }.orEmpty()
         if (remoteLots.isNotEmpty()) {
-            val unsyncedIds = currentAccount()?.profileId?.let { database.lotDao().observeForCollector(it).first() }?.filterNot { it.synced }?.map { it.id }?.toSet().orEmpty()
+            val unsyncedIds = database.lotDao().observeForCollector(account.profileId).first().filterNot { it.synced }.map { it.id }.toSet()
             database.lotDao().saveAll(remoteLots.filterNot { it.id in unsyncedIds }.map { lot ->
                 LotEntity(
                     id = lot.id,
@@ -471,6 +567,7 @@ class AppContainer(context: Context) {
         }
 
         val payments = runCatching { apiService.getPayments().requireData() }.getOrNull().orEmpty()
+        if (!sessionStillCurrent()) return@withLock
         if (payments.isNotEmpty()) {
             database.paymentDao().insertAll(payments.map { payment ->
                 PaymentEntity(
@@ -483,7 +580,7 @@ class AppContainer(context: Context) {
                     notes = "",
                     syncState = PaymentSyncState.SYNCED.name,
                     recordState = if (payment.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
-                    accountId = currentAccount()?.profileId
+                    accountId = account.profileId
                 )
             })
         }
@@ -492,8 +589,11 @@ class AppContainer(context: Context) {
     /** Refreshes the authoritative earnings ledger without requiring a full catalogue reload. */
     suspend fun refreshEarnings(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
-        if (currentAccount()?.role != AccountRole.COLLECTOR) return false
+        val account = currentAccount()?.takeIf { it.role == AccountRole.COLLECTOR } ?: return false
+        val stamp = AuthenticatedSessionStamp(authenticatedSessionGeneration(), account.profileId)
         val payments = apiService.getEarnings().requireData().payments
+        if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId) ||
+            !isAuthenticatedSessionCurrent(stamp.generation, account.profileId)) return false
         database.paymentDao().insertAll(payments.map { payment ->
             PaymentEntity(
                 id = payment.id,
@@ -506,7 +606,7 @@ class AppContainer(context: Context) {
                 notes = "",
                 syncState = PaymentSyncState.SYNCED.name,
                 recordState = if (payment.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
-                accountId = currentAccount()?.profileId
+                accountId = account.profileId
             )
         })
         return true
@@ -515,9 +615,11 @@ class AppContainer(context: Context) {
     /** Pulls durable cross-role events without requiring push infrastructure. */
     suspend fun refreshActivity(): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
-        if (currentAccount()?.role !in setOf(AccountRole.COLLECTOR, AccountRole.HOUSEHOLD, AccountRole.RECYCLER)) return false
+        val account = currentAccount()?.takeIf { it.role in setOf(AccountRole.COLLECTOR, AccountRole.HOUSEHOLD, AccountRole.RECYCLER) } ?: return false
+        val stamp = AuthenticatedSessionStamp(authenticatedSessionGeneration(), account.profileId)
         val response = apiService.getActivityChanges(secureStorage.get(SecureStorage.ACTIVITY_CURSOR)).requireData()
-        val accountId = currentAccount()?.profileId
+        if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId)) return false
+        val accountId = stamp.accountId
         if (response.notifications.isNotEmpty()) {
             FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications)
         }
@@ -540,12 +642,22 @@ class AppContainer(context: Context) {
      * Unsynced local rows are never overwritten, so a reconnect cannot erase
      * work that is still waiting in the outbox.
      */
-    suspend fun reconcileChanges(): Boolean {
+    suspend fun reconcileChanges(
+        requestApi: ApiService = apiService,
+        expectedSessionGeneration: Long? = null,
+        expectedAccountId: String? = null
+    ): Boolean {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
         if (currentAccount()?.role != AccountRole.COLLECTOR) return false
         val accountId = currentAccount()?.profileId ?: return false
+        if (expectedAccountId != null && expectedAccountId != accountId) return false
+        val stamp = AuthenticatedSessionStamp(expectedSessionGeneration ?: authenticatedSessionGeneration(), accountId)
+        fun sessionStillCurrent() = stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId) &&
+            isAuthenticatedSessionCurrent(stamp.generation, accountId)
+        if (!sessionStillCurrent()) return false
         val cursor = secureStorage.get(SecureStorage.SYNC_CURSOR)
-        val payload = apiService.getChanges(cursor).requireData()
+        val payload = requestApi.getChanges(cursor).requireData()
+        if (!sessionStillCurrent()) return false
         database.withTransaction {
             payload.changes.lots.forEach { remote ->
                 // Deltas are expected to be server-scoped, but keep the local
@@ -604,7 +716,7 @@ class AppContainer(context: Context) {
                             notes = local?.notes.orEmpty(),
                             syncState = PaymentSyncState.SYNCED.name,
                             recordState = if (remote.status == "DISPUTED") PaymentRecordState.DISCREPANCY.name else PaymentRecordState.NORMAL.name,
-                            accountId = currentAccount()?.profileId
+                            accountId = accountId
                         )
                     )
                 }
@@ -622,6 +734,7 @@ class AppContainer(context: Context) {
                 }
             }
         }
+        if (!sessionStillCurrent()) return false
         payload.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.SYNC_CURSOR, it) }
         return true
     }

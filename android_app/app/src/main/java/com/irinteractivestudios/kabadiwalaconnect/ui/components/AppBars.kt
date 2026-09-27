@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcSpacing
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTOM_TABS
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.HOUSEHOLD_BOTTOM_TABS
@@ -58,6 +59,7 @@ fun KcTopBar(
     showBack: Boolean,
     onBack: () -> Unit
 ) {
+    val responsiveLayout = rememberKcResponsiveLayout()
     Surface(
         color = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
@@ -82,7 +84,9 @@ fun KcTopBar(
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1
+                    maxLines = if (responsiveLayout.isCompact) 2 else 1,
+                    softWrap = responsiveLayout.isCompact,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -100,6 +104,7 @@ fun KcBottomBar(
     kabadiwalaDemo: Boolean = false,
     recyclerPending: Boolean = false
 ) {
+    val responsiveLayout = rememberKcResponsiveLayout()
     val tabs = when (role) {
         AccountRole.RECYCLER -> if (recyclerPending) RECYCLER_PENDING_BOTTOM_TABS else RECYCLER_BOTTOM_TABS
         AccountRole.HOUSEHOLD -> HOUSEHOLD_BOTTOM_TABS
@@ -176,8 +181,9 @@ fun KcBottomBar(
                     stringResource(tab.labelRes),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
                     color = itemColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = if (responsiveLayout.isCompact) 2 else 1,
+                    softWrap = responsiveLayout.isCompact,
+                    overflow = if (responsiveLayout.isCompact) TextOverflow.Clip else TextOverflow.Ellipsis
                 )
             }
         }

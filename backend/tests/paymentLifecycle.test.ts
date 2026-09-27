@@ -23,4 +23,42 @@ describe('payment settlement lifecycle', () => {
     expect(result.id).toBe('payment-1');
     expect(handoverUpdate).toHaveBeenCalledWith({ where: { id: 'handover-1' }, data: { status: 'COMPLETED' } });
   });
+
+  it('does not apply an edit after a concurrent verification claimed the payment', async () => {
+    const payment = {
+      id: 'payment-race', collectorId: 'collector-1', status: 'RECORDED', amount: 100,
+      paymentMethod: 'CASH', createdAt: new Date(), lot: { quotes: [], handovers: [] }
+    };
+    const tx = {
+      payment: { updateMany: vi.fn().mockResolvedValue({ count: 0 }), findUniqueOrThrow: vi.fn() },
+      paymentAudit: { create: vi.fn() }
+    };
+    const db = {
+      payment: { findUnique: vi.fn().mockResolvedValue(payment) },
+      $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx))
+    } as never;
+
+    await expect(new PaymentService(db).edit('payment-race', 'collector-1', { amount: 120, method: 'CASH', notes: '' }))
+      .rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(tx.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'payment-race', collectorId: 'collector-1', status: 'RECORDED' })
+    }));
+    expect(tx.paymentAudit.create).not.toHaveBeenCalled();
+  });
+
+  it('does not count reversed formal payments as earnings but keeps them in transaction history', async () => {
+    const reversed = {
+      id: 'supply-payment-reversed', status: 'REVERSED', amount: 250,
+      recordedAt: new Date(), collectorId: 'collector-1'
+    };
+    const db = {
+      payment: { findMany: vi.fn().mockResolvedValue([]) },
+      supplyPayment: { findMany: vi.fn().mockResolvedValue([reversed]) }
+    } as never;
+
+    const ledger = await new PaymentService(db).ledger('collector-1');
+    expect(ledger.summary).toMatchObject({ totalEarnings: 0, thisMonthEarnings: 0, averageLotValue: 0 });
+    expect(ledger.formalPayments).toEqual([reversed]);
+    expect(ledger.transactions).toEqual([expect.objectContaining({ id: reversed.id, status: 'REVERSED' })]);
+  });
 });

@@ -27,6 +27,7 @@ fun EvidenceSection(
     title: String,
     modifier: Modifier = Modifier,
     status: String? = null,
+    statusTone: KcStatusTone? = null,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -38,7 +39,7 @@ fun EvidenceSection(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                status?.let { KcStatusPill(it) }
+                status?.let { KcStatusPill(it, tone = statusTone) }
             }
             content()
         }

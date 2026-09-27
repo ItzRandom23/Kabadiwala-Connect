@@ -18,6 +18,9 @@ import com.irinteractivestudios.kabadiwalaconnect.util.InMemorySecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -31,6 +34,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthenticationTest {
+    @Test fun startOverMakesFailedSessionCompletionRetryable() {
+        val vm = TestAuth.onboarding()
+        vm.useEmailSignIn()
+        vm.setEmail("user@example.com")
+        vm.setPassword("secret")
+
+        vm.startOver()
+
+        assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+        assertFalse(vm.state.value.completed)
+        assertFalse(vm.state.value.isBusy)
+        assertEquals("", vm.state.value.password)
+    }
+
     @Test fun ordinaryEmailSignInClearsPreviousOperatorChoice() {
         val vm = TestAuth.onboarding()
         vm.useAdminSignIn()
@@ -84,6 +101,113 @@ class AuthenticationTest {
             assertTrue(adminLoginCalled)
             assertTrue(vm.state.value.completed)
             assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun unexpectedEmailSignInFailureClearsBusyAndShowsRetryableError() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication = error("unexpected repository failure")
+                override suspend fun verifyOtp(phoneNumber: String, code: String) = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            })
+            vm.useAdminSignIn()
+            vm.setEmail("admin@example.com")
+            vm.setPassword("password123")
+            vm.signIn()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isBusy)
+            assertEquals(com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.AuthError.NETWORK, vm.state.value.authError)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun startOverIgnoresLateEmailSignInSuccess() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val pending = CompletableDeferred<EmailAuthentication>()
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun authenticateAdmin(email: String, password: String): EmailAuthentication =
+                    withContext(NonCancellable) { pending.await() }
+                override suspend fun verifyOtp(phoneNumber: String, code: String) = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            })
+            vm.useAdminSignIn()
+            vm.setEmail("admin@example.com")
+            vm.setPassword("password123")
+            vm.signIn()
+            advanceUntilIdle()
+            vm.startOver()
+            pending.complete(EmailAuthentication.Success(
+                token = "header.payload.signature",
+                expiresAtEpochMs = Long.MAX_VALUE,
+                profile = AccountProfile(id = "admin-1", email = "admin@example.com", role = AccountRole.ADMIN, preferredLanguage = "en", profileId = "admin-1")
+            ))
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+            assertFalse(vm.state.value.completed)
+            assertFalse(vm.state.value.isBusy)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun resetOtpIgnoresLateVerificationSuccess() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val pending = CompletableDeferred<OtpVerification>()
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String): OtpVerification =
+                    withContext(NonCancellable) { pending.await() }
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val vm = OnboardingViewModel(auth, object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) = Unit
+                override suspend fun clear() = Unit
+            })
+            vm.setPhone("9876543210")
+            vm.requestOtp()
+            advanceUntilIdle()
+            vm.setOtp("123456")
+            vm.verifyOtp()
+            advanceUntilIdle()
+            vm.resetOtp()
+            pending.complete(OtpVerification.Success(
+                token = "header.payload.signature",
+                expiresAtEpochMs = Long.MAX_VALUE,
+                profile = AccountProfile(id = "household-1", email = "home@example.com", role = AccountRole.HOUSEHOLD, preferredLanguage = "en", profileId = "household-1")
+            ))
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.PHONE, vm.state.value.step)
+            assertFalse(vm.state.value.completed)
+            assertFalse(vm.state.value.isBusy)
         } finally {
             Dispatchers.resetMain()
         }
@@ -547,6 +671,60 @@ class AuthenticationTest {
             assertEquals("Pune", vm.state.value.area)
             assertEquals(18.5204, vm.state.value.latitude ?: 0.0, 0.000001)
             assertEquals(73.8567, vm.state.value.longitude ?: 0.0, 0.000001)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun manualLocationChoiceWinsOverLateGpsResponse() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val pendingLocation = CompletableDeferred<CurrentLocation?>()
+            val vm = TestAuth.onboarding(locationProvider = LocationProvider { pendingLocation.await() })
+
+            vm.locationPermissionResult(true)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isLocationBusy)
+
+            vm.chooseManualLocation()
+            pendingLocation.complete(CurrentLocation(18.5204, 73.8567, "Pune", "Late GPS address"))
+            advanceUntilIdle()
+
+            assertEquals(OnboardingStep.AREA, vm.state.value.step)
+            assertFalse(vm.state.value.isLocationBusy)
+            assertEquals(com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.LocationChoice.MANUAL, vm.state.value.locationChoice)
+            assertEquals(null, vm.state.value.latitude)
+            assertEquals("", vm.state.value.address)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test fun unexpectedProfilePersistenceFailureClearsBusyState() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val auth = object : AuthenticationRepository {
+                override suspend fun requestOtp(phoneNumber: String) = OtpChallenge(phoneNumber, Long.MAX_VALUE, 0)
+                override suspend fun verifyOtp(phoneNumber: String, code: String) = OtpVerification.NetworkError
+                override fun isSessionValid() = false
+                override fun logout() = Unit
+            }
+            val profiles = object : CollectorProfileRepository {
+                override fun observe(): Flow<CollectorProfile?> = emptyFlow()
+                override suspend fun save(profile: CollectorProfile) { error("local database unavailable") }
+                override suspend fun clear() = Unit
+            }
+            val vm = OnboardingViewModel(auth, profiles)
+            vm.selectRole(AccountRole.COLLECTOR)
+            vm.chooseManualLocation()
+            vm.setAddress("Audit Area")
+            vm.saveProfile()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isBusy)
+            assertEquals(com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.AuthError.NETWORK, vm.state.value.authError)
         } finally {
             Dispatchers.resetMain()
         }

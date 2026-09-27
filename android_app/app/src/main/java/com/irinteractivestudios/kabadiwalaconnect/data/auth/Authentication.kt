@@ -328,7 +328,7 @@ fun SecureStorage.saveAccount(profile: AccountProfile) {
 fun SecureStorage.readAccount(): AccountProfile? {
     val role = get(SecureStorage.ACCOUNT_ROLE)?.let { runCatching { AccountRole.valueOf(it) }.getOrNull() } ?: return null
     val profileId = get(SecureStorage.ACCOUNT_PROFILE_ID) ?: return null
-    val status = get(SecureStorage.ACCOUNT_VERIFICATION_STATUS)?.let { runCatching { RecyclerVerificationStatus.valueOf(it) }.getOrNull() } ?: RecyclerVerificationStatus.VERIFIED
+    val status = get(SecureStorage.ACCOUNT_VERIFICATION_STATUS).toRecyclerVerificationStatusOrPending()
     return AccountProfile(
         id = profileId,
         email = get(SecureStorage.ACCOUNT_EMAIL).orEmpty(),

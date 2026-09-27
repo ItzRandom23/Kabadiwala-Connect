@@ -19,6 +19,12 @@ data class SessionSnapshot(
     val restorable: Boolean get() = state == SessionState.AUTHENTICATED && account != null
 }
 
+/** Identity and generation captured before an authenticated request starts. */
+data class AuthenticatedSessionStamp(val generation: Long, val accountId: String?) {
+    fun matches(currentGeneration: Long, currentAccountId: String?): Boolean =
+        generation == currentGeneration && accountId == currentAccountId
+}
+
 /** Single process-local source of truth for session restoration and account scope. */
 class SessionCoordinator {
     private val _snapshot = MutableStateFlow(SessionSnapshot(SessionState.RESTORING, null))

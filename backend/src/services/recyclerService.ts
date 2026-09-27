@@ -6,6 +6,7 @@ import type {
   RecyclerAuthorizationStatus
 } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { withTransactionRetry } from '../utils/transactionRetry.js';
 
 const EARTH_RADIUS_KM = 6371;
 const DISTANCE_FALLBACK_KM = Number.POSITIVE_INFINITY;
@@ -307,7 +308,7 @@ export class RecyclerService {
       validUntil: Date;
     }
   ) {
-    return this.db.$transaction(async transaction => {
+    return withTransactionRetry(() => this.db.$transaction(async transaction => {
       const previous = await transaction.recycler.findUnique({ where: { id } });
       if (!previous) {
         throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
@@ -318,9 +319,37 @@ export class RecyclerService {
       if (previous.authorizationStatus === 'VERIFIED') {
         throw new AppError('CONFLICT', 'This recycler profile is already verified', 409, { code: 'RECYCLER_ALREADY_VERIFIED' });
       }
+      const hasExistingEvidence = [
+        previous.authorizationAuthority,
+        previous.licenseNumber,
+        previous.authorizationType,
+        previous.authorizationEvidenceReference,
+        previous.verificationSource,
+        previous.authorizationValidUntil
+      ].some(value => value !== null && value !== undefined && value !== '');
+      if (previous.authorizationStatus === 'PENDING' && hasExistingEvidence) {
+        throw new AppError('CONFLICT', 'Your authorization evidence is already awaiting review', 409, { code: 'RECYCLER_VERIFICATION_ALREADY_PENDING' });
+      }
 
-      const recycler = await transaction.recycler.update({
-        where: { id },
+      // Claim the current state and write evidence in one conditional update.
+      // This also stops two requests racing from both submitting the same
+      // initially empty PENDING profile. Mongo signup documents may omit
+      // nullable fields entirely, so match null, missing and blank values.
+      const claimed = await transaction.recycler.updateMany({
+        where: {
+          id,
+          authorizationStatus: previous.authorizationStatus,
+          ...(previous.authorizationStatus === 'PENDING' ? {
+            AND: [
+              { OR: [{ authorizationAuthority: null }, { authorizationAuthority: { isSet: false } }, { authorizationAuthority: '' }] },
+              { OR: [{ licenseNumber: null }, { licenseNumber: { isSet: false } }, { licenseNumber: '' }] },
+              { OR: [{ authorizationType: null }, { authorizationType: { isSet: false } }, { authorizationType: '' }] },
+              { OR: [{ authorizationEvidenceReference: null }, { authorizationEvidenceReference: { isSet: false } }, { authorizationEvidenceReference: '' }] },
+              { OR: [{ verificationSource: null }, { verificationSource: { isSet: false } }, { verificationSource: '' }] },
+              { OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { isSet: false } }] }
+            ]
+          } : {})
+        },
         data: {
           authorizationStatus: 'PENDING',
           authorizationAuthority: input.authority,
@@ -331,9 +360,13 @@ export class RecyclerService {
           authorizationValidUntil: input.validUntil,
           verifiedAt: null,
           verifiedBy: null
-        },
-        include: this.include
+        }
       });
+      if (!claimed.count) {
+        throw new AppError('CONFLICT', 'Your authorization evidence is already awaiting review', 409, { code: 'RECYCLER_VERIFICATION_ALREADY_PENDING' });
+      }
+      const recycler = await transaction.recycler.findUnique({ where: { id }, include: this.include });
+      if (!recycler) throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
       await transaction.recyclerAuthorizationAudit.create({
         data: {
           recyclerId: id,
@@ -344,7 +377,7 @@ export class RecyclerService {
         }
       });
       return this.ownerView(recycler);
-    });
+    }));
   }
 
   async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; logisticsCostPerKm?: number; pickupFee?: number; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {

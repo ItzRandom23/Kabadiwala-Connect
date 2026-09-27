@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const environmentBoolean = z.union([z.boolean(), z.stringbool()]);
+
 const schema = z.object({
   APP_ENV: z.enum(['testing', 'production']).default('testing'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -20,10 +22,10 @@ const schema = z.object({
   TWOFACTOR_API_KEY: z.string().optional(),
   TWOFACTOR_BASE_URL: z.string().url().optional(),
   NOTIFICATION_SMS_PROVIDER: z.enum(['disabled', 'twofactor']).optional(),
-  NOTIFICATION_SMS_ENABLED: z.coerce.boolean().optional(),
+  NOTIFICATION_SMS_ENABLED: environmentBoolean.optional(),
   TWOFACTOR_SMS_SENDER_ID: z.string().trim().min(1).max(20).optional(),
   NOTIFICATION_PUSH_PROVIDER: z.enum(['disabled', 'fcm']).optional(),
-  NOTIFICATION_PUSH_ENABLED: z.coerce.boolean().optional(),
+  NOTIFICATION_PUSH_ENABLED: environmentBoolean.optional(),
   FCM_PROJECT_ID: z.string().trim().min(1).optional(),
   FCM_CLIENT_EMAIL: z.string().email().optional(),
   FCM_PRIVATE_KEY: z.string().min(1).optional(),
@@ -36,7 +38,7 @@ const schema = z.object({
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().min(1).default('uploads'),
   LOCAL_UPLOAD_BASE_URL: z.string().default(''),
-  LOCAL_UPLOAD_PUBLIC: z.coerce.boolean().default(false),
+  LOCAL_UPLOAD_PUBLIC: environmentBoolean.default(false),
   S3_ENDPOINT: z.string().url().optional().or(z.literal('')),
   S3_REGION: z.string().default('ap-south-1'),
   S3_BUCKET: z.string().optional(),

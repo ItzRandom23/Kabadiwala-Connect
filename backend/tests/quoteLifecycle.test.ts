@@ -2,6 +2,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { QuoteService } from '../src/services/quoteService.js';
 
 describe('quote lifecycle recovery', () => {
+  it('does not create a quote request when cancellation wins after the eligibility read', async () => {
+    const created = vi.fn();
+    const audit = vi.fn();
+    const lot = {
+      id: 'lot-race', collectorId: 'collector-1', status: 'CREATED', materialCategory: 'PCB',
+      weight: 2, weightUnit: 'KILOGRAM', estimatedValue: 50,
+      collectionLatitude: 18.5, collectionLongitude: 73.8, collectionAreaName: 'Pune'
+    };
+    const tx = {
+      lot: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findFirst: vi.fn().mockResolvedValue(null)
+      },
+      quoteRequest: { create: created },
+      quoteAudit: { create: audit }
+    };
+    const db = {
+      lot: { findFirst: vi.fn().mockResolvedValue(lot) },
+      recycler: { findUnique: vi.fn().mockResolvedValue({ authorizationStatus: 'VERIFIED', authorizationValidUntil: null, materials: [{ category: 'PCB' }] }) },
+      quoteRequest: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx))
+    } as never;
+
+    await expect(new QuoteService(db).requestQuote('collector-1', 'lot-race', 'recycler-1'))
+      .rejects.toMatchObject({ details: { code: 'LOT_NOT_ELIGIBLE_FOR_QUOTE' } });
+    expect(tx.lot.updateMany).toHaveBeenCalledWith({
+      where: { id: 'lot-race', collectorId: 'collector-1', status: 'CREATED' },
+      data: { status: 'QUOTE_REQUESTED' }
+    });
+    expect(created).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it('reopens a lot when its last quote is rejected', async () => {
     const q = {
       id: 'quote-1', quoteRequestId: 'request-1', lotId: 'lot-1', recyclerId: 'recycler-1',

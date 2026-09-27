@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.irinteractivestudios.kabadiwalaconnect.di.KcViewModelFactory
@@ -58,6 +59,7 @@ import com.irinteractivestudios.kabadiwalaconnect.util.InstallUpdateResult
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Single-activity Compose host.
@@ -69,6 +71,7 @@ import kotlinx.coroutines.withContext
  * - Requests no permissions on launch; features request access on demand.
  */
 class MainActivity : ComponentActivity() {
+    private val pendingNotificationRoute = mutableStateOf<String?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleManager.wrap(newBase))
@@ -92,6 +95,12 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = !initialDark
         }
         val app = application as KabadiwalaApp
+        // rememberSaveable is normally sufficient for configuration changes,
+        // but a locale-triggered recreate can happen before Compose has
+        // committed its saveable snapshot. Carry the one protected route in
+        // the Activity intent as a synchronous hand-off as well.
+        val routeFromLocaleRecreate = intent.getStringExtra(EXTRA_RESTORE_ROUTE)
+        pendingNotificationRoute.value = intent.getStringExtra(EXTRA_NOTIFICATION_ROUTE)
         // Local-only QA entry points. Release builds ignore these extras. The
         // live variant opens the real seller screen without creating an account,
         // so UI/API error states can be inspected on a clean emulator.
@@ -139,7 +148,11 @@ class MainActivity : ComponentActivity() {
                 // Locale changes recreate this Activity. Preserve the current
                 // Settings tab for that one recreation instead of restarting
                 // a valid session at its default destination.
-                var routeToRestoreAfterRecreation by rememberSaveable { mutableStateOf<String?>(null) }
+                // The route is handed through the intent immediately before
+                // a locale recreate. rememberSaveable could restore the old
+                // null snapshot before this initializer ran, so use ordinary
+                // composition state for this one-shot hand-off.
+                var routeToRestoreAfterRecreation by remember { mutableStateOf(routeFromLocaleRecreate) }
                 var availableUpdate by remember { mutableStateOf<AvailableAppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
@@ -233,8 +246,11 @@ class MainActivity : ComponentActivity() {
                     bootstrap.account?.role?.let { activeRole = it }
                 }
                 val cachedAccount = bootstrap.account
-                val defaultInitialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_VERIFY else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else Destinations.startForSession(cachedAccount.takeIf { bootstrap.restorable })
-                val restoreSettingsAfterLocaleChange = routeToRestoreAfterRecreation == Destinations.SETTINGS &&
+                // The Recycler debug preview uses DemoDataProvider's already
+                // VERIFIED account, so start in its operational marketplace
+                // instead of forcing that verified fixture through review.
+                val defaultInitialRoute = if (householdLivePreview) Destinations.HOME else if (recyclerPendingPreview) Destinations.RECYCLER_MARKETPLACE else if (lotCameraPreview) Destinations.CREATE_LOT else if (demoMode && renderedRole == AccountRole.RECYCLER) Destinations.RECYCLER_MARKETPLACE else if (demoMode) Destinations.HOME else Destinations.startForSession(cachedAccount.takeIf { bootstrap.restorable })
+                val restoreSettingsAfterLocaleChange = (routeToRestoreAfterRecreation == Destinations.SETTINGS || routeFromLocaleRecreate == Destinations.SETTINGS) &&
                     renderedRole != AccountRole.ADMIN &&
                     (demoMode || (bootstrap.restorable && cachedAccount != null))
                 val initialRoute = if (restoreSettingsAfterLocaleChange) Destinations.SETTINGS else defaultInitialRoute
@@ -290,6 +306,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(route, routeToRestoreAfterRecreation) {
                     if (restoringActivityState && routeToRestoreAfterRecreation != null && route == routeToRestoreAfterRecreation) {
                         routeToRestoreAfterRecreation = null
+                        intent.removeExtra(EXTRA_RESTORE_ROUTE)
                     }
                 }
                 LaunchedEffect(languageSelected, route, demoMode, householdLivePreview, bootstrap.restorable) {
@@ -383,7 +400,7 @@ class MainActivity : ComponentActivity() {
                             if (isTopLevel) {
                                 KcBottomBar(currentRoute = route, role = renderedRole, unreadNotifications = unreadNotifications, demoMode = demoMode, kabadiwalaDemo = kabadiwalaDemo, recyclerPending = recyclerPendingShell, onNavigate = { target ->
                                     navController.navigate(target) {
-                                        popUpTo(Destinations.START) { saveState = true }
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
@@ -408,6 +425,7 @@ class MainActivity : ComponentActivity() {
                                 factory = factory,
                                 onLanguageChange = {
                                     routeToRestoreAfterRecreation = route?.takeIf { it == Destinations.SETTINGS }
+                                    routeToRestoreAfterRecreation?.let { intent.putExtra(EXTRA_RESTORE_ROUTE, it) }
                                     recreate()
                                 },
                                 onAppearanceChange = { appearanceMode = AppearanceManager.normalize(it) },
@@ -422,15 +440,16 @@ class MainActivity : ComponentActivity() {
                                 onLogout = {
                                     app.container.revokeAuthenticatedBackgroundWork()
                                     app.container.sessionCoordinator.beginRestoration()
-                                    // Push-token revocation is best effort. It
-                                    // must never block the local logout flow
-                                    // behind a slow/offline network request
-                                    // (especially on the Recycler pending-
-                                    // verification screen).
-                                    uiScope.launch(Dispatchers.IO) {
-                                        app.container.unregisterCurrentPushToken()
-                                    }
                                     uiScope.launch {
+                                        // Revoke the push token while the
+                                        // authenticated session is still
+                                        // available, then always finish local
+                                        // logout even if the network stalls.
+                                        withContext(Dispatchers.IO) {
+                                            withTimeoutOrNull(1_500L) {
+                                                app.container.unregisterCurrentPushToken()
+                                            }
+                                        }
                                         app.container.authenticationRepository.logout()
                                         app.container.clearAccount()
                                         sessionBootstrap = app.container.sessionCoordinator.snapshot.value
@@ -469,7 +488,7 @@ class MainActivity : ComponentActivity() {
                                 demoRole = renderedRole.takeIf { demoMode && demoRoleName != "LEGACY" },
                                 role = renderedRole,
                                 sessionAuthenticated = bootstrap.restorable || demoMode,
-                                onAuthFinished = {
+                                onAuthFinished = { onboardingViewModel ->
                                     // The authentication response already carries the server-issued
                                     // account profile. Complete this fresh session directly instead
                                     // of immediately making a second profile request that can fail
@@ -480,6 +499,7 @@ class MainActivity : ComponentActivity() {
                                             runCatching { app.container.completeFreshAuthentication() }.getOrNull()
                                         }
                                         if (account == null) {
+                                            onboardingViewModel.startOver()
                                             sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                                             activeRole = AccountRole.COLLECTOR
                                             Toast.makeText(
@@ -534,8 +554,34 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+                val incomingNotificationRoute by pendingNotificationRoute
+                LaunchedEffect(incomingNotificationRoute, bootstrap.restorable, demoMode, renderedRole, cachedAccount?.verificationStatus, navController) {
+                    val pendingRoute = incomingNotificationRoute ?: return@LaunchedEffect
+                    // Keep a push route pending through sign-in. Once an account
+                    // is known, the shared destination resolver enforces its
+                    // role and verification gate before navigation.
+                    if (!demoMode && !bootstrap.restorable) return@LaunchedEffect
+                    val target = Destinations.notificationDestination(
+                        pendingRoute,
+                        renderedRole,
+                        demoMode,
+                        renderedRole.takeIf { demoMode && demoRoleName != "LEGACY" },
+                        cachedAccount?.verificationStatus
+                    )
+                    if (target != null) navController.navigate(target) { launchSingleTop = true }
+                    pendingNotificationRoute.value = null
+                    intent.removeExtra(EXTRA_NOTIFICATION_ROUTE)
+                }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_NOTIFICATION_ROUTE)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { pendingNotificationRoute.value = it }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -546,7 +592,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
+    companion object {
         const val NOTIFICATION_PERMISSION_REQUEST = 7001
+        const val EXTRA_RESTORE_ROUTE = "restore_route_after_locale_change"
+        const val EXTRA_NOTIFICATION_ROUTE = "notificationRoute"
     }
 }

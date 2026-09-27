@@ -3,6 +3,7 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { JwtService } from '../src/services/jwt.js';
 import { requireAccount, requireAuth, requireHousehold } from '../src/middleware/auth.js';
+import { errorHandler } from '../src/middleware/errors.js';
 
 const config = { JWT_SECRET: 'role-boundary-test-secret', JWT_EXPIRES_IN: '1h' } as any;
 const jwt = new JwtService(config);
@@ -70,5 +71,35 @@ describe('role boundaries', () => {
       .get('/account')
       .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-deleted')}`)
       .expect(403, { code: 'ACCOUNT_DELETED' });
+  });
+
+  it('keeps transient profile and database failures separate from invalid-token errors', async () => {
+    const profileFailureApp = express();
+    profileFailureApp.get('/kabadiwala', requireAuth(jwt, {
+      findById: vi.fn().mockRejectedValue(new Error('profile database unavailable'))
+    } as any), (_req, res) => res.json({ ok: true }));
+    profileFailureApp.use(errorHandler);
+
+    const profileResponse = await request(profileFailureApp)
+      .get('/kabadiwala')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-db-outage')}`);
+    expect(profileResponse.status).toBe(500);
+    expect(profileResponse.body.error.code).toBe('INTERNAL_SERVER_ERROR');
+    expect(profileResponse.body.error.code).not.toBe('TOKEN_INVALID');
+
+    const linkageFailureApp = express();
+    const db = {
+      collector: { findUnique: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) },
+      user: { findFirst: vi.fn().mockRejectedValue(new Error('account database unavailable')) }
+    } as any;
+    linkageFailureApp.get('/account', requireAccount(jwt, db, false), (_req, res) => res.json({ ok: true }));
+    linkageFailureApp.use(errorHandler);
+
+    const linkageResponse = await request(linkageFailureApp)
+      .get('/account')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-db-outage')}`);
+    expect(linkageResponse.status).toBe(500);
+    expect(linkageResponse.body.error.code).toBe('INTERNAL_SERVER_ERROR');
+    expect(linkageResponse.body.error.code).not.toBe('TOKEN_INVALID');
   });
 });

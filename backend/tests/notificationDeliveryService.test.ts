@@ -51,6 +51,64 @@ describe('notification SMS delivery', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'delivery-1' }, data: expect.objectContaining({ status: 'SENT', providerMessageId: 'message-1' }) });
   });
 
+  it('terminally skips pending SMS when disabled so re-enabling does not send a stale backlog', async () => {
+    const deliveries = [
+      { id: 'delivery-pending', channel: 'SMS', status: 'PENDING', attempts: 0, claimedAt: null, lastError: null },
+      { id: 'delivery-retry', channel: 'SMS', status: 'RETRY', attempts: 2, claimedAt: null, lastError: 'SMS_PROVIDER_ERROR' }
+    ];
+    const findMany = vi.fn(async () => deliveries.filter(row => ['PENDING', 'RETRY'].includes(row.status)));
+    const updateMany = vi.fn(async ({ where, data }: any) => {
+      if (data.status !== 'SKIPPED') return { count: 0 };
+      const eligibleStatuses = where.OR.flatMap((condition: any) => condition.status.in ?? [condition.status]);
+      const skipped = deliveries.filter(row => where.channel === row.channel && eligibleStatuses.includes(row.status));
+      for (const row of skipped) Object.assign(row, data);
+      return { count: skipped.length };
+    });
+    const fakeDb = {
+      notificationDelivery: { findMany, updateMany, update: vi.fn() }
+    };
+    const send = vi.fn();
+    const disabledConfig = { ...providerConfig, NOTIFICATION_SMS_ENABLED: false } as AppConfig;
+
+    const disabledResult = await new NotificationDeliveryService(fakeDb as never, disabledConfig, { send }).dispatchPendingSms();
+
+    expect(disabledResult).toEqual({ processed: 0, sent: 0, retried: 0, skipped: true });
+    expect(findMany).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        channel: 'SMS',
+        OR: expect.arrayContaining([
+          { status: { in: ['PENDING', 'RETRY'] } },
+          { status: 'PROCESSING', claimedAt: { lt: expect.any(Date) } }
+        ])
+      }),
+      data: { status: 'SKIPPED', claimedAt: null, lastError: 'SMS_DISABLED' }
+    }));
+    expect(deliveries.map(row => [row.status, row.lastError])).toEqual([
+      ['SKIPPED', 'SMS_DISABLED'],
+      ['SKIPPED', 'SMS_DISABLED']
+    ]);
+
+    const enabledResult = await new NotificationDeliveryService(fakeDb as never, providerConfig, { send }).dispatchPendingSms();
+
+    expect(enabledResult).toEqual({ processed: 0, sent: 0, retried: 0, skipped: false });
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('terminally skips SMS rows when enabled but no provider is available', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const fakeDb = { notificationDelivery: { updateMany } };
+    const config = { ...providerConfig, NOTIFICATION_SMS_PROVIDER: 'disabled' } as AppConfig;
+
+    const result = await new NotificationDeliveryService(fakeDb as never, config).dispatchPendingSms();
+
+    expect(result).toEqual({ processed: 0, sent: 0, retried: 0, skipped: true });
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { status: 'SKIPPED', claimedAt: null, lastError: 'SMS_PROVIDER_UNAVAILABLE' }
+    }));
+  });
+
   it('skips SMS for an account that has opted out', async () => {
     const update = vi.fn().mockResolvedValue({});
     const send = vi.fn();

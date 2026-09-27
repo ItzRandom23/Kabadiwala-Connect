@@ -63,6 +63,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme
 import kotlinx.coroutines.delay
 
@@ -93,10 +94,11 @@ fun HouseholdHomeScreen(
     onOpenDeal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val layout = rememberKcResponsiveLayout()
     LazyColumn(
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding),
+        verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -113,7 +115,7 @@ fun HouseholdHomeScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(layout.cardPadding), verticalArrangement = Arrangement.spacedBy(if (layout.isCompact) 8.dp else 12.dp)) {
                     Surface(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .12f), shape = CircleShape) {
                         Text(stringResource(R.string.household_new_pickup), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
                     }

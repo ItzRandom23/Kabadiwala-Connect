@@ -5,14 +5,27 @@ import type { AppConfig } from '../src/config/env.js';
 
 const config: AppConfig = { APP_ENV:'testing', NODE_ENV:'test', PORT:4000, DATABASE_URL:'mongodb://test', JWT_SECRET:'a-secure-test-secret', JWT_EXPIRES_IN:'15m', REFRESH_TOKEN_EXPIRES_IN_DAYS:30, TRACEABILITY_SIGNING_SECRET:'a-separate-traceability-test-secret', CORS_ORIGIN:'*', APP_VERSION:'1.0.0', OTP_PROVIDER:'development', DEV_OTP_CODE:'123456', STORAGE_PROVIDER:'local', LOCAL_UPLOAD_DIR:'uploads', LOCAL_UPLOAD_BASE_URL:'', LOCAL_UPLOAD_PUBLIC:true, S3_REGION:'ap-south-1', RATE_LIMIT_STORE:'memory', OTP_REQUEST_WINDOW_MINUTES:2 };
 
-function fakeDatabase() {
+function fakeDatabase({ legacyInitialSession = false } = {}) {
   const rows = new Map<string, any>();
   let sequence = 0;
   const refreshToken = {
-    create: async ({ data }: any) => { const row = { id:`rt-${++sequence}`, createdAt:new Date(), revokedAt:null, replacedBy:null, ...data }; rows.set(row.tokenHash, row); return row; },
+    create: async ({ data }: any) => {
+      const row = { id:`rt-${++sequence}`, createdAt:new Date(), revokedAt:null, replacedBy:null, ...data };
+      if (legacyInitialSession && sequence === 1) delete row.revokedAt;
+      rows.set(row.tokenHash, row);
+      return row;
+    },
     findUnique: async ({ where }: any) => where.tokenHash ? rows.get(where.tokenHash) ?? null : [...rows.values()].find(row => row.id === where.id) ?? null,
     update: async ({ where, data }: any) => { const row = [...rows.values()].find(value => value.id === where.id); Object.assign(row, data); return row; },
-    updateMany: async ({ where, data }: any) => { const matches = [...rows.values()].filter(row => (!where.id || row.id === where.id) && (!where.familyId || row.familyId === where.familyId) && (where.revokedAt !== null || row.revokedAt === null) && (!where.expiresAt?.gt || row.expiresAt > where.expiresAt.gt)); matches.forEach(row => Object.assign(row, data)); return { count:matches.length }; }
+    updateMany: async ({ where, data }: any) => {
+      const isUnrevoked = (row: any) => !where.OR || where.OR.some((clause: any) =>
+        clause.revokedAt === null ? Object.hasOwn(row, 'revokedAt') && row.revokedAt === null :
+          clause.revokedAt?.isSet === false ? !Object.hasOwn(row, 'revokedAt') : false
+      );
+      const matches = [...rows.values()].filter(row => (!where.id || row.id === where.id) && (!where.familyId || row.familyId === where.familyId) && (!where.actorId || row.actorId === where.actorId) && isUnrevoked(row) && (!where.expiresAt?.gt || row.expiresAt > where.expiresAt.gt));
+      matches.forEach(row => Object.assign(row, data));
+      return { count:matches.length };
+    }
   };
   const db: any = { refreshToken };
   db.$transaction = async (callback: any) => callback(db);
@@ -28,6 +41,17 @@ describe('refresh-token rotation', () => {
     expect(second.refreshToken).not.toBe(first.refreshToken);
     await expect(service.rotate(first.refreshToken)).rejects.toThrow(/reuse detected/i);
     await expect(service.rotate(second.refreshToken)).rejects.toThrow();
+  });
+
+  it('rotates a legacy session whose revokedAt field is absent', async () => {
+    const db = fakeDatabase({ legacyInitialSession: true });
+    const service = new SessionService(db, new JwtService(config), config);
+    const first = await service.issue('collector-1', 'COLLECTOR');
+
+    const second = await service.rotate(first.refreshToken);
+    expect(second.refreshToken).not.toBe(first.refreshToken);
+    const third = await service.rotate(second.refreshToken);
+    expect(third.refreshToken).not.toBe(second.refreshToken);
   });
 
   it('revokes the complete session family on logout', async () => {

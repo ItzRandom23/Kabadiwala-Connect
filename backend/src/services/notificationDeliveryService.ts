@@ -129,11 +129,11 @@ export class FcmPushProvider implements PushProvider {
       body: JSON.stringify({
         message: {
           token: input.token,
-          notification: { title: input.title, body: input.body },
+          // A push can be in flight while a device token is reassigned to a
+          // different account. Keep provider-visible content generic; the app
+          // loads the authenticated inbox after launch.
           data: {
             notificationId: input.notificationId ?? '',
-            type: input.type ?? '',
-            route: input.route ?? ''
           }
         }
       }),
@@ -186,9 +186,26 @@ export class NotificationDeliveryService {
   }
 
   async dispatchPendingSms(limit = 20) {
-    if (this.config.NOTIFICATION_SMS_ENABLED !== true || !this.provider) return { processed: 0, sent: 0, retried: 0, skipped: true };
     const now = new Date();
     const staleClaimBefore = new Date(now.getTime() - 10 * 60 * 1000);
+    if (this.config.NOTIFICATION_SMS_ENABLED !== true || !this.provider) {
+      // SMS is intentionally disabled (or unavailable), so close the outbox
+      // rows instead of leaving them pending until a later re-enable sends
+      // stale notifications. A live worker's PROCESSING claim is preserved;
+      // only claims older than the provider timeout can be safely cancelled.
+      const reason = this.config.NOTIFICATION_SMS_ENABLED === true ? 'SMS_PROVIDER_UNAVAILABLE' : 'SMS_DISABLED';
+      await this.db.notificationDelivery.updateMany({
+        where: {
+          channel: 'SMS',
+          OR: [
+            { status: { in: ['PENDING', 'RETRY'] } },
+            { status: 'PROCESSING', claimedAt: { lt: staleClaimBefore } }
+          ]
+        },
+        data: { status: 'SKIPPED', claimedAt: null, lastError: reason }
+      });
+      return { processed: 0, sent: 0, retried: 0, skipped: true };
+    }
     const rows = await this.db.notificationDelivery.findMany({
       where: {
         channel: 'SMS',

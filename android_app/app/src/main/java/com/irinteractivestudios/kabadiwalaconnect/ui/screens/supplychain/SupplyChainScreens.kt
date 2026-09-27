@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -94,10 +96,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
@@ -115,6 +119,8 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcStatusPill
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
@@ -157,15 +163,17 @@ fun HouseholdSupplyScreen(
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
-    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { HouseholdWelcomeHeader(initialArea, onRefresh, state.loading) }
+    val layout = rememberKcResponsiveLayout()
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+        item { HouseholdWelcomeHeader(initialArea, onRefresh, state.loading, layout.isCompact) }
         item {
             HouseholdSalePanel(
                 busy = "create-listing" in busy,
-                onCreateListing = onCreateListing
+                onCreateListing = onCreateListing,
+                compact = layout.isCompact
             )
         }
-        if (state.initialLoadComplete || state.listings.isNotEmpty() || state.pickups.isNotEmpty()) item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups") }
+        if (state.initialLoadComplete || state.listings.isNotEmpty() || state.pickups.isNotEmpty()) item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups", layout.isCompact) }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
         if (state.pendingPhotoUpload != null) item {
             OutlinedButton(onClick = onRetryPhoto, enabled = "upload-listing-photo" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -173,12 +181,13 @@ fun HouseholdSupplyScreen(
             }
         }
         item { Text("My listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        if (state.loading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
-        if (state.initialLoadComplete && !state.loading && state.listings.isEmpty()) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
+        if (state.householdListingsLoading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
+        if (state.householdListingsLoaded && state.listings.isEmpty() && state.error == null) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
         items(state.listings, key = { it.id }) { listing ->
             HouseholdListingCard(
                 listing = listing,
                 pickups = state.pickups.filter { it.listingId == listing.id },
+                pickupPendingSync = listing.id in state.pendingPickupListingIds,
                 kabadiwalas = state.kabadiwalas,
                 busy = busy,
                 onRequestPickup = onRequestPickup,
@@ -199,9 +208,9 @@ fun HouseholdSupplyScreen(
 }
 
 @Composable
-private fun HouseholdWelcomeHeader(area: String, onRefresh: () -> Unit, loading: Boolean) {
+private fun HouseholdWelcomeHeader(area: String, onRefresh: () -> Unit, loading: Boolean, compact: Boolean) {
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)) {
             if (area.isNotBlank()) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -226,14 +235,14 @@ private fun HouseholdWelcomeHeader(area: String, onRefresh: () -> Unit, loading:
 }
 
 @Composable
-private fun HouseholdSalePanel(busy: Boolean, onCreateListing: () -> Unit) {
+private fun HouseholdSalePanel(busy: Boolean, onCreateListing: () -> Unit, compact: Boolean) {
     Surface(
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 8.dp, bottomStart = 28.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(if (compact) 14.dp else 20.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
             Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = .72f), shape = RoundedCornerShape(50)) {
                 Text(stringResource(R.string.household_new_pickup), Modifier.padding(horizontal = 11.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
             }
@@ -242,7 +251,7 @@ private fun HouseholdSalePanel(busy: Boolean, onCreateListing: () -> Unit) {
             Button(
                 onClick = onCreateListing,
                 enabled = !busy,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
             ) {
                 Icon(Icons.Filled.Add, null)
                 Spacer(Modifier.width(8.dp))
@@ -479,6 +488,7 @@ private fun KabadiwalaPublicProfileDialog(
 private fun HouseholdListingCard(
     listing: HouseholdListingDto,
     pickups: List<PickupRequestDto>,
+    pickupPendingSync: Boolean,
     kabadiwalas: List<KabadiwalaProfileDto>,
     busy: Set<String>,
     onRequestPickup: (String, String?) -> Unit,
@@ -503,7 +513,7 @@ private fun HouseholdListingCard(
     var showPickupQr by remember(pickup?.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: listing.status)) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: if (pickupPendingSync) "PENDING_SYNC" else listing.status)) }
             Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
             val pickupAddress = listing.pickupAddress?.takeIf(String::isNotBlank) ?: listing.areaName
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("Pickup address · $pickupAddress", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -512,7 +522,9 @@ private fun HouseholdListingCard(
             val maxEstimate = listing.estimatedPriceMax
             if (minEstimate != null && maxEstimate != null) Text("Estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             if (pickup == null && listing.status == "POSTED") {
-                if (kabadiwalas.isNotEmpty()) {
+                if (pickupPendingSync) {
+                    Text("Pickup request saved offline. Waiting for a connection to send it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                } else if (kabadiwalas.isNotEmpty()) {
                     Text("Choose a partner", style = MaterialTheme.typography.labelLarge)
                     kabadiwalas.take(4).forEach { kabadiwala ->
                         val requestBusy = "pickup-${listing.id}" in busy
@@ -813,7 +825,17 @@ fun HouseholdListingCreateScreen(
             state.materialSuggestion?.materialCategory?.takeIf { friendlyMaterials.any { item -> item.key == it } }?.let { material = it; safetyAcknowledged = false }
         }
     }
-    LaunchedEffect(state.notice) { if (state.notice?.startsWith("Listing") == true) onBack() }
+    var observedInitialNotice by remember { mutableStateOf(false) }
+    LaunchedEffect(state.notice) {
+        if (!observedInitialNotice) {
+            // This ViewModel is shared with Household home. Ignore the notice
+            // already in state when the form opens; it may belong to an older
+            // listing and must not pop a fresh draft before it can be posted.
+            observedInitialNotice = true
+            return@LaunchedEffect
+        }
+        if (state.notice?.startsWith("Listing") == true) onBack()
+    }
     val isHazardous = friendlyMaterial(material).hazardous
     val parsedWeight = weight.toDoubleOrNull()
     val weightError = weight.isNotBlank() && (parsedWeight == null || parsedWeight <= 0 || parsedWeight > 500)
@@ -857,6 +879,7 @@ fun HouseholdListingCreateScreen(
         if (pickupAddress.trim().isEmpty()) add("add a pickup address")
         if (isHazardous && !safetyAcknowledged) add("confirm safe handling")
     }
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
@@ -1048,7 +1071,7 @@ fun HouseholdListingCreateScreen(
                     }
                 }
             }
-            item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { Text("Full pickup address") }, supportingText = { if (addressError) Text("Add a complete pickup address") else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.") }, isError = addressError, minLines = 2, maxLines = 3) }
+            item { OutlinedTextField(pickupAddress, { pickupAddress = it.take(240) }, modifier = Modifier.fillMaxWidth(), label = { if (!imeVisible) Text("Full pickup address") }, placeholder = { if (imeVisible) Text("Full pickup address") }, supportingText = { if (imeVisible) Text(if (addressError) "Add a complete address" else "Street/block and house number", maxLines = 1, overflow = TextOverflow.Ellipsis) else if (addressError) Text("Add a complete pickup address") else Text("Include your street, block, or house number. Shared with your assigned Kabadiwala.") }, isError = addressError, minLines = if (imeVisible) 1 else 2, maxLines = 3) }
             item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
             item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
         }
@@ -1057,12 +1080,14 @@ fun HouseholdListingCreateScreen(
                  Text(message, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
              }
          }
-         if (missingPostRequirements.isNotEmpty() && "create-listing" !in busy) {
+         if (missingPostRequirements.isNotEmpty() && "create-listing" !in busy && !imeVisible) {
              Text(
-                 "To post, ${missingPostRequirements.joinToString() }.",
-                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                 style = MaterialTheme.typography.bodySmall,
-                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                "To post, ${missingPostRequirements.joinToString() }.",
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = Int.MAX_VALUE,
+                overflow = TextOverflow.Ellipsis
              )
          }
          Button(onClick = {
@@ -1115,6 +1140,7 @@ fun HouseholdListingCreateScreen(
 
 @Composable
 fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }) {
+    val layout = rememberKcResponsiveLayout()
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
     val title = when (section) {
@@ -1146,7 +1172,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         when (section) {
             KabadiwalaSection.HOME, KabadiwalaSection.PICKUPS -> {
                 if (section == KabadiwalaSection.PICKUPS) {
-                    item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }} waiting", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled") }
+                    item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }} waiting", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled", layout.isCompact) }
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (state.initialLoadComplete && !state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
@@ -1331,10 +1357,11 @@ private fun FieldToolsHeader(onRefresh: () -> Unit, loading: Boolean) {
 
 @Composable
 private fun CollectorMetric(value: String, label: String, modifier: Modifier = Modifier) {
+    val layout = rememberKcResponsiveLayout()
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, modifier = modifier) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = if (layout.isCompact) 2 else 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (layout.isCompact) 2 else 1)
         }
     }
 }
@@ -1834,7 +1861,7 @@ private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListing
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Agreed rate · ₹/kg") }, supportingText = { Text("Confirm the rate with the household before completing.") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                     Text("Final material", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        materials.forEach { option -> FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 1) }) }
+                        materials.forEach { option -> FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 2) }) }
                     }
                     OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     if (reasonRequired) {
@@ -1964,6 +1991,9 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
 @Composable
 fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onCreateDemand: (ProcurementRequirementCreateDto) -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}) {
     var showDemand by remember { mutableStateOf(false) }
+    LaunchedEffect(state.notice) {
+        if (state.notice == "Requirement published to Kabadiwalas.") showDemand = false
+    }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
         item { Button(onClick = { showDemand = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
@@ -1988,7 +2018,12 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg · ${statusName(handover.status)}", style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onOpenHandoverScanner, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Scan QR") } } }
         }
     }
-    if (showDemand) DemandDialog(onDismiss = { showDemand = false }, onSubmit = { onCreateDemand(it); showDemand = false })
+    if (showDemand) DemandDialog(
+        onDismiss = { if ("create-demand" !in state.busy) showDemand = false },
+        isSubmitting = "create-demand" in state.busy,
+        error = state.error,
+        onSubmit = onCreateDemand
+    )
 }
 
 @Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · ${money(lot.askingRatePerKg)}/kg asking"); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("${lot.areaName} · collector lot", Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Make offer") }; if (offer != null) { Text("Your offer: ${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text("Accepted · waiting for QR handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
@@ -2005,7 +2040,7 @@ private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?)
     if (showWithdraw) ReasonDialog(title = "Withdraw offer", confirmLabel = "Withdraw", onDismiss = { showWithdraw = false }, onSubmit = { onWithdraw(offer.id, it.ifBlank { null }); showWithdraw = false })
 }
 @Composable private fun OfferDialog(lot: BulkLotDto, onDismiss: () -> Unit, onSubmit: (Double) -> Unit) { var rate by remember { mutableStateOf(lot.askingRatePerKg.toString()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Offer on ${materialName(lot.materialCategory)}") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { rate.toDoubleOrNull()?.takeIf { it > 0 }?.let(onSubmit) }, enabled = rate.toDoubleOrNull()?.let { it > 0 } == true) { Text("Send offer") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
-@Composable private fun DemandDialog(onDismiss: () -> Unit, onSubmit: (ProcurementRequirementCreateDto) -> Unit) { var material by remember { mutableStateOf("PLASTIC") }; var quantity by remember { mutableStateOf("") }; var minimum by remember { mutableStateOf("") }; var radius by remember { mutableStateOf("50") }; var rate by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Publish procurement demand") }, text = { Column(verticalArrangement = Arrangement.spacedBy(9.dp)) { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { materials.take(4).forEach { FilterChip(selected = material == it, onClick = { material = it }, label = { Text(materialName(it)) }) } }; OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Needed quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(minimum, { minimum = it.filter(Char::isDigit).take(9) }, label = { Text("Minimum lot · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(radius, { radius = it.filter(Char::isDigit).take(4) }, label = { Text("Procurement radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val m = minimum.toDoubleOrNull(); val r = radius.toDoubleOrNull(); if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementCreateDto(material, m, q, maxRatePerKg = rate.toDoubleOrNull(), procurementRadiusKm = r)) }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true && minimum.toDoubleOrNull()?.let { it > 0 } == true) { Text("Publish demand") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
+@Composable private fun DemandDialog(onDismiss: () -> Unit, isSubmitting: Boolean, error: String?, onSubmit: (ProcurementRequirementCreateDto) -> Unit) { var material by remember { mutableStateOf("PLASTIC") }; var quantity by remember { mutableStateOf("") }; var minimum by remember { mutableStateOf("") }; var radius by remember { mutableStateOf("50") }; var rate by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Publish procurement demand") }, text = { Column(verticalArrangement = Arrangement.spacedBy(9.dp)) { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { materials.take(4).forEach { FilterChip(selected = material == it, onClick = { material = it }, enabled = !isSubmitting, label = { Text(materialName(it)) }) } }; OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Needed quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, enabled = !isSubmitting); OutlinedTextField(minimum, { minimum = it.filter(Char::isDigit).take(9) }, label = { Text("Minimum lot · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, enabled = !isSubmitting); OutlinedTextField(radius, { radius = it.filter(Char::isDigit).take(4) }, label = { Text("Procurement radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, enabled = !isSubmitting); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, enabled = !isSubmitting); error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } } }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val m = minimum.toDoubleOrNull(); val r = radius.toDoubleOrNull(); if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementCreateDto(material, m, q, maxRatePerKg = rate.toDoubleOrNull(), procurementRadiusKm = r)) }, enabled = !isSubmitting && quantity.toDoubleOrNull()?.let { it > 0 } == true && minimum.toDoubleOrNull()?.let { it > 0 } == true) { Text(if (isSubmitting) "Publishing…" else "Publish demand") } }, dismissButton = { TextButton(onClick = onDismiss, enabled = !isSubmitting) { Text("Cancel") } }) }
 @Composable private fun RequirementCard(item: ProcurementRequirementDto, onUpdate: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }) {
     var showEdit by remember(item.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
@@ -2213,7 +2248,9 @@ private fun Text(
     fontWeight: FontWeight? = null,
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
-    style: TextStyle = androidx.compose.material3.LocalTextStyle.current
+    style: TextStyle = androidx.compose.material3.LocalTextStyle.current,
+    textAlign: TextAlign? = null,
+    overflow: TextOverflow = TextOverflow.Clip
 ) {
     MaterialText(
         text = localizedSupplyChainText(text),
@@ -2222,14 +2259,16 @@ private fun Text(
         fontWeight = fontWeight,
         maxLines = maxLines,
         minLines = minLines,
-        style = style
+        style = style,
+        textAlign = textAlign,
+        overflow = overflow
     )
 }
 
 @Composable private fun RoleHeader(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onRefresh: () -> Unit, loading: Boolean) { Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) { Column(Modifier.weight(1f)) { BoxRule(); Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }; IconButton(onClick = onRefresh, enabled = !loading) { if (loading) CircularProgressIndicator(Modifier.size(22.dp)) else Icon(Icons.Filled.Refresh, "Refresh") } } }
 @Composable private fun BoxRule() { Spacer(Modifier.height(4.dp)); Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.width(36.dp).height(4.dp)) {}; Spacer(Modifier.height(8.dp)) }
-@Composable private fun SummaryStrip(left: String, right: String) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(left, fontWeight = FontWeight.Bold); Text(right, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } } }
-@Composable private fun StatusChip(text: String) { Surface(shape = RoundedCornerShape(99.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+@Composable private fun SummaryStrip(left: String, right: String, compact: Boolean) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(if (compact) 12.dp else 15.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Text(left, Modifier.weight(1f), fontWeight = FontWeight.Bold, maxLines = 2); Text(right, Modifier.weight(1.6f), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, maxLines = 2) } } }
+@Composable private fun StatusChip(text: String) { KcStatusPill(text, compact = true) }
 @Composable
 private fun ErrorPanel(text: String, retry: () -> Unit) {
     Surface(

@@ -10,6 +10,7 @@ import { assertInventoryInvariant, recordInventoryMovement } from '../services/i
 import { evaluateSettlementVariance, riskLevelForFlags } from '../services/settlementRules.js';
 import { emitNotification } from '../services/notificationService.js';
 import { isTransientTransactionConflict, withTransactionRetry } from '../utils/transactionRetry.js';
+import { claimSourceListings, releaseSourceListings } from '../services/sourceListingAllocationService.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const positive = z.number().finite().positive();
@@ -37,6 +38,39 @@ function operationKey(req: any) {
 }
 
 const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
+
+function poolHandoverForCollector(handover: any, collectorId: string, contribution: any | null) {
+  const isOwner = handover.collectorId === collectorId;
+  const ownContribution = contribution?.collectorId === collectorId ? contribution : null;
+  const quotedWeightKg = isOwner ? handover.quotedWeightKg : (ownContribution?.quantityKg ?? 0);
+  const quotedRatePerKg = isOwner ? handover.quotedRatePerKg : (ownContribution?.expectedRatePerKg ?? 0);
+  const finalAcceptedKg = isOwner ? handover.finalAcceptedKg : (ownContribution?.finalAcceptedKg ?? null);
+  const finalValue = isOwner ? handover.finalValue : (ownContribution?.finalPayout ?? null);
+  return {
+    id: handover.id,
+    bulkLotId: handover.bulkLotId,
+    poolId: handover.poolId,
+    collectorId: isOwner ? handover.collectorId : '',
+    recyclerId: handover.recyclerId,
+    referenceId: handover.referenceId,
+    qrCodeData: isOwner ? handover.qrCodeData : null,
+    materialCategory: handover.materialCategory,
+    quotedWeightKg,
+    quotedRatePerKg,
+    quotedValue: isOwner ? handover.quotedValue : Number((quotedWeightKg * quotedRatePerKg).toFixed(2)),
+    finalAcceptedKg,
+    finalRejectedKg: isOwner ? handover.finalRejectedKg : null,
+    finalRatePerKg: isOwner ? handover.finalRatePerKg : (finalAcceptedKg && finalValue != null ? Number((finalValue / finalAcceptedKg).toFixed(2)) : null),
+    finalValue,
+    status: handover.status,
+    collectorConfirmedAt: handover.collectorConfirmedAt,
+    recyclerConfirmedAt: handover.recyclerConfirmedAt,
+    preparedAt: handover.preparedAt,
+    expiresAt: handover.expiresAt,
+    reviewReason: isOwner ? handover.reviewReason : null,
+    reviewEvidence: isOwner ? handover.reviewEvidence : null
+  };
+}
 
 async function retryableTransaction<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
   try {
@@ -159,6 +193,7 @@ async function releaseReservedBalance(tx: Store, contribution: any, sourceId: st
   assertInventoryInvariant(after);
   await recordInventoryMovement(tx, before, after, 'RELEASE', contribution.quantityKg, 'SUPPLY_HANDOVER', sourceId, { contributionId: contribution.id, reason: 'HANDOVER_EXPIRED' });
   await tx.poolContribution.update({ where: { id: contribution.id }, data: { status: 'RELEASED', handoverId: null, finalAcceptedKg: null, finalPayout: null } });
+  await releaseSourceListings(tx, contribution.sourceListingIds ?? [], 'POOL_CONTRIBUTION', contribution.id);
 }
 
 async function validateSourceListings(store: Store, collectorId: string, sourceListingIds: string[], materialCategory: string) {
@@ -498,6 +533,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       const contribution = existing
         ? await tx.poolContribution.update({ where: { id: existing.id }, data: { inventoryBalanceId: balance.id, sourceListingIds: input.sourceListingIds, quantityKg: input.quantityKg, expectedRatePerKg: rate, expectedPayout: Number((rate * input.quantityKg).toFixed(2)), status: 'RESERVED' } })
         : await tx.poolContribution.create({ data: { poolId, collectorId: req.identity!.collectorId, inventoryBalanceId: balance.id, sourceListingIds: input.sourceListingIds, materialCategory: pool.materialCategory, grade: input.grade, quantityKg: input.quantityKg, expectedRatePerKg: rate, expectedPayout: Number((rate * input.quantityKg).toFixed(2)) } });
+      await claimSourceListings(tx, input.sourceListingIds, 'POOL_CONTRIBUTION', contribution.id);
       const claimedPool = await tx.pooledConsignment.updateMany({ where: { id: poolId, status: { in: ['FORMING', 'THRESHOLD_MET'] } }, data: { totalReservedKg: { increment: input.quantityKg } } });
       if (!claimedPool.count) throw new AppError('CONFLICT', 'Pool changed before the contribution could be added', 409, { code: 'POOL_UPDATE_CONFLICT' });
       const updatedPool = await tx.pooledConsignment.findUniqueOrThrow({ where: { id: poolId } });
@@ -523,6 +559,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       assertInventoryInvariant(afterBalance);
       await recordInventoryMovement(tx, beforeBalance, afterBalance, 'RELEASE', contribution.quantityKg, 'POOL_CONTRIBUTION', contribution.id, { poolId });
       await tx.poolContribution.update({ where: { id: contribution.id }, data: { status: 'RELEASED' } });
+      await releaseSourceListings(tx, contribution.sourceListingIds ?? [], 'POOL_CONTRIBUTION', contribution.id);
       const claimedPool = await tx.pooledConsignment.updateMany({ where: { id: poolId, status: { in: ['FORMING', 'THRESHOLD_MET'] }, totalReservedKg: { gte: contribution.quantityKg } }, data: { totalReservedKg: { decrement: contribution.quantityKg } } });
       if (!claimedPool.count) throw new AppError('CONFLICT', 'Pool total changed before the contribution could be released', 409, { code: 'POOL_UPDATE_CONFLICT' });
       const updatedPool = await tx.pooledConsignment.findUniqueOrThrow({ where: { id: poolId } });
@@ -719,12 +756,19 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
   router.get('/kabadiwala/handovers', requireAuth(jwt, collectors), async (req, res) => {
     const contributions = await store.poolContribution.findMany({ where: { collectorId: req.identity!.collectorId, handoverId: { not: null } }, select: { handoverId: true } });
     const contributionHandoverIds = [...new Set(contributions.map((row: any) => row.handoverId).filter(Boolean))];
+    const ownContributions = contributionHandoverIds.length ? await store.poolContribution.findMany({
+      where: { collectorId: req.identity!.collectorId, handoverId: { in: contributionHandoverIds } },
+      select: { id: true, collectorId: true, handoverId: true, quantityKg: true, expectedRatePerKg: true, finalAcceptedKg: true, finalPayout: true }
+    }) : [];
+    const contributionByHandover = new Map(ownContributions.map((row: any) => [row.handoverId, row]));
     const handovers = await store.supplyHandover.findMany({
       where: { OR: [{ collectorId: req.identity!.collectorId }, ...(contributionHandoverIds.length ? [{ id: { in: contributionHandoverIds } }] : [])] },
       orderBy: { createdAt: 'desc' },
       take: 100
     });
-    res.json({ success: true, data: handovers });
+    res.json({ success: true, data: handovers.map((handover: any) => handover.poolId
+      ? poolHandoverForCollector(handover, req.identity!.collectorId, contributionByHandover.get(handover.id) ?? null)
+      : handover) });
   });
 
   router.get('/recycler/supply-handovers', requireRecycler(jwt, db), async (req, res) => {
@@ -1045,21 +1089,31 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const handover = await store.supplyHandover.findUnique({ where: { id: handoverId } });
     const contribution = handover?.poolId ? await store.poolContribution.findFirst({ where: { poolId: handover.poolId, collectorId: req.identity!.collectorId, handoverId } }) : null;
     if (!handover || (handover.collectorId !== req.identity!.collectorId && !contribution)) throw new AppError('NOT_FOUND', 'Material passport not found', 404, { code: 'PASSPORT_NOT_FOUND' });
-    const sourceListingIds = handover.poolId ? (contribution?.sourceListingIds ?? []) : (handover.sourceListingIds ?? []);
+    const sourceListingIds = handover.poolId ? (contribution?.sourceListingIds ?? []) : (handover.collectorId === req.identity!.collectorId ? (handover.sourceListingIds ?? []) : []);
     const sourcePickups = sourceListingIds.length ? await store.pickupRequest.findMany({ where: { listingId: { in: sourceListingIds }, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED' }, select: { id: true, listingId: true } }) : [];
     const events = await store.materialPassportEvent.findMany({ where: { OR: [{ entityType: 'SUPPLY_HANDOVER', entityId: handoverId }, ...(sourceListingIds.length ? [{ entityType: 'HOUSEHOLD_LISTING', entityId: { in: sourceListingIds } }] : []), ...(sourcePickups.length ? [{ entityType: 'PICKUP_REQUEST', entityId: { in: sourcePickups.map((row: any) => row.id) } }] : [])] }, orderBy: { occurredAt: 'asc' } });
     const inventoryMovements = sourcePickups.length ? await store.inventoryMovement.findMany({ where: { sourceType: 'PICKUP_REQUEST', sourceId: { in: sourcePickups.map((row: any) => row.id) } }, orderBy: { createdAt: 'asc' } }) : [];
-    const settlement = await store.settlementBreakdown.findUnique({ where: { handoverId } });
+    const ownsHandover = handover.collectorId === req.identity!.collectorId;
+    const settlement = !handover.poolId && ownsHandover ? await store.settlementBreakdown.findUnique({ where: { handoverId } }) : null;
     const poolSettlements = handover.poolId && contribution ? await store.poolSettlement.findUnique({ where: { contributionId: contribution.id } }) : null;
     const payments = await store.supplyPayment.findMany({ where: { supplyHandoverId: handoverId, collectorId: req.identity!.collectorId }, orderBy: { createdAt: 'asc' } });
-    res.json({ success: true, data: { handover: { ...handover, sourceListingIds }, contribution, sourceListingIds, sourcePickups, settlement: settlement ?? poolSettlements, payments, events, inventoryMovements, disclaimer: 'Traceability is platform evidence for this prototype; it is not a government certificate.' } });
+    const safeEvents = events.map((event: any) => event.entityType === 'SUPPLY_HANDOVER'
+      ? { id: event.id, entityType: event.entityType, entityId: event.entityId, eventType: event.eventType, actorRole: event.actorRole, occurredAt: event.occurredAt, metadata: null }
+      : event);
+    const visibleHandover = handover.poolId
+      ? { ...poolHandoverForCollector(handover, req.identity!.collectorId, contribution), sourceListingIds }
+      : { ...handover, sourceListingIds };
+    res.json({ success: true, data: { handover: visibleHandover, contribution, sourceListingIds, sourcePickups, settlement: settlement ?? poolSettlements, payments, events: safeEvents, inventoryMovements, disclaimer: 'Traceability is platform evidence for this prototype; it is not a government certificate.' } });
   });
   router.get('/kabadiwala/handovers/:handoverId/anomalies', requireAuth(jwt, collectors), async (req, res) => {
     const handoverId = parse(id, req.params.handoverId);
     const handover = await store.supplyHandover.findUnique({ where: { id: handoverId } });
     const contribution = handover?.poolId ? await store.poolContribution.findFirst({ where: { poolId: handover.poolId, collectorId: req.identity!.collectorId, handoverId } }) : null;
     if (!handover || (handover.collectorId !== req.identity!.collectorId && !contribution)) throw new AppError('NOT_FOUND', 'Handover anomalies not found', 404, { code: 'HANDOVER_NOT_FOUND' });
-    const flags = await store.anomalyFlag.findMany({ where: { entityType: { in: ['SUPPLY_HANDOVER', 'POOL_CONTRIBUTION'] }, entityId: { in: [handoverId, ...(contribution ? [contribution.id] : [])] } }, orderBy: { createdAt: 'asc' } });
+    const visibleEntityIds = handover.collectorId === req.identity!.collectorId
+      ? [handoverId, ...(contribution ? [contribution.id] : [])]
+      : contribution ? [contribution.id] : [];
+    const flags = visibleEntityIds.length ? await store.anomalyFlag.findMany({ where: { entityType: { in: ['SUPPLY_HANDOVER', 'POOL_CONTRIBUTION'] }, entityId: { in: visibleEntityIds } }, orderBy: { createdAt: 'asc' } }) : [];
     const riskLevel = flags.length ? riskLevelForFlags(flags) : 'NONE';
     res.json({ success: true, data: { handoverId, riskLevel, flags, deterministic: true, disclaimer: 'Flags are deterministic platform checks, not an AI decision.' } });
   });

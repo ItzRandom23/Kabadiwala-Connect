@@ -14,6 +14,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.irinteractivestudios.kabadiwalaconnect.KabadiwalaApp
 import com.irinteractivestudios.kabadiwalaconnect.MainActivity
 import com.irinteractivestudios.kabadiwalaconnect.R
+import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
 
 /** Receives token rotation and foreground messages without owning account state. */
 class KcFirebaseMessagingService : FirebaseMessagingService() {
@@ -26,8 +27,8 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
 
-        val title = message.notification?.title ?: message.data["title"] ?: getString(R.string.app_name)
-        val body = message.notification?.body ?: message.data["body"] ?: return
+        val title = getString(R.string.app_name)
+        val body = getString(R.string.notification_generic_body)
         val channelId = "kabadiwala_updates"
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -37,7 +38,9 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
         }
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            message.data["route"]?.takeIf { it.isNotBlank() }?.let { putExtra("notificationRoute", it) }
+            // Backend push messages intentionally carry only a notification
+            // id. Open the role-scoped inbox and let it fetch authorized data.
+            putExtra(MainActivity.EXTRA_NOTIFICATION_ROUTE, Destinations.NOTIFICATIONS)
         }
         val pendingIntent = PendingIntent.getActivity(
             this,

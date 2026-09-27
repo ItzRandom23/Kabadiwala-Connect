@@ -4,7 +4,9 @@ import { PaymentService } from './paymentService.js';
 import { canonicalWeight } from './lotService.js';
 import { assertInventoryInvariant, recordInventoryMovement } from './inventoryLedger.js';
 import { evaluateSettlementVariance } from './settlementRules.js';
+import { claimSourceListings, releaseSourceListings } from './sourceListingAllocationService.js';
 import { AppError } from '../utils/errors.js';
+import { withTransactionRetry } from '../utils/transactionRetry.js';
 
 type SyncResult = { operationId: string; status: string; entityType?: string; entityId?: string; errorCode?: string };
 type SyncRole = 'COLLECTOR' | 'RECYCLER';
@@ -78,6 +80,7 @@ export class SyncService {
     assertInventoryInvariant(after);
     await recordInventoryMovement(tx, before, after, 'RELEASE', contribution.quantityKg, 'POOL_CONTRIBUTION', sourceId, { poolId: contribution.poolId, contributionId: contribution.id, reason });
     await tx.poolContribution.update({ where: { id: contribution.id }, data: { status: 'RELEASED', handoverId: null, finalAcceptedKg: null, finalPayout: null } });
+    await releaseSourceListings(tx, contribution.sourceListingIds ?? [], 'POOL_CONTRIBUTION', contribution.id);
   }
 
   private async expireHandover(tx: any, handover: any, actorId: string) {
@@ -140,7 +143,7 @@ export class SyncService {
     const grade = typeof p.grade === 'string' && p.grade.trim() ? p.grade.trim().slice(0, 80) : 'UNSPECIFIED';
     const sourceListingIds = Array.isArray(p.sourceListingIds) ? p.sourceListingIds.map((value: unknown) => asId(value, 'sourceListingId')) : [];
     if (new Set(sourceListingIds).size !== sourceListingIds.length) throw new AppError('VALIDATION_ERROR', 'sourceListingIds must be unique', 422, { code: 'DUPLICATE_SOURCE_LISTING' });
-    const result = await this.db.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry(() => this.db.$transaction(async (tx: any) => {
       const existingById = await tx.poolContribution.findUnique({ where: { id: op.entityId } });
       if (existingById) {
         if (existingById.collectorId !== cid || existingById.poolId !== poolId || Math.abs(existingById.quantityKg - quantityKg) > 0.0001 || existingById.grade !== grade) throw new AppError('CONFLICT', 'Contribution id is already owned by a different pool or Collector', 409, { code: 'POOL_CONTRIBUTION_ID_CONFLICT' });
@@ -172,6 +175,7 @@ export class SyncService {
       assertInventoryInvariant(after);
       await recordInventoryMovement(tx, balance, after, 'RESERVATION', quantityKg, 'POOL_CONTRIBUTION', op.entityId, { poolId, via: 'OFFLINE_SYNC' });
       const contribution = await tx.poolContribution.create({ data: { id: op.entityId, poolId, collectorId: cid, inventoryBalanceId: balance.id, sourceListingIds, materialCategory: pool.materialCategory, grade, quantityKg, expectedRatePerKg: serverRate, expectedPayout: Number((serverRate * quantityKg).toFixed(2)) } });
+      await claimSourceListings(tx, sourceListingIds, 'POOL_CONTRIBUTION', contribution.id);
       const claimedPool = await tx.pooledConsignment.updateMany({ where: { id: poolId, status: { in: ['FORMING', 'THRESHOLD_MET'] } }, data: { totalReservedKg: { increment: quantityKg } } });
       if (!claimedPool.count) throw new AppError('CONFLICT', 'Pool changed before the contribution could be added', 409, { code: 'POOL_UPDATE_CONFLICT' });
       const updatedPool = await tx.pooledConsignment.findUniqueOrThrow({ where: { id: poolId } });
@@ -180,7 +184,7 @@ export class SyncService {
       await this.audit(tx, cid, 'COLLECTOR', 'POOL_CONTRIBUTION_RESERVED', 'POOL_CONTRIBUTION', contribution.id, { poolId, quantityKg, totalReservedKg: updatedPool.totalReservedKg, via: 'OFFLINE_SYNC' });
       await this.save(cid, op, requestHash, 'APPLIED', undefined, tx);
       return { status: 'APPLIED', entityType: 'POOL_CONTRIBUTION', entityId: contribution.id };
-    });
+    }));
     return { operationId: op.operationId, ...result };
   }
 
@@ -402,7 +406,16 @@ export class SyncService {
         if (prior.requestHash !== hash) {
           results.push({ operationId: op.operationId, status: 'CONFLICT', entityType: prior.entityType, entityId: prior.entityId, errorCode: 'SYNC_PAYLOAD_MISMATCH' });
         } else {
-          results.push({ operationId: op.operationId, status: 'ALREADY_APPLIED', entityType: prior.entityType, entityId: prior.entityId });
+          // A matching operation id is only success when its original write
+          // was applied. Replaying a stored rejection as ALREADY_APPLIED makes
+          // offline clients delete work that never reached the server.
+          results.push({
+            operationId: op.operationId,
+            status: prior.status === 'APPLIED' ? 'ALREADY_APPLIED' : prior.status,
+            entityType: prior.entityType,
+            entityId: prior.entityId,
+            ...(prior.errorCode ? { errorCode: prior.errorCode } : {})
+          });
         }
         continue;
       }

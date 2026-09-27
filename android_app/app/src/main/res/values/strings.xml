@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="app_name">Kabadiwala Connect</string>
     <string name="notification_channel_name">Account updates</string>
+    <string name="notification_generic_body" translatable="false">Open the app to view your update.</string>
 
     <!-- Bottom navigation -->
     <string name="nav_home">Home</string>
@@ -13,6 +14,7 @@
     <string name="nav_pickups">Pickups</string>
     <string name="nav_rates">Rates</string>
     <string name="nav_profile">Profile</string>
+    <string name="nav_verification">Verify</string>
     <string name="nav_kabadiwala_inventory">Inventory</string>
     <string name="nav_kabadiwala_pickups">Pickups</string>
     <string name="nav_kabadiwala_lots">Buyers</string>
@@ -94,11 +96,20 @@
     <string name="recycler_rate_draft_saved">Saved on this phone · not published yet.</string>
     <string name="recycler_reference_captured">Saved on this phone · server validation is still required.</string>
     <string name="recycler_verification_pending_detail">Waiting for review. Marketplace access opens after approval.</string>
+    <string name="recycler_verification_evidence_needed_detail">Your Recycler account has not sent authorization evidence yet. Submit it once; the review team can then verify your account.</string>
+    <string name="recycler_verification_expired_detail">Your authorization has expired. Submit current evidence for review before using Recycler services.</string>
+    <string name="recycler_verification_checking_detail">Checking whether you have already submitted authorization evidence.</string>
+    <string name="recycler_verification_unavailable_detail">Verification status could not be loaded. Refresh before submitting evidence.</string>
+    <string name="recycler_verification_already_submitted">Your authorization evidence is already with the review team. You can submit updated evidence after they respond.</string>
     <string name="recycler_verification_rejected_detail">Not approved. Update your details or contact support.</string>
     <string name="recycler_verification_suspended_detail">Marketplace access is paused. Contact support.</string>
     <string name="recycler_verification_verified_detail">Verified facility. Marketplace access is ready.</string>
     <string name="recycler_verification_status_detail">Status is set by the review team.</string>
     <string name="recycler_verification_status_pending">Pending review</string>
+    <string name="recycler_verification_status_evidence_needed">Evidence needed</string>
+    <string name="recycler_verification_status_expired">Authorization expired</string>
+    <string name="recycler_verification_status_checking">Checking status</string>
+    <string name="recycler_verification_status_unavailable">Status unavailable</string>
     <string name="recycler_verification_status_verified">Verified</string>
     <string name="recycler_verification_status_rejected">Needs updates</string>
     <string name="recycler_verification_status_suspended">Suspended</string>
@@ -493,6 +504,7 @@
     <string name="auth_finish">Save and continue</string>
     <string name="auth_complete_title">You are ready!</string>
     <string name="auth_complete_detail">Your collector profile is saved on this phone.</string>
+    <string name="auth_signin_finishing">Finishing sign-in and opening your workspace…</string>
     <string name="auth_complete_phone">Mobile: %1$s</string>
     <string name="auth_name_label">Your name (required)</string>
     <string name="auth_name_required_error">Enter your name to continue.</string>
@@ -595,6 +607,7 @@
     <string name="workflow_progress_value">%1$d / %2$d</string>
     <string name="payment_no_lots">No lots are ready for a payment record.</string>
     <string name="payment_waiting_sync">Saved locally — waiting to sync</string>
+    <string name="payment_ready_to_save">Ready to save</string>
     <string name="payment_recorded">Recorded</string>
     <string name="payment_investigate">Review payment</string>
     <string name="payment_method_cash">Cash</string>

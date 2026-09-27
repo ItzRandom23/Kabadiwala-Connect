@@ -3,6 +3,8 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,10 +60,12 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.recyclerVerificationStatusFromAuthorization
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EmptyContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileEditDraft
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.ProfileScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KcTheme
@@ -93,9 +97,22 @@ fun RecyclerVerificationScreen(
     onOpenMarketplace: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
-    val status = recyclerProfile?.authorizationStatus?.let { value ->
-        runCatching { RecyclerVerificationStatus.valueOf(value) }.getOrNull()
-    } ?: profile?.verificationStatus ?: RecyclerVerificationStatus.PENDING
+    val layout = rememberKcResponsiveLayout()
+    // Once the server profile is present it owns this screen's state. An
+    // unrecognized server state fails closed instead of showing stale account
+    // status (for example VERIFIED) alongside a pending verification shell.
+    val status = if (recyclerProfile != null) {
+        recyclerVerificationStatusFromAuthorization(recyclerProfile.authorizationStatus)
+            ?: RecyclerVerificationStatus.PENDING
+    } else {
+        profile?.verificationStatus ?: RecyclerVerificationStatus.PENDING
+    }
+    val authorizationDetails = recyclerProfile?.authorizationDetails
+    val evidenceAlreadySubmitted = authorizationDetails?.let {
+        listOf(it.authority, it.type, it.registrationNumber, it.evidenceReference, it.verificationSource, it.validUntil)
+            .any { value -> !value.isNullOrBlank() }
+    } == true
+    val authorizationExpired = recyclerProfile?.authorizationStatus.equals("EXPIRED", ignoreCase = true)
     var authority by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.authority.orEmpty()) }
     var registrationNumber by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.registrationNumber.orEmpty()) }
     var authorizationType by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.type.orEmpty()) }
@@ -106,24 +123,41 @@ fun RecyclerVerificationScreen(
     var localError by remember { mutableStateOf<Int?>(null) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     val detailRes = when (status) {
-        RecyclerVerificationStatus.PENDING -> R.string.recycler_verification_pending_detail
+        RecyclerVerificationStatus.PENDING -> when {
+            authorizationExpired -> R.string.recycler_verification_expired_detail
+            recyclerProfile == null && loading -> R.string.recycler_verification_checking_detail
+            recyclerProfile == null -> R.string.recycler_verification_unavailable_detail
+            evidenceAlreadySubmitted -> R.string.recycler_verification_pending_detail
+            else -> R.string.recycler_verification_evidence_needed_detail
+        }
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_rejected_detail
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_suspended_detail
         RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_verified_detail
     }
-    val statusColor = when (status) {
-        RecyclerVerificationStatus.VERIFIED -> MaterialTheme.colorScheme.primaryContainer
-        RecyclerVerificationStatus.REJECTED, RecyclerVerificationStatus.SUSPENDED -> MaterialTheme.colorScheme.errorContainer
-        RecyclerVerificationStatus.PENDING -> MaterialTheme.colorScheme.secondaryContainer
+    val statusColors = when (status) {
+        RecyclerVerificationStatus.VERIFIED -> KcTheme.extended.successContainer to KcTheme.extended.onSuccessContainer
+        RecyclerVerificationStatus.REJECTED, RecyclerVerificationStatus.SUSPENDED -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        RecyclerVerificationStatus.PENDING -> KcTheme.extended.warningContainer to KcTheme.extended.onWarningContainer
     }
-    val canSubmit = status == RecyclerVerificationStatus.PENDING || status == RecyclerVerificationStatus.REJECTED
+    // A new Recycler profile starts in PENDING before it has sent any evidence.
+    // Only that empty pending profile (or a rejected profile) can submit.
+    // Fail closed while profile data is unavailable so a refresh/error cannot
+    // accidentally reopen a request already awaiting review.
+    val canSubmit = status == RecyclerVerificationStatus.REJECTED || authorizationExpired ||
+        (status == RecyclerVerificationStatus.PENDING && recyclerProfile != null && !evidenceAlreadySubmitted)
     val statusLabelRes = when (status) {
-        RecyclerVerificationStatus.PENDING -> R.string.recycler_verification_status_pending
+        RecyclerVerificationStatus.PENDING -> when {
+            authorizationExpired -> R.string.recycler_verification_status_expired
+            recyclerProfile == null && loading -> R.string.recycler_verification_status_checking
+            recyclerProfile == null -> R.string.recycler_verification_status_unavailable
+            evidenceAlreadySubmitted -> R.string.recycler_verification_status_pending
+            else -> R.string.recycler_verification_status_evidence_needed
+        }
         RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_status_verified
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_status_rejected
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             shape = MaterialTheme.shapes.large,
@@ -142,7 +176,7 @@ fun RecyclerVerificationScreen(
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(stringResource(R.string.recycler_verification_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(recyclerProfile?.name ?: profile?.displayName ?: stringResource(R.string.nav_profile), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                    Text(recyclerProfile?.name ?: profile?.displayName ?: stringResource(R.string.nav_profile), style = MaterialTheme.typography.titleMedium, maxLines = if (layout.isCompact) 2 else 1)
                 }
                 androidx.compose.material3.IconButton(onClick = { showLogoutConfirm = true }) {
                     Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.settings_logout))
@@ -160,8 +194,11 @@ fun RecyclerVerificationScreen(
             style = MaterialTheme.typography.headlineMedium
         )
         Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
-        StatusCard(stringResource(statusLabelRes), stringResource(R.string.recycler_verification_status_detail), statusColor)
-        Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        StatusCard(stringResource(statusLabelRes), stringResource(R.string.recycler_verification_status_detail), statusColors.first, statusColors.second)
+        if (canSubmit) {
+            Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 
         if (status == RecyclerVerificationStatus.VERIFIED) {
             VerificationEvidenceSummary(recyclerProfile)
@@ -170,6 +207,8 @@ fun RecyclerVerificationScreen(
             }
         } else if (status == RecyclerVerificationStatus.SUSPENDED) {
             Text(stringResource(R.string.recycler_verification_suspended_action), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        } else if (status == RecyclerVerificationStatus.PENDING && !authorizationExpired && evidenceAlreadySubmitted) {
+            Text(stringResource(R.string.recycler_verification_already_submitted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (canSubmit) {
             Surface(
                 shape = MaterialTheme.shapes.large,
@@ -208,7 +247,6 @@ fun RecyclerVerificationScreen(
                         Text(stringResource(R.string.recycler_verification_declaration), style = MaterialTheme.typography.bodyMedium)
                     }
                     localError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Button(
                         onClick = {
                             val validationError = validateVerificationForm(authority, registrationNumber, authorizationType, validUntil, evidenceReference, verificationSource, declarationAccepted)
@@ -548,7 +586,8 @@ fun RecyclerOrdersScreen(
     onRefresh: () -> Unit = {},
     onScan: () -> Unit = {}
 ) {
-    LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val layout = rememberKcResponsiveLayout()
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -618,7 +657,8 @@ fun RecyclerScanScreen(
             onVerify(value)
         }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val layout = rememberKcResponsiveLayout()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Icon(Icons.Filled.QrCodeScanner, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
         Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.recycler_scan_explanation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -690,6 +730,7 @@ fun RecyclerScanScreen(
 private fun statusNameForSupply(value: String) = value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun RecyclerPickupsScreen(
     demoMode: Boolean = false,
     availability: String? = null,
@@ -699,9 +740,10 @@ fun RecyclerPickupsScreen(
     onRefresh: () -> Unit = {},
     onSave: (String) -> Unit = {}
 ) {
+    val layout = rememberKcResponsiveLayout()
     var pickupReady by remember { mutableStateOf(false) }
     var selectedAvailability by remember(availability) { mutableStateOf(availability ?: "FLEXIBLE") }
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(stringResource(R.string.recycler_pickups_title), style = MaterialTheme.typography.headlineLarge)
         if (demoMode) {
             DemoDataBanner()
@@ -718,7 +760,7 @@ fun RecyclerPickupsScreen(
             Text(stringResource(R.string.recycler_pickups_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
             error?.let { Text("Couldn’t load availability. Your saved setting is unchanged.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("TODAY" to "Today", "THIS_WEEK" to "This week", "FLEXIBLE" to "Flexible").forEach { (value, label) ->
                     FilterChip(selected = selectedAvailability == value, onClick = { selectedAvailability = value }, label = { Text(label) })
                 }
@@ -751,10 +793,11 @@ fun RecyclerRatesScreen(
     onSave: (List<RecyclerRateUpdateDto>) -> Unit = {},
     demoMode: Boolean = false
 ) {
+    val layout = rememberKcResponsiveLayout()
     val categories = remember(acceptedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory }).filter { it.isNotBlank() }.distinct() }
     var values by remember(categories, rates) { mutableStateOf(categories.associateWith { category -> rates.firstOrNull { it.materialCategory == category }?.pricePerKg?.toString().orEmpty() }) }
     val valid = values.values.any { it.toDoubleOrNull()?.let { value -> value > 0 } == true }
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.recycler_rates_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (demoMode) DemoDataBanner()
@@ -804,7 +847,7 @@ fun RecyclerProfileScreen(profile: AccountProfile?, onLogout: () -> Unit, onSave
     }
 }
 
-@Composable private fun StatusCard(label: String, detail: String, color: androidx.compose.ui.graphics.Color) { Surface(color = color, shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f)), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CheckCircle, null); Column(Modifier.padding(start = 12.dp)) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium) } } } }
+@Composable private fun StatusCard(label: String, detail: String, color: androidx.compose.ui.graphics.Color, contentColor: androidx.compose.ui.graphics.Color) { Surface(color = color, contentColor = contentColor, shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f)), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CheckCircle, null, tint = contentColor); Column(Modifier.padding(start = 12.dp)) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium) } } } }
 
 @Composable private fun OperationalSurface(content: @Composable () -> Unit) {
     Surface(

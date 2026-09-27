@@ -6,6 +6,8 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.KABADIWALA_BOTTO
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.recyclerVerificationStatusFromAuthorization
+import com.irinteractivestudios.kabadiwalaconnect.domain.model.reconcileRecyclerAccountAuthorization
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,6 +24,56 @@ class DestinationsTest {
     fun appStartsOnHome() {
         assertEquals(Destinations.HOME, Destinations.START)
         assertTrue(Destinations.TOP_LEVEL.contains(Destinations.START))
+    }
+
+    @Test
+    fun recyclerAuthorizationStatesNormalizeWithoutTreatingReviewAsVerified() {
+        assertEquals(RecyclerVerificationStatus.VERIFIED, recyclerVerificationStatusFromAuthorization("verified"))
+        assertEquals(RecyclerVerificationStatus.PENDING, recyclerVerificationStatusFromAuthorization("UNDER_REVIEW"))
+        assertEquals(RecyclerVerificationStatus.PENDING, recyclerVerificationStatusFromAuthorization("EXPIRED"))
+        assertEquals(RecyclerVerificationStatus.REJECTED, recyclerVerificationStatusFromAuthorization("REVIEW_REQUIRED"))
+        assertEquals(RecyclerVerificationStatus.REJECTED, recyclerVerificationStatusFromAuthorization("REVOKED"))
+        assertEquals(null, recyclerVerificationStatusFromAuthorization("unknown"))
+    }
+
+    @Test
+    fun verifiedRecyclerIsRoutedOutOfVerificationAndIntoMarketplace() {
+        assertEquals(
+            Destinations.RECYCLER_MARKETPLACE,
+            Destinations.verifiedRecyclerLanding(Destinations.RECYCLER_VERIFY, RecyclerVerificationStatus.VERIFIED)
+        )
+        assertEquals(
+            null,
+            Destinations.verifiedRecyclerLanding(Destinations.RECYCLER_VERIFY, RecyclerVerificationStatus.PENDING)
+        )
+        assertEquals(
+            null,
+            Destinations.verifiedRecyclerLanding(Destinations.RECYCLER_MARKETPLACE, RecyclerVerificationStatus.VERIFIED)
+        )
+    }
+
+    @Test
+    fun recyclerSessionStatusReconcilesOnlyForItsOwnProfile() {
+        val pending = AccountProfile(
+            "account-1", "recycler@example.test", AccountRole.RECYCLER,
+            verificationStatus = RecyclerVerificationStatus.PENDING,
+            profileId = "recycler-1"
+        )
+        assertEquals(
+            RecyclerVerificationStatus.VERIFIED,
+            reconcileRecyclerAccountAuthorization(pending, "recycler-1", "VERIFIED")?.verificationStatus
+        )
+        assertEquals(null, reconcileRecyclerAccountAuthorization(pending, "other-recycler", "VERIFIED"))
+        assertEquals(
+            null,
+            reconcileRecyclerAccountAuthorization(
+                pending.copy(role = AccountRole.HOUSEHOLD), "recycler-1", "VERIFIED"
+            )
+        )
+        assertEquals(
+            RecyclerVerificationStatus.PENDING,
+            reconcileRecyclerAccountAuthorization(pending.copy(verificationStatus = RecyclerVerificationStatus.VERIFIED), "recycler-1", "unknown")?.verificationStatus
+        )
     }
 
     @Test
@@ -71,5 +123,83 @@ class DestinationsTest {
         assertEquals(Destinations.RECYCLER_MARKETPLACE, Destinations.startForSession(AccountProfile("r", "r@example.com", AccountRole.RECYCLER)))
         assertEquals(Destinations.RECYCLER_VERIFY, Destinations.startForSession(AccountProfile("p", "p@example.com", AccountRole.RECYCLER, verificationStatus = RecyclerVerificationStatus.PENDING)))
         assertEquals(Destinations.ADMIN_DASHBOARD, Destinations.startForSession(AccountProfile("a", "a@example.com", AccountRole.ADMIN)))
+    }
+
+    @Test
+    fun liveCollectorCanReachExistingLotQuoteHandoverAndPaymentFlows() {
+        val routes = listOf(
+            Destinations.CREATE_LOT,
+            Destinations.MY_LOTS,
+            Destinations.LOT_DETAIL,
+            Destinations.LOT_EDIT,
+            Destinations.TRANSACTION_TIMELINE,
+            Destinations.RECYCLERS_FOR_LOT,
+            Destinations.QUOTE_REQUEST,
+            Destinations.QUOTE_COMPARE,
+            Destinations.HANDOVER_CREATE,
+            Destinations.HANDOVER_DOCUMENT,
+            Destinations.HANDOVER_DISPUTE,
+            Destinations.PAYMENT_CREATE,
+            Destinations.EARNINGS
+        )
+
+        routes.forEach { route ->
+            assertTrue(
+                "Live collector route should remain reachable: $route",
+                Destinations.isAllowedForSession(
+                    AccountRole.COLLECTOR,
+                    route,
+                    demoMode = false,
+                    demoRole = null,
+                    recyclerVerificationStatus = null
+                )
+            )
+        }
+    }
+
+    @Test
+    fun notificationRoutesResolveToExistingRoleAuthorizedDestinations() {
+        assertEquals(
+            Destinations.NOTIFICATIONS,
+            Destinations.notificationDestination(Destinations.NOTIFICATIONS, AccountRole.HOUSEHOLD, false, null, null)
+        )
+        assertEquals(
+            Destinations.NOTIFICATIONS,
+            Destinations.notificationDestination(Destinations.NOTIFICATIONS, AccountRole.COLLECTOR, false, null, null)
+        )
+        assertEquals(
+            Destinations.NOTIFICATIONS,
+            Destinations.notificationDestination(Destinations.NOTIFICATIONS, AccountRole.RECYCLER, false, null, RecyclerVerificationStatus.PENDING)
+        )
+        assertEquals(
+            "quotes/compare/lot-123",
+            Destinations.notificationDestination("quotes/compare/lot-123", AccountRole.COLLECTOR, false, null, null)
+        )
+        assertEquals(
+            "handovers/document/hand-123",
+            Destinations.notificationDestination("handovers/document/hand-123", AccountRole.COLLECTOR, false, null, null)
+        )
+        assertEquals(
+            Destinations.KABADIWALA_PICKUPS,
+            Destinations.notificationDestination("kabadiwala/pickups/pickup-123", AccountRole.COLLECTOR, false, null, null)
+        )
+        assertEquals(
+            Destinations.HOME,
+            Destinations.notificationDestination("household/pickups/pickup-123/reassignment-options", AccountRole.HOUSEHOLD, false, null, null)
+        )
+        assertEquals(
+            Destinations.EARNINGS,
+            Destinations.notificationDestination("earnings", AccountRole.COLLECTOR, false, null, null)
+        )
+        assertEquals(
+            Destinations.RECYCLER_ORDERS,
+            Destinations.notificationDestination("recycler/orders", AccountRole.RECYCLER, false, null, RecyclerVerificationStatus.VERIFIED)
+        )
+        assertEquals(
+            Destinations.RECYCLER_VERIFY,
+            Destinations.notificationDestination("recycler/orders", AccountRole.RECYCLER, false, null, RecyclerVerificationStatus.PENDING)
+        )
+        assertEquals(null, Destinations.notificationDestination("payments/create/extra", AccountRole.COLLECTOR, false, null, null))
+        assertEquals(null, Destinations.notificationDestination("admin/dashboard", AccountRole.COLLECTOR, false, null, null))
     }
 }

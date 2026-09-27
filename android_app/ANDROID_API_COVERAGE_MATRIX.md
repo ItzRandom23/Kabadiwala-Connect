@@ -1,6 +1,6 @@
 # Android API coverage matrix
 
-Audit date: 2026-09-15. Source: `../docs/BACKEND_API_CONTRACT.md`, `ApiService.kt`, existing Compose navigation, repositories, ViewModels and tests.
+Historical audit date: 2026-09-15. Source: `ApiService.kt`, Compose navigation, repositories, ViewModels and tests. Cross-cutting current evidence is in `../docs/README.md`; endpoint status rows below are historical and must not be treated as current verification.
 
 ## Reading the matrix
 
@@ -43,7 +43,7 @@ Audit date: 2026-09-15. Source: `../docs/BACKEND_API_CONTRACT.md`, `ApiService.k
 | `GET /lots/:lotId/valuation` | Collector | Lot detail valuation | T | C/R; test gap | PARTIAL |
 | `PUT /admin/prices/:priceId` | Admin + capability | AdminConsoleScreen → AdminConsoleViewModel | J | Audited update form; server permission remains authoritative | COMPLETE |
 | `GET /recycler/profile` | Recycler incl. pending | RecyclerProfileViewModel | T | Pending/rejected/expired state cards | COMPLETE |
-| `POST /recycler/verification-request` | Recycler incl. pending | RecyclerProfileViewModel | T | Evidence form/R | COMPLETE |
+| `POST /recycler/verification-request` | Recycler incl. pending | RecyclerProfileViewModel | T | First evidence/rejected/expired resubmission; pending duplicate rejected; UI and service regression tests | COMPLETE |
 | `PATCH /recycler/profile` | Verified Recycler | RecyclerProfileViewModel | T | Verified-only form | COMPLETE |
 | `PUT /recycler/rates` | Verified Recycler | RecyclerProfileViewModel | T | Rates form/R | COMPLETE |
 | `GET /recyclers` | Any authenticated | RecyclersViewModel / directory | T | L/C/E/R/O | COMPLETE |

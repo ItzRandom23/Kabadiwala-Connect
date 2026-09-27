@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +20,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.Recycler
 
 @Composable
 fun LotQuoteEntryScreen(lot: Lot, onRequest: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(lot.materialLabel, style = androidx.compose.material3.MaterialTheme.typography.headlineLarge)
         Text(stringResource(R.string.quote_lot_summary, lot.materialLabel, lot.weightKg))
         Text(stringResource(R.string.quote_estimated, lot.estimatedValueRupees ?: 0.0), style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
@@ -28,7 +30,7 @@ fun LotQuoteEntryScreen(lot: Lot, onRequest: () -> Unit) {
 
 @Composable
 fun RecyclerQuoteEntryScreen(recycler: Recycler, onRequest: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(recycler.name, style = androidx.compose.material3.MaterialTheme.typography.headlineLarge)
         Text(recycler.facility)
         Text(recycler.address)

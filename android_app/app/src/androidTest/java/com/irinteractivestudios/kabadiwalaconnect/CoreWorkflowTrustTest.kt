@@ -44,7 +44,8 @@ class CoreWorkflowTrustTest {
 
         composeRule.onAllNodesWithText("Copper wire").assertCountEquals(2)
         composeRule.onNodeWithText("4.5 kg").assertIsDisplayed()
-        composeRule.onNodeWithText("Saved locally — waiting to sync").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Ready to save").assertCountEquals(1)
+        composeRule.onNodeWithText("Continue").assertIsDisplayed()
     }
 
     private fun emptyPaymentRepository() = object : PaymentRepository {

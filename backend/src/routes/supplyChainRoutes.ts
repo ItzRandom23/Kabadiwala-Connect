@@ -12,6 +12,8 @@ import { AppError } from '../utils/errors.js';
 import { assertInventoryInvariant, ownedKg, recordInventoryMovement } from '../services/inventoryLedger.js';
 import { emitNotification } from '../services/notificationService.js';
 import { assertPickupWorkTime, movePickupDay, releasePickupDay, validatePickupSlot } from '../services/pickupSchedulingService.js';
+import { claimSourceListings, releaseSourceListings } from '../services/sourceListingAllocationService.js';
+import { withTransactionRetry } from '../utils/transactionRetry.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const condition = z.enum(['INTACT', 'DAMAGED', 'PARTIAL']);
@@ -404,7 +406,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       // existing reassignment row with a conditional update.
       const priorTarget = await tx.pickupRequest.findUnique({ where: { listingId_kabadiwalaId: { listingId: pickup.listingId, kabadiwalaId: input.kabadiwalaId } } });
       let reassigned;
-      const lifecycleReset = { status: 'REQUESTED', requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : null, scheduledSlot: null, acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, weighedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, reassignmentReason: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, cancelledBy: null, cancellationReason: null, completedAt: null };
+      const lifecycleReset = { status: 'REQUESTED', requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : null, scheduledSlot: null, acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, reassignmentReason: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, cancelledBy: null, cancellationReason: null, completedAt: null };
       if (priorTarget && priorTarget.id !== pickup.id) {
         if (activePickupStatuses.includes(priorTarget.status) || priorTarget.status === 'REASSIGNMENT_REQUIRED') throw new AppError('CONFLICT', 'This Kabadiwala already has an active request for the listing', 409, { code: 'PICKUP_TARGET_ALREADY_ASSIGNED' });
         const closed = await tx.pickupRequest.updateMany({ where: { id: pickup.id, householdId: req.identity!.collectorId, status: 'REASSIGNMENT_REQUIRED' }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: 'HOUSEHOLD_SELECTED_REPLACEMENT', cancelledAt: new Date() } });
@@ -434,7 +436,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!listingForPickup) throw new AppError('NOT_FOUND', 'Listing not found', 404, { code: 'LISTING_NOT_FOUND' });
     if (!hasListingPhoto(listingForPickup)) throw new AppError('CONFLICT', 'Add at least one photo before requesting pickup', 409, { code: 'PHOTO_REQUIRED' });
     if (!input.kabadiwalaId) {
-      const result = await store.$transaction(async (tx: any) => {
+      const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
         if (operationId) {
           const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
           if (replay) {
@@ -450,11 +452,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         }
         const claimedListing = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: 'POSTED' }, data: { status: 'MATCHED' } });
         if (!claimedListing.count) throw new AppError('CONFLICT', 'This listing is no longer available for a pickup request', 409);
-        const pickup = await tx.pickupRequest.create({ data: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP', requestedSlot } });
+        const pickup = await tx.pickupRequest.create({ data: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP', requestedSlot, householdQrScannedAt: null } });
         await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_WAITING_FOR_PICKUP', 'PICKUP_REQUEST', pickup.id, { listingId, requestedSlot: requestedSlot?.toISOString() ?? null });
         if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: pickup.id, requestHash: operationHash, response: jsonValue(pickup) } });
         return { pickup, created: true, replayed: false };
-      });
+      }));
       if (result.created && !result.replayed) {
         const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } });
         const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
@@ -476,7 +478,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     // Claim the listing and create the request in one transaction. The
     // conditional POSTED -> MATCHED update is the single-winner guard when
     // two kabadiwalas are selected concurrently.
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       if (operationId) {
         const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
         if (replay) {
@@ -501,13 +503,19 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       }
       const pickup = await tx.pickupRequest.upsert({
         where: { listingId_kabadiwalaId: { listingId, kabadiwalaId: input.kabadiwalaId } },
-        update: { requestedSlot: requestedSlot ?? undefined, status: 'REQUESTED', cancelledBy: null, cancellationReason: null },
-        create: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: input.kabadiwalaId, requestedSlot }
+        update: { requestedSlot: requestedSlot ?? undefined, status: 'REQUESTED', acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, completedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, cancelledBy: null, cancellationReason: null, reassignmentReason: null },
+        create: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: input.kabadiwalaId, requestedSlot, householdQrScannedAt: null }
       });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_REQUESTED', 'PICKUP_REQUEST', pickup.id, { listingId, kabadiwalaId: input.kabadiwalaId, requestedSlot: requestedSlot?.toISOString() ?? null });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: pickup.id, requestHash: operationHash, response: jsonValue(pickup) } });
       return { pickup, created: !existing, replayed: false };
-    });
+    }));
+    if (result.created && !result.replayed) {
+      await Promise.allSettled([
+        emitNotification(store, { accountId: input.kabadiwalaId, type: 'PICKUP_REQUESTED', title: 'New pickup request', body: 'A household selected you for a pickup request. Review and accept it when available.', route: `kabadiwala/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUESTED:${result.pickup.id}:${input.kabadiwalaId}` }),
+        emitNotification(store, { accountId: req.identity!.collectorId, type: 'PICKUP_REQUESTED', title: 'Pickup request sent', body: 'Your pickup request was sent to the selected Kabadiwala.', route: `household/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUESTED:${result.pickup.id}:${req.identity!.collectorId}` })
+      ]);
+    }
     res.status(result.created ? 201 : 200).json({ success: true, data: result.pickup, ...(result.replayed ? { message: 'Pickup request already processed' } : {}) });
   });
   router.get('/household/pickups', requireHousehold(jwt, collectors), async (req, res) => {
@@ -580,7 +588,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const decision = parse(settlementDecision, req.body ?? {});
     const operationId = operationKey(req);
     const operationHash = requestHash({ action: 'HOUSEHOLD_PICKUP_SETTLEMENT', pickupId, decision });
-    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'PENDING_HOUSEHOLD_CONFIRMATION' } });
+    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED' } });
     if (!pickup) throw new AppError('CONFLICT', 'This pickup settlement is no longer actionable', 409, { code: 'SETTLEMENT_ALREADY_DECIDED' });
     const result = await store.$transaction(async (tx: any) => {
       if (operationId) {
@@ -590,7 +598,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
           return { pickup: replay.response, replayed: true };
         }
       }
-      const row = await tx.pickupRequest.updateMany({ where: { id: pickupId, householdId: req.identity!.collectorId, settlementStatus: 'PENDING_HOUSEHOLD_CONFIRMATION' }, data: { settlementStatus: decision.decision === 'ACCEPT' ? 'ACCEPTED' : 'DISPUTED', householdDecision: decision.decision, settlementReasonCode: decision.reasonCode ?? null, settlementEvidenceReference: decision.evidenceReference ?? null, settlementDisputeNotes: decision.notes ?? null, settlementDecisionAt: new Date() } });
+      const row = await tx.pickupRequest.updateMany({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'PENDING_HOUSEHOLD_CONFIRMATION' }, data: { settlementStatus: decision.decision === 'ACCEPT' ? 'ACCEPTED' : 'DISPUTED', householdDecision: decision.decision, settlementReasonCode: decision.reasonCode ?? null, settlementEvidenceReference: decision.evidenceReference ?? null, settlementDisputeNotes: decision.notes ?? null, settlementDecisionAt: new Date() } });
       if (!row.count) throw new AppError('CONFLICT', 'This pickup settlement was already decided', 409, { code: 'SETTLEMENT_ALREADY_DECIDED' });
       if (decision.decision === 'RAISE_ISSUE') await tx.anomalyFlag.create({ data: { entityType: 'PICKUP_REQUEST', entityId: pickupId, ruleCode: decision.reasonCode ?? 'HOUSEHOLD_DISPUTE', severity: 'MEDIUM', details: { notes: decision.notes ?? null, evidenceReference: decision.evidenceReference ?? null } } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', decision.decision === 'ACCEPT' ? 'SETTLEMENT_ACCEPTED' : 'SETTLEMENT_DISPUTED', 'PICKUP_REQUEST', pickupId, { reasonCode: decision.reasonCode ?? null, notes: decision.notes ?? null });
@@ -607,24 +615,14 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!listing) throw new AppError('NOT_FOUND', 'Material passport not found', 404, { code: 'PASSPORT_NOT_FOUND' });
     const pickups = await store.pickupRequest.findMany({ where: { listingId, householdId: req.identity!.collectorId }, select: { id: true } });
     const pickupIds = pickups.map((row: { id: string }) => row.id);
-    const [events, movements, bulkLots, poolContributions] = await Promise.all([
+    const [events, movements] = await Promise.all([
       store.materialPassportEvent.findMany({ where: { OR: [{ entityType: 'HOUSEHOLD_LISTING', entityId: listingId }, ...(pickupIds.length ? [{ entityType: 'PICKUP_REQUEST', entityId: { in: pickupIds } }] : [])] }, orderBy: { occurredAt: 'asc' } }),
-      pickupIds.length ? store.inventoryMovement.findMany({ where: { sourceType: 'PICKUP_REQUEST', sourceId: { in: pickupIds } }, orderBy: { createdAt: 'asc' } }) : [],
-      store.bulkLot.findMany({ where: { sourceListingIds: { has: listingId } }, select: { id: true, status: true, quantityKg: true, materialCategory: true, grade: true } }),
-      store.poolContribution.findMany({ where: { sourceListingIds: { has: listingId } }, select: { id: true, poolId: true, handoverId: true, status: true, quantityKg: true, finalAcceptedKg: true } })
+      pickupIds.length ? store.inventoryMovement.findMany({ where: { sourceType: 'PICKUP_REQUEST', sourceId: { in: pickupIds } }, orderBy: { createdAt: 'asc' } }) : []
     ]);
-    const bulkLotIds = bulkLots.map((row: any) => row.id);
-    const poolIds = [...new Set(poolContributions.map((row: any) => row.poolId))];
-    const handovers = await store.supplyHandover.findMany({ where: { OR: [...(bulkLotIds.length ? [{ bulkLotId: { in: bulkLotIds } }] : []), { sourceListingIds: { has: listingId } }] }, select: { id: true, bulkLotId: true, poolId: true, recyclerId: true, materialCategory: true, quotedWeightKg: true, finalAcceptedKg: true, finalValue: true, status: true, destructionEvidenceStatus: true, recyclerEvidenceReference: true, sourceListingIds: true, createdAt: true, updatedAt: true } });
-    const handoverIds = handovers.map((row: any) => row.id);
-    const downstreamEvents = handoverIds.length ? await store.materialPassportEvent.findMany({ where: { entityType: 'SUPPLY_HANDOVER', entityId: { in: handoverIds } }, orderBy: { occurredAt: 'asc' } }) : [];
-    const [settlementBreakdowns, poolSettlements, anomalies] = await Promise.all([
-      handoverIds.length ? store.settlementBreakdown.findMany({ where: { handoverId: { in: handoverIds } }, orderBy: { updatedAt: 'asc' } }) : [],
-      poolContributions.length ? store.poolSettlement.findMany({ where: { contributionId: { in: poolContributions.map((row: any) => row.id) } }, orderBy: { updatedAt: 'asc' } }) : [],
-      (handoverIds.length || poolContributions.length) ? store.anomalyFlag.findMany({ where: { OR: [...handoverIds.map((id: string) => ({ entityType: 'SUPPLY_HANDOVER', entityId: id })), ...poolContributions.map((row: any) => ({ entityType: 'POOL_CONTRIBUTION', entityId: row.id }))] }, orderBy: { createdAt: 'asc' } }) : []
-    ]);
-    const visibleHandovers = handovers.map((row: any) => ({ ...row, sourceListingIds: [listingId] }));
-    res.json({ success: true, data: { listing, pickupIds, events: [...events, ...downstreamEvents].sort((left: any, right: any) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime()), inventoryMovements: movements, bulkLots, poolContributions, handovers: visibleHandovers, settlementBreakdowns, poolSettlements, anomalies, disclaimer: 'Traceability is platform evidence for this prototype; it is not a government certificate.' } });
+    // Passport access is listing-scoped. Downstream pool and handover records
+    // aggregate multiple households and collectors, so returning them here
+    // would disclose unrelated quantities, values, and source identifiers.
+    res.json({ success: true, data: { listing, pickupIds, events, inventoryMovements: movements, disclaimer: 'Traceability is platform evidence for this prototype; it is not a government certificate.' } });
   });
   router.post('/household/listings/:listingId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId); const input = parse(cancellationInput, req.body ?? {});
@@ -674,7 +672,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     // Photo references are private storage keys. The collector receives only a
     // presence flag; the image itself remains behind the assigned-pickup photo
     // endpoint below.
-    res.json({ success: true, data: listings.map(({ photoReference, photoReferences, ...listing }: { photoReference?: string | null; photoReferences?: string[]; [key: string]: any }) => ({ ...listing, pickupAddress: addressVisibleListingIds.has(listing.id) ? listing.pickupAddress ?? null : null, photoAttached: Boolean(photoReference || photoReferences?.length), photoCount: photoReferences?.length || (photoReference ? 1 : 0) })) });
+    res.json({ success: true, data: listings.map(({ photoReference, photoReferences, ...listing }: { photoReference?: string | null; photoReferences?: string[]; [key: string]: any }) => {
+      const locationVisible = addressVisibleListingIds.has(listing.id);
+      return {
+        ...listing,
+        pickupAddress: locationVisible ? listing.pickupAddress ?? null : null,
+        latitude: locationVisible ? listing.latitude ?? null : null,
+        longitude: locationVisible ? listing.longitude ?? null : null,
+        photoAttached: Boolean(photoReference || photoReferences?.length),
+        photoCount: photoReferences?.length || (photoReference ? 1 : 0)
+      };
+    }) });
   });
   router.get('/kabadiwala/listings/:listingId/photo', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -743,16 +751,16 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/pickups/:pickupId/confirm-availability', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
-    const input = parse(z.object({ availabilityConfirmed: z.boolean().default(true), scheduledSlot: z.string().datetime().optional() }), req.body ?? {});
+    const input = parse(z.object({ availabilityConfirmed: z.literal(true).default(true), scheduledSlot: z.string().datetime().optional() }), req.body ?? {});
     const scheduledSlot = input.scheduledSlot ? validatePickupSlot(input.scheduledSlot) : null;
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED'] } } });
       if (!pickup) throw new AppError('CONFLICT', 'Pickup is not awaiting availability confirmation', 409, { code: 'PICKUP_NOT_CONFIRMABLE' });
       if (scheduledSlot) await movePickupDay(tx, req.identity!.collectorId, scheduledSlot, pickup.scheduledSlot);
       const updated = await tx.pickupRequest.update({ where: { id: pickupId }, data: { availabilityConfirmedAt: new Date(), ...(scheduledSlot ? { scheduledSlot, requestedSlot: scheduledSlot, status: 'SCHEDULED' } : {}) } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_AVAILABILITY_CONFIRMED', 'PICKUP_REQUEST', pickupId, { scheduledSlot: scheduledSlot?.toISOString() ?? pickup.scheduledSlot?.toISOString() ?? null });
       return updated;
-    });
+    }));
     res.json({ success: true, data: result });
   });
   router.post('/kabadiwala/pickups/:pickupId/schedule', requireAuth(jwt, collectors), async (req, res) => {
@@ -786,7 +794,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/kabadiwala/pickups/:pickupId/reassign', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const input = parse(z.object({ reason: z.string().trim().min(2).max(500), noShow: z.boolean().default(false) }), req.body ?? {});
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const pickupBefore = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED'] } } });
       if (!pickupBefore) throw new AppError('CONFLICT', 'Pickup is not eligible for reassignment', 409, { code: 'PICKUP_NOT_REASSIGNABLE' });
       const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED'] } }, data: { status: 'REASSIGNMENT_REQUIRED', reassignmentReason: input.reason, noShow: input.noShow, cancelledBy: 'COLLECTOR', cancellationReason: input.reason, cancelledAt: new Date() } });
@@ -798,7 +806,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (recentCancellations >= 3 || input.noShow) await tx.anomalyFlag.create({ data: { entityType: 'COLLECTOR', entityId: req.identity!.collectorId, ruleCode: recentCancellations >= 3 ? 'REPEATED_PICKUP_CANCELLATION' : 'PICKUP_NO_SHOW', severity: recentCancellations >= 3 ? 'MEDIUM' : 'MEDIUM', details: { pickupId, recentCancellations, noShow: input.noShow, reason: input.reason } } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_REASSIGNMENT_REQUIRED', 'PICKUP_REQUEST', pickupId, { reason: input.reason, noShow: input.noShow });
       return pickup;
-    });
+    }));
     await emitNotification(store, { accountId: result.householdId, type: 'PICKUP_REASSIGNMENT_REQUIRED', title: 'Choose another Kabadiwala', body: input.noShow ? 'The assigned Kabadiwala could not complete this pickup. Choose another available Kabadiwala.' : 'This pickup needs a new Kabadiwala. Choose another available Kabadiwala.', route: `household/pickups/${pickupId}/reassignment-options`, dedupeKey: `PICKUP_REASSIGNMENT_REQUIRED:${pickupId}` });
     res.json({ success: true, data: result, message: 'Find another Kabadiwala is now available for this request' });
   });
@@ -840,7 +848,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
             }
             const scannedAt = new Date();
             const updated = await tx.pickupRequest.updateMany({
-              where: { id: pickupId, kabadiwalaId: collectorId, status: 'ARRIVED', householdQrScannedAt: null },
+              where: { id: pickupId, kabadiwalaId: collectorId, status: 'ARRIVED', OR: [{ householdQrScannedAt: null }, { householdQrScannedAt: { isSet: false } }] },
               data: { householdQrScannedAt: scannedAt }
             });
             if (!updated.count) return null;
@@ -930,12 +938,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/kabadiwala/pickups/:pickupId/settlement-payment', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const input = parse(z.object({ amount: positive.max(100000000), method: z.enum(['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET', 'UPI']), recordedAt: z.string().datetime().optional(), reference: z.string().trim().max(200).optional(), notes: z.string().trim().max(1000).optional() }).strict(), req.body);
-    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: { in: ['ACCEPTED', 'COMPLETED', 'DISPUTED'] } } });
+    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED' } });
     if (!pickup) throw new AppError('CONFLICT', 'Household must accept the pickup settlement before payment', 409, { code: 'PICKUP_SETTLEMENT_NOT_ACCEPTED' });
-    const expectedAmount = Number((pickup.finalAmount ?? 0).toFixed(2));
-    if (expectedAmount <= 0 || input.amount > expectedAmount + 0.01) throw new AppError('VALIDATION_ERROR', 'Payment cannot exceed the accepted pickup settlement', 422, { code: 'PICKUP_PAYMENT_EXCEEDS_SETTLEMENT' });
-    const recordedAt = input.recordedAt ? new Date(input.recordedAt) : new Date();
-    if (recordedAt > new Date()) throw new AppError('VALIDATION_ERROR', 'Payment date cannot be in the future', 422, { code: 'PAYMENT_DATE_INVALID' });
     const sourceKey = `PICKUP_SETTLEMENT:${pickupId}`;
     const operationId = operationKey(req);
     const hash = requestHash({ pickupId, input });
@@ -953,11 +957,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'RECORD_PICKUP_SETTLEMENT_PAYMENT', entityId: prior.id, requestHash: hash, response: jsonValue(prior) } });
         return { payment: prior, replayed: true };
       }
+      const acceptedPickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' } });
+      if (!acceptedPickup) throw new AppError('CONFLICT', 'Household must accept the pickup settlement before payment', 409, { code: 'PICKUP_SETTLEMENT_NOT_ACCEPTED' });
+      const expectedAmount = Number((acceptedPickup.finalAmount ?? 0).toFixed(2));
+      if (expectedAmount <= 0 || input.amount > expectedAmount + 0.01) throw new AppError('VALIDATION_ERROR', 'Payment cannot exceed the accepted pickup settlement', 422, { code: 'PICKUP_PAYMENT_EXCEEDS_SETTLEMENT' });
+      const recordedAt = input.recordedAt ? new Date(input.recordedAt) : new Date();
+      if (recordedAt > new Date()) throw new AppError('VALIDATION_ERROR', 'Payment date cannot be in the future', 422, { code: 'PAYMENT_DATE_INVALID' });
       const anomaly = Math.abs(input.amount - expectedAmount) > 0.01;
+      const claimed = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: anomaly ? 'DISPUTED' : 'ACCEPTED' } });
+      if (!claimed.count) throw new AppError('CONFLICT', 'Pickup settlement changed before payment was recorded', 409, { code: 'PICKUP_SETTLEMENT_CONFLICT' });
       const payment = await tx.pickupSettlementPayment.create({ data: { sourceKey, requestHash: hash, pickupId, householdId: pickup.householdId, collectorId: req.identity!.collectorId, amount: Number(input.amount.toFixed(2)), paymentMethod: input.method, recordedAt, reference: input.reference ?? null, notes: input.notes ?? null, anomaly, anomalyReason: anomaly ? 'Payment differs from the household-accepted pickup settlement' : null, status: anomaly ? 'DISPUTED' : 'RECORDED' } });
       if (anomaly) await tx.anomalyFlag.create({ data: { entityType: 'PICKUP_REQUEST', entityId: pickupId, ruleCode: 'PICKUP_PAYMENT_AMOUNT_DIFFERENCE', severity: 'MEDIUM', details: { expectedAmount, amount: payment.amount, paymentId: payment.id } } });
-      const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: anomaly ? 'DISPUTED' : 'ACCEPTED' } });
-      if (!updated.count && !anomaly) throw new AppError('CONFLICT', 'Pickup settlement changed before payment was recorded', 409, { code: 'PICKUP_SETTLEMENT_CONFLICT' });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_RECORDED', 'PICKUP_REQUEST', pickupId, { paymentId: payment.id, expectedAmount, amount: payment.amount, method: payment.paymentMethod });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'RECORD_PICKUP_SETTLEMENT_PAYMENT', entityId: payment.id, requestHash: hash, response: jsonValue(payment) } });
       return { payment, replayed: false };
@@ -974,7 +984,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const paymentId = parse(id, req.params.paymentId);
     const input = parse(z.object({ decision: z.enum(['VERIFY', 'DISPUTE']), notes: z.string().trim().max(1000).optional() }).strict(), req.body);
     if (input.decision === 'DISPUTE' && !input.notes) throw new AppError('VALIDATION_ERROR', 'Add a note explaining the payment mismatch', 422, { code: 'PAYMENT_RECONCILIATION_NOTE_REQUIRED' });
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const payment = await tx.pickupSettlementPayment.findUnique({ where: { id: paymentId } });
       if (!payment) throw new AppError('NOT_FOUND', 'Pickup payment not found', 404, { code: 'PICKUP_PAYMENT_NOT_FOUND' });
       const nextStatus = input.decision === 'VERIFY' ? 'VERIFIED' : 'DISPUTED';
@@ -988,7 +998,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       }
       await auditSupplyEvent(tx, req.identity!.collectorId, 'ADMIN', input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED_BY_OPERATOR', 'PICKUP_REQUEST', payment.pickupId, { paymentId, decision: input.decision, notes: input.notes ?? null });
       return tx.pickupSettlementPayment.findUniqueOrThrow({ where: { id: paymentId } });
-    });
+    }));
     const recipients = [...new Set([result.householdId, result.collectorId])];
     await Promise.all(recipients.map(accountId => emitNotification(store, { accountId, type: input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED', title: input.decision === 'VERIFY' ? 'Pickup payment reconciled' : 'Pickup payment needs review', body: input.decision === 'VERIFY' ? 'An operator reconciled the pickup payment record.' : 'An operator flagged the pickup payment for follow-up.', route: `household/pickups/${result.pickupId}`, dedupeKey: `PICKUP_PAYMENT_RECONCILED:${result.id}:${input.decision}:${accountId}` })));
     res.json({ success: true, data: { ...result, kind: 'HOUSEHOLD_PICKUP_SETTLEMENT' } });
@@ -1006,7 +1016,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const input = parse(bulkInput, req.body);
     const operationId = operationKey(req);
     const operationHash = requestHash({ action: 'CREATE_BULK_LOT', input });
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       if (operationId) {
         const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
         if (replay) {
@@ -1021,11 +1031,12 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       const after = await tx.inventoryBalance.findUniqueOrThrow({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: req.identity!.collectorId, materialCategory: input.materialCategory, grade: input.grade } } });
       assertInventoryInvariant(after);
       const created = await tx.bulkLot.create({ data: { ...input, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } });
+      await claimSourceListings(tx, input.sourceListingIds, 'BULK_LOT', created.id);
       await recordInventoryMovement(tx, before ?? { ...after, availableKg: after.availableKg + input.quantityKg, reservedKg: after.reservedKg - input.quantityKg }, after, 'RESERVATION', input.quantityKg, 'BULK_LOT', created.id, { bulkLotId: created.id });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'BULK_LOT_LISTED', 'BULK_LOT', created.id, { materialCategory: created.materialCategory, grade: created.grade, quantityKg: created.quantityKg, askingRatePerKg: created.askingRatePerKg });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'CREATE_BULK_LOT', entityId: created.id, requestHash: operationHash, response: jsonValue(created) } });
       return { lot: created, replayed: false };
-    });
+    }));
     res.status(result.replayed ? 200 : 201).json({ success: true, data: result.lot, ...(result.replayed ? { message: 'Bulk lot already created' } : {}) });
   });
   router.get('/kabadiwala/bulk-lots', requireAuth(jwt, collectors), async (req, res) => {
@@ -1038,6 +1049,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!lot) throw new AppError('CONFLICT', 'Only an unreserved listed lot can be cancelled', 409);
       const claimed = await tx.bulkLot.updateMany({ where: { id: lotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' }, data: { status: 'CANCELLED' } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Bulk lot was already updated', 409, { code: 'BULK_LOT_ALREADY_UPDATED' });
+      await releaseSourceListings(tx, lot.sourceListingIds ?? [], 'BULK_LOT', lot.id);
       await tx.bulkOffer.updateMany({ where: { bulkLotId: lot.id, status: 'PENDING' }, data: { status: 'CANCELLED' } });
       const before = await tx.inventoryBalance.findUniqueOrThrow({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: lot.kabadiwalaId, materialCategory: lot.materialCategory, grade: lot.grade } } });
       const updated = await tx.inventoryBalance.update({ where: { id: before.id }, data: { availableKg: { increment: lot.quantityKg }, reservedKg: { decrement: lot.quantityKg } } });

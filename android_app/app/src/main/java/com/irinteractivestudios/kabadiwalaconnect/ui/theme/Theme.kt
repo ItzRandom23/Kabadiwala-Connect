@@ -1,6 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -20,15 +21,15 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 
 private val LightColorScheme = lightColorScheme(
     primary = KcLightPrimary,
-    onPrimary = KcWhite,
+    onPrimary = KcLightOnPrimary,
     primaryContainer = KcGreenPrimaryContainer,
     onPrimaryContainer = KcGreenOnPrimaryContainer,
     secondary = KcLightSecondary,
-    onSecondary = KcWhite,
+    onSecondary = KcLightOnSecondary,
     secondaryContainer = KcLightSecondaryContainer,
     onSecondaryContainer = KcLightOnSecondaryContainer,
     tertiary = KcLightTertiary,
-    onTertiary = KcWhite,
+    onTertiary = KcLightOnTertiary,
     tertiaryContainer = KcLightTertiaryContainer,
     onTertiaryContainer = KcLightOnTertiaryContainer,
     background = KcLightBackground,
@@ -37,53 +38,62 @@ private val LightColorScheme = lightColorScheme(
     onSurface = KcLightText,
     surfaceVariant = KcLightRaised,
     surfaceContainerLowest = KcLightSurface,
-    surfaceContainerLow = KcSurfaceSunken,
-    surfaceContainer = KcLightRaised,
+    surfaceContainerLow = KcLightContainerLow,
+    surfaceContainer = KcLightContainer,
     surfaceContainerHigh = KcLightContainerHigh,
     onSurfaceVariant = KcLightMuted,
     outline = KcLightOutline,
     outlineVariant = KcLightOutlineVariant,
     error = KcLightError,
     onError = KcOnError,
-    errorContainer = KcErrorContainer,
-    onErrorContainer = KcOnErrorContainer
+    errorContainer = KcLightErrorContainer,
+    onErrorContainer = KcLightOnErrorContainer
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = KcLime,
-    onPrimary = KcLimeOn,
-    primaryContainer = Color(0xFF314736),
-    onPrimaryContainer = Color(0xFFE2EEDC),
-    secondary = KcAmber,
-    onSecondary = Color(0xFF302718),
-    secondaryContainer = Color(0xFF493A22),
-    onSecondaryContainer = Color(0xFFF2E5C7),
-    tertiary = KcCyan,
-    onTertiary = KcLimeOn,
-    tertiaryContainer = Color(0xFF293B30),
-    onTertiaryContainer = Color(0xFFE2EDE3),
-    background = KcGraphiteBackground,
-    onBackground = KcText,
-    surface = KcGraphiteSurface,
-    onSurface = KcText,
-    surfaceVariant = KcGraphiteRaised,
-    surfaceContainerLowest = KcGraphiteBackground,
-    surfaceContainerLow = KcGraphiteSurface,
-    surfaceContainer = KcGraphiteRaised,
-    surfaceContainerHigh = KcSurfaceHigh,
-    onSurfaceVariant = KcMuted,
-    outline = KcGraphiteBorder,
-    error = KcErrorRed,
-    onError = KcLimeOn,
-    errorContainer = Color(0xFF4D3028),
-    onErrorContainer = Color(0xFFFFDDD2)
+    primary = KcDarkPrimary,
+    onPrimary = KcDarkOnPrimary,
+    primaryContainer = KcDarkPrimaryContainer,
+    onPrimaryContainer = KcDarkOnPrimaryContainer,
+    secondary = KcDarkSecondary,
+    onSecondary = KcDarkOnSecondary,
+    secondaryContainer = KcDarkSecondaryContainer,
+    onSecondaryContainer = KcDarkOnSecondaryContainer,
+    tertiary = KcDarkTertiary,
+    onTertiary = KcDarkOnTertiary,
+    tertiaryContainer = KcDarkTertiaryContainer,
+    onTertiaryContainer = KcDarkOnTertiaryContainer,
+    background = KcDarkBackground,
+    onBackground = KcDarkText,
+    surface = KcDarkSurface,
+    onSurface = KcDarkText,
+    surfaceVariant = KcDarkSurfaceVariant,
+    surfaceContainerLowest = KcDarkBackground,
+    surfaceContainerLow = KcDarkSurface,
+    surfaceContainer = KcDarkSurfaceContainer,
+    surfaceContainerHigh = KcDarkElevatedSurface,
+    surfaceContainerHighest = KcDarkSurfaceHigh,
+    onSurfaceVariant = KcDarkMuted,
+    outline = KcDarkOutline,
+    outlineVariant = KcDarkOutlineVariant,
+    error = KcDarkError,
+    onError = KcDarkOnError,
+    errorContainer = KcDarkErrorContainer,
+    onErrorContainer = KcDarkOnErrorContainer
 )
 
 @Immutable
 data class KcExtendedColors(
     val value: androidx.compose.ui.graphics.Color,
     val success: androidx.compose.ui.graphics.Color,
+    val successContainer: androidx.compose.ui.graphics.Color,
+    val onSuccessContainer: androidx.compose.ui.graphics.Color,
     val warning: androidx.compose.ui.graphics.Color,
+    val warningContainer: androidx.compose.ui.graphics.Color,
+    val onWarningContainer: androidx.compose.ui.graphics.Color,
+    val info: androidx.compose.ui.graphics.Color,
+    val infoContainer: androidx.compose.ui.graphics.Color,
+    val onInfoContainer: androidx.compose.ui.graphics.Color,
     val logoPlate: androidx.compose.ui.graphics.Color,
     val logoPlateBorder: androidx.compose.ui.graphics.Color,
     val isOperations: Boolean
@@ -91,10 +101,17 @@ data class KcExtendedColors(
 
 private val LocalKcExtendedColors = staticCompositionLocalOf {
     KcExtendedColors(
-        value = KcLime,
-        success = KcMint,
-        warning = KcAmber,
-        logoPlate = KcSurfaceRaised,
+        value = KcDarkPrimary,
+        success = KcDarkSuccess,
+        successContainer = KcDarkSuccessContainer,
+        onSuccessContainer = KcDarkOnSuccessContainer,
+        warning = KcDarkWarning,
+        warningContainer = KcDarkWarningContainer,
+        onWarningContainer = KcDarkOnWarningContainer,
+        info = KcDarkInfo,
+        infoContainer = KcDarkInfoContainer,
+        onInfoContainer = KcDarkOnInfoContainer,
+        logoPlate = KcDarkElevatedSurface,
         logoPlateBorder = KcLogoPlateDarkBorder,
         isOperations = false
     )
@@ -153,10 +170,17 @@ fun KabadiwalaConnectTheme(
     val effectiveDark = darkTheme
     val colorScheme = if (effectiveDark) DarkColorScheme else LightColorScheme
     val extended = KcExtendedColors(
-        value = if (effectiveDark) KcLime else KcLightPrimary,
-        success = if (effectiveDark) KcMint else KcLightSuccess,
-        warning = if (effectiveDark) KcAmber else KcLightWarning,
-        logoPlate = if (effectiveDark) KcLogoPlateDark else KcGreenPrimaryContainer,
+        value = if (effectiveDark) KcDarkPrimary else KcLightPrimary,
+        success = if (effectiveDark) KcDarkSuccess else KcLightSuccess,
+        successContainer = if (effectiveDark) KcDarkSuccessContainer else KcLightSuccessContainer,
+        onSuccessContainer = if (effectiveDark) KcDarkOnSuccessContainer else KcLightOnSuccessContainer,
+        warning = if (effectiveDark) KcDarkWarning else KcLightWarning,
+        warningContainer = if (effectiveDark) KcDarkWarningContainer else KcLightWarningContainer,
+        onWarningContainer = if (effectiveDark) KcDarkOnWarningContainer else KcLightOnWarningContainer,
+        info = if (effectiveDark) KcDarkInfo else KcLightInfo,
+        infoContainer = if (effectiveDark) KcDarkInfoContainer else KcLightInfoContainer,
+        onInfoContainer = if (effectiveDark) KcDarkOnInfoContainer else KcLightOnInfoContainer,
+        logoPlate = if (effectiveDark) KcDarkElevatedSurface else KcGreenPrimaryContainer,
         logoPlateBorder = if (effectiveDark) KcLogoPlateDarkBorder else KcLightPrimary.copy(alpha = .55f),
         isOperations = role == AccountRole.RECYCLER
     )
@@ -165,11 +189,20 @@ fun KabadiwalaConnectTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.background.toArgb()
+            val supportsLightNavigationIcons = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            window.navigationBarColor = if (!effectiveDark && !supportsLightNavigationIcons) {
+                KcDarkBackground.toArgb()
+            } else {
+                colorScheme.background.toArgb()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                 !effectiveDark
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars =
-                !effectiveDark
+                !effectiveDark && supportsLightNavigationIcons
         }
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CloudOff
@@ -69,6 +70,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.DemoDataBanner
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ErrorContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.util.RecyclerSortMode
 import com.irinteractivestudios.kabadiwalaconnect.util.UiState
 import com.irinteractivestudios.kabadiwalaconnect.util.AndroidLocationProvider
@@ -258,8 +260,9 @@ private fun RecyclerCard(recycler: Recycler, vm: RecyclersViewModel, onOpen: (St
 
 @Composable
 fun RecyclerDetailScreen(recycler: Recycler, onCall: () -> Unit, onRequestQuote: () -> Unit = {}) {
+    val layout = rememberKcResponsiveLayout()
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(recycler.name, style = MaterialTheme.typography.headlineLarge)
         Text(recycler.facility, style = MaterialTheme.typography.titleMedium)
         Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null); Text(recycler.address, modifier = Modifier.padding(start = 8.dp)) }

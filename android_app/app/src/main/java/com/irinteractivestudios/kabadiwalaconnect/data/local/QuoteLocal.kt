@@ -5,13 +5,13 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.QuoteBatchRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.isRetryableTransportFailure
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteExpiry
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import java.io.IOException
 import java.util.UUID
 import com.google.gson.JsonObject
 
@@ -65,7 +65,8 @@ class RemoteQuoteRepository(
             val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
             dao.insertAll(quotes.map { it.toEntity() })
             quotes
-        } catch (_: IOException) {
+        } catch (error: Exception) {
+            if (!error.isRetryableTransportFailure()) throw error
             val placeholder = Quote(
                 id = "QRQ-${UUID.randomUUID()}", recyclerId = recycler.id, lotId = lot.id,
                 amountRupees = lot.estimatedValueRupees ?: recycler.offeredRatePerKg * lot.weightKg,
@@ -87,7 +88,8 @@ class RemoteQuoteRepository(
         return try {
             api.requestQuoteBatch(QuoteBatchRequestDto(lot.id, selected.map { it.id })).requireData()
             refresh(lot)
-        } catch (_: IOException) {
+        } catch (error: Exception) {
+            if (!error.isRetryableTransportFailure()) throw error
             // Preserve the existing offline contract for each recipient. The
             // backend batch endpoint remains the preferred online path.
             selected.flatMap { submitRequest(lot, it, nowEpochMs) }
@@ -98,7 +100,8 @@ class RemoteQuoteRepository(
         return try {
             val quote = api.acceptQuote(quoteId).requireData()
             (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
-        } catch (_: IOException) {
+        } catch (error: Exception) {
+            if (!error.isRetryableTransportFailure()) throw error
             val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
             if (updated) enqueue("ACCEPT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
             updated
@@ -109,7 +112,8 @@ class RemoteQuoteRepository(
         return try {
             val quote = api.rejectQuote(quoteId).requireData()
             (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
-        } catch (_: IOException) {
+        } catch (error: Exception) {
+            if (!error.isRetryableTransportFailure()) throw error
             val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
             if (updated) enqueue("REJECT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
             updated

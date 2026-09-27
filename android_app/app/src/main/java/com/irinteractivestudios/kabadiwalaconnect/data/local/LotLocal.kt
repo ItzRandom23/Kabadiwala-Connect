@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.Lot
@@ -59,6 +60,13 @@ interface LotDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(lot: LotEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun enqueueSync(item: SyncQueueItemEntity): Long
+    @Transaction
+    suspend fun saveAndEnqueue(lot: LotEntity, item: SyncQueueItemEntity) {
+        save(lot)
+        enqueueSync(item)
+    }
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveAll(lots: List<LotEntity>)
     @Query("SELECT * FROM lots WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): LotEntity?
@@ -106,22 +114,17 @@ class RoomLotRepository(
     override fun observeLot(id: String): Flow<Lot?> = accountId()?.takeIf { it.isNotBlank() }?.let { active -> dao.observeById(id).map { row -> row?.takeIf { it.collectorId == active }?.toDomain() } } ?: flowOf(null)
     override suspend fun save(lot: Lot) {
         check(accountId()?.takeIf { it.isNotBlank() } == lot.collectorId) { "Authenticated account required for lot changes" }
-        dao.save(lot.toEntity())
-        // The lot is visible immediately. Queue the server operation separately
-        // so an unavailable network never blocks the collector's workflow.
-        try {
-            syncQueue?.enqueue(
-                SyncQueueItemEntity(
-                    operation = "CREATE_LOT",
-                    payloadJson = Gson().toJson(lot.toSyncPayload()),
-                    createdAtEpochMs = lot.createdAtEpochMs,
-                    accountId = lot.collectorId
-                )
-            )
-            requestSync?.invoke()
-        } catch (_: Exception) {
-            // Local creation remains successful if queue persistence is unavailable.
-        }
+        val entity = lot.toEntity()
+        val operation = SyncQueueItemEntity(
+            operation = "CREATE_LOT",
+            payloadJson = Gson().toJson(lot.toSyncPayload()),
+            createdAtEpochMs = lot.createdAtEpochMs,
+            accountId = lot.collectorId
+        )
+        if (syncQueue == null) dao.save(entity) else dao.saveAndEnqueue(entity, operation)
+        // The outbox is durable before scheduling; if WorkManager scheduling
+        // fails, a later app start can still discover and replay the row.
+        runCatching { requestSync?.invoke() }
     }
 
     override suspend fun update(lot: Lot): Boolean {
@@ -137,16 +140,14 @@ class RoomLotRepository(
             synced = false,
             version = current.version
         )
-        dao.save(updated.toEntity())
-        syncQueue?.enqueue(
-            SyncQueueItemEntity(
-                operation = "UPDATE_LOT",
-                payloadJson = Gson().toJson(updated.toUpdateSyncPayload(current.version)),
-                createdAtEpochMs = updated.updatedAtEpochMs,
-                accountId = current.collectorId
-            )
+        val operation = SyncQueueItemEntity(
+            operation = "UPDATE_LOT",
+            payloadJson = Gson().toJson(updated.toUpdateSyncPayload(current.version)),
+            createdAtEpochMs = updated.updatedAtEpochMs,
+            accountId = current.collectorId
         )
-        requestSync?.invoke()
+        if (syncQueue == null) dao.save(updated.toEntity()) else dao.saveAndEnqueue(updated.toEntity(), operation)
+        runCatching { requestSync?.invoke() }
         return true
     }
     override suspend fun cancel(id: String, updatedAt: Long): Boolean {

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { unrevokedRefreshTokenWhere } from '../utils/refreshTokenFilter.js';
 
 export type PrivacyAccountRole = 'HOUSEHOLD' | 'COLLECTOR' | 'RECYCLER';
 
@@ -125,7 +126,7 @@ export class AccountPrivacyService {
         }
       }
 
-      await tx.refreshToken.updateMany({ where: { actorId: profileId, revokedAt: null }, data: { revokedAt: now } });
+      await tx.refreshToken.updateMany({ where: unrevokedRefreshTokenWhere({ actorId: profileId }), data: { revokedAt: now } });
       await tx.notificationEvent.deleteMany({ where: { accountId: profileId } });
       await tx.notificationDelivery?.deleteMany({ where: { accountId: profileId } });
       await tx.notificationDeliveryTarget?.deleteMany({ where: { accountId: profileId } });

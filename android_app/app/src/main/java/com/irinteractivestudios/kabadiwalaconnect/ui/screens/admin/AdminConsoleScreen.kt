@@ -70,7 +70,7 @@ fun AdminConsoleScreen(
             TextButton(onClick = onLogout) { Text("Sign out") }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AdminSection.values().forEach { section ->
+            state.availableSections.forEach { section ->
                 FilterChip(selected = state.section == section, onClick = { onSection(section) }, label = { Text(section.label) })
             }
         }
@@ -84,9 +84,13 @@ fun AdminConsoleScreen(
                 Text(state.message, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(12.dp))
             }
         }
-        if (state.section == AdminSection.TOOLS) {
+        if (state.availableSections.isEmpty()) {
+            Text("No operator permissions are assigned to this account. Contact your system administrator.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (state.section == AdminSection.TOOLS) {
             AdminTools(
                 busy = state.actionBusy,
+                canManagePrices = state.canManagePrices,
+                canExportDataset = state.canExportDataset,
                 onImportPrice = { importDialog = true },
                 onUpdatePrice = { updatePriceDialog = true },
                 onExportDataset = onExportDataset
@@ -101,7 +105,7 @@ fun AdminConsoleScreen(
             }
             state.items.forEach { item ->
                 when (state.section) {
-                    AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, { recyclerDialog = item.stringValue("id", "recyclerId") }, onSelect)
+                    AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, state.canAuthorizeRecyclers, { recyclerDialog = item.stringValue("id", "recyclerId") }, onSelect)
                     AdminSection.DISPUTES -> DisputeReviewCard(item, state.actionBusy) { disputeDialog = item.stringValue("id", "disputeId") }
                     AdminSection.PAYMENTS -> PaymentReviewCard(item, state.actionBusy) { paymentDialog = item.stringValue("id", "paymentId") }
                     AdminSection.ANOMALIES -> AnomalyReviewCard(item, state.actionBusy) { anomalyDialog = item.stringValue("id", "flagId") }
@@ -166,27 +170,29 @@ fun AdminConsoleScreen(
 }
 
 @Composable
-private fun AdminTools(busy: Boolean, onImportPrice: () -> Unit, onUpdatePrice: () -> Unit, onExportDataset: () -> Unit) {
+private fun AdminTools(busy: Boolean, canManagePrices: Boolean, canExportDataset: Boolean, onImportPrice: () -> Unit, onUpdatePrice: () -> Unit, onExportDataset: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Validated data tools", style = MaterialTheme.typography.titleLarge)
             Text("Server permission required. Every action is audited.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onImportPrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Import price row") }
-            OutlinedButton(onClick = onUpdatePrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Update price observation") }
-            OutlinedButton(onClick = onExportDataset, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Export safe dataset") }
+            if (canManagePrices) {
+                Button(onClick = onImportPrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Import price row") }
+                OutlinedButton(onClick = onUpdatePrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Update price observation") }
+            }
+            if (canExportDataset) OutlinedButton(onClick = onExportDataset, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Export safe dataset") }
         }
     }
 }
 
 @Composable
-private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, onReview: () -> Unit, onSelect: (JsonObject) -> Unit) = ReviewCard(
+private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, canAuthorize: Boolean, onReview: () -> Unit, onSelect: (JsonObject) -> Unit) = ReviewCard(
     title = item.stringValue("businessName", "displayName", "id"),
     subtitle = "${item.stringValue("verificationStatus", "status")} · ${item.stringValue("city", "areaName")}",
     item = item,
-    actionLabel = "Review",
+    actionLabel = if (canAuthorize) "Authorize" else "View details",
     busy = busy,
-    onAction = onReview,
-    onSelect = onSelect
+    onAction = { if (canAuthorize) onReview() else onSelect(item) },
+    onSelect = if (canAuthorize) onSelect else null
 )
 
 @Composable

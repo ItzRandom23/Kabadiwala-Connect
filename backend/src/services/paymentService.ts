@@ -47,13 +47,22 @@ export class PaymentService {
   async get(id: string, cid: string) { return this.owned(id, cid); }
   async edit(id: string, cid: string, p: any) {
     const old = await this.owned(id, cid);
-    if (old.status === 'VERIFIED' || old.status === 'DISPUTED' || Date.now() - old.createdAt.getTime() > 86400000) throw new AppError('CONFLICT', 'Payment correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
+    if (old.status !== 'RECORDED' || Date.now() - old.createdAt.getTime() > 86400000) throw new AppError('CONFLICT', 'Payment correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
     if (old.lot.handovers.some(h => ['DISPUTED', 'PENDING_MANUAL_REVIEW'].includes(h.status))) throw new AppError('CONFLICT', 'Payment is locked while the handover is under review', 409, { code: 'PAYMENT_HANDOVER_UNDER_REVIEW' });
     if (!Number.isFinite(p.amount) || p.amount <= 0 || p.amount >= 1000000) throw new AppError('VALIDATION_ERROR', 'Invalid payment amount', 422, { code: 'PAYMENT_AMOUNT_INVALID' });
     if (!['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET'].includes(p.method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method', 422, { code: 'PAYMENT_METHOD_INVALID' });
     const acceptedQuote = old.lot.quotes.find(q => q.status === 'ACCEPTED');
     if (acceptedQuote && (p.amount > acceptedQuote.totalQuotedPrice * 1.5 || p.amount < acceptedQuote.totalQuotedPrice * 0.5)) throw new AppError('CONFLICT', 'This correction is outside the accepted quote range; raise a dispute for review', 409, { code: 'PAYMENT_AMOUNT_OUTSIDE_QUOTE' });
-    return this.db.$transaction(async tx => { const x = await tx.payment.update({ where: { id }, data: { amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, notes: p.notes, anomaly: false, anomalyReason: null } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_EDITED', oldValues: { amount: old.amount, paymentMethod: old.paymentMethod }, newValues: { amount: x.amount, paymentMethod: x.paymentMethod } } }); return x; });
+    return this.db.$transaction(async tx => {
+      const changed = await tx.payment.updateMany({
+        where: { id, collectorId: cid, status: 'RECORDED', createdAt: { gte: new Date(Date.now() - 86400000) } },
+        data: { amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, notes: p.notes, anomaly: false, anomalyReason: null }
+      });
+      if (!changed.count) throw new AppError('CONFLICT', 'Payment changed or its correction window expired', 409, { code: 'PAYMENT_EDIT_WINDOW_EXPIRED' });
+      const x = await tx.payment.findUniqueOrThrow({ where: { id } });
+      await tx.paymentAudit.create({ data: { paymentId: id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_EDITED', oldValues: { amount: old.amount, paymentMethod: old.paymentMethod }, newValues: { amount: x.amount, paymentMethod: x.paymentMethod } } });
+      return x;
+    });
   }
   async dispute(id: string, cid: string, p: any) {
     const pay = await this.owned(id, cid);
@@ -67,8 +76,8 @@ export class PaymentService {
     const payments = await this.list(cid);
     const supplyPaymentStore = (this.db as any).supplyPayment;
     const supplyPayments = supplyPaymentStore ? await supplyPaymentStore.findMany({ where: { collectorId: cid }, orderBy: { recordedAt: 'desc' } }) : [];
-    const settled = payments.filter(p => p.status !== 'DISPUTED');
-    const formalSettled = supplyPayments.filter((p: any) => p.status !== 'DISPUTED');
+    const settled = payments.filter(p => p.status !== 'DISPUTED' && p.status !== 'REVERSED');
+    const formalSettled = supplyPayments.filter((p: any) => p.status !== 'DISPUTED' && p.status !== 'REVERSED');
     const total = settled.reduce((s, p) => s + p.amount, 0) + formalSettled.reduce((s: number, p: any) => s + p.amount, 0);
     // Ledger months are business months in India, independent of the host
     // machine's timezone (which is commonly UTC in production).

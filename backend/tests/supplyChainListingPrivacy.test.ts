@@ -77,4 +77,56 @@ describe('collector listing discovery privacy', () => {
     expect(response.body.data).toEqual([]);
     expect(findManyListings).not.toHaveBeenCalled();
   });
+
+  it('hides exact address and coordinates for unassigned waiting listings', async () => {
+    const assignedListing = {
+      id: 'assigned-private-location', materialCategory: 'COPPER', estimatedWeight: 4,
+      condition: 'INTACT', notes: null, photoReference: null, photoReferences: [],
+      areaName: 'Sector 12', pickupAddress: 'Assigned household exact address',
+      latitude: 18.612345, longitude: 73.812345, estimatedPriceMin: null, estimatedPriceMax: null,
+      status: 'MATCHED', createdAt: new Date(), updatedAt: new Date()
+    };
+    const waitingListing = {
+      ...assignedListing,
+      id: 'waiting-private-location',
+      pickupAddress: 'Unassigned household exact address',
+      latitude: 18.623456,
+      longitude: 73.823456,
+      status: 'POSTED'
+    };
+    const pickupFindMany = vi.fn(async ({ where }: any) => where.kabadiwalaId
+      ? [{ listingId: assignedListing.id, status: 'ACCEPTED' }]
+      : [{ id: 'waiting-pickup', listingId: waitingListing.id, status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }]);
+    const listingFindMany = vi.fn()
+      .mockResolvedValueOnce([{ id: waitingListing.id, areaName: waitingListing.areaName, latitude: waitingListing.latitude, longitude: waitingListing.longitude }])
+      .mockResolvedValueOnce([assignedListing, waitingListing]);
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
+      collector: { findUnique: vi.fn().mockResolvedValue({ areaName: 'Sector 12', latitude: 18.6, longitude: 73.8 }) },
+      pickupRequest: { findMany: pickupFindMany },
+      householdListing: { findMany: listingFindMany }
+    } as never;
+    const collectors = { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use('/api/v1', supplyChainRoutes(jwt, collectors, db));
+    app.use(errorHandler);
+
+    const response = await request(app)
+      .get('/api/v1/kabadiwala/listings')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-1')}`);
+
+    expect(response.status).toBe(200);
+    const assigned = response.body.data.find((listing: any) => listing.id === assignedListing.id);
+    const waiting = response.body.data.find((listing: any) => listing.id === waitingListing.id);
+    expect(assigned).toMatchObject({
+      pickupAddress: assignedListing.pickupAddress,
+      latitude: assignedListing.latitude,
+      longitude: assignedListing.longitude
+    });
+    expect(waiting).toMatchObject({ pickupAddress: null, latitude: null, longitude: null });
+    expect(JSON.stringify(waiting)).not.toContain('Unassigned household exact address');
+    expect(JSON.stringify(waiting)).not.toContain(String(waitingListing.latitude));
+    expect(JSON.stringify(waiting)).not.toContain(String(waitingListing.longitude));
+  });
 });

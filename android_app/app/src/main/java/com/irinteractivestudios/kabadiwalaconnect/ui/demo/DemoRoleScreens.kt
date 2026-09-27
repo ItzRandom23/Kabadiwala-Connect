@@ -172,15 +172,15 @@ private fun DemoKabadiwalaOverview(
         }
         item {
             Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 8.dp, bottomStart = 28.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text(stringResource(R.string.demo_today_collection_value).uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Text("₹2,450", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.demo_ahead_usual_day), color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                    Text(stringResource(R.string.demo_ahead_usual_day), color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = .82f))
                 }
             }
         }

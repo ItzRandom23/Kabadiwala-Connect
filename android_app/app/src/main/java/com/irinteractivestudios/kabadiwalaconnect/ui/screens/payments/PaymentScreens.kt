@@ -2,6 +2,8 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.payments
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,12 +17,14 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.PaymentReposit
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.EvidenceSection
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
+import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.ProofRow
 import java.util.UUID
 import kotlinx.coroutines.launch
 
 @Composable
 fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (String, Double) -> Unit) {
+    val layout = rememberKcResponsiveLayout()
     var lot by remember(lots) { mutableStateOf(lots.firstOrNull()) }
     var amountText by remember(lots) { mutableStateOf(lots.firstOrNull()?.finalValueRupees?.takeIf { it > 0 }?.toString().orEmpty()) }
     var method by remember { mutableStateOf(PaymentMethod.CASH) }
@@ -33,9 +37,15 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
     val scope = rememberCoroutineScope()
 
     Column(
-        Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        Modifier.fillMaxSize().imePadding(),
+        verticalArrangement = Arrangement.spacedBy(if (layout.isCompact) 8.dp else 10.dp)
     ) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = if (layout.isNarrow) 14.dp else 16.dp, vertical = if (layout.isCompact) 12.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (layout.isCompact) 12.dp else 14.dp)
+        ) {
         Text(stringResource(R.string.payment_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.payment_date_now), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -78,7 +88,7 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
             singleLine = true
         )
         if (valid) {
-            EvidenceSection(title = stringResource(R.string.payment_confirm_title), status = stringResource(R.string.payment_waiting_sync)) {
+            EvidenceSection(title = stringResource(R.string.payment_confirm_title), status = stringResource(R.string.payment_ready_to_save)) {
                 Text(rupees(amount), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
                 ProofRow(stringResource(R.string.payment_method), paymentMethodLabel(method))
                 ProofRow(stringResource(R.string.handover_date), stringResource(R.string.payment_date_now))
@@ -95,7 +105,13 @@ fun PaymentRecordScreen(lots: List<Lot>, repo: PaymentRepository, onSaved: (Stri
         OutlinedTextField(value = notes, onValueChange = { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.payment_notes)) }, minLines = 2)
         if (saveError) Text(stringResource(R.string.payment_save_error), color = MaterialTheme.colorScheme.error)
         if (amountText.isNotBlank() && !valid) Text(stringResource(R.string.payment_amount_error), color = MaterialTheme.colorScheme.error)
-        KcPrimaryButton(text = stringResource(R.string.payment_save), onClick = { confirm = true }, enabled = valid)
+        }
+        KcPrimaryButton(
+            text = stringResource(R.string.payment_save),
+            onClick = { confirm = true },
+            enabled = valid,
+            modifier = Modifier.padding(horizontal = if (layout.isNarrow) 14.dp else 16.dp)
+        )
     }
     if (confirm) {
         AlertDialog(

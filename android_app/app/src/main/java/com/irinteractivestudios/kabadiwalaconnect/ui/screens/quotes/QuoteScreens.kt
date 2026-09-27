@@ -2,6 +2,8 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -51,6 +55,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.repository.QuoteRepositor
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: String, presetRecyclerId: String, repo: QuoteRepository, onSubmitted: (String) -> Unit) {
     var lotId by remember { mutableStateOf(presetLotId.takeUnless { it == "none" } ?: lots.firstOrNull()?.id.orEmpty()) }
     var selectedRecyclerIds by remember {
@@ -67,13 +72,13 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
     val lot = lots.firstOrNull { it.id == lotId }
     val selectedRecyclers = recyclers.filter { it.id in selectedRecyclerIds }
     if (lots.isEmpty() || recyclers.isEmpty()) { EmptyContent(); return }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.quote_request_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(if (BuildConfig.DEBUG) R.string.quote_request_detail else R.string.quote_request_detail_live), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.quote_choose_lot), style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { lots.forEach { item -> FilterChip(item.id == lotId, { lotId = item.id }, label = { Text(item.materialLabel) }) } }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { lots.forEach { item -> FilterChip(item.id == lotId, { lotId = item.id }, label = { Text(item.materialLabel) }) } }
         Text(stringResource(R.string.quote_choose_recyclers), style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             recyclers.forEach { item ->
                 FilterChip(
                     selected = item.id in selectedRecyclerIds,
@@ -105,7 +110,7 @@ fun QuoteComparisonScreen(quotes: List<Quote>, lot: Lot?, referencePrice: Price?
         if (refreshing) {
             LoadingContent()
         } else {
-            Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(48.dp))
                 Text(stringResource(R.string.quote_compare_title), style = MaterialTheme.typography.headlineLarge)
                 Text(stringResource(R.string.common_no_data), style = MaterialTheme.typography.titleMedium)
@@ -121,7 +126,7 @@ fun QuoteComparisonScreen(quotes: List<Quote>, lot: Lot?, referencePrice: Price?
         Text(stringResource(R.string.quote_compare_title), style = MaterialTheme.typography.headlineLarge)
         if (actionError) Text(stringResource(R.string.quote_action_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         Text(stringResource(R.string.quote_delivery_state, deliveryLabel(quotes.first())), style = MaterialTheme.typography.bodyMedium)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(quotes, key = { it.id }) { quote -> QuoteCard(quote, lot, referencePrice, quote.id == best?.id, repo, onAccepted, onRejected, processingQuoteId) } }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { items(quotes, key = { it.id }) { quote -> QuoteCard(quote, lot, referencePrice, quote.id == best?.id, repo, onAccepted, onRejected, processingQuoteId) } }
     }
 }
 

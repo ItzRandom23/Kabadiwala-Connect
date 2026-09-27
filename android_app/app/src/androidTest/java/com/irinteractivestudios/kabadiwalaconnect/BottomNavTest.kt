@@ -105,16 +105,24 @@ class BottomNavTest {
 
     @Test
     fun changingLanguageInDemoKeepsDemoSession() {
+        val activityBeforeLocaleChange = composeTestRule.activity
         composeTestRule.onNodeWithTag("nav_settings")
             .performClick()
         composeTestRule.onNodeWithTag("settings_language_picker")
             .performClick()
         composeTestRule.onNodeWithTag("lang_hi")
             .performClick()
-        // Locale application recreates MainActivity asynchronously. Wait for
-        // the restored navigation hierarchy instead of racing the recreation.
+        // Locale application recreates MainActivity asynchronously. A tagged
+        // tab exists on every top-level screen, so waiting for visibility alone
+        // can pass against the old Activity while recreation is still pending.
         composeTestRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching { composeTestRule.onAllNodesWithTag("nav_settings").fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+            composeTestRule.activity !== activityBeforeLocaleChange
+        }
+        composeTestRule.waitUntil(timeoutMillis = 10_000) {
+            runCatching {
+                composeTestRule.onNodeWithTag("nav_settings").assertIsSelected()
+                true
+            }.getOrDefault(false)
         }
 
         composeTestRule.onNodeWithTag("nav_settings")
