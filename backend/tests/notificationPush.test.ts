@@ -38,7 +38,8 @@ describe('FCM push delivery', () => {
     expect(JSON.parse(requestBodies[1])).toEqual({
       message: {
         token: 'fcm-device-token',
-        data: { notificationId: 'event-1' }
+        data: { notificationId: 'event-1', type: 'PICKUP_CONFIRMED' },
+        android: { priority: 'HIGH' }
       }
     });
     expect(requestBodies[1]).not.toContain('Private pickup');

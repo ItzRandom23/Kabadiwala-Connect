@@ -43,6 +43,22 @@ export function validatePickupSlot(value: string, now = new Date()) {
   return slot;
 }
 
+/** Collector pickups can be scheduled shortly after acceptance. Household
+ * requested slots keep the existing 90-minute lead policy above. */
+export function validateCollectorPickupSlot(value: string, acceptedAt?: Date | null, now = new Date()) {
+  const slot = new Date(value);
+  if (Number.isNaN(slot.getTime())) throw new AppError('VALIDATION_ERROR', 'Pickup time is invalid', 422, { code: 'PICKUP_SLOT_INVALID' });
+  assertPickupWorkTime(slot);
+  const acceptedOrNow = acceptedAt && acceptedAt.getTime() > now.getTime() ? acceptedAt.getTime() : now.getTime();
+  const earliest = acceptedOrNow + 5 * 60 * 1000;
+  if (slot.getTime() < earliest) throw new AppError('CONFLICT', 'Choose a pickup time at least 5 minutes after accepting the order', 409, { code: 'PICKUP_SLOT_TOO_SOON' });
+  if (slot.getTime() > now.getTime() + PICKUP_MAX_HORIZON_MS) throw new AppError('CONFLICT', 'Pickup time must be within the next 14 days', 409, { code: 'PICKUP_SLOT_TOO_FAR' });
+  if (slot.getUTCSeconds() !== 0 || slot.getUTCMilliseconds() !== 0 || slot.getUTCMinutes() % 5 !== 0) {
+    throw new AppError('VALIDATION_ERROR', 'Pickup time must use a 5-minute interval', 422, { code: 'PICKUP_SLOT_ALIGNMENT' });
+  }
+  return slot;
+}
+
 export function pickupDayKey(value: Date, timeZone = 'Asia/Kolkata') {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value);
   const year = parts.find(part => part.type === 'year')?.value ?? '0000';

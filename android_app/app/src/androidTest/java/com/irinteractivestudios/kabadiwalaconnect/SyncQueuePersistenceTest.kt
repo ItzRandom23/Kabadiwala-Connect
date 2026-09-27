@@ -127,6 +127,44 @@ class SyncQueuePersistenceTest {
     }
 
     @Test
+    fun rebindingOfflinePickupRequestPersistsAndRemainsAccountScoped() = runBlocking {
+        database = openDatabase()
+        val queue = database!!.syncQueueDao()
+        val pickupUid = queue.enqueue(
+            SyncQueueItemEntity(
+                operation = "REQUEST_HOUSEHOLD_PICKUP",
+                payloadJson = """{"listingId":"local-listing-1","kabadiwalaId":"collector-2"}""",
+                createdAtEpochMs = 1L,
+                accountId = "account-a"
+            )
+        )
+
+        assertEquals(
+            0,
+            queue.updatePayloadForAccount(
+                pickupUid,
+                "account-b",
+                """{"listingId":"server-listing-9","kabadiwalaId":"collector-2"}"""
+            )
+        )
+        assertEquals(
+            1,
+            queue.updatePayloadForAccount(
+                pickupUid,
+                "account-a",
+                """{"listingId":"server-listing-9","kabadiwalaId":"collector-2"}"""
+            )
+        )
+        database!!.close()
+
+        database = openDatabase()
+        val persisted = database!!.syncQueueDao().observeForAccount("account-a").first().single()
+        assertTrue(persisted.payloadJson.contains("server-listing-9"))
+        assertTrue(persisted.payloadJson.contains("collector-2"))
+        assertTrue(database!!.syncQueueDao().observeForAccount("account-b").first().isEmpty())
+    }
+
+    @Test
     fun clearingOneAccountFormalisationCacheDoesNotTouchAnotherAccount() {
         val cache = FormalisationCacheStore(context)
         try {

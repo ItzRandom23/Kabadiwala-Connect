@@ -33,6 +33,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -429,7 +431,11 @@ class SupplyChainViewModel(
                     loading = false,
                     initialLoadComplete = failures.isEmpty() || _state.value.initialLoadComplete,
                     listings = if (listingsResult.isFailure) runCatching { cachedHouseholdListings() }.getOrDefault(cached).ifEmpty { _state.value.listings } else _state.value.listings,
-                    error = failures.joinToString(" ").takeIf { it.isNotEmpty() }
+                    // Listings, pickups and directory fail independently. A
+                    // household should see one actionable offline message,
+                    // not one copy per failed endpoint (or minor wording
+                    // variation between them).
+                    error = summarizeHouseholdRefreshFailures(failures)
                 )
             } finally {
                 if (generation == householdRefreshGeneration && accountId() == refreshAccount) {
@@ -441,6 +447,16 @@ class SupplyChainViewModel(
             }
         }
     }
+
+    private fun summarizeHouseholdRefreshFailures(failures: List<String>): String? {
+        if (failures.isEmpty()) return null
+        failures.firstOrNull { it.contains("session expired", ignoreCase = true) }?.let { return it }
+        if (failures.any { it.contains("connection issue", ignoreCase = true) || it.contains("internet", ignoreCase = true) }) {
+            return "Connection issue. Check your internet and retry."
+        }
+        return failures.first()
+    }
+
     fun searchHouseholdKabadiwalas(area: String, radiusKm: Int = _state.value.kabadiwalaRadiusKm, location: CurrentLocation? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         val query = area.trim()
@@ -487,7 +503,9 @@ class SupplyChainViewModel(
     fun refreshKabadiwala() {
         if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
         resetForAccountChange()
-        if (supplyRefreshJob?.isActive == true) return
+        // Always let the newest collector refresh replace an in-flight one.
+        // Otherwise a queue read started before accept/reject can finish last
+        // and put the old REQUESTED row back on screen.
         cache?.load(accountId())?.let(::applyCached)
         load { current ->
         var partialFailure = false
@@ -908,31 +926,35 @@ class SupplyChainViewModel(
 
     fun loadKabadiwalaListingPhotos(listingId: String, photoCount: Int) = action("photos-$listingId", AccountRole.COLLECTOR, {
         val count = photoCount.coerceIn(1, 6)
-        val photos = mutableListOf<ByteArray>()
-        var partialFailure = false
-        var firstFailure: Throwable? = null
-        for (index in 0 until count) {
-            try {
+        _state.value = _state.value.copy(listingPhotoErrors = _state.value.listingPhotoErrors - listingId)
+        val results = coroutineScope {
+            (0 until count).map { index ->
+                async {
+                    try {
                 val response = if (index == 0) {
                     api.getKabadiwalaListingPhoto(listingId)
                 } else {
                     api.getKabadiwalaListingPhotoAtIndex(listingId, index)
                 }
-                photos += response.requireBody().bytes()
-            } catch (error: Throwable) {
-                if (photos.isEmpty()) {
-                    _state.value = _state.value.copy(
-                        listingPhotoErrors = _state.value.listingPhotoErrors +
-                            (listingId to "Couldn't load scrap photos. Check the connection and retry.")
-                    )
-                    throw error
+                        Result.success(withContext(Dispatchers.IO) { response.requireBody().bytes() })
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Result.failure(error)
+                    }
                 }
-                partialFailure = true
-                firstFailure = firstFailure ?: error
-                break
             }
+                .awaitAll()
         }
-        if (photos.isEmpty()) throw (firstFailure ?: IllegalStateException("No listing photos available"))
+        val photos = results.mapNotNull { it.getOrNull() }
+        val partialFailure = photos.size < count
+        if (photos.isEmpty()) {
+            _state.value = _state.value.copy(
+                listingPhotoErrors = _state.value.listingPhotoErrors +
+                    (listingId to "Couldn't load scrap photos. Check the connection and retry.")
+            )
+            return@action "Couldn't load scrap photos. Check the connection and retry."
+        }
         _state.value = _state.value.copy(
             listingPhotos = _state.value.listingPhotos + (listingId to photos),
             listingPhotoErrors = if (partialFailure) {
@@ -947,9 +969,15 @@ class SupplyChainViewModel(
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })
     fun decideHouseholdSettlement(pickupId: String, decision: String, reasonCode: String? = null, notes: String? = null) = action("settlement-$pickupId", AccountRole.HOUSEHOLD, { api.decideHouseholdSettlement(pickupId, SettlementDecisionDto(decision, reasonCode, null, notes)).requireData(); refreshHousehold(); "Settlement decision recorded." })
-    fun acceptListing(listingId: String) = action("accept-$listingId", AccountRole.COLLECTOR, {
+    fun acceptListing(listingId: String) = action("pickup-decision-${_state.value.pickups.firstOrNull { it.listingId == listingId }?.id ?: listingId}", AccountRole.COLLECTOR, {
         try {
             api.acceptHouseholdListing(listingId).requireSuccess()
+            val acceptedAt = java.time.Instant.now().toString()
+            _state.value = _state.value.copy(
+                pickups = _state.value.pickups.map { pickup ->
+                    if (pickup.listingId == listingId) pickup.copy(status = "ACCEPTED", acceptedAt = acceptedAt, updatedAt = acceptedAt) else pickup
+                }
+            )
             refreshKabadiwala()
             "Pickup accepted."
         } catch (error: Throwable) {
@@ -959,7 +987,12 @@ class SupplyChainViewModel(
             } else throw error
         }
     })
-    fun rejectPickup(pickupId: String, reason: String? = null) = action("reject-$pickupId", AccountRole.COLLECTOR, { api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireSuccess(); refreshKabadiwala(); "Pickup declined and returned to the network." })
+    fun rejectPickup(pickupId: String, reason: String? = null) = action("pickup-decision-$pickupId", AccountRole.COLLECTOR, {
+        api.rejectKabadiwalaPickup(pickupId, BulkOfferDecisionDto(reason)).requireSuccess()
+        _state.value = _state.value.copy(pickups = _state.value.pickups.filterNot { it.id == pickupId })
+        refreshKabadiwala()
+        "Pickup declined and returned to the network."
+    })
     fun confirmAvailability(pickupId: String, slot: String? = null) = action("availability-$pickupId", AccountRole.COLLECTOR, {
         val updated = api.confirmPickupAvailability(pickupId, PickupAvailabilityDto(true, slot)).requireData()
         _state.value = _state.value.copy(
@@ -967,7 +1000,17 @@ class SupplyChainViewModel(
         )
         "Availability confirmed."
     })
-    fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, { api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireSuccess(); refreshKabadiwala(); "Pickup scheduled." })
+    fun schedulePickup(pickupId: String, iso: String) = action("schedule-$pickupId", AccountRole.COLLECTOR, {
+        api.schedulePickup(pickupId, PickupScheduleDto(iso)).requireSuccess()
+        val changedAt = java.time.Instant.now().toString()
+        _state.value = _state.value.copy(
+            pickups = _state.value.pickups.map { pickup ->
+                if (pickup.id == pickupId) pickup.copy(status = "SCHEDULED", scheduledSlot = iso, updatedAt = changedAt) else pickup
+            }
+        )
+        refreshKabadiwala()
+        "Pickup scheduled."
+    })
     fun pickupStatus(pickupId: String, status: String) = action("status-$pickupId", AccountRole.COLLECTOR, {
         api.updatePickupStatus(pickupId, PickupStatusDto(status)).requireSuccess()
         val changedAt = java.time.Instant.now().toString()

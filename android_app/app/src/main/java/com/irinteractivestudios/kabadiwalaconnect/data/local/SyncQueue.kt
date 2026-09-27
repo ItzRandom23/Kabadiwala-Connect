@@ -67,6 +67,10 @@ interface SyncQueueDao {
     @Query("DELETE FROM sync_queue WHERE uid = :uid AND accountId = :accountId")
     suspend fun remove(uid: Long, accountId: String): Int
 
+    /** Rewrite a dependent operation after its temporary local entity gets a server ID. */
+    @Query("UPDATE sync_queue SET payloadJson = :payloadJson, attempts = 0, lastErrorCode = NULL, nextAttemptAtEpochMs = 0 WHERE uid = :uid AND accountId = :accountId")
+    suspend fun updatePayloadForAccount(uid: Long, accountId: String, payloadJson: String): Int
+
     /** Explicit user retry: clear the permanent-error gate for one item. */
     @Query("UPDATE sync_queue SET attempts = 0, lastErrorCode = NULL, nextAttemptAtEpochMs = 0 WHERE uid = :uid AND accountId = :accountId")
     suspend fun resetForRetry(uid: Long, accountId: String): Int

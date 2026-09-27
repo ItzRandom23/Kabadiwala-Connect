@@ -134,7 +134,11 @@ export class FcmPushProvider implements PushProvider {
           // loads the authenticated inbox after launch.
           data: {
             notificationId: input.notificationId ?? '',
-          }
+            type: input.type ?? '',
+          },
+          // Data-only FCM messages need high priority to wake the app promptly;
+          // Android still applies the user's notification/channel settings.
+          android: { priority: 'HIGH' }
         }
       }),
       signal: timeout()

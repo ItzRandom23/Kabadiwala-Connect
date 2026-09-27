@@ -11,7 +11,7 @@ import { requireAuth as baseRequireAuth, requireHousehold as baseRequireHousehol
 import { AppError } from '../utils/errors.js';
 import { assertInventoryInvariant, ownedKg, recordInventoryMovement } from '../services/inventoryLedger.js';
 import { emitNotification } from '../services/notificationService.js';
-import { assertPickupWorkTime, movePickupDay, releasePickupDay, validatePickupSlot } from '../services/pickupSchedulingService.js';
+import { assertPickupWorkTime, movePickupDay, releasePickupDay, validateCollectorPickupSlot, validatePickupSlot } from '../services/pickupSchedulingService.js';
 import { claimSourceListings, releaseSourceListings } from '../services/sourceListingAllocationService.js';
 import { withTransactionRetry } from '../utils/transactionRetry.js';
 
@@ -764,7 +764,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     res.json({ success: true, data: result });
   });
   router.post('/kabadiwala/pickups/:pickupId/schedule', requireAuth(jwt, collectors), async (req, res) => {
-    const pickupId = parse(id, req.params.pickupId); const scheduledSlot = validatePickupSlot(parse(z.object({ scheduledSlot: z.string().datetime() }), req.body).scheduledSlot);
+    const pickupId = parse(id, req.params.pickupId);
+    const { scheduledSlot: requestedSlot } = parse(z.object({ scheduledSlot: z.string().datetime() }), req.body);
+    const currentPickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } }, select: { acceptedAt: true } });
+    if (!currentPickup) throw new AppError('CONFLICT', 'Pickup cannot be scheduled', 409, { code: 'PICKUP_NOT_SCHEDULABLE' });
+    const scheduledSlot = validateCollectorPickupSlot(requestedSlot, currentPickup.acceptedAt);
     await store.$transaction(async (tx: any) => {
       const pickup = await tx.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } } });
       if (!pickup) throw new AppError('CONFLICT', 'Pickup cannot be scheduled', 409, { code: 'PICKUP_NOT_SCHEDULABLE' });

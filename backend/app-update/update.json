@@ -1,8 +1,8 @@
 {
-  "versionCode": 64,
-  "versionName": "0.1.0-beta",
-  "apkUrl": "kabadiwala-connect-0.1.0-beta-debug.apk",
-  "sha256": "47D35F467FD8DF5D80EBFA3E295E83134F6DC24BF31115E8E32FAC94536A6FB9",
-  "sizeBytes": 28750405,
-  "releaseNotes": "VPS-connected test build with account, verification, payment, and responsive UI fixes."
+  "versionCode": 65,
+  "versionName": "0.1.1-beta",
+  "apkUrl": "kabadiwala-connect-0.1.1-beta-debug.apk",
+  "sha256": "8DE125902B0FD2B425050CCD7CFE0D2E17C7D49CA31BF80ACE288D4220146728",
+  "sizeBytes": 28769596,
+  "releaseNotes": "Firebase-enabled testing build with heads-up notification support, notification navigation fixes, and pickup workflow stability updates."
 }

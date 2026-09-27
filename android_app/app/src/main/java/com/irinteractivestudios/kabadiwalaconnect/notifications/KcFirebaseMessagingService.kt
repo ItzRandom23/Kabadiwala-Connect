@@ -27,13 +27,15 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
 
-        val title = getString(R.string.app_name)
-        val body = getString(R.string.notification_generic_body)
-        val channelId = "kabadiwala_updates"
+        val (title, body) = pushCopy(message.data["type"])
+        // Bump the channel id so existing installs receive the higher
+        // importance setting; Android does not allow an app to upgrade an
+        // already-created channel in place.
+        val channelId = "kabadiwala_urgent_updates_v2"
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel(channelId, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_DEFAULT)
+                NotificationChannel(channelId, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_HIGH)
             )
         }
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -53,9 +55,20 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(this).notify(message.data["notificationId"]?.hashCode() ?: body.hashCode(), notification)
+    }
+
+    private fun pushCopy(type: String?): Pair<String, String> = when (type) {
+        "PICKUP_REQUESTED", "PICKUP_REASSIGNED_TO_COLLECTOR" ->
+            "New pickup request" to "A household selected you for a pickup. Tap to review it."
+        "PICKUP_WAITING_FOR_PICKUP" ->
+            "Pickup needed nearby" to "A household is waiting for a Kabadiwala. Tap to view pickups."
+        else -> getString(R.string.app_name) to getString(R.string.notification_generic_body)
     }
 }

@@ -525,7 +525,7 @@ private fun HouseholdListingCard(
                 if (pickupPendingSync) {
                     Text("Pickup request saved offline. Waiting for a connection to send it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 } else if (kabadiwalas.isNotEmpty()) {
-                    Text("Choose a partner", style = MaterialTheme.typography.labelLarge)
+                    Text("Collectors see this listing after you send a pickup request. Choose a partner:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     kabadiwalas.take(4).forEach { kabadiwala ->
                         val requestBusy = "pickup-${listing.id}" in busy
                         OutlinedButton(onClick = { onRequestPickup(listing.id, kabadiwala.id) }, enabled = !requestBusy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -535,7 +535,7 @@ private fun HouseholdListingCard(
                 } else {
                     Text("No Kabadiwala is available within ${radiusKm} km right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (radiusKm < 20) OutlinedButton(onClick = onIncreaseRadius, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text("Increase radius to ${if (radiusKm == 5) 10 else 20} km")
+                        Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text("Increase radius to ${if (radiusKm == 5) 10 else 25} km")
                     }
                     OutlinedButton(onClick = { onRequestPickup(listing.id, null) }, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Notify nearby Kabadiwalas")
@@ -1016,7 +1016,7 @@ fun HouseholdListingCreateScreen(
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    friendlyMaterials.forEach { option ->
+                    friendlyMaterials.sortedBy { it.title.lowercase(Locale.ROOT) }.forEach { option ->
                         val selected = material == option.key
                         Card(onClick = { material = option.key; materialChosenManually = true; safetyAcknowledged = false }, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow), border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null, modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
                             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1139,7 +1139,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onConfirmAvailability: (String, String?) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }) {
     val layout = rememberKcResponsiveLayout()
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
@@ -1176,7 +1176,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (state.initialLoadComplete && !state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onConfirmAvailability, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr) }
+                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Text("View all ${state.pickups.size} pickups")
@@ -1393,7 +1393,7 @@ private fun SupplyChainToolsShortcut(onClick: () -> Unit) {
 enum class KabadiwalaSection { HOME, INVENTORY, PICKUPS, LOTS, TOOLS }
 
 @Composable
-private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onConfirmAvailability: (String, String?) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit) {
+private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, loadedPhotos: List<ByteArray>, photoError: String?, photoLoading: Boolean, busy: Set<String>, onLoadPhotos: (String, Int) -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onReject: (String, String) -> Unit, onCancel: (String, String?) -> Unit, onReassign: (String, String, Boolean) -> Unit, onRecordPayment: (String, PickupSettlementPaymentRequestDto) -> Unit, onVerifyHouseholdQr: (String, String) -> Unit) {
     var showComplete by remember { mutableStateOf(false) }
     var showSchedule by remember { mutableStateOf(false) }
     var showReject by remember { mutableStateOf(false) }
@@ -1452,35 +1452,23 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     loadedPhotos,
                     photoCount,
                     photoError,
+                    photoLoading,
                     onRetry = { onLoadPhotos(pickup.listingId, photoCount) },
                     onPhotoClick = { index -> selectedPhotoIndex = index }
                 )
             }
             when (pickup.status) {
-                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Claim pickup") }
+                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, enabled = "pickup-decision-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if ("pickup-decision-${pickup.id}" in busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Claim pickup") }
                 "REQUESTED" -> {
+                    val decisionPending = "pickup-decision-${pickup.id}" in busy
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = { onAccept(pickup.listingId) }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Accept pickup") }
-                        OutlinedButton(onClick = { showReject = true }, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Decline") }
+                        Button(onClick = { onAccept(pickup.listingId) }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { if (decisionPending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Accept pickup") }
+                        OutlinedButton(onClick = { showReject = true }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Decline") }
                     }
                 }
                 "ACCEPTED" -> {
-                    if (pickup.availabilityConfirmedAt == null) {
-                        OutlinedButton(
-                            onClick = { onConfirmAvailability(pickup.id, null) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
-                        ) { Text("Confirm availability") }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text("Availability confirmed", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    Button(onClick = { showSchedule = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Schedule pickup") }
+                    val schedulePending = "schedule-${pickup.id}" in busy
+                    Button(onClick = { showSchedule = true }, enabled = !schedulePending, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if (schedulePending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Schedule pickup") }
                     if (isPickupWorkTimeNow()) {
                         Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
                     } else {
@@ -1530,6 +1518,8 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
     if (showSchedule) SchedulePickupDialog(
         onDismiss = { showSchedule = false },
         confirmLabel = "Schedule pickup",
+        minLeadMinutes = 5,
+        acceptedAt = pickup.acceptedAt,
         onSubmit = { onSchedule(pickup.id, it); showSchedule = false }
     )
     if (showComplete && pickup.householdQrScannedAt != null) CompletionDialog(pickup, listing, onDismiss = { showComplete = false }, onSubmit = { onComplete(pickup.id, it); showComplete = false })
@@ -1586,7 +1576,7 @@ private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: (
 }
 
 @Composable
-private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, onRetry: () -> Unit, onPhotoClick: (Int) -> Unit) {
+private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photoError: String?, loading: Boolean, onRetry: () -> Unit, onPhotoClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (photos.isEmpty()) {
             if (photoError != null) {
@@ -1594,10 +1584,15 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
                     Text(photoError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = onRetry) { Text("Retry") }
                 }
-            } else {
+            } else if (loading) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Text("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Scrap photos are ready to load.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = onRetry) { Text("Load") }
                 }
             }
         } else {
@@ -1689,28 +1684,33 @@ private fun FullScreenListingPhotoDialog(
 private fun SchedulePickupDialog(
     onDismiss: () -> Unit,
     onSubmit: (String) -> Unit,
-    confirmLabel: String = "Confirm time"
+    confirmLabel: String = "Confirm time",
+    minLeadMinutes: Int = 90,
+    acceptedAt: String? = null
 ) {
-    // Offer the next three half-hour slots inside the server's India-time
-    // operating window and 90-minute lead time.
+    // Offer the next three valid slots inside the server's India-time window.
     val slots = remember {
         val indiaTimeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
         val now = java.util.Calendar.getInstance(indiaTimeZone)
-        val earliestAllowedTime = System.currentTimeMillis() + 95L * 60L * 1000L
+        val leadMillis = minLeadMinutes * 60_000L
+        val nowMillis = System.currentTimeMillis()
+        val acceptedMillis = acceptedAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: nowMillis
+        val clockSkewBufferMillis = if (minLeadMinutes == 5) 60_000L else 0L
+        val earliestAllowedTime = maxOf(nowMillis, acceptedMillis) + leadMillis + clockSkewBufferMillis
         val candidates = mutableListOf<java.util.Date>()
         for (dayOffset in 0..14) {
             val day = java.util.Calendar.getInstance(indiaTimeZone).apply {
                 timeInMillis = now.timeInMillis
                 add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
             }
-            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 30) {
+            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 5) {
                 val slot = (day.clone() as java.util.Calendar).apply {
                     set(java.util.Calendar.HOUR_OF_DAY, minutesOfDay / 60)
                     set(java.util.Calendar.MINUTE, minutesOfDay % 60)
                     set(java.util.Calendar.SECOND, 0)
                     set(java.util.Calendar.MILLISECOND, 0)
                 }
-                if (slot.timeInMillis >= earliestAllowedTime) candidates += slot.time
+                if (slot.timeInMillis >= earliestAllowedTime && (minLeadMinutes != 90 || minutesOfDay % 30 == 0)) candidates += slot.time
                 if (candidates.size == 3) break
             }
             if (candidates.size == 3) break
@@ -1723,13 +1723,19 @@ private fun SchedulePickupDialog(
         }
         candidates.map { time -> formatter.format(time) to displayFormatter.format(time) }
     }
-    var selected by remember(slots.first().first) { mutableStateOf(slots.first().first) }
+    val firstSlot = slots.firstOrNull()?.first
+    var selected by remember(firstSlot) { mutableStateOf(firstSlot.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Schedule collection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Pickups run 10:30 AM–6:00 PM. Choose a slot at least 90 minutes from now.", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (minLeadMinutes == 5) "Pickups run 10:30 AM–6:00 PM. Choose a time at least 5 minutes after accepting."
+                    else "Pickups run 10:30 AM–6:00 PM. Choose a time at least $minLeadMinutes minutes from now.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (slots.isEmpty()) Text("No pickup times are available in the next 14 days.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         androidx.compose.material3.RadioButton(selected = selected == slot.first, onClick = { selected = slot.first })
@@ -1738,7 +1744,7 @@ private fun SchedulePickupDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSubmit(selected.toString()) }) { Text(confirmLabel) } },
+        confirmButton = { TextButton(onClick = { onSubmit(selected) }, enabled = selected.isNotBlank()) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

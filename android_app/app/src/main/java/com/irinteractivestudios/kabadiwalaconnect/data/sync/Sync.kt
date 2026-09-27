@@ -128,6 +128,10 @@ class SyncWorker(
         val eligibleOperations = syncOperationsForRole(currentRole)
         val pending = queue.observePendingForAccount(accountId).first()
             .filter { item -> item.operation in eligibleOperations }
+            // A pickup request can reference a household listing created in
+            // the same offline session. Always create that server record first,
+            // even when both operations have identical millisecond timestamps.
+            .sortedWith(compareBy<SyncQueueItemEntity> { householdOperationPriority(it.operation) }.thenBy { it.createdAtEpochMs }.thenBy { it.uid })
             .take(BATCH_SIZE)
         if (BuildConfig.DEBUG) {
             val allQueued = queue.observeAll().first()
@@ -146,8 +150,30 @@ class SyncWorker(
         // Operations with dedicated idempotent API contracts are replayed
         // before the legacy batch. They retain their queue row on any
         // uncertain response so WorkManager can safely retry them.
-        for (item in pending.filterNot { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }) {
+        for (selectedItem in pending.filterNot { it.operation == "CREATE_LOT" || it.operation == "RECORD_PAYMENT" }) {
             if (!sessionStillCurrent()) return Result.success()
+            // A prior operation in this run may have rebound this row from a
+            // temporary local listing ID to its permanent server ID.
+            val item = queue.observeForAccount(accountId).first().firstOrNull { it.uid == selectedItem.uid }
+                ?: continue
+            if (item.operation == "REQUEST_HOUSEHOLD_PICKUP") {
+                val listingId = runCatching {
+                    JsonParser.parseString(item.payloadJson).asJsonObject.get("listingId")?.asString
+                }.getOrNull().orEmpty()
+                if (listingId.startsWith("local-")) {
+                    val createStillQueued = queue.observeForAccount(accountId).first().any { queued ->
+                        queued.operation == "CREATE_HOUSEHOLD_LISTING" && runCatching {
+                            JsonParser.parseString(queued.payloadJson).asJsonObject.get("localListingId")?.asString == listingId
+                        }.getOrDefault(false)
+                    }
+                    if (createStillQueued) {
+                        deferredOperation = true
+                        continue
+                    }
+                    queue.markFailed(item.uid, accountId, "LOCAL_LISTING_NOT_SYNCED", Long.MAX_VALUE)
+                    return Result.failure()
+                }
+            }
             if (item.operation == "REQUEST_QUOTE") {
                 val quotePayload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull()
                 val localLot = quotePayload?.get("lotId")?.asString?.let { app.container.database.lotDao().findByIdForCollector(it, accountId) }
@@ -337,6 +363,20 @@ class SyncWorker(
                         app.container.database.householdListingCacheDao().removeForAccount(localId, accountId)
                     }
                     app.container.database.householdListingCacheDao().upsert(synchronizedListing.toCacheEntity(accountId, synced = true))
+                    payload.get("localListingId")?.asString?.takeIf { it.isNotBlank() }?.let { localId ->
+                        val syncQueue = app.container.database.syncQueueDao()
+                        syncQueue.observeForAccount(accountId).first()
+                            .filter { it.operation == "REQUEST_HOUSEHOLD_PICKUP" }
+                            .forEach { queuedPickup ->
+                                remapHouseholdPickupListingReference(
+                                    queuedPickup.payloadJson,
+                                    localId,
+                                    synchronizedListing.id
+                                )?.let { updatedPayload ->
+                                    syncQueue.updatePayloadForAccount(queuedPickup.uid, accountId, updatedPayload)
+                                }
+                            }
+                    }
                 }
                 "REQUEST_QUOTE" -> {
                     api.requestQuote(QuoteRequestDto(payload.string("lotId"), payload.string("recyclerId"))).requireData()
@@ -512,6 +552,12 @@ internal fun syncOperationsForRole(role: AccountRole?): Set<String> {
         AccountRole.RECYCLER -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CONFIRM_SUPPLY_HANDOVER")
         else -> emptySet()
     }
+}
+
+private fun householdOperationPriority(operation: String): Int = when (operation) {
+    "CREATE_HOUSEHOLD_LISTING" -> 0
+    "REQUEST_HOUSEHOLD_PICKUP" -> 1
+    else -> 2
 }
 
 private fun syncErrorCode(raw: String): String? = runCatching {

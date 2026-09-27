@@ -84,20 +84,18 @@ class FutureFeatureViewModel(
                 val notifications = async {
                     request(previous.notifications.ifEmpty { cachedNotifications }) { api.getNotifications(limit = 100).requireData().also { cache?.saveNotifications(it, accountId()) } }
                 }
-                val unread = async {
-                    request(null) { api.getNotificationUnreadCount().requireData().count }
-                }
                 val schemesResult = schemes.await()
                 val activitiesResult = activities.await()
                 val rewardsResult = rewards.await()
                 val conversationsResult = conversations.await()
                 val analyticsResult = analytics.await()
                 val notificationsResult = notifications.await()
-                val unreadResult = unread.await()
-                val failureCount = listOf(schemesResult, activitiesResult, rewardsResult, conversationsResult, analyticsResult, notificationsResult, unreadResult)
+                val failureCount = listOf(schemesResult, activitiesResult, rewardsResult, conversationsResult, analyticsResult, notificationsResult)
                     .count { it.failed }
                 val resolvedNotifications = notificationsResult.value.orEmpty()
-                val resolvedUnread = unreadResult.value ?: resolvedNotifications.count { it.readAt.isNullOrBlank() }
+                // Keep the inbox summary consistent with the rows currently
+                // rendered. The separate count endpoint can lag the list query.
+                val resolvedUnread = resolvedNotifications.count { it.readAt.isNullOrBlank() }
                 _state.value = _state.value.copy(
                     loading = false,
                     error = if (failureCount > 0) "Some information could not be refreshed. Cached data is shown." else null,

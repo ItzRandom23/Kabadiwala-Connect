@@ -336,6 +336,7 @@ class MainActivity : ComponentActivity() {
                     Destinations.PAYMENT_CREATE -> stringResource(R.string.payment_title)
                     Destinations.EARNINGS -> stringResource(R.string.earnings_title)
                     Destinations.SETTINGS -> stringResource(R.string.settings_title)
+                    Destinations.NOTIFICATIONS -> stringResource(R.string.notifications_title)
                     Destinations.PROFILE -> stringResource(R.string.profile_title)
                     Destinations.SAFETY -> stringResource(R.string.safety_title)
                     Destinations.HELP -> stringResource(R.string.help_title)
@@ -568,7 +569,17 @@ class MainActivity : ComponentActivity() {
                         renderedRole.takeIf { demoMode && demoRoleName != "LEGACY" },
                         cachedAccount?.verificationStatus
                     )
-                    if (target != null) navController.navigate(target) { launchSingleTop = true }
+                    if (target != null) {
+                        if (target in Destinations.topLevelFor(renderedRole, newNavigation = !demoMode || kabadiwalaDemo)) {
+                            navController.navigate(target) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        } else {
+                            navController.navigate(target) { launchSingleTop = true }
+                        }
+                    }
                     pendingNotificationRoute.value = null
                     intent.removeExtra(EXTRA_NOTIFICATION_ROUTE)
                 }
