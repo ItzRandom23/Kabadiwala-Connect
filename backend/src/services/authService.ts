@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import type { JwtService } from './jwt.js';
@@ -20,6 +20,9 @@ export type PhoneAccountInput = {
   materialsAccepted?: string[];
   pickupAvailable?: boolean;
   serviceRadiusKm?: number;
+  authorizationAuthority?: string; authorizationType?: string; authorizationEvidenceReference?: string; authorizationValidUntil?: string;
+  alternatePhone?: string; pickupAvailability?: 'TODAY' | 'THIS_WEEK' | 'FLEXIBLE'; pickupIncluded?: boolean;
+  pickupFee?: number; logisticsCostPerKm?: number; operatingHours?: Record<string, unknown>;
 };
 
 const normalizedEmail = (value?: string | null) => value?.trim().toLowerCase() || null;
@@ -306,9 +309,18 @@ export class AuthService {
           longitude,
           authorizationStatus: 'PENDING',
           licenseNumber: input.authorizationNumber?.trim() || null,
-          maxPickupDistanceKm: input.serviceRadiusKm ?? 25,
-          pickupAvailability: input.pickupAvailable ? 'FLEXIBLE' : 'THIS_WEEK',
-          operatingHours: {}
+          authorizationAuthority: input.authorizationAuthority?.trim() || null,
+          authorizationType: input.authorizationType?.trim() || null,
+          authorizationEvidenceReference: input.authorizationEvidenceReference?.trim() || null,
+          authorizationValidUntil: input.authorizationValidUntil ? new Date(input.authorizationValidUntil) : null,
+          alternatePhone: input.alternatePhone?.trim() || null,
+          pickupAvailable: input.pickupAvailable ?? false,
+          maxPickupDistanceKm: input.pickupAvailable ? (input.serviceRadiusKm ?? 25) : 0,
+          pickupAvailability: input.pickupAvailable ? (input.pickupAvailability ?? 'FLEXIBLE') : 'FLEXIBLE',
+          pickupIncluded: input.pickupAvailable ? (input.pickupIncluded ?? false) : false,
+          pickupFee: input.pickupAvailable && !input.pickupIncluded ? input.pickupFee ?? null : null,
+          logisticsCostPerKm: input.pickupAvailable && !input.pickupIncluded ? input.logisticsCostPerKm ?? null : null,
+          operatingHours: (input.operatingHours ?? {}) as Prisma.InputJsonValue
         }
       });
       const materials = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => acceptedMaterials.has(value)))];

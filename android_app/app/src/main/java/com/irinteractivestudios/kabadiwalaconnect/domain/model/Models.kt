@@ -2,7 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect.domain.model
 
 enum class AccountRole { HOUSEHOLD, COLLECTOR, RECYCLER, ADMIN }
 
-enum class RecyclerVerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
+enum class RecyclerVerificationStatus { PENDING, UNDER_REVIEW, VERIFIED, REJECTED, SUSPENDED }
 
 /** Maps the backend's richer authorization lifecycle onto app access states. */
 fun recyclerVerificationStatusFromAuthorization(value: String?): RecyclerVerificationStatus? =
@@ -10,7 +10,8 @@ fun recyclerVerificationStatusFromAuthorization(value: String?): RecyclerVerific
         "VERIFIED" -> RecyclerVerificationStatus.VERIFIED
         "REJECTED", "REVIEW_REQUIRED", "REVOKED" -> RecyclerVerificationStatus.REJECTED
         "SUSPENDED" -> RecyclerVerificationStatus.SUSPENDED
-        "PENDING", "UNDER_REVIEW", "EXPIRED" -> RecyclerVerificationStatus.PENDING
+        "UNDER_REVIEW" -> RecyclerVerificationStatus.UNDER_REVIEW
+        "PENDING", "EXPIRED" -> RecyclerVerificationStatus.PENDING
         else -> null
     }
 

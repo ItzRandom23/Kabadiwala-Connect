@@ -35,10 +35,13 @@ function fixture() {
       findMany: vi.fn(async () => storedMessage ? [storedMessage] : []),
       findFirst: vi.fn(async () => storedMessage),
       create: vi.fn(async ({ data }: any) => storedMessage = { id: 'message-1', ...data, createdAt: new Date(), readAt: null }),
-      updateMany: vi.fn(async () => ({ count: 0 }))
+      updateMany: vi.fn(async () => { if (storedMessage) storedMessage.readAt = new Date(); return { count: storedMessage ? 1 : 0 }; }),
+      groupBy: vi.fn(async ({ where }: any) => storedMessage && storedMessage.readAt == null && storedMessage.senderId !== where.senderId.not ? [{ conversationId: conversation.id, _count: { _all: 1 } }] : [])
     },
-    conversation: { findUnique: vi.fn(async () => null) },
-    chatMessage: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []), updateMany: vi.fn(async () => ({ count: 0 })) }
+    conversation: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
+    chatMessage: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []), updateMany: vi.fn(async () => ({ count: 0 })), groupBy: vi.fn(async () => []) },
+    notificationEvent: { create: vi.fn(async ({ data }: any) => ({ id: data.id, ...data })), updateMany: vi.fn(async () => ({ count: 1 })) },
+    notificationDelivery: { upsert: vi.fn(async () => ({})) }
   } as any;
   const jwt = new JwtService({ JWT_SECRET: 'pickup-chat-test-secret', JWT_EXPIRES_IN: '1h' } as never);
   const app = express();
@@ -64,6 +67,12 @@ describe('household pickup chat', () => {
       .set(householdAuth).send({ clientMessageId: 'client-message-0001', body: 'I will be home at 5 PM.' });
     expect(sent.status).toBe(201);
     expect(sent.body.data).toMatchObject({ senderId: 'household-1', senderRole: 'HOUSEHOLD', body: 'I will be home at 5 PM.' });
+    expect(db.notificationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ accountId: 'collector-1', type: 'CHAT_MESSAGE', route: 'messages/pickup-conversation-1' }) }));
+    expect(db.notificationDelivery.upsert).toHaveBeenCalledTimes(1);
+
+    const unread = await request(app).get('/future/conversations').set(collectorAuth);
+    expect(unread.status).toBe(200);
+    expect(unread.body.data[0].unreadCount).toBe(1);
 
     const replay = await request(app).post(`/future/conversations/${created.body.data.id}/messages`)
       .set(householdAuth).send({ clientMessageId: 'client-message-0001', body: 'I will be home at 5 PM.' });
@@ -74,6 +83,8 @@ describe('household pickup chat', () => {
     expect(read.status).toBe(200);
     expect(read.body.data).toHaveLength(1);
     expect(db.pickupChatMessage.updateMany).toHaveBeenCalled();
+    const afterRead = await request(app).get('/future/conversations').set(collectorAuth);
+    expect(afterRead.body.data[0].unreadCount).toBe(0);
 
     const denied = await request(app).get(`/future/conversations/${created.body.data.id}/messages`).set(otherHouseholdAuth);
     expect(denied.status).toBe(404);

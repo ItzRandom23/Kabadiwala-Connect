@@ -29,7 +29,7 @@ class DestinationsTest {
     @Test
     fun recyclerAuthorizationStatesNormalizeWithoutTreatingReviewAsVerified() {
         assertEquals(RecyclerVerificationStatus.VERIFIED, recyclerVerificationStatusFromAuthorization("verified"))
-        assertEquals(RecyclerVerificationStatus.PENDING, recyclerVerificationStatusFromAuthorization("UNDER_REVIEW"))
+        assertEquals(RecyclerVerificationStatus.UNDER_REVIEW, recyclerVerificationStatusFromAuthorization("UNDER_REVIEW"))
         assertEquals(RecyclerVerificationStatus.PENDING, recyclerVerificationStatusFromAuthorization("EXPIRED"))
         assertEquals(RecyclerVerificationStatus.REJECTED, recyclerVerificationStatusFromAuthorization("REVIEW_REQUIRED"))
         assertEquals(RecyclerVerificationStatus.REJECTED, recyclerVerificationStatusFromAuthorization("REVOKED"))

@@ -262,17 +262,9 @@ class SyncWorker(
                                 // permanent upload failure is safer than showing a false
                                 // "synced" state or silently dropping the evidence.
                                 if (photoResult == PhotoUploadResult.PERMANENT_FAILURE) {
-                                    // The lot mutation itself was accepted. Keep
-                                    // that server record visible and retain a
-                                    // retryable, clearly labelled queue item for
-                                    // the photo instead of leaving the whole lot
-                                    // stuck forever as "waiting".
-                                    if (operation.operationType == "UPDATE") {
-                                        val clientVersion = operation.payload.get("clientVersion")?.asInt ?: 1
-                                        app.container.database.lotDao().markSyncedWithVersionForCollector(operation.entityId, clientVersion + 1, accountId)
-                                    } else {
-                                        app.container.database.lotDao().markSyncedForCollector(operation.entityId, accountId)
-                                    }
+                                    // The server accepted the record, but the photo
+                                    // is still missing. Do not unlock quote requests
+                                    // until the evidence is uploaded successfully.
                                     queue.markFailed(item.uid, accountId, "LOT_PHOTO_UPLOAD_REJECTED", Long.MAX_VALUE)
                                     return Result.failure()
                                 }

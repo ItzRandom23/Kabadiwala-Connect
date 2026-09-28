@@ -97,7 +97,8 @@ class KcViewModelFactory(
                 profiles = container.collectorProfileRepository,
                 secureStorage = container.secureStorage,
                 initialLanguage = LocaleManager.persistedTag(app),
-                locationProvider = AndroidLocationProvider(app)
+                locationProvider = AndroidLocationProvider(app),
+                apiService = container.apiService
             )
         modelClass.isAssignableFrom(LotManagementViewModel::class.java) ->
             LotManagementViewModel(container.lotWriter, currentCollectorId(), container.apiService, priceCatalog, languageProvider = { LocaleManager.persistedTag(app) })

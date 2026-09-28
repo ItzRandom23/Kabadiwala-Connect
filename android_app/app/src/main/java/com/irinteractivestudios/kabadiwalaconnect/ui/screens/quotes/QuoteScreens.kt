@@ -56,11 +56,12 @@ import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: String, presetRecyclerId: String, repo: QuoteRepository, onSubmitted: (String) -> Unit) {
-    var lotId by remember { mutableStateOf(presetLotId.takeUnless { it == "none" } ?: lots.firstOrNull()?.id.orEmpty()) }
+fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: String, presetRecyclerId: String, repo: QuoteRepository, onSubmitted: (String) -> Unit, onRefreshCatalogs: () -> Unit = {}) {
+    val availableLots = lots.filter { it.status == com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus.SAVED }
+    var lotId by remember(presetLotId) { mutableStateOf(presetLotId.takeUnless { it == "none" }.orEmpty()) }
     var selectedRecyclerIds by remember {
         mutableStateOf(
-            setOf(presetRecyclerId.takeUnless { it == "none" } ?: recyclers.firstOrNull()?.id.orEmpty())
+            setOf(presetRecyclerId.takeUnless { it == "none" }.orEmpty())
                 .filter(String::isNotBlank)
                 .toSet()
         )
@@ -69,14 +70,23 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
     var submitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val lot = lots.firstOrNull { it.id == lotId }
+    androidx.compose.runtime.LaunchedEffect(availableLots) { if (lotId.isBlank()) lotId = availableLots.firstOrNull()?.id.orEmpty() }
+    androidx.compose.runtime.LaunchedEffect(recyclers) { if (selectedRecyclerIds.isEmpty()) selectedRecyclerIds = recyclers.firstOrNull()?.id?.let(::setOf).orEmpty() }
+    val lot = availableLots.firstOrNull { it.id == lotId }
     val selectedRecyclers = recyclers.filter { it.id in selectedRecyclerIds }
-    if (lots.isEmpty() || recyclers.isEmpty()) { EmptyContent(); return }
+    if (availableLots.isEmpty() || recyclers.isEmpty()) {
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Request recycler quotes", style = MaterialTheme.typography.headlineMedium)
+            Text(if (availableLots.isEmpty()) "Save a photo record first. It will appear here once created." else "Loading verified recyclers. Check your connection and try again if this takes too long.")
+            if (recyclers.isEmpty()) OutlinedButton(onClick = onRefreshCatalogs, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Refresh recyclers") }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.quote_request_title), style = MaterialTheme.typography.headlineLarge)
         Text(stringResource(if (BuildConfig.DEBUG) R.string.quote_request_detail else R.string.quote_request_detail_live), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.quote_choose_lot), style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { lots.forEach { item -> FilterChip(item.id == lotId, { lotId = item.id }, label = { Text(item.materialLabel) }) } }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { availableLots.forEach { item -> FilterChip(item.id == lotId, { lotId = item.id }, label = { Text(item.materialLabel) }) } }
         Text(stringResource(R.string.quote_choose_recyclers), style = MaterialTheme.typography.titleMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             recyclers.forEach { item ->
@@ -90,6 +100,7 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
             }
         }
         lot?.let { selectedLot -> if (selectedRecyclers.isNotEmpty()) {
+            if (!selectedLot.synced) Text("This record is still syncing. Quote requests can be sent after the server receives it.", color = MaterialTheme.colorScheme.tertiary)
             EvidenceSection(title = stringResource(R.string.quote_summary), status = stringResource(R.string.quote_saved)) {
                 ProofRow(stringResource(R.string.lot_material_label), selectedLot.materialLabel)
                 ProofRow(stringResource(R.string.handover_weight), stringResource(R.string.lot_weight_value, selectedLot.weightKg.toString()))
@@ -99,7 +110,7 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
             }
             Text(stringResource(R.string.quote_confirmation), style = MaterialTheme.typography.bodyLarge)
             if (submitError) Text(stringResource(R.string.quote_submit_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            Button(onClick = { submitError = false; submitting = true; scope.launch { try { repo.submitBatchRequest(selectedLot, selectedRecyclers); submitted = true; onSubmitted(selectedLot.id) } catch (_: Exception) { submitError = true } finally { submitting = false } } }, enabled = !submitted && !submitting, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("quote_submit")) { Icon(Icons.Filled.CheckCircle, null); Spacer(Modifier.width(8.dp)); Text(stringResource(if (submitted) R.string.quote_saved else R.string.quote_submit)) }
+            Button(onClick = { submitError = false; submitting = true; scope.launch { try { repo.submitBatchRequest(selectedLot, selectedRecyclers); submitted = true; onSubmitted(selectedLot.id) } catch (_: Exception) { submitError = true } finally { submitting = false } } }, enabled = selectedLot.synced && !submitted && !submitting, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("quote_submit")) { Icon(Icons.Filled.CheckCircle, null); Spacer(Modifier.width(8.dp)); Text(stringResource(if (submitted) R.string.quote_saved else R.string.quote_submit)) }
         } }
     }
 }

@@ -201,6 +201,11 @@ data class VerifyOtpRequestDto(
     val materialsAccepted: List<String>? = null,
     val pickupAvailable: Boolean? = null,
     val serviceRadiusKm: Int? = null,
+    val authorizationAuthority: String? = null, val authorizationType: String? = null,
+    val authorizationEvidenceReference: String? = null, val authorizationValidUntil: String? = null,
+    val alternatePhone: String? = null, val pickupAvailability: String? = null,
+    val pickupIncluded: Boolean? = null, val pickupFee: Double? = null,
+    val logisticsCostPerKm: Double? = null, val operatingHours: JsonObject? = null,
     val latitude: Double? = null,
     val longitude: Double? = null
 )
@@ -209,7 +214,7 @@ data class LogoutDto(val loggedOut: Boolean = true)
 data class AccountDeletionRequestDto(val confirmation: String = "DELETE")
 data class AccountDeletionDto(val deleted: Boolean = false, val alreadyDeleted: Boolean = false, val profileId: String = "")
 data class AuthResponseDto(val token: String, val refreshToken: String? = null, val collector: CollectorDto? = null, val user: AccountProfileDto? = null)
-data class EmailAuthRequestDto(val email: String, val password: String, val role: String? = null, val preferredLanguage: String? = null, val areaName: String? = null, val address: String? = null, val latitude: Double? = null, val longitude: Double? = null, val businessName: String? = null, val authorizationNumber: String? = null, val materialsAccepted: List<String>? = null, val pickupAvailable: Boolean? = null, val serviceRadiusKm: Int? = null)
+data class EmailAuthRequestDto(val email: String, val password: String, val role: String? = null, val preferredLanguage: String? = null, val areaName: String? = null, val address: String? = null, val latitude: Double? = null, val longitude: Double? = null, val businessName: String? = null, val authorizationNumber: String? = null, val materialsAccepted: List<String>? = null, val pickupAvailable: Boolean? = null, val serviceRadiusKm: Int? = null, val authorizationAuthority: String? = null, val authorizationType: String? = null, val authorizationEvidenceReference: String? = null, val authorizationValidUntil: String? = null, val alternatePhone: String? = null, val pickupAvailability: String? = null, val pickupIncluded: Boolean? = null, val pickupFee: Double? = null, val logisticsCostPerKm: Double? = null, val operatingHours: JsonObject? = null)
 data class AccountAuthResponseDto(val token: String, val refreshToken: String? = null, val user: AccountProfileDto)
 data class RefreshTokenRequestDto(val refreshToken: String)
 data class RefreshTokenResponseDto(val token: String, val refreshToken: String)
@@ -236,7 +241,7 @@ data class PricePointDto(val date: String, val marketPrice: Double, val unit: St
 data class ValuationDto(val lotId: String, val basePricePerKg: Double, val weight: Double, val conditionMultiplier: Double, val qualityAdjustment: Double = 1.0, val estimatedValue: Double, val priceDate: String? = null, val disclaimer: String? = null)
 
 data class RecyclerPageDto(val items: List<RecyclerDto> = emptyList(), val pagination: PageDto = PageDto())
-data class RecyclerDto(val id: String, val name: String, val facilityLocation: LocationDto? = null, val authorizationStatus: String? = null, val authorizationDetails: AuthorizationDto? = null, val materialsAccepted: List<RecyclerMaterialDto> = emptyList(), val rates: List<RecyclerRateDto> = emptyList(), val pickupAvailability: String? = null, val serviceArea: ServiceAreaDto? = null, val operatingHours: JsonObject? = null, val averageHandoverTime: String? = null, val rating: Double? = null, val reviewCount: Int = 0, val completedHandovers: Int? = null, val lastUpdated: String? = null, val contact: ContactDto? = null, val distanceKm: Double? = null)
+data class RecyclerDto(val id: String, val name: String, val facilityLocation: LocationDto? = null, val authorizationStatus: String? = null, val authorizationDetails: AuthorizationDto? = null, val materialsAccepted: List<RecyclerMaterialDto> = emptyList(), val rates: List<RecyclerRateDto> = emptyList(), val pickupAvailable: Boolean = false, val pickupAvailability: String? = null, val pickupIncluded: Boolean = false, val pickupFee: Double? = null, val serviceArea: ServiceAreaDto? = null, val operatingHours: JsonObject? = null, val averageHandoverTime: String? = null, val rating: Double? = null, val reviewCount: Int = 0, val completedHandovers: Int? = null, val lastUpdated: String? = null, val contact: ContactDto? = null, val distanceKm: Double? = null)
 data class AuthorizationDto(
     val authority: String? = null,
     val type: String? = null,
@@ -258,10 +263,9 @@ data class RecyclerVerificationRequestDto(
     val registrationNumber: String,
     val authorizationType: String,
     val evidenceReference: String,
-    val verificationSource: String,
-    val validUntil: String
+    val validUntil: String? = null
 )
-data class ServiceAreaDto(val maxPickupDistanceKm: Double? = null)
+data class ServiceAreaDto(val maxPickupDistanceKm: Double? = null, val logisticsCostPerKm: Double? = null)
 data class ContactDto(val phone: String? = null, val email: String? = null, val alternatePhone: String? = null)
 data class RecyclerMatchesDto(val lotId: String, val matches: List<RecyclerMatchDto> = emptyList())
 data class RecyclerMatchDto(val recycler: RecyclerDto, val offeredRatePerKg: Double? = null, val matchScore: Int = 0, val explanation: JsonObject? = null)
@@ -388,7 +392,7 @@ data class ChatDraftRequestDto(val language: String? = null, val instruction: St
 data class ChatDraftDto(val text: String = "", val source: String = "TEMPLATE", val model: String? = null)
 data class RecyclerReviewDto(val id: String = "", val rating: Int = 0, val pickupReliability: Int? = null, val paymentClarity: Int? = null, val comment: String? = null, val createdAt: String? = null, val verified: Boolean = true)
 data class SubmitReviewRequestDto(val handoverId: String, val rating: Int, val pickupReliability: Int? = null, val paymentClarity: Int? = null, val comment: String? = null)
-data class ConversationDto(val id: String = "", val lotId: String = "", val quoteId: String? = null, val collectorId: String = "", val recyclerId: String = "", val status: String = "OPEN", val lastMessageAt: String? = null, val type: String = "TRADE", val pickupRequestId: String? = null)
+data class ConversationDto(val id: String = "", val lotId: String = "", val quoteId: String? = null, val collectorId: String = "", val recyclerId: String = "", val status: String = "OPEN", val lastMessageAt: String? = null, val type: String = "TRADE", val pickupRequestId: String? = null, val unreadCount: Int = 0)
 data class CreateConversationRequestDto(val lotId: String? = null, val quoteId: String? = null, val collectorId: String? = null, val recyclerId: String? = null, val bulkLotId: String? = null)
 data class CreatePickupConversationRequestDto(val pickupRequestId: String)
 data class ChatMessageDto(val id: String = "", val conversationId: String = "", val senderId: String = "", val senderRole: String = "", val clientMessageId: String = "", val body: String = "", val status: String = "SENT", val createdAt: String? = null, val readAt: String? = null)

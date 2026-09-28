@@ -59,6 +59,7 @@ class FutureFeatureViewModel(
     private val _state = MutableStateFlow(FutureFeatureState())
     val state: StateFlow<FutureFeatureState> = _state.asStateFlow()
     private var pollingJob: Job? = null
+    private var conversationsJob: Job? = null
     private var refreshJob: Job? = null
 
     fun refresh() {
@@ -190,22 +191,49 @@ class FutureFeatureViewModel(
         }
     }
 
-    fun loadMessages(conversationId: String) {
-        viewModelScope.launch {
-            val cached = cache?.messages(conversationId, accountId()).orEmpty()
-            val result = runCatching { api.getMessages(conversationId).requireData().also { cache?.saveMessages(it) } }
-                .getOrElse { cached }
-                .mergePending(cached)
-            _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to result))
+    fun loadConversations() {
+        if (conversationsJob?.isActive == true) return
+        conversationsJob = viewModelScope.launch {
+            val cached = cache?.conversations(accountId()).orEmpty()
+            if (_state.value.conversations.isEmpty() && cached.isNotEmpty()) _state.value = _state.value.copy(conversations = cached)
+            try {
+                val conversations = api.getConversations().requireData()
+                cache?.saveConversations(conversations)
+                _state.value = _state.value.copy(conversations = conversations)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Keep the last successful list while connectivity recovers.
+            }
         }
+    }
+
+    fun loadMessages(conversationId: String) {
+        viewModelScope.launch { fetchMessages(conversationId) }
+    }
+
+    private suspend fun fetchMessages(conversationId: String) {
+        val cached = cache?.messages(conversationId, accountId()).orEmpty()
+        if (_state.value.messages[conversationId].isNullOrEmpty() && cached.isNotEmpty()) {
+            _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to cached))
+        }
+        val result = try {
+            api.getMessages(conversationId).requireData().also { cache?.saveMessages(it) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            cached
+        }
+            .mergePending(_state.value.messages[conversationId].orEmpty() + cached)
+        _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to result))
     }
 
     fun startPolling(conversationId: String) {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (true) {
-                loadMessages(conversationId)
-                delay(15_000)
+                fetchMessages(conversationId)
+                delay(3_000)
             }
         }
     }

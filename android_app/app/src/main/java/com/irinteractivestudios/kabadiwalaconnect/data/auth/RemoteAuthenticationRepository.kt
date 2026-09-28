@@ -99,6 +99,7 @@ class RemoteAuthenticationRepository(
                     materialsAccepted = materials,
                     pickupAvailable = account?.pickupAvailable,
                     serviceRadiusKm = account?.serviceRadiusKm,
+                    authorizationAuthority = account?.authorizationAuthority.trimmedOrNull(), authorizationType = account?.authorizationType.trimmedOrNull(), authorizationEvidenceReference = account?.authorizationEvidenceReference.trimmedOrNull(), authorizationValidUntil = account?.authorizationValidUntil?.takeIf { it.isNotBlank() }?.let { "${it}T23:59:59.999Z" }, alternatePhone = account?.alternatePhone.trimmedOrNull(), pickupAvailability = account?.pickupAvailability, pickupIncluded = account?.pickupIncluded, pickupFee = account?.pickupFee, logisticsCostPerKm = account?.logisticsCostPerKm, operatingHours = account?.operatingHours?.takeIf { it.isNotBlank() }?.let { JsonObject().apply { addProperty("description", it) } },
                     latitude = account?.latitude,
                     longitude = account?.longitude
                 )
@@ -172,6 +173,7 @@ class RemoteAuthenticationRepository(
                 materialsAccepted = request.materialsAccepted,
                 pickupAvailable = request.pickupAvailable,
                 serviceRadiusKm = request.serviceRadiusKm
+                ,authorizationAuthority = request.authorizationAuthority.takeIf { it.isNotBlank() }, authorizationType = request.authorizationType.takeIf { it.isNotBlank() }, authorizationEvidenceReference = request.authorizationEvidenceReference.takeIf { it.isNotBlank() }, authorizationValidUntil = request.authorizationValidUntil.takeIf { it.isNotBlank() }?.let { "${it}T23:59:59.999Z" }, alternatePhone = request.alternatePhone.takeIf { it.isNotBlank() }, pickupAvailability = request.pickupAvailability, pickupIncluded = request.pickupIncluded, pickupFee = request.pickupFee, logisticsCostPerKm = request.logisticsCostPerKm, operatingHours = request.operatingHours.takeIf { it.isNotBlank() }?.let { JsonObject().apply { addProperty("description", it) } }
             )
             val auth = if (request.isReturning) api.login(body) else api.signup(body)
             val result = auth.requireData()

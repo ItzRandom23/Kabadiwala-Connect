@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonObject
@@ -51,7 +54,7 @@ fun AdminConsoleScreen(
     onExportDataset: () -> Unit,
     onLogout: () -> Unit
 ) {
-    var recyclerDialog by remember { mutableStateOf<String?>(null) }
+    var recyclerDialog by remember { mutableStateOf<JsonObject?>(null) }
     var disputeDialog by remember { mutableStateOf<String?>(null) }
     var paymentDialog by remember { mutableStateOf<String?>(null) }
     var anomalyDialog by remember { mutableStateOf<String?>(null) }
@@ -105,7 +108,7 @@ fun AdminConsoleScreen(
             }
             state.items.forEach { item ->
                 when (state.section) {
-                    AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, state.canAuthorizeRecyclers, { recyclerDialog = item.stringValue("id", "recyclerId") }, onSelect)
+                    AdminSection.RECYCLERS -> RecyclerReviewCard(item, state.actionBusy, state.canAuthorizeRecyclers, { recyclerDialog = item }, onSelect)
                     AdminSection.DISPUTES -> DisputeReviewCard(item, state.actionBusy) { disputeDialog = item.stringValue("id", "disputeId") }
                     AdminSection.PAYMENTS -> PaymentReviewCard(item, state.actionBusy) { paymentDialog = item.stringValue("id", "paymentId") }
                     AdminSection.ANOMALIES -> AnomalyReviewCard(item, state.actionBusy) { anomalyDialog = item.stringValue("id", "flagId") }
@@ -115,14 +118,14 @@ fun AdminConsoleScreen(
         }
     }
 
-    recyclerDialog?.let { id ->
+    recyclerDialog?.let { item ->
         RecyclerAuthorizationDialog(
-            recyclerId = id,
+            item = item,
             busy = state.actionBusy,
             onDismiss = { recyclerDialog = null },
             onSubmit = { status, reason, authority, registration, type, evidence, source, validUntil ->
                 recyclerDialog = null
-                onAuthorizeRecycler(id, status, reason, authority, registration, type, evidence, source, validUntil)
+                onAuthorizeRecycler(item.stringValue("id"), status, reason, authority, registration, type, evidence, source, validUntil)
             }
         )
     }
@@ -160,7 +163,7 @@ fun AdminConsoleScreen(
         onUpdatePrice(id, min, max, market, reason)
     }
     state.selected?.let { item ->
-        AlertDialog(
+        if (state.section == AdminSection.RECYCLERS) RecyclerRecordDetailsDialog(item, onClearSelection) else AlertDialog(
             onDismissRequest = onClearSelection,
             title = { Text("Record details") },
             text = { Text(item.entrySet().joinToString("\n") { (key, value) -> "$key: ${if (value.isJsonPrimitive) value.asString else value.toString()}" }) },
@@ -185,15 +188,23 @@ private fun AdminTools(busy: Boolean, canManagePrices: Boolean, canExportDataset
 }
 
 @Composable
-private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, canAuthorize: Boolean, onReview: () -> Unit, onSelect: (JsonObject) -> Unit) = ReviewCard(
-    title = item.stringValue("businessName", "displayName", "id"),
-    subtitle = "${item.stringValue("verificationStatus", "status")} · ${item.stringValue("city", "areaName")}",
-    item = item,
-    actionLabel = if (canAuthorize) "Authorize" else "View details",
-    busy = busy,
-    onAction = { if (canAuthorize) onReview() else onSelect(item) },
-    onSelect = if (canAuthorize) onSelect else null
-)
+private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, canAuthorize: Boolean, onReview: () -> Unit, onSelect: (JsonObject) -> Unit) {
+    val materials = item.getAsJsonArray("materials")?.mapNotNull { runCatching { it.asJsonObject.stringValue("category") }.getOrNull() }.orEmpty()
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(item.stringValue("name").ifBlank { "Unnamed facility" }, style = MaterialTheme.typography.titleLarge)
+            Text(item.stringValue("areaName").ifBlank { "Area not provided" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(item.stringValue("authorizationStatus").replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase), color = MaterialTheme.colorScheme.primary)
+            Text("Registration  ${item.stringValue("licenseNumber").ifBlank { "Not provided" }}")
+            Text("Materials  ${materials.take(3).joinToString(" · ").ifBlank { "Not provided" }}${if (materials.size > 3) " · +${materials.size - 3}" else ""}")
+            Text("Pickup  ${if (item.booleanValue("pickupAvailable")) "Available" else "Not available"}")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onSelect(item) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Review") }
+                if (canAuthorize) Button(onClick = onReview, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Verify") }
+            }
+        }
+    }
+}
 
 @Composable
 private fun DisputeReviewCard(item: JsonObject, busy: Boolean, onResolve: () -> Unit) = ReviewCard(
@@ -241,28 +252,84 @@ private fun ReviewCard(title: String, subtitle: String, item: JsonObject, action
 }
 
 @Composable
-private fun RecyclerAuthorizationDialog(recyclerId: String, busy: Boolean, onDismiss: () -> Unit, onSubmit: (String, String?, String?, String?, String?, String?, String?, String?) -> Unit) {
-    var status by remember { mutableStateOf("VERIFIED") }
+private fun RecyclerAuthorizationDialog(item: JsonObject, busy: Boolean, onDismiss: () -> Unit, onSubmit: (String, String?, String?, String?, String?, String?, String?, String?) -> Unit) {
+    var status by remember(item.stringValue("id")) { mutableStateOf("UNDER_REVIEW") }
     var reason by remember { mutableStateOf("") }
-    var authority by remember { mutableStateOf("") }
-    var registration by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("") }
-    var evidence by remember { mutableStateOf("") }
     var source by remember { mutableStateOf("") }
     var validUntil by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Authorize recycler") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(recyclerId)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("VERIFIED", "UNDER_REVIEW", "REJECTED").forEach { FilterChip(selected = status == it, onClick = { status = it }, label = { Text(it) }) } }
-            AdminField("Reason", reason) { reason = it }
-            AdminField("Authority", authority) { authority = it }
-            AdminField("Registration number", registration) { registration = it }
-            AdminField("Authorization type", type) { type = it }
-            AdminField("Evidence reference", evidence) { evidence = it }
-            AdminField("Verification source", source) { source = it }
-            AdminField("Valid until (ISO-8601)", validUntil) { validUntil = it }
+    val context = LocalContext.current
+    val submittedDate = item.stringValue("authorizationValidUntil").take(10)
+    val canVerify = listOf("authorizationAuthority", "licenseNumber", "authorizationType", "authorizationEvidenceReference").all { item.stringValue(it).isNotBlank() }
+    val valid = !busy && when (status) { "VERIFIED" -> canVerify && source.trim().length >= 3; "REJECTED" -> reason.trim().length >= 10; else -> true }
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.imePadding(), title = { Text("Review ${item.stringValue("name").ifBlank { "facility" }}") }, text = {
+        Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Decision", style = MaterialTheme.typography.titleMedium)
+            listOf("UNDER_REVIEW" to "Under review", "VERIFIED" to "Verified", "REJECTED" to "Rejected").forEach { (key, label) -> FilterChip(selected = status == key, onClick = { status = key }, label = { Text(label) }, modifier = Modifier.fillMaxWidth()) }
+            HorizontalDivider()
+            Text("Submitted information", style = MaterialTheme.typography.titleMedium)
+            DetailRow("Registration", item.stringValue("licenseNumber"))
+            DetailRow("Authority", item.stringValue("authorizationAuthority"))
+            DetailRow("Authorization type", item.stringValue("authorizationType"))
+            DetailRow("Evidence", item.stringValue("authorizationEvidenceReference"))
+            DetailRow("Valid until", submittedDate)
+            if (status == "VERIFIED") {
+                if (!canVerify) Text("The Recycler must complete registration, authority, type, and evidence before verification.", color = MaterialTheme.colorScheme.error)
+                AdminField("Verification method · Required", source) { source = it.take(500) }
+                OutlinedButton(onClick = {
+                    val today = java.util.Calendar.getInstance()
+                    android.app.DatePickerDialog(context, { _, year, month, day -> validUntil = "%04d-%02d-%02dT23:59:59.999Z".format(year, month + 1, day) }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                }, modifier = Modifier.fillMaxWidth()) { Text(if (validUntil.isBlank()) "Override validity date · Optional" else "Verified until ${validUntil.take(10)}") }
+                AdminField("Internal note · Optional", reason) { reason = it.take(500) }
+            } else if (status == "REJECTED") AdminField("Rejection reason · Required", reason) { reason = it.take(500) }
+            else AdminField("Review note · Optional", reason) { reason = it.take(500) }
         }
-    }, confirmButton = { Button(onClick = { onSubmit(status, reason, authority, registration, type, evidence, source, validUntil) }, enabled = !busy) { Text("Submit") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { onSubmit(status, reason, null, null, null, null, source, validUntil) }, enabled = valid) { Text("Submit") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+@Composable
+private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit) {
+    val location = item.objectValue("facilityLocation")
+    val contact = item.objectValue("contact")
+    val authorization = item.objectValue("authorizationDetails")
+    val area = item.objectValue("serviceArea")
+    val materials = item.getAsJsonArray("materialsAccepted")?.mapNotNull { runCatching { it.asJsonObject.stringValue("category") }.getOrNull() }.orEmpty()
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(item.stringValue("name").ifBlank { "Facility review" }) }, text = {
+        Column(Modifier.heightIn(max = 540.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("FACILITY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            DetailRow("Business name", item.stringValue("name"))
+            DetailRow("Phone", contact?.stringValue("phone").orEmpty())
+            DetailRow("Alternate phone", contact?.stringValue("alternatePhone").orEmpty())
+            DetailRow("Email", contact?.stringValue("email").orEmpty())
+            DetailRow("Address", location?.stringValue("address").orEmpty())
+            DetailRow("Area", location?.stringValue("areaName").orEmpty())
+            HorizontalDivider()
+            Text("AUTHORIZATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            DetailRow("Status", item.stringValue("authorizationStatus").replace('_', ' '))
+            DetailRow("Registration number", authorization?.stringValue("registrationNumber").orEmpty())
+            DetailRow("Authority", authorization?.stringValue("authority").orEmpty())
+            DetailRow("Authorization type", authorization?.stringValue("type").orEmpty())
+            DetailRow("Evidence", authorization?.stringValue("evidenceReference").orEmpty())
+            DetailRow("Valid until", authorization?.stringValue("validUntil")?.take(10).orEmpty())
+            authorization?.stringValue("reviewReason")?.takeIf(String::isNotBlank)?.let { DetailRow("Review feedback", it) }
+            HorizontalDivider()
+            Text("LOGISTICS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            DetailRow("Materials accepted", materials.joinToString(" · "))
+            DetailRow("Pickup", if (item.booleanValue("pickupAvailable")) "Available" else "Not available")
+            if (item.booleanValue("pickupAvailable")) {
+                DetailRow("Availability", item.stringValue("pickupAvailability").replace('_', ' '))
+                DetailRow("Maximum distance", area?.stringValue("maxPickupDistanceKm")?.let { "$it km" }.orEmpty())
+                DetailRow("Pricing", if (item.booleanValue("pickupIncluded")) "Included" else item.stringValue("pickupFee").takeIf(String::isNotBlank)?.let { "₹$it fixed" } ?: area?.stringValue("logisticsCostPerKm")?.takeIf(String::isNotBlank)?.let { "₹$it per km" }.orEmpty())
+            }
+            DetailRow("Operating hours", item.objectValue("operatingHours")?.stringValue("description").orEmpty())
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
+}
+
+@Composable private fun DetailRow(label: String, value: String) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifBlank { "Not provided" }, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable
@@ -371,5 +438,11 @@ private fun AdminField(label: String, value: String, onValue: (String) -> Unit) 
 private fun JsonObject.stringValue(vararg keys: String): String = keys.firstNotNullOfOrNull { key ->
     get(key)?.takeUnless { it.isJsonNull }?.let { element -> if (element.isJsonPrimitive) element.asString else element.toString().take(100) }
 }.orEmpty()
+
+private fun JsonObject.objectValue(key: String): JsonObject? =
+    get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+
+private fun JsonObject.booleanValue(key: String): Boolean =
+    get(key)?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
 
 private fun JsonObject.compactSummary(): String = entrySet().take(5).joinToString(" · ") { (key, value) -> "$key=${if (value.isJsonPrimitive) value.asString else value.toString().take(40)}" }

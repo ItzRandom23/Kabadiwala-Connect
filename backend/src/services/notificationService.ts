@@ -9,6 +9,7 @@ export type NotificationInput = {
   route?: string;
   /** Stable business-event identity used to make retried requests idempotent. */
   dedupeKey?: string;
+  channels?: Array<'SMS' | 'PUSH'>;
 };
 
 /**
@@ -16,10 +17,10 @@ export type NotificationInput = {
  * dependency of the business operation. Older test/disposable databases may
  * not have the optional model yet, so enqueueing remains best-effort.
  */
-export async function enqueueNotificationDelivery(db: unknown, event: { id: string; accountId: string }) {
+export async function enqueueNotificationDelivery(db: unknown, event: { id: string; accountId: string }, channels: Array<'SMS' | 'PUSH'> = ['SMS', 'PUSH']) {
   const delivery = (db as { notificationDelivery?: { upsert?: (args: unknown) => Promise<unknown> } }).notificationDelivery;
   if (!delivery?.upsert) return;
-  for (const channel of ['SMS', 'PUSH']) {
+  for (const channel of channels) {
     try {
       await delivery.upsert({
         where: { notificationId_channel: { notificationId: event.id, channel } },
@@ -44,11 +45,11 @@ function notificationId(input: NotificationInput) {
  * conditions and push delivery can be added without changing domain services.
  */
 export async function emitNotification(db: PrismaClient, input: NotificationInput) {
-  const { dedupeKey, ...data } = input;
+  const { dedupeKey, channels, ...data } = input;
   const id = dedupeKey ? notificationId(input) : undefined;
   try {
     const event = await db.notificationEvent.create({ data: { ...data, ...(id ? { id } : {}) } });
-    await enqueueNotificationDelivery(db, event);
+    await enqueueNotificationDelivery(db, event, channels);
     return event;
   } catch {
     // A deterministic ID turns a retry into a harmless duplicate-key error.
@@ -57,7 +58,7 @@ export async function emitNotification(db: PrismaClient, input: NotificationInpu
     if (id) {
       try {
         const event = await db.notificationEvent.findUnique({ where: { id } });
-        if (event) await enqueueNotificationDelivery(db, event);
+        if (event) await enqueueNotificationDelivery(db, event, channels);
         return event;
       } catch {
         // Notification delivery must never fail the business operation.

@@ -718,7 +718,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/listings/:listingId/accept', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
-    await store.$transaction(async (tx: any) => {
+    const acceptedPickup = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
       if (!updated.count) {
         const [collector, listing] = await Promise.all([
@@ -734,7 +734,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await tx.householdListing.updateMany({ where: { id: listingId, status: 'POSTED' }, data: { status: 'MATCHED' } });
       const pickup = await tx.pickupRequest.findFirstOrThrow({ where: { listingId, kabadiwalaId: req.identity!.collectorId } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_ACCEPTED', 'PICKUP_REQUEST', pickup.id, { listingId });
-    });
+      return pickup;
+    }));
+    await emitNotification(store, { accountId: acceptedPickup.householdId, type: 'PICKUP_ACCEPTED', title: 'Kabadiwala accepted your pickup', body: 'Your pickup is now assigned. Open the listing to see the next step.', route: `household/pickups/${acceptedPickup.id}`, dedupeKey: `PICKUP_ACCEPTED:${acceptedPickup.id}` });
     res.json({ success: true, data: { status: 'ACCEPTED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/reject', requireAuth(jwt, collectors), async (req, res) => {

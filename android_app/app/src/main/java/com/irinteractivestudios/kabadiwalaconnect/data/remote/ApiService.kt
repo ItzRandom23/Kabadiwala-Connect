@@ -450,6 +450,8 @@ interface ApiService {
     // authority for the permission claims on these requests.
     @PUT("admin/prices/{priceId}")
     suspend fun adminUpdatePrice(@Path("priceId") priceId: String, @Body body: JsonObject): Response<ApiEnvelope<JsonObject>>
+    @GET("materials/categories")
+    suspend fun materialCategories(): Response<ApiEnvelope<List<String>>>
     @GET("admin/recyclers")
     suspend fun adminRecyclerQueue(@Query("status") status: String? = null): Response<ApiEnvelope<List<JsonObject>>>
     @GET("admin/recyclers/{recyclerId}")

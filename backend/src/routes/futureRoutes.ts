@@ -9,6 +9,7 @@ import { z } from 'zod';
 import type { JwtService } from '../services/jwt.js';
 import { requireAccount } from '../middleware/auth.js';
 import { AppError } from '../utils/errors.js';
+import { emitNotification } from '../services/notificationService.js';
 
 const { AccountRole, DescriptionSource, MessageStatus, PreferredLanguage, RewardStatus } = prismaPackage;
 
@@ -536,9 +537,14 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       ? await db.pickupRequest.findMany({ where: { id: { in: listingIds } }, select: { id: true, listingId: true } })
       : [];
     const listingByPickup = new Map(pickupRows.map(row => [row.id, row.listingId]));
+    const [tradeUnread, pickupUnread] = await Promise.all([
+      trades.length ? db.chatMessage.groupBy({ by: ['conversationId'], where: { conversationId: { in: trades.map(chat => chat.id) }, senderId: { not: identity.collectorId }, readAt: null }, _count: { _all: true } }) : [],
+      pickupChats.length ? db.pickupChatMessage.groupBy({ by: ['conversationId'], where: { conversationId: { in: pickupChats.map(chat => chat.id) }, senderId: { not: identity.collectorId }, readAt: null }, _count: { _all: true } }) : []
+    ]);
+    const unreadByConversation = new Map([...tradeUnread, ...pickupUnread].map(row => [row.conversationId, row._count._all]));
     const conversations = [
-      ...trades.map(conversation => ({ ...conversation, type: 'TRADE', pickupRequestId: null })),
-      ...pickupChats.map(conversation => pickupConversationDto(conversation, listingByPickup.get(conversation.pickupRequestId) ?? ''))
+      ...trades.map(conversation => ({ ...conversation, type: 'TRADE', pickupRequestId: null, unreadCount: unreadByConversation.get(conversation.id) ?? 0 })),
+      ...pickupChats.map(conversation => ({ ...pickupConversationDto(conversation, listingByPickup.get(conversation.pickupRequestId) ?? ''), unreadCount: unreadByConversation.get(conversation.id) ?? 0 }))
     ].sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
     return res.json({ success: true, data: conversations, message: 'Conversations retrieved' });
   });
@@ -606,6 +612,10 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const readUpdate = { status: MessageStatus.READ, readAt: new Date() };
     if (context.kind === 'PICKUP') await db.pickupChatMessage.updateMany({ where: unreadFilter, data: readUpdate });
     else await db.chatMessage.updateMany({ where: unreadFilter, data: readUpdate });
+    await db.notificationEvent.updateMany({
+      where: { accountId: identity.collectorId, type: 'CHAT_MESSAGE', route: `messages/${req.params.conversationId}`, readAt: null },
+      data: { readAt: new Date() }
+    });
     return res.json({ success: true, data: messages.reverse(), message: 'Messages retrieved' });
   });
 
@@ -626,6 +636,18 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       : await db.chatMessage.create({ data: messageInput });
     if (context.kind === 'PICKUP') await db.pickupConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
     else await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: message.createdAt } });
+    const recipientId = context.kind === 'PICKUP'
+      ? (identity.collectorId === context.conversation.householdId ? context.conversation.kabadiwalaId : context.conversation.householdId)
+      : (identity.collectorId === context.conversation.collectorId ? context.conversation.recyclerId : context.conversation.collectorId);
+    await emitNotification(db, {
+      accountId: recipientId,
+      type: 'CHAT_MESSAGE',
+      title: context.kind === 'PICKUP' ? 'New pickup message' : 'New recycler trade message',
+      body: `${identity.role === 'HOUSEHOLD' ? 'Household' : identity.role === 'RECYCLER' ? 'Recycler' : 'Kabadiwala'}: ${message.body.slice(0, 120)}`,
+      route: `messages/${conversation.id}`,
+      dedupeKey: `CHAT_MESSAGE:${message.id}`,
+      channels: ['PUSH']
+    });
     return res.status(201).json({ success: true, data: message, message: 'Message sent' });
   });
 

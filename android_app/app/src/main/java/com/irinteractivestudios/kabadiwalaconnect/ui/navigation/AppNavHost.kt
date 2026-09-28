@@ -274,7 +274,7 @@ fun AppNavHost(
             LotRoute(
                 vm,
                 onSafety = { navController.navigate(Destinations.SAFETY) },
-                onViewSaved = { navController.navigate(Destinations.MY_LOTS) },
+                onViewSaved = { vm.state.value.savedLotId?.let { navController.navigate(Destinations.lotDetail(it)) } },
                 onHome = {
                     if (!navController.popBackStack(Destinations.HOME, false)) {
                         navController.navigate(Destinations.HOME) {
@@ -314,7 +314,7 @@ fun AppNavHost(
             val scope = rememberCoroutineScope()
             var repeating by remember(id) { mutableStateOf(false) }
             var repeatError by remember(id) { mutableStateOf(false) }
-            lot?.let { item -> LotDetailScreen(item, onCancel = { scope.launch { factory.lotWriter.cancel(id, System.currentTimeMillis()) } }, onEdit = { navController.navigate(Destinations.lotEdit(id)) }, repeating = repeating, repeatError = repeatError, onTimeline = { navController.navigate(Destinations.transactionTimeline(id)) }, onRepeat = {
+            lot?.let { item -> LotDetailScreen(item, onCancel = { scope.launch { factory.lotWriter.cancel(id, System.currentTimeMillis()) } }, onEdit = { navController.navigate(Destinations.lotEdit(id)) }, onRequestQuotes = { navController.navigate(Destinations.quoteRequest(id, "none")) }, repeating = repeating, repeatError = repeatError, onTimeline = { navController.navigate(Destinations.transactionTimeline(id)) }, onRepeat = {
                 if (!repeating) {
                     repeating = true
                     repeatError = false
@@ -419,7 +419,7 @@ fun AppNavHost(
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refreshKabadiwala() }
-                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenTools = { navController.navigate(Destinations.KABADIWALA_TOOLS) }, onOpenPickups = { navController.navigate(Destinations.KABADIWALA_PICKUPS) }, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) })
+                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenTools = { navController.navigate(Destinations.KABADIWALA_TOOLS) }, onOpenPickups = { navController.navigate(Destinations.KABADIWALA_PICKUPS) }, onOpenInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) }, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) })
             } else {
                 val vm: HomeViewModel = viewModel(factory = factory)
                 val state by vm.uiState.collectAsStateWithLifecycle()
@@ -541,7 +541,8 @@ fun AppNavHost(
             val lots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
             val recyclers by factory.recyclers.observeRecyclers().collectAsStateWithLifecycle(initialValue = emptyList())
             val scope = rememberCoroutineScope()
-            QuoteRequestScreen(lots, recyclers, lotId, recyclerId, factory.quoteRepository, onSubmitted = { id -> scope.launch { factory.lotWriter.lock(id, System.currentTimeMillis()); navController.navigate(Destinations.quoteCompare(id)) } })
+            LaunchedEffect(lotId) { factory.refreshCatalogs(force = true) }
+            QuoteRequestScreen(lots, recyclers, lotId, recyclerId, factory.quoteRepository, onSubmitted = { id -> scope.launch { factory.lotWriter.lock(id, System.currentTimeMillis()); navController.navigate(Destinations.quoteCompare(id)) } }, onRefreshCatalogs = { scope.launch { factory.refreshCatalogs(force = true) } })
         }
         composable(Destinations.QUOTE_COMPARE, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
             val lotId = entry.arguments?.getString("lotId").orEmpty()
@@ -1037,7 +1038,12 @@ fun AppNavHost(
             else {
                 val vm: FutureFeatureViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) { vm.refresh() }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        vm.loadConversations()
+                        kotlinx.coroutines.delay(5_000)
+                    }
+                }
                 ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh, currentAccountId = factory.currentAccount?.profileId.orEmpty())
             }
         }
@@ -1048,7 +1054,8 @@ fun AppNavHost(
                 val vm: FutureFeatureViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 val conversation = state.conversations.firstOrNull { it.id == id }
-                LaunchedEffect(id) { vm.refresh(); vm.startPolling(id) }
+                LaunchedEffect(id) { vm.loadConversations(); vm.startPolling(id) }
+                androidx.compose.runtime.DisposableEffect(id) { onDispose { vm.stopPolling() } }
                 conversation?.let {
                 ChatDetailScreen(
                     conversation = it,
@@ -1167,9 +1174,13 @@ fun AppNavHost(
                 var saving by remember { mutableStateOf(false) }
                 var saveError by remember { mutableStateOf<String?>(null) }
                 val scope = rememberCoroutineScope()
+                LaunchedEffect(Unit) {
+                    runCatching { factory.refreshAccount() }.onSuccess { refreshed ->
+                        if (refreshed != null) profile = refreshed
+                    }
+                }
                 RecyclerProfileScreen(
                     profile = profile,
-                    onLogout = onLogout,
                     saving = saving,
                     saveError = saveError,
                     onSave = { draft: ProfileEditDraft ->

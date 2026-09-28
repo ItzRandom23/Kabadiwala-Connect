@@ -517,6 +517,7 @@ model Recycler {
   phone                          String?
   email                          String?
   alternatePhone                 String?
+  pickupAvailable                Boolean                      @default(false)
   maxPickupDistanceKm            Float
   logisticsCostPerKm             Float?
   pickupFee                      Float?

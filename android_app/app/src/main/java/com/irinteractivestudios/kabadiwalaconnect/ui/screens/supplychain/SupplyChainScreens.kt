@@ -536,21 +536,24 @@ private fun HouseholdListingCard(
             if (pickup == null && listing.status == "POSTED") {
                 if (pickupPendingSync) {
                     Text("Pickup request saved offline. Waiting for a connection to send it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                } else if (kabadiwalas.isNotEmpty()) {
-                    Text("Collectors see this listing after you send a pickup request. Choose a partner:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Send to nearby Kabadiwalas. The first one to accept gets this pickup; everyone else sees it as taken.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = { onRequestPickup(listing.id, null) }, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Notify nearby Kabadiwalas")
+                    }
+                }
+                if (!pickupPendingSync && kabadiwalas.isNotEmpty()) {
+                    Text("Or choose one Kabadiwala directly:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     kabadiwalas.take(4).forEach { kabadiwala ->
                         val requestBusy = "pickup-${listing.id}" in busy
                         OutlinedButton(onClick = { onRequestPickup(listing.id, kabadiwala.id) }, enabled = !requestBusy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Filled.LocalShipping, null); Spacer(Modifier.width(8.dp)); Text("Request pickup · ${kabadiwala.displayName ?: "Kabadiwala"}")
                         }
                     }
-                } else {
+                } else if (!pickupPendingSync && kabadiwalas.isEmpty()) {
                     Text("No Kabadiwala is available within ${radiusKm} km right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (radiusKm < 20) OutlinedButton(onClick = onIncreaseRadius, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text("Increase radius to ${if (radiusKm == 5) 10 else 25} km")
-                    }
-                    OutlinedButton(onClick = { onRequestPickup(listing.id, null) }, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Notify nearby Kabadiwalas")
                     }
                 }
                 OutlinedButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel listing") }
@@ -1320,7 +1323,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         val hasCollectorSnapshot = state.initialLoadComplete || state.cachedAtEpochMs > 0L || state.pickups.isNotEmpty() || state.inventory.isNotEmpty()
         if (!hasCollectorSnapshot && state.loading) item { LoadingPanel("Loading your collection desk…") }
         if (section == KabadiwalaSection.HOME && hasCollectorSnapshot) item {
-            CollectorOverview(state, onCreateCapturedLot)
+            CollectorOverview(state, onOpenInventory, onOpenPickups)
         }
         if (section == KabadiwalaSection.HOME || section == KabadiwalaSection.PICKUPS) item {
             Text("Pickup shift: 10:30 AM–6:00 PM India time. Start trip during this shift, then mark Arrived at the household to unlock its QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1379,7 +1382,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (visibleCapturedLots.isEmpty()) item { EmptyPanel("No saved records", "Collected scrap records will appear here.", actionLabel = "Record scrap", onAction = onCreateCapturedLot) }
+                        if (visibleCapturedLots.isEmpty()) item { EmptyPanel("No saved records", "Photo records for direct recycler quotes will appear here.", actionLabel = "Create photo record", onAction = onCreateCapturedLot) }
                         items(visibleCapturedLots, key = { "captured-${it.id}" }) { lot -> CapturedLotCard(lot) }
                     }
                 }
@@ -1444,7 +1447,7 @@ private fun LotsModeSelector(
 }
 
 @Composable
-private fun CollectorOverview(state: SupplyChainState, onCreateCapturedLot: () -> Unit) {
+private fun CollectorOverview(state: SupplyChainState, onOpenInventory: () -> Unit, onOpenPickups: () -> Unit) {
     val waiting = state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }
     val scheduled = state.pickups.count { it.status == "SCHEDULED" }
     val stockKg = state.inventory.sumOf { it.availableKg + it.reservedKg }
@@ -1470,12 +1473,12 @@ private fun CollectorOverview(state: SupplyChainState, onCreateCapturedLot: () -
                     CollectorMetric("${"%.1f".format(stockKg)} kg", "In stock", Modifier.fillMaxWidth())
                 }
             }
-            Button(onClick = onCreateCapturedLot, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Button(onClick = if (state.inventory.any { it.availableKg > 0 }) onOpenInventory else onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 Icon(Icons.Filled.Inventory2, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Record collected scrap")
+                Text(if (state.inventory.any { it.availableKg > 0 }) "List stock for recyclers" else "Open pickups")
             }
-            Text("Saves a field record for recycler quotes. It does not add stock to bulk inventory. Bulk recycler lots use stock from completed household pickups.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+            Text(if (state.inventory.any { it.availableKg > 0 }) "Create a recycler lot from weighed stock." else "Complete a household pickup with its QR and final weight to add stock.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
         }
     }
 }

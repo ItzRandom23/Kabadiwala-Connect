@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
@@ -35,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +47,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +59,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ChatMessageDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DiyActivityDto
@@ -63,6 +69,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RewardLedgerDto
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.launch
 import com.irinteractivestudios.kabadiwalaconnect.R
 
 private fun rupees(value: Double) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN")).format(value)
@@ -186,6 +193,11 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
                         )
                         Text(conversation.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (conversation.unreadCount > 0) {
+                        Surface(color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, shape = RoundedCornerShape(10.dp)) {
+                            Text(conversation.unreadCount.coerceAtMost(99).toString(), Modifier.padding(horizontal = 9.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -195,16 +207,33 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 @Composable
 fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     var draft by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val scrollScope = rememberCoroutineScope()
+    var lastSeenMessageId by remember(conversation.id) { mutableStateOf<String?>(null) }
+    var newMessagesBelow by remember(conversation.id) { mutableIntStateOf(0) }
     LaunchedEffect(draftSuggestion) { if (!draftSuggestion.isNullOrBlank()) draft = draftSuggestion }
-    Column(modifier.fillMaxSize().imePadding().padding(16.dp)) {
-        Text(if (conversation.type == "PICKUP") "Pickup chat" else "Chat with ${if (conversation.collectorId == currentAccountId) "Recycler" else "Kabadiwala"}", style = MaterialTheme.typography.headlineMedium)
-        Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        val newest = messages.lastOrNull() ?: return@LaunchedEffect
+        if (newest.id != lastSeenMessageId) {
+            val atBottom = listState.layoutInfo.visibleItemsInfo.any { it.key == lastSeenMessageId }
+            if (lastSeenMessageId == null || atBottom || newest.senderId == currentAccountId || newest.senderId.isBlank()) {
+                listState.animateScrollToItem(messages.lastIndex)
+                newMessagesBelow = 0
+            } else {
+                newMessagesBelow++
+            }
+            lastSeenMessageId = newest.id
+        }
+    }
+    Column(modifier.fillMaxSize().imePadding().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Text(if (conversation.type == "PICKUP") "Pickup conversation" else if (conversation.collectorId == currentAccountId) "Recycler conversation" else "Kabadiwala conversation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(14.dp))
+        LazyColumn(Modifier.weight(1f), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(messages, key = { it.id }) { message ->
                 val isMine = message.senderId.isBlank() || message.senderId == currentAccountId
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start) {
-                    Surface(color = if (isMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(0.88f)) {
+                    Surface(color = if (isMine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, shape = if (isMine) RoundedCornerShape(18.dp, 18.dp, 5.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 5.dp), modifier = Modifier.fillMaxWidth(0.86f)) {
                         Column(Modifier.padding(12.dp)) {
                             val senderLabel = if (isMine) R.string.future_chat_sender_you else when (message.senderRole.uppercase(Locale.ROOT)) {
                                 "HOUSEHOLD" -> R.string.auth_demo_household
@@ -227,6 +256,14 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
                 }
             }
         }
+        if (newMessagesBelow > 0) {
+            TextButton(onClick = {
+                newMessagesBelow = 0
+                if (messages.isNotEmpty()) scrollScope.launch { listState.animateScrollToItem(messages.lastIndex) }
+            }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text("$newMessagesBelow new message${if (newMessagesBelow == 1) "" else "s"} below ↓")
+            }
+        }
         if (drafting || (!draftSuggestion.isNullOrBlank() && draft.isNotBlank())) {
             Text(stringResource(if (drafting) R.string.future_chat_drafting else R.string.future_chat_draft_note), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -240,7 +277,7 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
                 if (draft.isBlank() && !draftSuggestion.isNullOrBlank()) onDraftCleared()
             }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.future_message)) }, maxLines = 4)
             IconButton(onClick = onDraftReply, enabled = !sending && !drafting) { Icon(Icons.Filled.AutoAwesome, contentDescription = stringResource(R.string.future_chat_draft)) }
-            Button(enabled = draft.isNotBlank() && !sending, onClick = { onSend(draft); draft = "" }) { Text(stringResource(R.string.future_send)) }
+            FilledIconButton(enabled = draft.isNotBlank() && !sending, onClick = { onSend(draft); draft = "" }, modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.future_send)) }
         }
     }
 }

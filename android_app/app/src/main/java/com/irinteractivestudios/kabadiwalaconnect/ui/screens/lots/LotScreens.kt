@@ -273,8 +273,8 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
         if (state.step != LotStep.SAVED) {
             WorkflowProgress(
                 current = state.step.ordinal + 1,
-                total = 7,
-                label = stringResource(R.string.lot_step, state.step.ordinal + 1, 7)
+                total = 6,
+                label = stringResource(R.string.lot_step, state.step.ordinal + 1, 6)
             )
             if (state.step != LotStep.PHOTO) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -307,7 +307,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     Icon(Icons.Filled.CameraAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(58.dp))
     Text(stringResource(R.string.lot_photo_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_photo_detail), style = MaterialTheme.typography.bodyLarge)
-    Text("This saves a collected scrap record for recycler quotes. It does not add stock to bulk inventory or publish a bulk recycler lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Create a photo record, then choose recyclers to request quotes. Bulk marketplace lots are created from weighed pickup inventory.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isNotEmpty()) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             items(s.photoPaths, key = { it }) { path ->
@@ -372,7 +372,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                 }
             }
             when (s.materialDetectionStatus) {
-                MaterialDetectionStatus.LOW_CONFIDENCE -> Text(stringResource(R.string.lot_material_low_confidence), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.LOW_CONFIDENCE -> Text("Check the suggestion and choose the closest material below.", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.UNSUPPORTED_IMAGE -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_unsupported_image), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.NETWORK_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.SERVICE_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -398,30 +398,22 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
         OutlinedButton(onClick = onSafety, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_safety_open)) }
 OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, null, "lot-safety") }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.AutoMirrored.Filled.VolumeUp, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.safety_hear)) }
     }
-    Material.entries.chunked(2).forEach { row ->
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            row.forEach { material ->
-                val selected = material == s.material
-                Card(
-                    onClick = { vm.chooseMaterial(material) },
-                    shape = MaterialTheme.shapes.medium,
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 3.dp else 1.dp),
-                    modifier = Modifier.weight(1f).heightIn(min = 100.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            selected -> MaterialTheme.colorScheme.primaryContainer
-                            material.hazardous -> MaterialTheme.colorScheme.errorContainer
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    )
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val friendly = friendlyMaterial(materialCatalogKey(material))
-                        Icon(materialIcon(material), contentDescription = friendly.title, tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(30.dp))
-                        Text(friendly.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold)
-                        Text(friendly.examples, style = MaterialTheme.typography.labelSmall, maxLines = 2)
-                    }
+    Material.entries.forEach { material ->
+        val friendly = friendlyMaterial(materialCatalogKey(material))
+        Surface(
+            onClick = { vm.chooseMaterial(material) },
+            shape = MaterialTheme.shapes.medium,
+            color = if (s.material == material) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag("lot_material_${material.name}")
+        ) {
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(materialIcon(material), contentDescription = null, tint = if (material.hazardous) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(friendly.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(friendly.examples, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (material.hazardous) Icon(Icons.Filled.Warning, contentDescription = "Handle with care", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -456,23 +448,10 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
         isError = s.weightError,
-        supportingText = { Text(if (s.weightError) stringResource(R.string.lot_weight_error) else stringResource(R.string.lot_weight_slider_hint)) },
+        supportingText = { Text(if (s.weightError) stringResource(R.string.lot_weight_error) else "Enter the exact scale reading.") },
         modifier = Modifier.fillMaxWidth().testTag("lot_weight")
     )
-    val sliderMax = if (s.weightUnit == WeightUnit.GRAMS) 10_000f else 500f
-    val value = s.weightText.toFloatOrNull()?.coerceIn(0f, sliderMax) ?: 0f
-    Slider(
-        value = value,
-        onValueChange = { next ->
-            vm.setWeight(
-                if (s.weightUnit == WeightUnit.GRAMS) next.roundToInt().toString()
-                else String.format(Locale.US, "%.1f", next)
-            )
-        },
-        valueRange = 0f..sliderMax,
-        steps = 99,
-        modifier = Modifier.testTag("lot_weight_slider")
-    )
+    Text("Use the number shown on your scale. You can enter grams or kilograms.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     KcPrimaryButton(stringResource(R.string.lot_next), vm::confirmWeight, icon = Icons.Filled.CheckCircle, testTag = "lot_weight_next")
 }
 @Composable private fun LocationStep(s: LotDraftState, vm: LotManagementViewModel, gps: () -> Unit) {
@@ -519,7 +498,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 }
 @Composable private fun ReviewStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_review_title), style = MaterialTheme.typography.headlineMedium)
-    Text("Saving creates a field record for recycler quotes. Bulk recycler lots use inventory added after a household pickup's QR scan and final weight.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Save this photo record, then request quotes from recyclers. To publish a bulk marketplace lot, complete a pickup and list its weighed inventory.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isEmpty()) {
         Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
@@ -568,7 +547,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     OutlinedTextField(s.notes, vm::setNotes, label = { Text(stringResource(R.string.lot_description_label)) }, supportingText = { Text(if (s.descriptionSource == "AI") stringResource(R.string.lot_description_ai) else stringResource(R.string.lot_description_fallback)) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6)
     if (s.saveError) Text(stringResource(R.string.lot_save_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     KcPrimaryButton(
-        stringResource(if (s.isSaving) R.string.lot_saving else R.string.lot_save),
+        if (s.isSaving) "Saving record…" else "Save and choose recyclers",
         vm::save,
         icon = Icons.Filled.CheckCircle,
         enabled = !s.isSaving,
@@ -581,8 +560,8 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
-            Text("Field record saved for recycler quotes. Bulk inventory is updated separately after a household pickup's QR scan and final weight.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            KcPrimaryButton(stringResource(R.string.lot_view_saved), onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
+            Text("Your photo record is saved. Open it to request quotes when the server sync finishes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            KcPrimaryButton("Open record and request quotes", onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
             OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("lot_back_home")) {
                 Text(stringResource(R.string.lot_back_home))
             }
@@ -603,7 +582,44 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     } }
 }
 
-@Composable fun LotDetailScreen(lot: Lot, onCancel: () -> Unit, onEdit: () -> Unit = {}, onRepeat: () -> Unit = {}, repeating: Boolean = false, repeatError: Boolean = false, onTimeline: () -> Unit = {}) { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }; Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium); ReviewRow(stringResource(R.string.lot_condition_label), lot.condition); ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString())); ReviewRow(stringResource(R.string.lot_area_label), lot.location); lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }; lot.quoteRupees?.let { ReviewRow(stringResource(R.string.lot_user_price_label), "₹%.0f".format(it)) }; Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge); if (repeatError) Text(stringResource(R.string.lot_repeat_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium); if (lot.status in setOf(LotStatus.COLLECTOR_CONFIRMED, LotStatus.HANDED_OVER, LotStatus.PAID, LotStatus.DISPUTED)) OutlinedButton(onClick = onTimeline, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_timeline")) { Text(stringResource(R.string.transaction_passport_title)) }; if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, enabled = !repeating, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(if (repeating) R.string.lot_repeat_sending else R.string.lot_repeat)) }; if (lot.status == LotStatus.SAVED) { OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_edit")) { Text(stringResource(R.string.lot_edit)) }; OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) } } } }
+@Composable
+fun LotDetailScreen(
+    lot: Lot,
+    onCancel: () -> Unit,
+    onEdit: () -> Unit = {},
+    onRequestQuotes: () -> Unit = {},
+    onRepeat: () -> Unit = {},
+    repeating: Boolean = false,
+    repeatError: Boolean = false,
+    onTimeline: () -> Unit = {}
+) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        lot.localPhotoPath?.let { decodeSampledBitmap(it)?.let { image -> Image(image, null, Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop) } }
+        Text(lot.materialLabel, style = MaterialTheme.typography.headlineMedium)
+        ReviewRow(stringResource(R.string.lot_condition_label), lot.condition)
+        ReviewRow(stringResource(R.string.lot_weight_label), stringResource(R.string.lot_weight_value, lot.weightKg.toString()))
+        ReviewRow(stringResource(R.string.lot_area_label), lot.location)
+        lot.estimatedValueRupees?.let { Text(stringResource(R.string.lot_estimated_value, it), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }
+        lot.quoteRupees?.let { ReviewRow(stringResource(R.string.lot_user_price_label), "₹%.0f".format(it)) }
+        Text(stringResource(R.string.lot_estimate_disclaimer), style = MaterialTheme.typography.bodyMedium)
+        if (lot.status == LotStatus.SAVED) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Next: request recycler quotes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(if (lot.synced) "Choose verified recyclers and send this photo record for a quote." else "Waiting for this record and its photo to sync. Keep the app online, then return here to request quotes.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            KcPrimaryButton("Choose recyclers", onRequestQuotes, enabled = lot.synced, modifier = Modifier.fillMaxWidth(), testTag = "lot_request_quotes")
+            OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_edit")) { Text(stringResource(R.string.lot_edit)) }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_cancel")) { Text(stringResource(R.string.lot_cancel)) }
+        }
+        Text(stringResource(R.string.lot_timeline), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.lot_created_timeline), style = MaterialTheme.typography.bodyLarge)
+        if (repeatError) Text(stringResource(R.string.lot_repeat_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        if (lot.status in setOf(LotStatus.COLLECTOR_CONFIRMED, LotStatus.HANDED_OVER, LotStatus.PAID, LotStatus.DISPUTED)) OutlinedButton(onClick = onTimeline, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_timeline")) { Text(stringResource(R.string.transaction_passport_title)) }
+        if (lot.status == LotStatus.PAID) OutlinedButton(onClick = onRepeat, enabled = !repeating, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_repeat")) { Text(stringResource(if (repeating) R.string.lot_repeat_sending else R.string.lot_repeat)) }
+    }
+}
 
 /**
  * Edits the fields supported by the backend while a lot is still CREATED.

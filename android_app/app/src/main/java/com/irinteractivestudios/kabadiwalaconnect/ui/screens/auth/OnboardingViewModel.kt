@@ -13,6 +13,8 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.OtpVerification
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.PhoneAccountRequest
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.saveAccount
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
@@ -27,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.time.LocalDate
 
 enum class OnboardingStep { WELCOME, EMAIL, ROLE, LANGUAGE, RECYCLER_DETAILS, PHONE, OTP, LOCATION_PERMISSION, AREA, COMPLETE }
 enum class LocationChoice { GPS, MANUAL }
@@ -45,6 +48,10 @@ data class OnboardingState(
     val materialsAccepted: Set<String> = emptySet(),
     val pickupAvailable: Boolean = false,
     val serviceRadiusKm: Int = 25,
+    val materialCategories: List<String> = emptyList(), val materialCategoriesError: Boolean = false,
+    val authorizationAuthority: String = "", val authorizationType: String = "", val authorizationEvidenceReference: String = "", val authorizationValidUntil: String = "", val alternatePhone: String = "",
+    val pickupAvailability: String = "FLEXIBLE", val pickupPricing: String = "INCLUDED", val pickupFeeText: String = "", val logisticsCostText: String = "", val operatingHours: String = "",
+    val recyclerDetailsError: String? = null,
     val phone: String = "",
     val otp: String = "",
     val language: String = LocaleManager.ENGLISH,
@@ -76,7 +83,8 @@ class OnboardingViewModel(
     private val secureStorage: SecureStorage? = null,
     initialLanguage: String = LocaleManager.ENGLISH,
     private val now: () -> Long = { System.currentTimeMillis() },
-    private val locationProvider: LocationProvider? = null
+    private val locationProvider: LocationProvider? = null,
+    private val apiService: ApiService? = null
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         OnboardingState(language = LocaleManager.normalizeTag(initialLanguage))
@@ -242,19 +250,55 @@ class OnboardingViewModel(
     fun selectRole(role: AccountRole) {
         val next = if (role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
         _state.value = _state.value.copy(role = role, roleSelected = true, roleRequiredAfterSignIn = false, step = next)
+        if (role == AccountRole.RECYCLER) loadMaterialCategories()
+    }
+    fun loadMaterialCategories() {
+        val api = apiService ?: return
+        viewModelScope.launch {
+            try {
+                val categories = api.materialCategories().requireData()
+                _state.value = _state.value.copy(materialCategories = categories, materialCategoriesError = categories.isEmpty())
+            } catch (error: Exception) {
+                android.util.Log.w("RecyclerMaterials", "Could not load canonical material categories", error)
+                _state.value = _state.value.copy(materialCategoriesError = true)
+            }
+        }
     }
     fun setDisplayName(value: String) { _state.value = _state.value.copy(displayName = value, displayNameError = false) }
     fun setBusinessName(value: String) { _state.value = _state.value.copy(businessName = value) }
     fun setAuthorizationNumber(value: String) { _state.value = _state.value.copy(authorizationNumber = value) }
+    fun setAuthorizationAuthority(value: String) { _state.value = _state.value.copy(authorizationAuthority = value) }
+    fun setAuthorizationType(value: String) { _state.value = _state.value.copy(authorizationType = value) }
+    fun setAuthorizationEvidenceReference(value: String) { _state.value = _state.value.copy(authorizationEvidenceReference = value) }
+    fun setAuthorizationValidUntil(value: String) { _state.value = _state.value.copy(authorizationValidUntil = value) }
+    fun setAlternatePhone(value: String) { _state.value = _state.value.copy(alternatePhone = value) }
+    fun setPickupAvailability(value: String) { _state.value = _state.value.copy(pickupAvailability = value) }
+    fun setPickupPricing(value: String) { _state.value = _state.value.copy(pickupPricing = value) }
+    fun setPickupFeeText(value: String) { _state.value = _state.value.copy(pickupFeeText = value) }
+    fun setLogisticsCostText(value: String) { _state.value = _state.value.copy(logisticsCostText = value) }
+    fun setOperatingHours(value: String) { _state.value = _state.value.copy(operatingHours = value) }
     fun toggleMaterial(value: String) { _state.value = _state.value.copy(materialsAccepted = _state.value.materialsAccepted.toMutableSet().also { if (!it.add(value)) it.remove(value) }) }
-    fun setPickupAvailable(value: Boolean) { _state.value = _state.value.copy(pickupAvailable = value) }
+    fun setPickupAvailable(value: Boolean) { _state.value = _state.value.copy(pickupAvailable = value, pickupPricing = if (value) _state.value.pickupPricing else "INCLUDED", pickupFeeText = if (value) _state.value.pickupFeeText else "", logisticsCostText = if (value) _state.value.logisticsCostText else "") }
     fun setServiceRadius(value: Int) { _state.value = _state.value.copy(serviceRadiusKm = value) }
     fun continueRecyclerDetails() {
         val current = _state.value
-        if (!current.hasRequiredRecyclerDetails()) return
+        val issue = current.recyclerIssue()
+        if (issue != null) { _state.value = current.copy(recyclerDetailsError = issue); return }
         val validEmail = current.email.isBlank() || EmailValidator.isValid(current.email)
         _state.value = current.copy(emailError = !validEmail)
         if (validEmail) _state.value = _state.value.copy(step = OnboardingStep.LOCATION_PERMISSION)
+    }
+    private fun OnboardingState.recyclerIssue(): String? = when {
+        businessName.trim().length < 2 -> "Enter the facility name (at least 2 characters)."
+        authorizationNumber.isNotBlank() && !authorizationNumber.trim().matches(Regex("[A-Za-z0-9][A-Za-z0-9/.-]{3,79}")) -> "Check the registration number format."
+        materialCategories.isEmpty() -> "Load supported materials before continuing."
+        materialsAccepted.isEmpty() || !materialCategories.containsAll(materialsAccepted) -> "Select at least one supported material."
+        authorizationValidUntil.isNotBlank() && runCatching { LocalDate.parse(authorizationValidUntil) }.getOrNull()?.isAfter(LocalDate.now()) != true -> "Choose a future authorization validity date."
+        alternatePhone.isNotBlank() && !IndianPhoneValidator.isValid(alternatePhone) -> "Enter a valid 10-digit alternate phone."
+        pickupAvailable && serviceRadiusKm !in 1..200 -> "Set a pickup distance between 1 and 200 km."
+        pickupAvailable && pickupPricing == "FIXED" && (pickupFeeText.toDoubleOrNull()?.let { it >= 0 && it <= 100000 } != true) -> "Enter a valid fixed pickup fee."
+        pickupAvailable && pickupPricing == "PER_KM" && (logisticsCostText.toDoubleOrNull()?.let { it >= 0 && it <= 100000 } != true) -> "Enter a valid cost per km."
+        else -> null
     }
 
     // Legacy phone OTP boundary remains available for older backend/dev flows.
@@ -357,6 +401,7 @@ class OnboardingViewModel(
                                 materialsAccepted = materialsAccepted,
                                 pickupAvailable = current.pickupAvailable,
                                 serviceRadiusKm = current.serviceRadiusKm,
+                                authorizationAuthority = current.authorizationAuthority, authorizationType = current.authorizationType, authorizationEvidenceReference = current.authorizationEvidenceReference, authorizationValidUntil = current.authorizationValidUntil, alternatePhone = current.alternatePhone, pickupAvailability = current.pickupAvailability, pickupIncluded = current.pickupAvailable && current.pickupPricing == "INCLUDED", pickupFee = current.pickupFeeText.toDoubleOrNull().takeIf { current.pickupAvailable && current.pickupPricing == "FIXED" }, logisticsCostPerKm = current.logisticsCostText.toDoubleOrNull().takeIf { current.pickupAvailable && current.pickupPricing == "PER_KM" }, operatingHours = current.operatingHours,
                                 latitude = current.latitude,
                                 longitude = current.longitude
                             )
@@ -592,7 +637,7 @@ class OnboardingViewModel(
         profileJob = viewModelScope.launch {
             try {
                 if (current.email.isNotBlank() && authenticatedCollectorId == null) {
-                    val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, address = current.address.trim(), latitude = current.latitude, longitude = current.longitude, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, isReturning = current.returningUser)
+                    val request = EmailAccountRequest(email = current.email, password = current.password, role = current.role, preferredLanguage = current.language, areaName = current.area, address = current.address.trim(), latitude = current.latitude, longitude = current.longitude, businessName = current.businessName, authorizationNumber = current.authorizationNumber, materialsAccepted = current.materialsAccepted.toList(), pickupAvailable = current.pickupAvailable, serviceRadiusKm = current.serviceRadiusKm, authorizationAuthority = current.authorizationAuthority, authorizationType = current.authorizationType, authorizationEvidenceReference = current.authorizationEvidenceReference, authorizationValidUntil = current.authorizationValidUntil, alternatePhone = current.alternatePhone, pickupAvailability = current.pickupAvailability, pickupIncluded = current.pickupAvailable && current.pickupPricing == "INCLUDED", pickupFee = current.pickupFeeText.toDoubleOrNull().takeIf { current.pickupAvailable && current.pickupPricing == "FIXED" }, logisticsCostPerKm = current.logisticsCostText.toDoubleOrNull().takeIf { current.pickupAvailable && current.pickupPricing == "PER_KM" }, operatingHours = current.operatingHours, isReturning = current.returningUser)
                     when (val result = auth.authenticateEmail(request)) {
                         is EmailAuthentication.Success -> {
                             secureStorage?.saveAccount(result.profile)

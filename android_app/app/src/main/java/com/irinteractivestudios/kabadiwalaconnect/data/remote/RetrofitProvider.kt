@@ -29,7 +29,7 @@ object RetrofitProvider {
             // is protected and must carry the bearer token; treating every
             // `/auth/*` path as public caused the startup profile request to
             // return `Bearer token required` immediately after sign-in.
-            val isPublicAuthEndpoint = original.url.encodedPath.isPublicAuthEndpoint()
+            val isPublicAuthEndpoint = isPublicAuthEndpoint(original.url.encodedPath)
             // A protected call without a token is a client-side session race,
             // not a request the backend should have to reject. This guard is
             // deliberately below the public-auth check so login, signup,
@@ -57,7 +57,7 @@ object RetrofitProvider {
                 (if (photoDetection) chain.withReadTimeout(45, TimeUnit.SECONDS) else chain).proceed(request)
             }
             .authenticator { _, response ->
-                if (tokenRefresher == null || response.request.url.encodedPath.isPublicAuthEndpoint()) {
+                if (tokenRefresher == null || isPublicAuthEndpoint(response.request.url.encodedPath)) {
                     null
                 } else if (!response.request.belongsToCurrentSession(sessionGenerationProvider)) {
                     // An old request can finish after logout or another
@@ -128,14 +128,15 @@ object RetrofitProvider {
     internal fun sessionRetryAllowed(requestGeneration: Long?, currentGeneration: Long?): Boolean =
         requestGeneration == currentGeneration
 
-    private fun String.isPublicAuthEndpoint(): Boolean =
-            endsWith("/auth/request-otp") ||
-            endsWith("/auth/verify-otp") ||
-            endsWith("/auth/refresh") ||
-            endsWith("/auth/logout") ||
-            endsWith("/auth/signup") ||
-            endsWith("/auth/login") ||
-            endsWith("/auth/admin-login")
+    internal fun isPublicAuthEndpoint(path: String): Boolean =
+            path.endsWith("/materials/categories") ||
+            path.endsWith("/auth/request-otp") ||
+            path.endsWith("/auth/verify-otp") ||
+            path.endsWith("/auth/refresh") ||
+            path.endsWith("/auth/logout") ||
+            path.endsWith("/auth/signup") ||
+            path.endsWith("/auth/login") ||
+            path.endsWith("/auth/admin-login")
 
 }
 

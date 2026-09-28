@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,6 +57,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
@@ -335,15 +337,54 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 }
 
 @Composable private fun RecyclerDetailsEntry(state: OnboardingState, vm: OnboardingViewModel) {
+    var showMaterials by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Text(stringResource(R.string.auth_recycler_details_title), style = MaterialTheme.typography.headlineMedium)
-    Text(stringResource(R.string.auth_recycler_details_detail), style = MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text(stringResource(R.string.auth_business_name)) }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    Text("Basic facility information", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text("Facility or business name · Required") }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
-    OutlinedTextField(state.authorizationNumber, vm::setAuthorizationNumber, label = { Text(stringResource(R.string.auth_authorization_number)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    Text(stringResource(R.string.auth_materials_accepted), style = MaterialTheme.typography.titleSmall)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { listOf("PCB", "CABLE", "BATTERY").forEach { material -> FilterChip(selected = material in state.materialsAccepted, onClick = { vm.toggleMaterial(material) }, label = { Text(material) }) } }
+    OutlinedTextField(state.alternatePhone, { vm.setAlternatePhone(it.filter(Char::isDigit).take(10)) }, label = { Text("Alternate phone · Optional") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
+    Text("Materials accepted · Required", style = MaterialTheme.typography.titleMedium)
+    Text(if (state.materialsAccepted.isEmpty()) "No materials selected" else state.materialsAccepted.sorted().joinToString(" · ") { it.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedButton(onClick = { showMaterials = true }, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("recycler_material_picker")) { Text("Choose materials") }
+    if (state.materialCategoriesError) TextButton(onClick = vm::loadMaterialCategories) { Text("Could not load materials · Retry") }
+    Text("Authorization and verification", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text("Add available details now. You can complete the evidence before Admin review.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(state.authorizationNumber, vm::setAuthorizationNumber, label = { Text("Registration / authorization number · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationAuthority, vm::setAuthorizationAuthority, label = { Text("Issuing authority · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationType, vm::setAuthorizationType, label = { Text("Authorization type · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationEvidenceReference, vm::setAuthorizationEvidenceReference, label = { Text("Document reference or URL · Optional") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+    OutlinedButton(onClick = {
+        val today = java.util.Calendar.getInstance()
+        android.app.DatePickerDialog(context, { _, year, month, day -> vm.setAuthorizationValidUntil("%04d-%02d-%02d".format(year, month + 1, day)) }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH)).show()
+    }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (state.authorizationValidUntil.isBlank()) "Choose validity date · Optional" else "Valid until ${state.authorizationValidUntil}") }
+    Text("Pickup and logistics", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.auth_pickup_available), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge); Switch(state.pickupAvailable, vm::setPickupAvailable) }
-    KcPrimaryButton(stringResource(R.string.auth_continue), vm::continueRecyclerDetails, icon = Icons.Filled.CheckCircle, enabled = state.businessName.isNotBlank() && state.materialsAccepted.isNotEmpty())
+    if (state.pickupAvailable) {
+        Text("Pickup availability", style = MaterialTheme.typography.titleSmall)
+        listOf("TODAY" to "Available today", "THIS_WEEK" to "Scheduled this week", "FLEXIBLE" to "Flexible").forEach { (key, label) -> FilterChip(selected = state.pickupAvailability == key, onClick = { vm.setPickupAvailability(key) }, label = { Text(label) }) }
+        OutlinedTextField(state.serviceRadiusKm.takeIf { it > 0 }?.toString().orEmpty(), { vm.setServiceRadius(it.filter(Char::isDigit).take(3).toIntOrNull() ?: 0) }, label = { Text("Maximum pickup distance · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text("Pickup pricing", style = MaterialTheme.typography.titleSmall)
+        listOf("INCLUDED" to "Included / free", "FIXED" to "Fixed fee", "PER_KM" to "Cost per km").forEach { (key, label) -> FilterChip(selected = state.pickupPricing == key, onClick = { vm.setPickupPricing(key) }, label = { Text(label) }) }
+        if (state.pickupPricing == "FIXED") OutlinedTextField(state.pickupFeeText, { vm.setPickupFeeText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text("Pickup fee · ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        if (state.pickupPricing == "PER_KM") OutlinedTextField(state.logisticsCostText, { vm.setLogisticsCostText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text("Cost per km · ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+    }
+    OutlinedTextField(state.operatingHours, vm::setOperatingHours, label = { Text("Operating hours · Optional") }, placeholder = { Text("For example, Mon–Sat 10 AM–6 PM") }, modifier = Modifier.fillMaxWidth())
+    state.recyclerDetailsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    KcPrimaryButton(stringResource(R.string.auth_continue), vm::continueRecyclerDetails, icon = Icons.Filled.CheckCircle, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth())
+    if (showMaterials) {
+        var query by remember { mutableStateOf("") }
+        AlertDialog(onDismissRequest = { showMaterials = false }, title = { Text("Materials accepted") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(query, { query = it }, label = { Text("Search materials") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
+                    state.materialCategories.filter { it.contains(query.trim(), ignoreCase = true) }.forEach { category ->
+                        FilterChip(selected = category in state.materialsAccepted, onClick = { vm.toggleMaterial(category) }, label = { Text(category.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)) }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { showMaterials = false }) { Text("Done (${state.materialsAccepted.size})") } })
+    }
 }
 
 @Composable private fun LocationPermission(state: OnboardingState, vm: OnboardingViewModel, launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {

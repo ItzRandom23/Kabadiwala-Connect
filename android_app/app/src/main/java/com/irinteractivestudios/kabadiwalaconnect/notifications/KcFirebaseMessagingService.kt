@@ -69,6 +69,8 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
             "New pickup request" to "A household selected you for a pickup. Tap to review it."
         "PICKUP_WAITING_FOR_PICKUP" ->
             "Pickup needed nearby" to "A household is waiting for a Kabadiwala. Tap to view pickups."
+        "CHAT_MESSAGE" ->
+            "New message" to "You have a new chat message. Tap to read it."
         else -> getString(R.string.app_name) to getString(R.string.notification_generic_body)
     }
 }

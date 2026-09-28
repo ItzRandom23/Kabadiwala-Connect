@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
@@ -111,8 +112,8 @@ fun RecyclerVerificationScreen(
     }
     val authorizationDetails = recyclerProfile?.authorizationDetails
     val evidenceAlreadySubmitted = authorizationDetails?.let {
-        listOf(it.authority, it.type, it.registrationNumber, it.evidenceReference, it.verificationSource, it.validUntil)
-            .any { value -> !value.isNullOrBlank() }
+        listOf(it.authority, it.type, it.registrationNumber, it.evidenceReference)
+            .all { value -> !value.isNullOrBlank() }
     } == true
     val authorizationExpired = recyclerProfile?.authorizationStatus.equals("EXPIRED", ignoreCase = true)
     var authority by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.authority.orEmpty()) }
@@ -120,7 +121,7 @@ fun RecyclerVerificationScreen(
     var authorizationType by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.type.orEmpty()) }
     var validUntil by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.validUntil?.take(10).orEmpty()) }
     var evidenceReference by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.evidenceReference.orEmpty()) }
-    var verificationSource by remember(recyclerProfile?.id) { mutableStateOf(recyclerProfile?.authorizationDetails?.verificationSource.orEmpty()) }
+    val context = LocalContext.current
     var declarationAccepted by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<Int?>(null) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
@@ -133,13 +134,14 @@ fun RecyclerVerificationScreen(
             else -> R.string.recycler_verification_evidence_needed_detail
         }
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_rejected_detail
+        RecyclerVerificationStatus.UNDER_REVIEW -> R.string.recycler_verification_pending_detail
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_suspended_detail
         RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_verified_detail
     }
     val statusColors = when (status) {
         RecyclerVerificationStatus.VERIFIED -> KcTheme.extended.successContainer to KcTheme.extended.onSuccessContainer
         RecyclerVerificationStatus.REJECTED, RecyclerVerificationStatus.SUSPENDED -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        RecyclerVerificationStatus.PENDING -> KcTheme.extended.warningContainer to KcTheme.extended.onWarningContainer
+        RecyclerVerificationStatus.PENDING, RecyclerVerificationStatus.UNDER_REVIEW -> KcTheme.extended.warningContainer to KcTheme.extended.onWarningContainer
     }
     // A new Recycler profile starts in PENDING before it has sent any evidence.
     // Only that empty pending profile (or a rejected profile) can submit.
@@ -157,6 +159,7 @@ fun RecyclerVerificationScreen(
         }
         RecyclerVerificationStatus.VERIFIED -> R.string.recycler_verification_status_verified
         RecyclerVerificationStatus.REJECTED -> R.string.recycler_verification_status_rejected
+        RecyclerVerificationStatus.UNDER_REVIEW -> R.string.recycler_verification_status_pending
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
@@ -209,8 +212,8 @@ fun RecyclerVerificationScreen(
             }
         } else if (status == RecyclerVerificationStatus.SUSPENDED) {
             Text(stringResource(R.string.recycler_verification_suspended_action), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-        } else if (status == RecyclerVerificationStatus.PENDING && !authorizationExpired && evidenceAlreadySubmitted) {
-            Text(stringResource(R.string.recycler_verification_already_submitted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (status == RecyclerVerificationStatus.UNDER_REVIEW || status == RecyclerVerificationStatus.PENDING && !authorizationExpired && evidenceAlreadySubmitted) {
+            Text(if (status == RecyclerVerificationStatus.UNDER_REVIEW) "Your facility verification is currently being reviewed." else stringResource(R.string.recycler_verification_already_submitted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (canSubmit) {
             Surface(
                 shape = MaterialTheme.shapes.large,
@@ -229,21 +232,11 @@ fun RecyclerVerificationScreen(
                     OutlinedTextField(authority, { authority = it }, label = { Text(stringResource(R.string.recycler_verification_authority)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(authorizationType, { authorizationType = it }, label = { Text(stringResource(R.string.recycler_verification_type)) }, placeholder = { Text(stringResource(R.string.recycler_verification_type_hint)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(registrationNumber, { registrationNumber = it }, label = { Text(stringResource(R.string.recycler_verification_registration_number)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(
-                        validUntil,
-                        { validUntil = formatIsoDateInput(it) },
-                        label = { Text(stringResource(R.string.recycler_verification_valid_until)) },
-                        placeholder = { Text(stringResource(R.string.recycler_verification_valid_until_hint)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        isError = localError == R.string.recycler_verification_error_date,
-                        supportingText = if (localError == R.string.recycler_verification_error_date) {
-                            { Text(stringResource(R.string.recycler_verification_error_date)) }
-                        } else null,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedButton(onClick = {
+                        val today = java.util.Calendar.getInstance()
+                        android.app.DatePickerDialog(context, { _, year, month, day -> validUntil = "%04d-%02d-%02d".format(year, month + 1, day) }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (validUntil.isBlank()) "Choose authorization validity date" else "Valid until $validUntil") }
                     OutlinedTextField(evidenceReference, { evidenceReference = it }, label = { Text(stringResource(R.string.recycler_verification_evidence_reference)) }, placeholder = { Text(stringResource(R.string.recycler_verification_evidence_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(verificationSource, { verificationSource = it }, label = { Text(stringResource(R.string.recycler_verification_source)) }, placeholder = { Text(stringResource(R.string.recycler_verification_source_hint)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = declarationAccepted, onCheckedChange = { declarationAccepted = it })
                         Text(stringResource(R.string.recycler_verification_declaration), style = MaterialTheme.typography.bodyMedium)
@@ -251,9 +244,9 @@ fun RecyclerVerificationScreen(
                     localError?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Button(
                         onClick = {
-                            val validationError = validateVerificationForm(authority, registrationNumber, authorizationType, validUntil, evidenceReference, verificationSource, declarationAccepted)
+                            val validationError = validateVerificationForm(authority, registrationNumber, authorizationType, validUntil, evidenceReference, declarationAccepted)
                             localError = validationError
-                            if (validationError == null) onSubmit(RecyclerVerificationRequestDto(authority.trim(), registrationNumber.trim(), authorizationType.trim(), evidenceReference.trim(), verificationSource.trim(), validUntil.trim()))
+                            if (validationError == null) onSubmit(RecyclerVerificationRequestDto(authority.trim(), registrationNumber.trim(), authorizationType.trim(), evidenceReference.trim(), validUntil.trim().ifBlank { null }))
                         },
                         enabled = !saving && !loading,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
@@ -312,15 +305,13 @@ private fun validateVerificationForm(
     authorizationType: String,
     validUntil: String,
     evidenceReference: String,
-    verificationSource: String,
     declarationAccepted: Boolean
 ): Int? = when {
     authority.trim().length < 2 -> R.string.recycler_verification_error_authority
     authorizationType.trim().length < 2 -> R.string.recycler_verification_error_type
     registrationNumber.trim().length < 2 -> R.string.recycler_verification_error_registration
-    !isFutureIsoDate(validUntil.trim()) -> R.string.recycler_verification_error_date
+    validUntil.isNotBlank() && !isFutureIsoDate(validUntil.trim()) -> R.string.recycler_verification_error_date
     evidenceReference.trim().length < 2 -> R.string.recycler_verification_error_evidence
-    verificationSource.trim().length < 2 -> R.string.recycler_verification_error_source
     !declarationAccepted -> R.string.recycler_verification_error_declaration
     else -> null
 }
@@ -839,26 +830,8 @@ private fun String.displayMaterial(): String = when (this) {
 @Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text("$label · ₹/kg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }
 
 @Composable
-fun RecyclerProfileScreen(profile: AccountProfile?, onLogout: () -> Unit, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null) {
-    var showLogoutConfirm by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        ProfileScreen(profile, Modifier.weight(1f), onSave = onSave, saving = saving, saveError = saveError)
-        OutlinedButton(onClick = { showLogoutConfirm = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).heightIn(min = 52.dp)) { Text(stringResource(R.string.settings_logout)) }
-    }
-    if (showLogoutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
-            title = { Text(stringResource(R.string.settings_logout)) },
-            text = { Text(stringResource(R.string.settings_logout_warning)) },
-            dismissButton = { TextButton(onClick = { showLogoutConfirm = false }) { Text(stringResource(R.string.common_back)) } },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLogoutConfirm = false
-                    onLogout()
-                }) { Text(stringResource(R.string.settings_logout)) }
-            }
-        )
-    }
+fun RecyclerProfileScreen(profile: AccountProfile?, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null) {
+    ProfileScreen(profile, onSave = onSave, saving = saving, saveError = saveError)
 }
 
 @Composable private fun StatusCard(label: String, detail: String, color: androidx.compose.ui.graphics.Color, contentColor: androidx.compose.ui.graphics.Color) { Surface(color = color, contentColor = contentColor, shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f)), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CheckCircle, null, tint = contentColor); Column(Modifier.padding(start = 12.dp)) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium) } } } }

@@ -3,12 +3,14 @@ import type { JwtService } from '../services/jwt.js';
 import type { CollectorRepository } from '../repositories/collectorRepository.js';
 import type { RecyclerService } from '../services/recyclerService.js';
 import type { PrismaClient } from '@prisma/client';
+import { MaterialCategory } from '@prisma/client';
 import { requireAccount, requireAdmin, requireAuth, requireRecycler } from '../middleware/auth.js';
 import { recyclerController } from '../controllers/recyclerController.js';
 
 export const recyclerRoutes = (jwt: JwtService, c: CollectorRepository, s: RecyclerService, db?: PrismaClient) => {
   const x = recyclerController(s);
   return Router()
+    .get('/materials/categories', (_req, res) => res.json({ success: true, data: Object.values(MaterialCategory), message: 'Supported material categories' }))
     // A pending or rejected recycler must be able to read its own profile and
     // submit evidence. Operational recycler actions remain verified-only.
     .get('/recycler/profile', requireRecycler(jwt, db, false), x.selfProfile)

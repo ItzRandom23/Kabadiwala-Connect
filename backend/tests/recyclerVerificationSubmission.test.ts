@@ -6,6 +6,7 @@ describe('Recycler verification submission lifecycle', () => {
     const initial = {
       id: 'recycler-1',
       authorizationStatus: 'PENDING',
+      updatedAt: new Date('2026-09-27T00:00:00Z'),
       // MongoDB documents created by signup omit most nullable evidence fields.
     };
     const updated = {
@@ -62,10 +63,7 @@ describe('Recycler verification submission lifecycle', () => {
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         id: 'recycler-1', authorizationStatus: 'PENDING',
-        AND: expect.arrayContaining([
-          { OR: [{ authorizationEvidenceReference: null }, { authorizationEvidenceReference: { isSet: false } }, { authorizationEvidenceReference: '' }] },
-          { OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { isSet: false } }] }
-        ])
+        updatedAt: initial.updatedAt
       }),
       data: expect.objectContaining({ authorizationStatus: 'PENDING', authorizationEvidenceReference: 'https://example.test/evidence' })
     }));

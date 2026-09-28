@@ -29,8 +29,11 @@ function fixture() {
       findFirst: vi.fn(async () => message),
       findMany: vi.fn(async () => message ? [message] : []),
       create: vi.fn(async ({ data }: any) => message = { id: 'message-1', ...data, createdAt: new Date(), readAt: null }),
-      updateMany: vi.fn(async () => ({ count: 1 }))
+      updateMany: vi.fn(async () => { if (message) message.readAt = new Date(); return { count: message ? 1 : 0 }; }),
+      groupBy: vi.fn(async ({ where }: any) => message && message.readAt == null && message.senderId !== where.senderId.not ? [{ conversationId: conversation.id, _count: { _all: 1 } }] : [])
     },
+    notificationEvent: { create: vi.fn(async ({ data }: any) => ({ id: data.id, ...data })), updateMany: vi.fn(async () => ({ count: 1 })) },
+    notificationDelivery: { upsert: vi.fn(async () => ({})) },
     pickupConversation: { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     pickupRequest: { findMany: vi.fn(async () => []) }
   } as any;
@@ -60,6 +63,9 @@ describe('accepted bulk trade chat', () => {
       .send({ clientMessageId: 'bulk-message-0001', body: 'I can receive the lot tomorrow.' });
     expect(sent.status).toBe(201);
     expect(sent.body.data).toMatchObject({ senderRole: 'RECYCLER', senderId: 'recycler-1' });
+    expect(db.notificationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ accountId: 'collector-1', route: 'messages/trade-chat-1' }) }));
+    const unread = await request(app).get('/future/conversations').set(collectorAuth);
+    expect(unread.body.data[0].unreadCount).toBe(1);
     const read = await request(app).get(`/future/conversations/${conversation.id}/messages`).set(collectorAuth);
     expect(read.status).toBe(200);
     expect(read.body.data).toHaveLength(1);

@@ -214,4 +214,24 @@ describe('waiting pickup lifecycle', () => {
     expect(response.body.error.details).toMatchObject({ code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
     expect(tx.pickupRequest.updateMany).toHaveBeenCalledTimes(1);
   });
+
+  it('returns a taken-order conflict when another collector claimed the waiting pickup first', async () => {
+    const tx = {
+      ...auditMocks(),
+      pickupRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }), findFirstOrThrow: vi.fn() },
+      collector: { findUnique: vi.fn().mockResolvedValue({ areaName: 'Sector 12' }) },
+      householdListing: { findUnique: vi.fn().mockResolvedValue({ areaName: 'Sector 12' }), updateMany: vi.fn() }
+    };
+    const db: any = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
+      $transaction: vi.fn(async (work: (value: any) => unknown) => work(tx))
+    };
+    const jwt = new JwtService(config);
+    const response = await request(appFor(db, jwt))
+      .post('/api/v1/kabadiwala/listings/listing-taken/accept')
+      .set('Authorization', `Bearer ${jwt.generateToken('collector-loser')}`);
+    expect(response.status).toBe(409);
+    expect(response.body.error.details).toMatchObject({ code: 'PICKUP_NOT_AVAILABLE' });
+    expect(tx.pickupRequest.findFirstOrThrow).not.toHaveBeenCalled();
+  });
 });

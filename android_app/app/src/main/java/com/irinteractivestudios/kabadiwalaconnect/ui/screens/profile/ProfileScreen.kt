@@ -62,13 +62,20 @@ fun ProfileScreen(
         }
         SectionCard(title = stringResource(R.string.profile_personal_details)) {
             val activeLanguage = LocaleManager.persistedTag(LocalContext.current)
-            ProfileRow(Icons.Filled.Person, stringResource(R.string.profile_name), profile.displayName ?: profile.businessName ?: stringResource(R.string.profile_not_added))
+            ProfileRow(Icons.Filled.Person, if (profile.role == AccountRole.RECYCLER) "Facility / business name" else stringResource(R.string.profile_name), if (profile.role == AccountRole.RECYCLER) profile.businessName ?: profile.displayName ?: stringResource(R.string.profile_not_added) else profile.displayName ?: profile.businessName ?: stringResource(R.string.profile_not_added))
             ProfileRow(Icons.Filled.Phone, stringResource(R.string.profile_mobile), profile.phoneNumber.ifBlank { stringResource(R.string.profile_not_added) })
             ProfileRow(Icons.Filled.Email, stringResource(R.string.profile_email), profile.email.ifBlank { stringResource(R.string.profile_not_added) })
             ProfileRow(Icons.Filled.Person, stringResource(R.string.profile_role), roleLabel(profile.role))
             ProfileRow(Icons.Filled.Language, stringResource(R.string.profile_language), LocaleManager.LABELS[activeLanguage] ?: activeLanguage)
             ProfileRow(Icons.Filled.LocationOn, "Address", profile.address?.takeIf(String::isNotBlank) ?: profile.areaName?.takeIf(String::isNotBlank) ?: stringResource(R.string.profile_not_added))
             ProfileRow(Icons.Filled.Verified, stringResource(R.string.profile_verification), verificationLabel(profile.verificationStatus))
+            if (profile.role == AccountRole.RECYCLER) Text(when (profile.verificationStatus) {
+                RecyclerVerificationStatus.PENDING -> "Your facility details have been submitted and are awaiting review."
+                RecyclerVerificationStatus.UNDER_REVIEW -> "Your facility verification is currently being reviewed."
+                RecyclerVerificationStatus.VERIFIED -> "Your facility is verified and can access Recycler services."
+                RecyclerVerificationStatus.REJECTED -> "Your application needs changes. Open Verify to read the reason and resubmit."
+                RecyclerVerificationStatus.SUSPENDED -> "Your facility access is suspended. Contact support."
+            }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (onSave != null && profile.role != AccountRole.ADMIN) {
                 Button(onClick = { editing = true }, enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Icon(Icons.Filled.Edit, contentDescription = null)
@@ -120,6 +127,7 @@ private fun roleLabel(role: AccountRole): String = when (role) {
 private fun verificationLabel(status: RecyclerVerificationStatus): String = when (status) {
     RecyclerVerificationStatus.VERIFIED -> stringResource(R.string.profile_verified)
     RecyclerVerificationStatus.PENDING -> stringResource(R.string.profile_pending)
+    RecyclerVerificationStatus.UNDER_REVIEW -> "Under review"
     RecyclerVerificationStatus.REJECTED -> stringResource(R.string.profile_rejected)
     RecyclerVerificationStatus.SUSPENDED -> stringResource(R.string.profile_suspended)
 }

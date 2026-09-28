@@ -38,6 +38,7 @@ data class EmailAccountRequest(
     val materialsAccepted: List<String> = emptyList(),
     val pickupAvailable: Boolean = false,
     val serviceRadiusKm: Int = 25,
+    val authorizationAuthority: String = "", val authorizationType: String = "", val authorizationEvidenceReference: String = "", val authorizationValidUntil: String = "", val alternatePhone: String = "", val pickupAvailability: String = "FLEXIBLE", val pickupIncluded: Boolean = false, val pickupFee: Double? = null, val logisticsCostPerKm: Double? = null, val operatingHours: String = "",
     val isReturning: Boolean = false
 )
 
@@ -54,6 +55,7 @@ data class PhoneAccountRequest(
     val materialsAccepted: List<String> = emptyList(),
     val pickupAvailable: Boolean = false,
     val serviceRadiusKm: Int = 25,
+    val authorizationAuthority: String = "", val authorizationType: String = "", val authorizationEvidenceReference: String = "", val authorizationValidUntil: String = "", val alternatePhone: String = "", val pickupAvailability: String = "FLEXIBLE", val pickupIncluded: Boolean = false, val pickupFee: Double? = null, val logisticsCostPerKm: Double? = null, val operatingHours: String = "",
     val latitude: Double? = null,
     val longitude: Double? = null
 )

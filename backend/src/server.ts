@@ -85,18 +85,18 @@ void runRecyclerFreshnessSweep();
 const recyclerFreshnessTimer = setInterval(runRecyclerFreshnessSweep, 60 * 60 * 1000);
 recyclerFreshnessTimer.unref();
 
-const runNotificationDelivery = () => Promise.all([
-  notificationDelivery.dispatchPendingSms(),
-  notificationDelivery.dispatchPendingPush()
-])
-  .then(([sms, push]) => {
-    if (sms.sent || sms.retried) console.log(`Notification SMS worker: sent=${sms.sent}, retried=${sms.retried}`);
-    if (push.sent || push.retried) console.log(`Notification push worker: sent=${push.sent}, retried=${push.retried}`);
-  })
-  .catch(error => console.warn('Notification delivery worker skipped:', error));
-void runNotificationDelivery();
-const notificationDeliveryTimer = setInterval(runNotificationDelivery, 30 * 1000);
-notificationDeliveryTimer.unref();
+const runSmsDelivery = () => notificationDelivery.dispatchPendingSms()
+  .then(result => { if (result.sent || result.retried) console.log(`Notification SMS worker: sent=${result.sent}, retried=${result.retried}`); })
+  .catch(error => console.warn('Notification SMS worker skipped:', error));
+const runPushDelivery = () => notificationDelivery.dispatchPendingPush()
+  .then(result => { if (result.sent || result.retried) console.log(`Notification push worker: sent=${result.sent}, retried=${result.retried}`); })
+  .catch(error => console.warn('Notification push worker skipped:', error));
+void runSmsDelivery();
+void runPushDelivery();
+const smsDeliveryTimer = setInterval(runSmsDelivery, 30 * 1000);
+smsDeliveryTimer.unref();
+const pushDeliveryTimer = setInterval(runPushDelivery, 5 * 1000);
+pushDeliveryTimer.unref();
 
 // Bind explicitly to IPv4 so Android emulators can reach the local development
 // server through 10.0.2.2. This remains a local/SIH prototype server; deployment
@@ -104,7 +104,8 @@ notificationDeliveryTimer.unref();
 const server = app.listen(config.PORT, '0.0.0.0', () => console.log(`Kabadiwala backend listening on port ${config.PORT}`));
 const shutdown = async () => {
   clearInterval(recyclerFreshnessTimer);
-  clearInterval(notificationDeliveryTimer);
+  clearInterval(smsDeliveryTimer);
+  clearInterval(pushDeliveryTimer);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

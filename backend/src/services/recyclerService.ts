@@ -153,6 +153,7 @@ export class RecyclerService {
         updatedAt: rate.updatedAt
       })),
       pickupAvailability: recycler.pickupAvailability ?? 'FLEXIBLE',
+      pickupAvailable: recycler.pickupAvailable ?? (recycler.maxPickupDistanceKm > 0),
       serviceArea: { maxPickupDistanceKm: recycler.maxPickupDistanceKm, logisticsCostPerKm: recycler.logisticsCostPerKm ?? null },
       pickupIncluded: recycler.pickupIncluded ?? false,
       pickupFee: recycler.pickupFee ?? null,
@@ -304,8 +305,8 @@ export class RecyclerService {
       registrationNumber: string;
       authorizationType: string;
       evidenceReference: string;
-      verificationSource: string;
-      validUntil: Date;
+      verificationSource?: string;
+      validUntil?: Date;
     }
   ) {
     return withTransactionRetry(() => this.db.$transaction(async transaction => {
@@ -319,36 +320,23 @@ export class RecyclerService {
       if (previous.authorizationStatus === 'VERIFIED') {
         throw new AppError('CONFLICT', 'This recycler profile is already verified', 409, { code: 'RECYCLER_ALREADY_VERIFIED' });
       }
-      const hasExistingEvidence = [
+      const hasCompleteEvidence = [
         previous.authorizationAuthority,
         previous.licenseNumber,
         previous.authorizationType,
-        previous.authorizationEvidenceReference,
-        previous.verificationSource,
-        previous.authorizationValidUntil
-      ].some(value => value !== null && value !== undefined && value !== '');
-      if (previous.authorizationStatus === 'PENDING' && hasExistingEvidence) {
+        previous.authorizationEvidenceReference
+      ].every(value => value !== null && value !== undefined && value !== '');
+      if (previous.authorizationStatus === 'PENDING' && hasCompleteEvidence) {
         throw new AppError('CONFLICT', 'Your authorization evidence is already awaiting review', 409, { code: 'RECYCLER_VERIFICATION_ALREADY_PENDING' });
       }
 
-      // Claim the current state and write evidence in one conditional update.
-      // This also stops two requests racing from both submitting the same
-      // initially empty PENDING profile. Mongo signup documents may omit
-      // nullable fields entirely, so match null, missing and blank values.
+      // The update timestamp prevents a concurrent resubmission from silently
+      // overwriting an application that another request just submitted.
       const claimed = await transaction.recycler.updateMany({
         where: {
           id,
           authorizationStatus: previous.authorizationStatus,
-          ...(previous.authorizationStatus === 'PENDING' ? {
-            AND: [
-              { OR: [{ authorizationAuthority: null }, { authorizationAuthority: { isSet: false } }, { authorizationAuthority: '' }] },
-              { OR: [{ licenseNumber: null }, { licenseNumber: { isSet: false } }, { licenseNumber: '' }] },
-              { OR: [{ authorizationType: null }, { authorizationType: { isSet: false } }, { authorizationType: '' }] },
-              { OR: [{ authorizationEvidenceReference: null }, { authorizationEvidenceReference: { isSet: false } }, { authorizationEvidenceReference: '' }] },
-              { OR: [{ verificationSource: null }, { verificationSource: { isSet: false } }, { verificationSource: '' }] },
-              { OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { isSet: false } }] }
-            ]
-          } : {})
+          updatedAt: previous.updatedAt
         },
         data: {
           authorizationStatus: 'PENDING',
@@ -356,8 +344,8 @@ export class RecyclerService {
           licenseNumber: input.registrationNumber,
           authorizationType: input.authorizationType,
           authorizationEvidenceReference: input.evidenceReference,
-          verificationSource: input.verificationSource,
-          authorizationValidUntil: input.validUntil,
+          verificationSource: null,
+          authorizationValidUntil: input.validUntil ?? null,
           verifiedAt: null,
           verifiedBy: null
         }
@@ -380,8 +368,13 @@ export class RecyclerService {
     }));
   }
 
-  async updateProfile(id: string, input: { pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; logisticsCostPerKm?: number; pickupFee?: number; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {
-    const recycler = await this.db.recycler.update({ where: { id }, data: input, include: this.include }).catch(error => {
+  async updateProfile(id: string, input: { pickupAvailable?: boolean; pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; logisticsCostPerKm?: number | null; pickupFee?: number | null; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {
+    const data = input.pickupAvailable === false
+      ? { ...input, pickupAvailable: false, maxPickupDistanceKm: 0, pickupIncluded: false, pickupFee: null, logisticsCostPerKm: null }
+      : input.pickupAvailable === true
+        ? { ...input, pickupAvailable: true, pickupFee: input.pickupIncluded ? null : input.pickupFee ?? null, logisticsCostPerKm: input.pickupIncluded ? null : input.logisticsCostPerKm ?? null }
+        : input;
+    const recycler = await this.db.recycler.update({ where: { id }, data, include: this.include }).catch(error => {
       if (error?.code === 'P2025') throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
       throw error;
     });
@@ -478,7 +471,7 @@ export class RecyclerService {
   }
 
   async adminList() {
-    return this.db.recycler.findMany({ include: this.include });
+    return this.db.recycler.findMany({ where: { authorizationStatus: { in: ['PENDING', 'UNDER_REVIEW', 'REJECTED'] } }, include: this.include, orderBy: { createdAt: 'desc' } });
   }
 
   async adminDetail(id: string) {
@@ -494,28 +487,22 @@ export class RecyclerService {
     actorId: string,
     status: RecyclerAuthorizationStatus,
     reason?: string,
-    details?: { authority?: string; registrationNumber?: string; authorizationType?: string; evidenceReference?: string; verificationSource?: string; validUntil?: Date }
+    details?: { verificationSource?: string; validUntil?: Date }
   ) {
-    if (status === 'VERIFIED') {
-      const complete = details?.authority && details.registrationNumber && details.authorizationType
-        && details.evidenceReference && details.verificationSource && details.validUntil;
-      if (!complete || details.validUntil! <= new Date()) {
-        throw new AppError('VALIDATION_ERROR', 'Verified recyclers require complete, current authorization evidence', 422, { code: 'VERIFICATION_EVIDENCE_REQUIRED' });
-      }
-    }
     return this.db.$transaction(async transaction => {
       const previous = await transaction.recycler.findUnique({ where: { id } });
       if (!previous) {
         throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
       }
+      if (previous.authorizationStatus === 'SUSPENDED' || previous.authorizationStatus === 'REVOKED') throw new AppError('CONFLICT', 'This account requires support review', 409);
+      if (status === 'VERIFIED' && (!previous.authorizationAuthority || !previous.licenseNumber || !previous.authorizationType || !previous.authorizationEvidenceReference || !details?.verificationSource || ((details.validUntil ?? previous.authorizationValidUntil) && (details.validUntil ?? previous.authorizationValidUntil)! <= new Date()))) {
+        throw new AppError('VALIDATION_ERROR', 'Submitted authorization evidence and a verification method are required', 422, { code: 'VERIFICATION_EVIDENCE_REQUIRED' });
+      }
+      if (status === 'REJECTED' && !reason?.trim()) throw new AppError('VALIDATION_ERROR', 'A rejection reason is required', 422);
       const recycler = await transaction.recycler.update({
         where: { id },
         data: {
           authorizationStatus: status,
-          ...(details?.authority ? { authorizationAuthority: details.authority } : {}),
-          ...(details?.registrationNumber ? { licenseNumber: details.registrationNumber } : {}),
-          ...(details?.authorizationType ? { authorizationType: details.authorizationType } : {}),
-          ...(details?.evidenceReference ? { authorizationEvidenceReference: details.evidenceReference } : {}),
           ...(details?.verificationSource ? { verificationSource: details.verificationSource } : {}),
           ...(details?.validUntil ? { authorizationValidUntil: details.validUntil } : {}),
           ...(status === 'VERIFIED' ? { verifiedAt: new Date(), verifiedBy: actorId } : {}),

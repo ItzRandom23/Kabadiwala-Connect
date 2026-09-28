@@ -79,7 +79,7 @@ class AdminConsoleViewModel(
             _state.update { it.copy(loading = true, error = null, message = null) }
             runCatching {
                 when (section) {
-                    AdminSection.RECYCLERS -> api.adminRecyclerQueue("PENDING").requireData()
+                    AdminSection.RECYCLERS -> api.adminRecyclerQueue().requireData()
                     AdminSection.DISPUTES -> api.adminDisputes("OPEN").requireData()
                     AdminSection.PAYMENTS -> {
                         val recorded = api.adminPayments("PENDING").requireData()
@@ -97,7 +97,15 @@ class AdminConsoleViewModel(
         }
     }
 
-    fun select(item: JsonObject) { _state.update { it.copy(selected = item) } }
+    fun select(item: JsonObject) {
+        if (_state.value.section != AdminSection.RECYCLERS) { _state.update { it.copy(selected = item) }; return }
+        val id = item.get("id")?.takeUnless { it.isJsonNull }?.asString ?: return
+        viewModelScope.launch {
+            runCatching { api.adminRecyclerDetail(id).requireData() }
+                .onSuccess { detail -> _state.update { it.copy(selected = detail) } }
+                .onFailure { error -> _state.update { it.copy(error = userFacingError(error, "Could not load facility details")) } }
+        }
+    }
     fun clearSelection() { _state.update { it.copy(selected = null) } }
 
     fun authorizeRecycler(
