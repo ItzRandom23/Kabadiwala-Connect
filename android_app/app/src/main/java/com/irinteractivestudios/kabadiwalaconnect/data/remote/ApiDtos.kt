@@ -136,18 +136,20 @@ data class KabadiwalaPublicProfileDto(
     val collectedMaterials: List<String> = emptyList(),
     val ratingAverage: Double? = null,
     val reviewCount: Int = 0,
-    val memberSince: String? = null
+    val memberSince: String? = null,
+    val pickupPricing: PickupPricingDto? = null
 )
+data class PickupPricingDto(val freeRadiusKm: Double = 0.0, val feePerKm: Double = 0.0, val maxDistanceKm: Double = 25.0, val estimatedFee: Double? = null)
 data class HouseholdPickupReviewDto(val rating: Int)
 data class HouseholdPickupReviewResultDto(val id: String = "", val pickupId: String = "", val rating: Int = 0, val verified: Boolean = false, val ratingAverage: Double? = null, val reviewCount: Int = 0)
 data class PickupSettlementPaymentRequestDto(val amount: Double, val method: String, val recordedAt: String? = null, val reference: String? = null, val notes: String? = null)
-data class PickupSettlementPaymentDto(val pickupId: String = "", val amount: Double = 0.0, val paymentMethod: String = "", val recordedAt: String? = null, val reference: String? = null, val status: String = "RECORDED")
+data class PickupSettlementPaymentDto(val pickupId: String = "", val amount: Double = 0.0, val paymentMethod: String = "", val recordedAt: String? = null, val reference: String? = null, val householdReceivedAt: String? = null, val status: String = "RECORDED")
 data class PickupRequestCreateDto(val kabadiwalaId: String? = null, val requestedSlot: String? = null)
 data class CancellationRequestDto(val reason: String? = null)
-data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String? = null, val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val finalAmount: Double? = null, val acceptedAt: String? = null, val availabilityConfirmedAt: String? = null, val inTransitAt: String? = null, val arrivedAt: String? = null, val householdQrScannedAt: String? = null, val weighedAt: String? = null, val cancelledAt: String? = null, val noShow: Boolean = false, val lateCancellation: Boolean = false, val reassignmentReason: String? = null, val settlementStatus: String? = null, val settlementBeforeValue: Double? = null, val settlementAfterValue: Double? = null, val settlementReasonCode: String? = null, val settlementEvidenceReference: String? = null, val householdDecision: String? = null, val settlementDisputeNotes: String? = null, val settlementDecisionAt: String? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null, val householdReviewRating: Int? = null, val settlementPayment: PickupSettlementPaymentDto? = null)
+data class PickupRequestDto(val id: String = "", val listingId: String = "", val householdId: String = "", val kabadiwalaId: String? = null, val status: String = "REQUESTED", val requestedSlot: String? = null, val scheduledSlot: String? = null, val actualWeight: Double? = null, val finalCategory: String? = null, val grade: String? = null, val ratePerKg: Double? = null, val grossMaterialAmount: Double? = null, val pickupCharge: Double? = null, val finalAmount: Double? = null, val acceptedAt: String? = null, val availabilityConfirmedAt: String? = null, val inTransitAt: String? = null, val arrivedAt: String? = null, val householdQrScannedAt: String? = null, val weighedAt: String? = null, val cancelledAt: String? = null, val noShow: Boolean = false, val lateCancellation: Boolean = false, val reassignmentReason: String? = null, val settlementStatus: String? = null, val settlementBeforeValue: Double? = null, val settlementAfterValue: Double? = null, val settlementReasonCode: String? = null, val settlementEvidenceReference: String? = null, val householdDecision: String? = null, val settlementDisputeNotes: String? = null, val settlementDecisionAt: String? = null, val completedAt: String? = null, val createdAt: String? = null, val updatedAt: String? = null, val householdReviewRating: Int? = null, val settlementPayment: PickupSettlementPaymentDto? = null)
 data class PickupScheduleDto(val scheduledSlot: String)
 data class PickupStatusDto(val status: String)
-data class PickupCompletionDto(val actualWeight: Double, val finalCategory: String, val grade: String = "UNSPECIFIED", val ratePerKg: Double, val reasonCode: String? = null, val evidenceReference: String? = null)
+data class PickupCompletionDto(val actualWeight: Double, val finalCategory: String, val grade: String = "UNSPECIFIED", val ratePerKg: Double, val reasonCode: String? = null, val evidenceReference: String? = null, val waivePickupCharge: Boolean = false)
 data class HouseholdPickupQrDto(val pickupId: String = "", val qrCodeData: String = "", val expiresAt: String = "")
 data class HouseholdPickupQrVerifyDto(val qrCodeData: String)
 data class PickupAvailabilityDto(val availabilityConfirmed: Boolean = true, val scheduledSlot: String? = null)
@@ -257,7 +259,7 @@ data class RecyclerMaterialDto(val category: String, val subcategories: List<Str
 data class RecyclerRateDto(val materialCategory: String, val pricePerKg: Double, val updatedAt: String? = null)
 data class RecyclerRateUpdateDto(val materialCategory: String, val pricePerKg: Double)
 data class RecyclerRatesUpdateRequestDto(val rates: List<RecyclerRateUpdateDto>)
-data class RecyclerProfileUpdateRequestDto(val pickupAvailability: String? = null, val maxPickupDistanceKm: Double? = null, val operatingHours: JsonObject? = null)
+data class RecyclerProfileUpdateRequestDto(val pickupAvailability: String? = null, val pickupAvailable: Boolean? = null, val maxPickupDistanceKm: Double? = null, val pickupFreeRadiusKm: Double? = null, val logisticsCostPerKm: Double? = null, val pickupFee: Double? = null, val pickupIncluded: Boolean? = null, val operatingHours: JsonObject? = null)
 data class RecyclerVerificationRequestDto(
     val authority: String,
     val registrationNumber: String,
@@ -265,7 +267,7 @@ data class RecyclerVerificationRequestDto(
     val evidenceReference: String,
     val validUntil: String? = null
 )
-data class ServiceAreaDto(val maxPickupDistanceKm: Double? = null, val logisticsCostPerKm: Double? = null)
+data class ServiceAreaDto(val maxPickupDistanceKm: Double? = null, val pickupFreeRadiusKm: Double? = null, val logisticsCostPerKm: Double? = null)
 data class ContactDto(val phone: String? = null, val email: String? = null, val alternatePhone: String? = null)
 data class RecyclerMatchesDto(val lotId: String, val matches: List<RecyclerMatchDto> = emptyList())
 data class RecyclerMatchDto(val recycler: RecyclerDto, val offeredRatePerKg: Double? = null, val matchScore: Int = 0, val explanation: JsonObject? = null)

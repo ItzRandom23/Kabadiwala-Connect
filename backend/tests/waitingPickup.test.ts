@@ -189,7 +189,7 @@ describe('waiting pickup lifecycle', () => {
     expect(response.status).toBe(200);
     expect(tx.pickupRequest.updateMany).toHaveBeenLastCalledWith({
       where: { listingId: 'listing-2', kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' },
-      data: { kabadiwalaId: 'collector-2', status: 'ACCEPTED', acceptedAt: expect.any(Date) }
+      data: { kabadiwalaId: 'collector-2', status: 'ACCEPTED', acceptedAt: expect.any(Date), pickupCharge: 0 }
     });
   });
 
@@ -212,7 +212,7 @@ describe('waiting pickup lifecycle', () => {
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('AUTHORIZATION_ERROR');
     expect(response.body.error.details).toMatchObject({ code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
-    expect(tx.pickupRequest.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.pickupRequest.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns a taken-order conflict when another collector claimed the waiting pickup first', async () => {

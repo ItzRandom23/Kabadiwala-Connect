@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.FileDownload
@@ -73,6 +74,8 @@ fun SettingsScreen(
     onSmsNotificationsChange: (Boolean) -> Unit = {},
     onPushNotificationsChange: (Boolean) -> Unit = {},
     onOpenProfile: () -> Unit = {},
+    onOpenPickupPricing: () -> Unit = {},
+    showPickupPricing: Boolean = false,
     onOpenSafety: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenRewards: () -> Unit = {},
@@ -119,6 +122,7 @@ fun SettingsScreen(
                 onClick = onOpenProfile,
                 testTag = "settings_profile"
             )
+            if (showPickupPricing) SettingsRow(Icons.Filled.LocalShipping, "Pickup charges", onOpenPickupPricing, "settings_pickup_pricing")
         }
 
         SectionCard(title = stringResource(R.string.settings_language_section)) {

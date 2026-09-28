@@ -26,6 +26,7 @@ const activePickupStatuses = ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SC
 const sourceListingIdsInput = z.array(id).max(100).default([]);
 const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional(), sourceListingIds: sourceListingIdsInput }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
 const settlementDecision = z.object({ decision: z.enum(['ACCEPT', 'RAISE_ISSUE']), reasonCode: z.string().trim().min(2).max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), notes: z.string().trim().max(1000).optional() }).superRefine((value, ctx) => { if (value.decision === 'RAISE_ISSUE' && !value.reasonCode) ctx.addIssue({ code: 'custom', path: ['reasonCode'], message: 'A reason code is required when raising an issue' }); });
+const collectorPickupPricing = z.object({ freeRadiusKm: z.number().finite().min(0).max(200), feePerKm: z.number().finite().min(0).max(10000), maxDistanceKm: z.number().finite().positive().max(200) }).strict().refine(value => value.freeRadiusKm <= value.maxDistanceKm, { path: ['freeRadiusKm'], message: 'Free distance cannot exceed maximum distance' });
 const listingPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 6 } });
 
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
@@ -73,13 +74,13 @@ function areaNamesMatch(profileArea: string, requestedArea: string): boolean {
  * by the collector feed. The accept endpoint must repeat this check because a
  * caller can otherwise bypass the feed by guessing a listing ID.
  */
-function collectorCanSeeWaitingPickup(collector: any, listing: any, maxDistanceKm = 25): boolean {
+function collectorCanSeeWaitingPickup(collector: any, listing: any): boolean {
   if (!collector || !listing) return false;
   const distance = distanceKm(collector.latitude, collector.longitude, listing.latitude, listing.longitude);
   const sameArea = Boolean(collector.areaName && listing.areaName && areaNamesMatch(String(collector.areaName), String(listing.areaName)));
   // If GPS is unavailable, use the saved service area as the fallback. Do not
   // send every location-less listing to every collector.
-  return sameArea || (distance != null && distance <= maxDistanceKm);
+  return distance != null ? distance <= (collector.pickupMaxDistanceKm ?? 25) : sameArea;
 }
 
 async function validateSourceListings(store: any, collectorId: string, sourceListingIds: string[], materialCategory: string) {
@@ -190,6 +191,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         distanceKm: distance == null ? null : Number(distance.toFixed(1)),
         acceptingPickups: slots > 0,
         availablePickupSlots: slots,
+        pickupPricing: { freeRadiusKm: profile.pickupFreeRadiusKm ?? 0, feePerKm: profile.pickupFeePerKm ?? 0, maxDistanceKm: profile.pickupMaxDistanceKm ?? 25, estimatedFee: distance == null ? null : Number((Math.max(0, distance - (profile.pickupFreeRadiusKm ?? 0)) * (profile.pickupFeePerKm ?? 0)).toFixed(2)) },
         completedPickupCount: partnerPickups.length,
         acceptedWeightKg: Number(partnerPickups.reduce((sum: number, row: any) => sum + (row.actualWeight ?? 0), 0).toFixed(2)),
         collectedMaterials: [...new Set(partnerPickups.map((row: any) => row.finalCategory).filter(Boolean))],
@@ -198,6 +200,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       };
     });
   };
+
+  router.get('/kabadiwala/pickup-pricing', requireAuth(jwt, collectors), async (req, res) => {
+    const profile = await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { pickupFreeRadiusKm: true, pickupFeePerKm: true, pickupMaxDistanceKm: true } });
+    if (!profile) throw new AppError('NOT_FOUND', 'Kabadiwala profile not found', 404);
+    res.json({ success: true, data: { freeRadiusKm: profile.pickupFreeRadiusKm ?? 0, feePerKm: profile.pickupFeePerKm ?? 0, maxDistanceKm: profile.pickupMaxDistanceKm ?? 25 } });
+  });
+  router.put('/kabadiwala/pickup-pricing', requireAuth(jwt, collectors), async (req, res) => {
+    const input = parse(collectorPickupPricing, req.body);
+    const profile = await store.collector.update({ where: { id: req.identity!.collectorId }, data: { pickupFreeRadiusKm: input.freeRadiusKm, pickupFeePerKm: input.feePerKm, pickupMaxDistanceKm: input.maxDistanceKm } });
+    res.json({ success: true, data: { freeRadiusKm: profile.pickupFreeRadiusKm, feePerKm: profile.pickupFeePerKm, maxDistanceKm: profile.pickupMaxDistanceKm } });
+  });
 
   router.post('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
     const input = parse(listingInput, req.body);
@@ -312,7 +325,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     }
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
-    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true } }) : [];
+    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, pickupFreeRadiusKm: true, pickupFeePerKm: true, pickupMaxDistanceKm: true } }) : [];
     const matching = profiles.map((profile: any) => ({ profile, distance: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
       .filter(({ profile, distance }: any) => {
         if (locationQuery.latitude !== undefined) {
@@ -320,7 +333,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
           // Keep them discoverable through that explicit area when the
           // household also supplied an area label, while still applying the
           // radius strictly whenever the Kabadiwala has coordinates.
-          if (distance != null) return distance <= locationQuery.radiusKm;
+          if (distance != null) return distance <= locationQuery.radiusKm && distance <= (profile.pickupMaxDistanceKm ?? 25);
           return Boolean(areaQuery && areaNamesMatch(String(profile.areaName ?? ''), areaQuery));
         }
         return areaNamesMatch(String(profile.areaName ?? ''), areaQuery);
@@ -340,7 +353,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const kabadiwalaId = parse(id, req.params.kabadiwalaId);
     const location = parse(z.object({ latitude: z.coerce.number().finite().min(-90).max(90).optional(), longitude: z.coerce.number().finite().min(-180).max(180).optional() }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
     const account = await store.user.findFirst({ where: { collectorProfileId: kabadiwalaId, role: 'COLLECTOR', accountStatus: 'ACTIVE' }, select: { id: true } });
-    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, createdAt: true } }) : null;
+    const profile = account ? await store.collector.findFirst({ where: { id: kabadiwalaId, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, pickupFreeRadiusKm: true, pickupFeePerKm: true, pickupMaxDistanceKm: true, createdAt: true } }) : null;
     if (!profile) throw new AppError('NOT_FOUND', 'Active Kabadiwala profile not found', 404, { code: 'KABADIWALA_NOT_FOUND' });
     const [summary] = await publicPartnerSummaries([profile], location.latitude, location.longitude);
     res.json({ success: true, data: { ...summary, memberSince: profile.createdAt } });
@@ -406,7 +419,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       // existing reassignment row with a conditional update.
       const priorTarget = await tx.pickupRequest.findUnique({ where: { listingId_kabadiwalaId: { listingId: pickup.listingId, kabadiwalaId: input.kabadiwalaId } } });
       let reassigned;
-      const lifecycleReset = { status: 'REQUESTED', requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : null, scheduledSlot: null, acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, reassignmentReason: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, cancelledBy: null, cancellationReason: null, completedAt: null };
+      const lifecycleReset = { status: 'REQUESTED', requestedSlot: input.requestedSlot ? new Date(input.requestedSlot) : null, scheduledSlot: null, acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, reassignmentReason: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, grossMaterialAmount: null, pickupCharge: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, cancelledBy: null, cancellationReason: null, completedAt: null };
       if (priorTarget && priorTarget.id !== pickup.id) {
         if (activePickupStatuses.includes(priorTarget.status) || priorTarget.status === 'REASSIGNMENT_REQUIRED') throw new AppError('CONFLICT', 'This Kabadiwala already has an active request for the listing', 409, { code: 'PICKUP_TARGET_ALREADY_ASSIGNED' });
         const closed = await tx.pickupRequest.updateMany({ where: { id: pickup.id, householdId: req.identity!.collectorId, status: 'REASSIGNMENT_REQUIRED' }, data: { status: 'CANCELLED', cancelledBy: 'HOUSEHOLD', cancellationReason: 'HOUSEHOLD_SELECTED_REPLACEMENT', cancelledAt: new Date() } });
@@ -503,7 +516,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       }
       const pickup = await tx.pickupRequest.upsert({
         where: { listingId_kabadiwalaId: { listingId, kabadiwalaId: input.kabadiwalaId } },
-        update: { requestedSlot: requestedSlot ?? undefined, status: 'REQUESTED', acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, completedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, cancelledBy: null, cancellationReason: null, reassignmentReason: null },
+        update: { requestedSlot: requestedSlot ?? undefined, status: 'REQUESTED', acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, grossMaterialAmount: null, pickupCharge: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, completedAt: null, cancelledAt: null, noShow: false, lateCancellation: false, cancelledBy: null, cancellationReason: null, reassignmentReason: null },
         create: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: input.kabadiwalaId, requestedSlot, householdQrScannedAt: null }
       });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_REQUESTED', 'PICKUP_REQUEST', pickup.id, { listingId, kabadiwalaId: input.kabadiwalaId, requestedSlot: requestedSlot?.toISOString() ?? null });
@@ -523,7 +536,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const ids = pickups.map((pickup: any) => pickup.id);
     const [reviews, payments] = await Promise.all([
       ids.length && store.householdPickupReview?.findMany ? store.householdPickupReview.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, rating: true } }) : Promise.resolve([]),
-      ids.length && store.pickupSettlementPayment?.findMany ? store.pickupSettlementPayment.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true } }) : Promise.resolve([])
+      ids.length && store.pickupSettlementPayment?.findMany ? store.pickupSettlementPayment.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, householdReceivedAt: true, reference: true, status: true } }) : Promise.resolve([])
     ]);
     const reviewByPickup = new Map(reviews.map((review: any) => [review.pickupId, review.rating]));
     const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
@@ -640,6 +653,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     });
     res.json({ success: true, data: { status: 'CANCELLED' } });
   });
+  router.post('/household/pickups/:pickupId/payment-received', requireHousehold(jwt, collectors), async (req, res) => {
+    const pickupId = parse(id, req.params.pickupId);
+    const payment = await store.pickupSettlementPayment.findUnique({ where: { pickupId } });
+    if (!payment || payment.householdId !== req.identity!.collectorId || payment.status !== 'RECORDED') throw new AppError('CONFLICT', 'No recorded payment is awaiting your confirmation', 409, { code: 'PICKUP_PAYMENT_NOT_READY' });
+    const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' } });
+    if (!pickup || Math.abs(payment.amount - (pickup.finalAmount ?? 0)) > 0.01) throw new AppError('CONFLICT', 'Payment does not match the agreed amount', 409, { code: 'PICKUP_PAYMENT_MISMATCH' });
+    const result = await store.pickupSettlementPayment.updateMany({ where: { id: payment.id, status: 'RECORDED', householdReceivedAt: null }, data: { householdReceivedAt: new Date() } });
+    if (!result.count) throw new AppError('CONFLICT', 'Payment has already been confirmed', 409, { code: 'PICKUP_PAYMENT_ALREADY_CONFIRMED' });
+    await emitNotification(store, { accountId: payment.collectorId, type: 'PICKUP_PAYMENT_RECEIVED', title: 'Household confirmed payment', body: 'The household confirmed receipt of the agreed pickup amount.', route: `kabadiwala/pickups/${pickupId}`, dedupeKey: `PICKUP_PAYMENT_RECEIVED:${payment.id}` });
+    res.json({ success: true, data: await store.pickupSettlementPayment.findUniqueOrThrow({ where: { id: payment.id } }) });
+  });
   router.post('/household/pickups/:pickupId/cancel', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId); const input = parse(cancellationInput, req.body ?? {});
     await store.$transaction(async (tx: any) => {
@@ -659,7 +683,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { listingId: true, status: true } });
     const assignedListingIds = new Set(assigned.map((pickup: { listingId: string }) => pickup.listingId));
     const addressVisibleListingIds = new Set(assigned.filter((pickup: { listingId: string; status: string }) => !['CANCELLED', 'REJECTED'].includes(pickup.status)).map((pickup: { listingId: string }) => pickup.listingId));
-    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
+    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true, pickupMaxDistanceKm: true } }) : null;
     const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { listingId: true } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: { listingId: string }) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
     const visibleWaitingIds = waitingListings.filter((listing: any) => {
@@ -701,8 +725,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/kabadiwala/pickups', requireAuth(jwt, collectors), async (req, res) => {
     const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
-    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
-    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, finalAmount: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
+    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
+    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: any) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
     const listingById = new Map<string, any>(waitingListings.map((listing: any) => [listing.id, listing] as [string, any]));
     const visibleWaiting = waiting.filter((pickup: any) => {
@@ -711,7 +735,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     });
     const visible = [...assigned, ...visibleWaiting];
     const payments = visible.length && store.pickupSettlementPayment?.findMany
-      ? await store.pickupSettlementPayment.findMany({ where: { pickupId: { in: visible.map((pickup: any) => pickup.id) } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true } })
+      ? await store.pickupSettlementPayment.findMany({ where: { pickupId: { in: visible.map((pickup: any) => pickup.id) } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, householdReceivedAt: true, reference: true, status: true } })
       : [];
     const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
     res.json({ success: true, data: visible.map((pickup: any) => ({ ...pickup, settlementPayment: paymentByPickup.get(pickup.id) ?? null })) });
@@ -719,16 +743,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/kabadiwala/listings/:listingId/accept', requireAuth(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
     const acceptedPickup = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
-      let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date() } });
+      const collector = tx.collector?.findUnique ? await tx.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true, pickupMaxDistanceKm: true, pickupFreeRadiusKm: true, pickupFeePerKm: true } }) : null;
+      const listing = tx.householdListing?.findUnique ? await tx.householdListing.findUnique({ where: { id: listingId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
+      if (collector && listing && !collectorCanSeeWaitingPickup(collector, listing)) throw new AppError('AUTHORIZATION_ERROR', 'This pickup is outside your configured service distance', 403, { code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
+      const distance = distanceKm(collector?.latitude, collector?.longitude, listing?.latitude, listing?.longitude);
+      const pickupCharge = distance == null ? 0 : Number((Math.max(0, distance - (collector?.pickupFreeRadiusKm ?? 0)) * (collector?.pickupFeePerKm ?? 0)).toFixed(2));
+      let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date(), pickupCharge } });
       if (!updated.count) {
-        const [collector, listing] = await Promise.all([
-          tx.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }),
-          tx.householdListing.findUnique({ where: { id: listingId }, select: { areaName: true, latitude: true, longitude: true } })
-        ]);
         if (!collectorCanSeeWaitingPickup(collector, listing)) {
           throw new AppError('AUTHORIZATION_ERROR', 'This waiting pickup is outside your service area', 403, { code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
         }
-        updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }, data: { kabadiwalaId: req.identity!.collectorId, status: 'ACCEPTED', acceptedAt: new Date() } });
+        updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }, data: { kabadiwalaId: req.identity!.collectorId, status: 'ACCEPTED', acceptedAt: new Date(), pickupCharge } });
       }
       if (!updated.count) throw new AppError('CONFLICT', 'This pickup is no longer available. Refresh the queue to see current requests.', 409, { code: 'PICKUP_NOT_AVAILABLE' });
       await tx.householdListing.updateMany({ where: { id: listingId, status: 'POSTED' }, data: { status: 'MATCHED' } });
@@ -899,7 +924,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/pickups/:pickupId/complete', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
-    const input = parse(z.object({ actualWeight: positive.max(500), finalCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), ratePerKg: positive.max(1000000), reasonCode: z.string().trim().max(120).optional(), evidenceReference: z.string().trim().max(500).optional() }), req.body);
+    const input = parse(z.object({ actualWeight: positive.max(500), finalCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), ratePerKg: positive.max(1000000), reasonCode: z.string().trim().max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), waivePickupCharge: z.boolean().default(false) }), req.body);
     const operationId = operationKey(req);
     const operationHash = requestHash({ action: 'COMPLETE_PICKUP', pickupId, input });
     const result = await store.$transaction(async (tx: any) => {
@@ -914,14 +939,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!pickupBefore) throw new AppError('CONFLICT', 'Pickup cannot be weighed', 409, { code: 'PICKUP_NOT_WEIGHABLE' });
       if (!pickupBefore.householdQrScannedAt) throw new AppError('CONFLICT', 'Scan the household pickup QR before recording final weight', 409, { code: 'HOUSEHOLD_PICKUP_QR_REQUIRED' });
       const listing = await tx.householdListing.findUnique({ where: { id: pickupBefore.listingId } });
-      const finalAmount = Number((input.actualWeight * input.ratePerKg).toFixed(2));
+      const grossMaterialAmount = Number((input.actualWeight * input.ratePerKg).toFixed(2));
+      const pickupCharge = input.waivePickupCharge ? 0 : pickupBefore.pickupCharge ?? 0;
+      if (pickupCharge >= grossMaterialAmount) throw new AppError('VALIDATION_ERROR', 'Pickup charge must be less than the material value. Reduce your pickup charge to complete this order.', 422, { code: 'PICKUP_CHARGE_EXCEEDS_VALUE' });
+      const finalAmount = Number((grossMaterialAmount - pickupCharge).toFixed(2));
       const estimatedReference = listing?.estimatedPriceMax ?? listing?.estimatedPriceMin ?? null;
       const materialChanged = Boolean(listing && listing.materialCategory !== input.finalCategory);
       const weightChanged = Boolean(listing && Math.abs(input.actualWeight - listing.estimatedWeight) / listing.estimatedWeight > 0.2);
-      const valueChanged = Boolean(estimatedReference != null && Math.abs(finalAmount - estimatedReference) / Math.max(estimatedReference, 1) > 0.2);
+      const valueChanged = Boolean(estimatedReference != null && Math.abs(grossMaterialAmount - estimatedReference) / Math.max(estimatedReference, 1) > 0.2);
       const materialChangeNeedsReason = materialChanged || weightChanged || valueChanged;
       if (materialChangeNeedsReason && !input.reasonCode) throw new AppError('VALIDATION_ERROR', 'A reason code is required for a material settlement change', 422, { code: 'SETTLEMENT_REASON_REQUIRED' });
-      const claimed = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED' }, data: { status: 'WEIGHED', actualWeight: input.actualWeight, finalCategory: input.finalCategory, grade: input.grade, ratePerKg: input.ratePerKg, finalAmount, weighedAt: new Date(), settlementStatus: 'PENDING_HOUSEHOLD_CONFIRMATION', settlementBeforeValue: estimatedReference, settlementAfterValue: finalAmount, settlementReasonCode: input.reasonCode ?? null, settlementEvidenceReference: input.evidenceReference ?? null } });
+      const claimed = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'ARRIVED' }, data: { status: 'WEIGHED', actualWeight: input.actualWeight, finalCategory: input.finalCategory, grade: input.grade, ratePerKg: input.ratePerKg, grossMaterialAmount, pickupCharge, finalAmount, weighedAt: new Date(), settlementStatus: 'PENDING_HOUSEHOLD_CONFIRMATION', settlementBeforeValue: estimatedReference, settlementAfterValue: finalAmount, settlementReasonCode: input.reasonCode ?? null, settlementEvidenceReference: input.evidenceReference ?? null } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Pickup cannot be weighed', 409);
       const before = await tx.inventoryBalance.findUnique({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: req.identity!.collectorId, materialCategory: input.finalCategory, grade: input.grade } } });
       const balance = await tx.inventoryBalance.upsert({ where: { kabadiwalaId_materialCategory_grade: { kabadiwalaId: req.identity!.collectorId, materialCategory: input.finalCategory, grade: input.grade } }, update: { availableKg: { increment: input.actualWeight }, purchaseCost: { increment: finalAmount } }, create: { kabadiwalaId: req.identity!.collectorId, materialCategory: input.finalCategory, grade: input.grade, availableKg: input.actualWeight, purchaseCost: finalAmount } });
@@ -931,6 +959,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await recordInventoryMovement(tx, beforeBalance, balance, 'ACQUISITION', input.actualWeight, 'PICKUP_REQUEST', pickupId, { listingId: pickupBefore.listingId, ratePerKg: input.ratePerKg });
       const pickup = await tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId } });
       await tx.pickupRequest.update({ where: { id: pickupId }, data: { status: 'COMPLETED', completedAt: new Date() } });
+      if (tx.pickupConversation?.updateMany) await tx.pickupConversation.updateMany({ where: { pickupRequestId: pickupId }, data: { status: 'CLOSED' } });
       await tx.householdListing.updateMany({ where: { id: pickup.listingId, status: { in: ['MATCHED', 'POSTED'] } }, data: { status: 'COMPLETED' } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_COMPLETED', 'PICKUP_REQUEST', pickupId, { listingId: pickup.listingId, actualWeight: input.actualWeight, finalCategory: input.finalCategory, grade: input.grade, ratePerKg: input.ratePerKg });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'COLLECTED', 'HOUSEHOLD_LISTING', pickup.listingId, { pickupId, actualWeight: input.actualWeight });
@@ -983,7 +1012,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/admin/household-pickup-payments', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), async (req, res) => {
     const status = parse(z.enum(['RECORDED', 'DISPUTED', 'VERIFIED', 'REVERSED']).default('RECORDED'), req.query.status);
-    const payments = await store.pickupSettlementPayment.findMany({ where: { status }, orderBy: { recordedAt: 'asc' }, take: 100, select: { id: true, pickupId: true, householdId: true, collectorId: true, amount: true, paymentMethod: true, recordedAt: true, reference: true, status: true, anomaly: true, anomalyReason: true } });
+    const payments = await store.pickupSettlementPayment.findMany({ where: { status }, orderBy: { recordedAt: 'asc' }, take: 100, select: { id: true, pickupId: true, householdId: true, collectorId: true, amount: true, paymentMethod: true, recordedAt: true, householdReceivedAt: true, reference: true, status: true, anomaly: true, anomalyReason: true } });
     res.json({ success: true, data: payments.map((payment: any) => ({ ...payment, kind: 'HOUSEHOLD_PICKUP_SETTLEMENT' })) });
   });
   router.post('/admin/household-pickup-payments/:paymentId/reconcile', requireAdmin(jwt, db, 'PAYMENT_VERIFICATION'), async (req, res) => {
@@ -993,6 +1022,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const result = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const payment = await tx.pickupSettlementPayment.findUnique({ where: { id: paymentId } });
       if (!payment) throw new AppError('NOT_FOUND', 'Pickup payment not found', 404, { code: 'PICKUP_PAYMENT_NOT_FOUND' });
+      if (input.decision === 'VERIFY' && !payment.householdReceivedAt) throw new AppError('CONFLICT', 'Household must confirm receiving the payment before reconciliation', 409, { code: 'HOUSEHOLD_PAYMENT_CONFIRMATION_REQUIRED' });
       const nextStatus = input.decision === 'VERIFY' ? 'VERIFIED' : 'DISPUTED';
       const updated = await tx.pickupSettlementPayment.updateMany({ where: { id: paymentId, status: 'RECORDED' }, data: { status: nextStatus, confirmedAt: new Date(), anomaly: input.decision === 'DISPUTE' ? true : payment.anomaly, anomalyReason: input.notes ?? payment.anomalyReason } });
       if (!updated.count) throw new AppError('CONFLICT', 'Pickup payment is no longer awaiting reconciliation', 409, { code: 'PICKUP_PAYMENT_ALREADY_RECONCILED' });

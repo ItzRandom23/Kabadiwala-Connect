@@ -21,7 +21,9 @@ data class RecyclerProfileState(
     val saving: Boolean = false,
     val profile: RecyclerDto? = null,
     val error: String? = null,
-    val saved: Boolean = false
+    val saved: Boolean = false,
+    val materialCategories: List<String> = emptyList(),
+    val materialCategoriesError: Boolean = false
 )
 
 class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
@@ -33,7 +35,10 @@ class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null, saved = false)
             runCatching { api.getRecyclerProfile().requireData() }
-                .onSuccess { _state.value = _state.value.copy(loading = false, profile = it, error = null) }
+                .onSuccess { profile ->
+                    val categories = runCatching { api.materialCategories().requireData() }.getOrDefault(emptyList())
+                    _state.value = _state.value.copy(loading = false, profile = profile, materialCategories = categories, materialCategoriesError = categories.isEmpty(), error = null)
+                }
                 .onFailure { error -> _state.value = _state.value.copy(loading = false, error = userFacingError(error, "Could not load recycler profile")) }
         }
     }
@@ -55,6 +60,16 @@ class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
             runCatching { api.updateRecyclerProfile(RecyclerProfileUpdateRequestDto(pickupAvailability = value)).requireData() }
                 .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
                 .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Availability could not be saved")) }
+        }
+    }
+
+    fun savePickupPricing(input: RecyclerProfileUpdateRequestDto) {
+        if (_state.value.saving) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(saving = true, error = null, saved = false)
+            runCatching { api.updateRecyclerProfile(input).requireData() }
+                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Pickup charges could not be saved")) }
         }
     }
 

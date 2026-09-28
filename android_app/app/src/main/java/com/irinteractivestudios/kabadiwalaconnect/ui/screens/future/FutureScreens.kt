@@ -246,7 +246,7 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
                             if (isMine) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(message.status.chatStatusLabel(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                                    if (message.status != "SENT" && message.status != "READ") {
+                                    if (conversation.status == "OPEN" && message.status != "SENT" && message.status != "READ") {
                                         TextButton(onClick = { onRetryMessage(message.clientMessageId) }, enabled = !sending) { Text(stringResource(R.string.future_retry)) }
                                     }
                                 }
@@ -271,7 +271,8 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
             Button(onClick = proceed, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.future_confirm_handover)) }
             Spacer(Modifier.height(8.dp))
         }
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (conversation.status != "OPEN") Text("This pickup chat is closed. Previous messages remain available to read.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = draft, onValueChange = {
                 draft = it.take(1000)
                 if (draft.isBlank() && !draftSuggestion.isNullOrBlank()) onDraftCleared()

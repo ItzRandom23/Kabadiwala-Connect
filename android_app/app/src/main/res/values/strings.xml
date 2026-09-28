@@ -93,7 +93,7 @@
     <string name="recycler_live_data_unavailable">Live marketplace data is not available yet.</string>
     <string name="recycler_no_orders">No accepted orders yet.</string>
     <string name="recycler_no_pickups">No pickups are scheduled.</string>
-    <string name="recycler_rate_draft_saved">Saved on this phone · not published yet.</string>
+    <string name="recycler_rate_draft_saved">Rates published to Kabadiwalas.</string>
     <string name="recycler_reference_captured">Saved on this phone · server validation is still required.</string>
     <string name="recycler_verification_pending_detail">Waiting for review. Marketplace access opens after approval.</string>
     <string name="recycler_verification_evidence_needed_detail">Your Recycler account has not sent authorization evidence yet. Submit it once; the review team can then verify your account.</string>

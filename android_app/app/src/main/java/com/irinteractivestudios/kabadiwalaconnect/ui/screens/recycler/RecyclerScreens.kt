@@ -32,6 +32,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -60,6 +62,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerProfileUpdateRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerVerificationRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.RecyclerVerificationStatus
@@ -739,15 +742,22 @@ private fun statusNameForSupply(value: String) = value.replace('_', ' ').lowerca
 fun RecyclerPickupsScreen(
     demoMode: Boolean = false,
     availability: String? = null,
+    profile: com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto? = null,
     loading: Boolean = false,
     saving: Boolean = false,
     error: String? = null,
     onRefresh: () -> Unit = {},
-    onSave: (String) -> Unit = {}
+    onSave: (String) -> Unit = {},
+    onSavePricing: (RecyclerProfileUpdateRequestDto) -> Unit = {}
 ) {
     val layout = rememberKcResponsiveLayout()
     var pickupReady by remember { mutableStateOf(false) }
     var selectedAvailability by remember(availability) { mutableStateOf(availability ?: "FLEXIBLE") }
+    var pickupEnabled by remember(profile) { mutableStateOf(profile?.pickupAvailable ?: false) }
+    var freeKm by remember(profile) { mutableStateOf((profile?.serviceArea?.pickupFreeRadiusKm ?: 0.0).toString()) }
+    var maxKm by remember(profile) { mutableStateOf((profile?.serviceArea?.maxPickupDistanceKm ?: 25.0).toString()) }
+    var pricingMode by remember(profile) { mutableStateOf(if (profile?.pickupIncluded == true) "FREE" else if (profile?.pickupFee != null) "FIXED" else "PER_KM") }
+    var amount by remember(profile) { mutableStateOf((profile?.pickupFee ?: profile?.serviceArea?.logisticsCostPerKm ?: 0.0).toString()) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(stringResource(R.string.recycler_pickups_title), style = MaterialTheme.typography.headlineLarge)
         if (demoMode) {
@@ -782,6 +792,28 @@ fun RecyclerPickupsScreen(
                 if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
                 Text(if (saving) "Saving…" else "Save availability")
             }
+            HorizontalDivider()
+            Text("Pickup charges", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Show Kabadiwalas how far your facility can collect and what transport costs.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Facility pickup available", modifier = Modifier.weight(1f))
+                Switch(checked = pickupEnabled, onCheckedChange = { pickupEnabled = it })
+            }
+            if (pickupEnabled) {
+                OutlinedTextField(maxKm, { maxKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum distance · km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("FREE" to "Free", "FIXED" to "Fixed fee", "PER_KM" to "Per km").forEach { (key, label) -> FilterChip(selected = pricingMode == key, onClick = { pricingMode = key }, label = { Text(label) }) }
+                }
+                if (pricingMode == "PER_KM") OutlinedTextField(freeKm, { freeKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Free within · km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                if (pricingMode != "FREE") OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(if (pricingMode == "FIXED") "Fixed pickup fee · ₹" else "Beyond free distance · ₹/km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            }
+            val max = maxKm.toDoubleOrNull()
+            val free = freeKm.toDoubleOrNull()
+            val charge = amount.toDoubleOrNull()
+            val validPricing = !pickupEnabled || max != null && max > 0 && max <= 200 && (pricingMode == "FREE" || charge != null && charge >= 0) && (pricingMode != "PER_KM" || free != null && free >= 0 && free <= max)
+            Button(onClick = {
+                onSavePricing(if (!pickupEnabled) RecyclerProfileUpdateRequestDto(pickupAvailable = false) else RecyclerProfileUpdateRequestDto(pickupAvailable = true, pickupAvailability = selectedAvailability, maxPickupDistanceKm = max, pickupFreeRadiusKm = if (pricingMode == "PER_KM") free else 0.0, pickupIncluded = pricingMode == "FREE", pickupFee = if (pricingMode == "FIXED") charge else null, logisticsCostPerKm = if (pricingMode == "PER_KM") charge else null))
+            }, enabled = validPricing && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (saving) "Saving…" else "Save pickup charges") }
         }
     }
 }
@@ -790,6 +822,8 @@ fun RecyclerPickupsScreen(
 fun RecyclerRatesScreen(
     rates: List<com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateDto> = emptyList(),
     acceptedMaterials: List<String> = listOf("PCB", "COPPER"),
+    supportedMaterials: List<String> = emptyList(),
+    materialsError: Boolean = false,
     loading: Boolean = false,
     saving: Boolean = false,
     saved: Boolean = false,
@@ -799,7 +833,7 @@ fun RecyclerRatesScreen(
     demoMode: Boolean = false
 ) {
     val layout = rememberKcResponsiveLayout()
-    val categories = remember(acceptedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory }).filter { it.isNotBlank() }.distinct() }
+    val categories = remember(acceptedMaterials, supportedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory } + supportedMaterials).filter { it.isNotBlank() }.distinct() }
     var values by remember(categories, rates) { mutableStateOf(categories.associateWith { category -> rates.firstOrNull { it.materialCategory == category }?.pricePerKg?.toString().orEmpty() }) }
     val valid = values.values.any { it.toDoubleOrNull()?.let { value -> value > 0 } == true }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
@@ -807,10 +841,11 @@ fun RecyclerRatesScreen(
         Text(stringResource(R.string.recycler_rates_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (demoMode) DemoDataBanner()
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        if (materialsError) Text("Could not load all supported materials. Refresh to choose more categories.", color = MaterialTheme.colorScheme.error)
         error?.let { Text(stringResource(R.string.recycler_rates_load_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         categories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
-        if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcTheme.extended.warning, style = MaterialTheme.typography.bodyMedium)
-        if (error != null) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
+        if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcTheme.extended.success, style = MaterialTheme.typography.bodyMedium)
+        if (error != null || materialsError) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
         Button(onClick = {
             onSave(values.mapNotNull { (category, value) -> value.toDoubleOrNull()?.takeIf { it > 0 }?.let { RecyclerRateUpdateDto(category, it) } })
         }, enabled = valid && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {

@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import java.time.LocalDate
 
-enum class OnboardingStep { WELCOME, EMAIL, ROLE, LANGUAGE, RECYCLER_DETAILS, PHONE, OTP, LOCATION_PERMISSION, AREA, COMPLETE }
+enum class OnboardingStep { WELCOME, SIGN_IN, EMAIL, ROLE, LANGUAGE, RECYCLER_DETAILS, PHONE, OTP, LOCATION_PERMISSION, AREA, COMPLETE }
 enum class LocationChoice { GPS, MANUAL }
 
 data class OnboardingState(
@@ -128,7 +128,12 @@ class OnboardingViewModel(
         if (_state.value.isBusy) _state.value = _state.value.copy(isBusy = false)
     }
 
-    fun start() { _state.value = _state.value.copy(step = if (_state.value.returningUser) OnboardingStep.PHONE else OnboardingStep.ROLE, roleRequiredAfterSignIn = false) }
+    fun start() { _state.value = _state.value.copy(returningUser = false, step = OnboardingStep.ROLE, roleRequiredAfterSignIn = false, authError = null) }
+    fun startSignIn() {
+        invalidateSignIn()
+        _state.value = _state.value.copy(returningUser = true, step = OnboardingStep.SIGN_IN, roleRequiredAfterSignIn = false, authError = null)
+    }
+    fun usePhoneSignIn() { _state.value = _state.value.copy(returningUser = true, step = OnboardingStep.PHONE, authError = null) }
     fun useEmailSignIn() {
         invalidateSignIn()
         invalidateOtpFlow()
@@ -168,13 +173,14 @@ class OnboardingViewModel(
         invalidateProfileSave()
         val current = _state.value
         val previous = when (current.step) {
-            OnboardingStep.EMAIL -> OnboardingStep.WELCOME
+            OnboardingStep.EMAIL -> if (current.returningUser && current.role != AccountRole.ADMIN) OnboardingStep.SIGN_IN else OnboardingStep.WELCOME
+            OnboardingStep.SIGN_IN -> OnboardingStep.WELCOME
             OnboardingStep.ROLE -> OnboardingStep.WELCOME
             OnboardingStep.LANGUAGE -> OnboardingStep.ROLE
             OnboardingStep.RECYCLER_DETAILS -> OnboardingStep.ROLE
             OnboardingStep.LOCATION_PERMISSION -> if (current.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.ROLE
             OnboardingStep.AREA -> OnboardingStep.LOCATION_PERMISSION
-            OnboardingStep.PHONE -> if (current.returningUser) OnboardingStep.WELCOME else OnboardingStep.AREA
+            OnboardingStep.PHONE -> if (current.returningUser) OnboardingStep.SIGN_IN else OnboardingStep.AREA
             OnboardingStep.OTP -> OnboardingStep.PHONE
             OnboardingStep.WELCOME, OnboardingStep.COMPLETE -> current.step
         }

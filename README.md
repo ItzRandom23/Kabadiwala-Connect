@@ -4,8 +4,8 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 
 ## Current release
 
-- Android source/build version: `0.1.0-beta` (`versionCode 64`)
-- Latest OTA artifact in `backend/app-update`: `0.0.62-beta` (`versionCode 63`); a production-host APK and signing key were unavailable for a verified OTA release.
+- Android source/build version: `0.1.5-beta` (`versionCode 69`)
+- Latest OTA artifact in `backend/app-update`: `0.1.5-beta` (`versionCode 69`), built as `envTestingDebug`.
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`
@@ -155,9 +155,9 @@ the current audit evidence and device coverage are summarized in
 The app checks the backend-hosted `/app/update.json` and compares its
 `versionCode` with the installed version. Each published entry must reference
 an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.0.62-beta` with
-`versionCode 63`; the latest source build uses `0.1.0-beta` with
-`versionCode 64` and has only been built for the isolated envTesting API.
+SHA-256 and byte size. The current manifest publishes `0.1.5-beta` with
+`versionCode 69`. The APK is an `envTestingDebug` build; production release
+signing and deployment are managed separately.
 
 The user confirms the download and Android separately confirms installation;
 updates are never installed silently. After changing the manifest or APK,

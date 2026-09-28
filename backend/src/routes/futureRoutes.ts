@@ -586,7 +586,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const isHousehold = req.identity!.role === 'HOUSEHOLD' && pickup.householdId === identity;
     const isKabadiwala = req.identity!.role === 'COLLECTOR' && pickup.kabadiwalaId === identity;
     if (!isHousehold && !isKabadiwala) throw new AppError('NOT_FOUND', 'Assigned pickup not found', 404);
-    if (!['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED', 'COMPLETED'].includes(pickup.status)) {
+    if (!['ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'].includes(pickup.status)) {
       throw new AppError('CONFLICT', 'Chat opens after the Kabadiwala accepts the pickup', 409);
     }
     const conversation = await db.pickupConversation.upsert({
@@ -624,6 +624,10 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const context = await assertConversationParticipant(db, req.params.conversationId, identity);
     const conversation = context.conversation;
     if (conversation.status !== 'OPEN') throw new AppError('CONFLICT', 'This conversation is closed', 409);
+    if (context.kind === 'PICKUP') {
+      const pickup = await db.pickupRequest.findUnique({ where: { id: (conversation as { pickupRequestId: string }).pickupRequestId }, select: { status: true } });
+      if (!pickup || pickup.status === 'COMPLETED' || pickup.status === 'CANCELLED') throw new AppError('CONFLICT', 'This pickup chat is closed', 409);
+    }
     const parsed = z.object({ clientMessageId: z.string().min(8).max(120), body: z.string().trim().min(1).max(1000) }).safeParse(req.body);
     if (!parsed.success) throw new AppError('VALIDATION_ERROR', 'Message must be between 1 and 1000 characters', 422);
     const messageInput = { conversationId: conversation.id, senderId: identity.collectorId, senderRole: identity.role as AccountRoleType, clientMessageId: parsed.data.clientMessageId, body: parsed.data.body, status: MessageStatus.SENT };

@@ -487,11 +487,11 @@ class SupplyChainViewModel(
                 .onFailure { error -> _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
         }
     }
-    fun openKabadiwalaProfile(kabadiwalaId: String) {
+    fun openKabadiwalaProfile(kabadiwalaId: String, latitude: Double? = null, longitude: Double? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         _state.value = _state.value.copy(selectedKabadiwalaId = kabadiwalaId, kabadiwalaProfile = null, kabadiwalaProfileLoading = true, error = null)
         viewModelScope.launch {
-            runCatching { api.getHouseholdKabadiwala(kabadiwalaId, _state.value.kabadiwalaLatitude, _state.value.kabadiwalaLongitude).requireData() }
+            runCatching { api.getHouseholdKabadiwala(kabadiwalaId, latitude ?: _state.value.kabadiwalaLatitude, longitude ?: _state.value.kabadiwalaLongitude).requireData() }
                 .onSuccess { profile -> _state.value = _state.value.copy(kabadiwalaProfile = profile, kabadiwalaProfileLoading = false) }
                 .onFailure { error -> _state.value = _state.value.copy(kabadiwalaProfileLoading = false, error = friendly(error)) }
         }
@@ -1013,6 +1013,7 @@ class SupplyChainViewModel(
     fun cancelPickup(pickupId: String, reason: String? = null) = action("cancel-pickup-$pickupId", AccountRole.HOUSEHOLD, { api.cancelHouseholdPickup(pickupId, CancellationRequestDto(reason)).requireSuccess(); refreshHousehold(); "Pickup cancelled." })
     fun reschedulePickup(pickupId: String, scheduledSlot: String) = action("reschedule-$pickupId", AccountRole.HOUSEHOLD, { api.rescheduleHouseholdPickup(pickupId, PickupRescheduleDto(scheduledSlot)).requireData(); refreshHousehold(); "Pickup rescheduled." })
     fun decideHouseholdSettlement(pickupId: String, decision: String, reasonCode: String? = null, notes: String? = null) = action("settlement-$pickupId", AccountRole.HOUSEHOLD, { api.decideHouseholdSettlement(pickupId, SettlementDecisionDto(decision, reasonCode, null, notes)).requireData(); refreshHousehold(); "Settlement decision recorded." })
+    fun confirmHouseholdPaymentReceived(pickupId: String) = action("payment-received-$pickupId", AccountRole.HOUSEHOLD, { api.confirmHouseholdPaymentReceived(pickupId).requireData(); refreshHousehold(); "Payment receipt confirmed." })
     fun acceptListing(listingId: String) = action("pickup-decision-${_state.value.pickups.firstOrNull { it.listingId == listingId }?.id ?: listingId}", AccountRole.COLLECTOR, {
         try {
             api.acceptHouseholdListing(listingId).requireSuccess()

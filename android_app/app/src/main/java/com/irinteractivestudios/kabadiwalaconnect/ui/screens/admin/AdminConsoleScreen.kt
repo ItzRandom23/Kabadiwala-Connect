@@ -136,8 +136,10 @@ fun AdminConsoleScreen(
         }
     }
     paymentDialog?.let { id ->
-        val pickupPayment = state.items.firstOrNull { it.get("id")?.asString == id }?.get("kind")?.asString == "HOUSEHOLD_PICKUP_SETTLEMENT"
-        PaymentActionDialog(id, state.actionBusy, pickupPayment, { paymentDialog = null }, onVerify = {
+        val paymentRecord = state.items.firstOrNull { it.get("id")?.asString == id }
+        val pickupPayment = paymentRecord?.get("kind")?.asString == "HOUSEHOLD_PICKUP_SETTLEMENT"
+        val householdConfirmed = paymentRecord?.get("householdReceivedAt")?.let { !it.isJsonNull } == true
+        PaymentActionDialog(id, state.actionBusy, pickupPayment, householdConfirmed, { paymentDialog = null }, onVerify = {
             paymentDialog = null
             onVerifyPayment(id)
         }, onDisputePickup = { notes ->
@@ -219,7 +221,7 @@ private fun DisputeReviewCard(item: JsonObject, busy: Boolean, onResolve: () -> 
 @Composable
 private fun PaymentReviewCard(item: JsonObject, busy: Boolean, onReview: () -> Unit) = ReviewCard(
     title = item.stringValue("id", "paymentId"),
-    subtitle = if (item.stringValue("kind") == "HOUSEHOLD_PICKUP_SETTLEMENT") "Pickup payout · ${item.stringValue("paymentMethod")} · ₹${item.stringValue("amount")} · ${item.stringValue("status")}" else "${item.stringValue("status")} · ${item.stringValue("amount")} ${item.stringValue("currency")}",
+    subtitle = if (item.stringValue("kind") == "HOUSEHOLD_PICKUP_SETTLEMENT") "Pickup payout · ${item.stringValue("paymentMethod")} · ₹${item.stringValue("amount")} · ${if (item.get("householdReceivedAt")?.isJsonNull == false) "Household confirmed" else "Awaiting household receipt"}" else "${item.stringValue("status")} · ${item.stringValue("amount")} ${item.stringValue("currency")}",
     item = item,
     actionLabel = "Review",
     busy = busy,
@@ -346,7 +348,7 @@ private fun DisputeResolutionDialog(id: String, busy: Boolean, onDismiss: () -> 
 }
 
 @Composable
-private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolean, onDismiss: () -> Unit, onVerify: () -> Unit, onDisputePickup: (String) -> Unit, onReverse: (String, String?, String?, String?) -> Unit) {
+private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolean, householdConfirmed: Boolean, onDismiss: () -> Unit, onVerify: () -> Unit, onDisputePickup: (String) -> Unit, onReverse: (String, String?, String?, String?) -> Unit) {
     var reverse by remember { mutableStateOf(false) }
     var dispute by remember { mutableStateOf(false) }
     var reason by remember { mutableStateOf("") }
@@ -364,12 +366,12 @@ private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolea
             } else if (dispute) {
                 Text("Explain why the external cash/UPI record does not reconcile.")
                 AdminField("Reconciliation note", reason) { reason = it }
-            } else Text(if (pickupPayment) "Confirm that this recorded cash/UPI payment matches the pickup evidence." else "Choose the audited action for this payment.")
+            } else Text(if (pickupPayment && !householdConfirmed) "Waiting for the household to confirm receipt of the recorded payment." else if (pickupPayment) "Confirm that this recorded cash/UPI payment matches the pickup evidence." else "Choose the audited action for this payment.")
         }
     }, confirmButton = {
         if (reverse) Button(onClick = { onReverse(reason, provider, reference, evidence) }, enabled = !busy && reason.isNotBlank()) { Text("Reverse") }
         else if (dispute) Button(onClick = { onDisputePickup(reason) }, enabled = !busy && reason.isNotBlank()) { Text("Flag for follow-up") }
-        else Button(onClick = onVerify, enabled = !busy) { Text(if (pickupPayment) "Reconcile" else "Verify") }
+        else Button(onClick = onVerify, enabled = !busy && (!pickupPayment || householdConfirmed)) { Text(if (pickupPayment) "Reconcile" else "Verify") }
     }, dismissButton = {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!reverse && pickupPayment && !dispute) TextButton(onClick = { dispute = true }) { Text("Flag mismatch") }

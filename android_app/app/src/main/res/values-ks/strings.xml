@@ -38,7 +38,7 @@
     <string name="recycler_live_data_unavailable">Live marketplace data is not available yet.</string>
     <string name="recycler_no_orders">No accepted orders yet.</string>
     <string name="recycler_no_pickups">No pickups are scheduled.</string>
-    <string name="recycler_rate_draft_saved">Rate draft saved on this phone. It is not published until the rates service is connected.</string>
+    <string name="recycler_rate_draft_saved">Rates published to Kabadiwalas.</string>
     <string name="recycler_reference_captured">Reference captured on this phone. Server validation is still required before a handover can be completed.</string>
     <string name="recycler_verification_pending_detail">Your details are waiting for review. Marketplace access will open after approval.</string>
     <string name="recycler_verification_rejected_detail">Your verification was not approved. Update your business details or contact support.</string>

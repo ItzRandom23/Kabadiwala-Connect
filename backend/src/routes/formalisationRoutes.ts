@@ -341,8 +341,9 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       if (materialCapability?.maxAcceptableWeight != null && input.quantityKg > materialCapability.maxAcceptableWeight) return null;
       const distance = distanceKm(collector?.latitude, collector?.longitude, recycler.latitude, recycler.longitude);
       const pickupIncluded = Boolean(recycler.pickupIncluded);
-      const logisticsCostPerKm = recycler.logisticsCostPerKm ?? 12;
-      const logisticsCost = pickupIncluded ? Number((recycler.pickupFee ?? 0).toFixed(2)) : Number((((distance ?? 8) * logisticsCostPerKm) + (recycler.pickupFee ?? 0)).toFixed(2));
+      const logisticsCostPerKm = recycler.logisticsCostPerKm ?? 0;
+      const chargeableKm = distance == null ? null : Math.max(0, distance - (recycler.pickupFreeRadiusKm ?? 0));
+      const logisticsCost = pickupIncluded ? 0 : chargeableKm == null ? 0 : Number(((chargeableKm * logisticsCostPerKm) + (recycler.pickupFee ?? 0)).toFixed(2));
       const relevantDemand = demand.filter((row: any) => row.recyclerId === recycler.id);
       const minimumLotKg = Math.max(0, ...relevantDemand.map((row: any) => row.minimumLotKg), materialCapability?.minAcceptableWeight ?? 0);
       const demandRelevant = relevantDemand.length > 0;

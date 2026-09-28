@@ -52,6 +52,10 @@ interface ApiService {
     suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20): Response<ApiEnvelope<JsonElement>>
     @GET("household/kabadiwalas/{kabadiwalaId}")
     suspend fun getHouseholdKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null): Response<ApiEnvelope<KabadiwalaPublicProfileDto>>
+    @GET("kabadiwala/pickup-pricing")
+    suspend fun getKabadiwalaPickupPricing(): Response<ApiEnvelope<PickupPricingDto>>
+    @PUT("kabadiwala/pickup-pricing")
+    suspend fun updateKabadiwalaPickupPricing(@Body body: PickupPricingDto): Response<ApiEnvelope<PickupPricingDto>>
     @POST("household/pickups/{pickupId}/review")
     suspend fun reviewHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: HouseholdPickupReviewDto): Response<ApiEnvelope<HouseholdPickupReviewResultDto>>
     @POST("household/listings/{listingId}/pickups")
@@ -68,6 +72,8 @@ interface ApiService {
     suspend fun rescheduleHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: PickupRescheduleDto): Response<ApiEnvelope<PickupRequestDto>>
     @POST("household/pickups/{pickupId}/settlement")
     suspend fun decideHouseholdSettlement(@Path("pickupId") pickupId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<PickupRequestDto>>
+    @POST("household/pickups/{pickupId}/payment-received")
+    suspend fun confirmHouseholdPaymentReceived(@Path("pickupId") pickupId: String): Response<ApiEnvelope<PickupSettlementPaymentDto>>
     @POST("household/listings/{listingId}/cancel")
     suspend fun cancelHouseholdListing(@Path("listingId") listingId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @POST("household/pickups/{pickupId}/cancel")

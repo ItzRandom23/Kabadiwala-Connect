@@ -154,7 +154,7 @@ export class RecyclerService {
       })),
       pickupAvailability: recycler.pickupAvailability ?? 'FLEXIBLE',
       pickupAvailable: recycler.pickupAvailable ?? (recycler.maxPickupDistanceKm > 0),
-      serviceArea: { maxPickupDistanceKm: recycler.maxPickupDistanceKm, logisticsCostPerKm: recycler.logisticsCostPerKm ?? null },
+      serviceArea: { maxPickupDistanceKm: recycler.maxPickupDistanceKm, pickupFreeRadiusKm: recycler.pickupFreeRadiusKm ?? 0, logisticsCostPerKm: recycler.logisticsCostPerKm ?? null },
       pickupIncluded: recycler.pickupIncluded ?? false,
       pickupFee: recycler.pickupFee ?? null,
       operatingHours: recycler.operatingHours,
@@ -368,9 +368,9 @@ export class RecyclerService {
     }));
   }
 
-  async updateProfile(id: string, input: { pickupAvailable?: boolean; pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; logisticsCostPerKm?: number | null; pickupFee?: number | null; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {
+  async updateProfile(id: string, input: { pickupAvailable?: boolean; pickupAvailability?: PickupAvailability; maxPickupDistanceKm?: number; pickupFreeRadiusKm?: number; logisticsCostPerKm?: number | null; pickupFee?: number | null; pickupIncluded?: boolean; operatingHours?: Prisma.InputJsonValue }) {
     const data = input.pickupAvailable === false
-      ? { ...input, pickupAvailable: false, maxPickupDistanceKm: 0, pickupIncluded: false, pickupFee: null, logisticsCostPerKm: null }
+      ? { ...input, pickupAvailable: false, maxPickupDistanceKm: 0, pickupFreeRadiusKm: 0, pickupIncluded: false, pickupFee: null, logisticsCostPerKm: null }
       : input.pickupAvailable === true
         ? { ...input, pickupAvailable: true, pickupFee: input.pickupIncluded ? null : input.pickupFee ?? null, logisticsCostPerKm: input.pickupIncluded ? null : input.logisticsCostPerKm ?? null }
         : input;
@@ -388,6 +388,8 @@ export class RecyclerService {
       const categories = rates.map(rate => rate.materialCategory);
       await tx.recyclerRate.deleteMany({ where: { recyclerId: id, ...(categories.length ? { materialCategory: { notIn: categories } } : {}) } });
       for (const rate of rates) {
+        const accepted = await tx.recyclerMaterial.findFirst({ where: { recyclerId: id, category: rate.materialCategory }, select: { id: true } });
+        if (!accepted) await tx.recyclerMaterial.create({ data: { recyclerId: id, category: rate.materialCategory, subcategories: [], acceptedGrades: ['UNSPECIFIED'] } });
         await tx.recyclerRate.upsert({
           where: { recyclerId_materialCategory: { recyclerId: id, materialCategory: rate.materialCategory } },
           create: { recyclerId: id, materialCategory: rate.materialCategory, pricePerKg: rate.pricePerKg, unit: 'KILOGRAM', qualityStatus: 'UNVERIFIED', effectiveAt: new Date() },

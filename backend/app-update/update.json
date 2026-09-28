@@ -1,8 +1,8 @@
 {
-  "versionCode": 68,
-  "versionName": "0.1.4-beta",
-  "apkUrl": "kabadiwala-connect-0.1.4-beta-debug.apk",
-  "sha256": "D565B7673E2FF25B2248692B24C698D09DFFEDBAAB5D110B62F1C54D5A3C4A26",
-  "sizeBytes": 28868798,
-  "releaseNotes": "Recycler onboarding and Admin verification improvements, pickup claiming and cancellation fixes, and chat and signup reliability updates."
+  "versionCode": 69,
+  "versionName": "0.1.5-beta",
+  "apkUrl": "kabadiwala-connect-0.1.5-beta-debug.apk",
+  "sha256": "B02BFE1E5501C1101A03C088A1A00C30150C15D244D7FCBDD745B91B353B334B",
+  "sizeBytes": 28901025,
+  "releaseNotes": "Improved recycler verification and onboarding, pickup pricing and collection workflows, supply chain offers, and local price guidance."
 }

@@ -388,6 +388,7 @@ fun AppNavHost(
                     onCancelPickup = vm::cancelPickup,
                     onReschedulePickup = vm::reschedulePickup,
                     onDecideSettlement = { pickupId, decision, reason, notes -> vm.decideHouseholdSettlement(pickupId, decision, reason, notes) },
+                    onConfirmPaymentReceived = vm::confirmHouseholdPaymentReceived,
                     pickupQr = state.householdPickupQr,
                     pickupQrLoadingId = state.householdPickupQrLoadingId,
                     pickupQrError = state.householdPickupQrError,
@@ -498,11 +499,59 @@ fun AppNavHost(
                     onSearch = { area, radius -> supplyVm.searchHouseholdKabadiwalas(area, radius) },
                     onUseLocation = { location, radius -> supplyVm.searchHouseholdKabadiwalas(location.areaName.orEmpty(), radius, location) },
                     onLoadMore = supplyVm::loadMoreHouseholdKabadiwalas,
-                    onOpenProfile = supplyVm::openKabadiwalaProfile,
-                    onCloseProfile = supplyVm::closeKabadiwalaProfile,
-                    onRatePickup = supplyVm::rateHouseholdPickup
+                    onOpenProfile = {
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set("kabadiwalaProfileLat", supplyState.kabadiwalaLatitude)
+                            set("kabadiwalaProfileLon", supplyState.kabadiwalaLongitude)
+                        }
+                        navController.navigate(Destinations.kabadiwalaPublicProfile(it))
+                    }
                 )
             } else RecyclersScreen(state = state, vm = vm, onOpen = { navController.navigate(Destinations.recyclerDetail(it)) }, demoMode = demoMode)
+        }
+        composable(Destinations.KABADIWALA_PUBLIC_PROFILE, arguments = listOf(navArgument("kabadiwalaId") { type = NavType.StringType })) { entry ->
+            val kabadiwalaId = entry.arguments?.getString("kabadiwalaId").orEmpty()
+            val vm: SupplyChainViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            val searchLatitude = navController.previousBackStackEntry?.savedStateHandle?.get<Double>("kabadiwalaProfileLat")
+            val searchLongitude = navController.previousBackStackEntry?.savedStateHandle?.get<Double>("kabadiwalaProfileLon")
+            LaunchedEffect(kabadiwalaId, searchLatitude, searchLongitude) {
+                vm.refreshHousehold()
+                vm.openKabadiwalaProfile(
+                    kabadiwalaId,
+                    searchLatitude ?: factory.currentAccount?.latitude,
+                    searchLongitude ?: factory.currentAccount?.longitude
+                )
+            }
+            KabadiwalaPublicProfileScreen(
+                profile = state.kabadiwalaProfile,
+                loading = state.kabadiwalaProfileLoading,
+                pickups = state.pickups.filter { it.kabadiwalaId == kabadiwalaId && it.status == "COMPLETED" && it.householdReviewRating == null },
+                error = state.error,
+                onRatePickup = vm::rateHouseholdPickup,
+                onDismiss = { navController.popBackStack() }
+            )
+        }
+        composable(Destinations.KABADIWALA_PICKUP_PRICING) {
+            var pricing by remember { mutableStateOf<com.irinteractivestudios.kabadiwalaconnect.data.remote.PickupPricingDto?>(null) }
+            var saving by remember { mutableStateOf(false) }
+            var saved by remember { mutableStateOf(false) }
+            var error by remember { mutableStateOf<String?>(null) }
+            val scope = rememberCoroutineScope()
+            LaunchedEffect(Unit) {
+                runCatching { factory.apiService.getKabadiwalaPickupPricing().requireData() }
+                    .onSuccess { pricing = it }
+                    .onFailure { error = "Could not load pickup charges" }
+            }
+            KabadiwalaPickupPricingScreen(pricing, saving, error, saved, onBack = { navController.popBackStack() }, onSave = { input ->
+                scope.launch {
+                    saving = true; error = null; saved = false
+                    runCatching { factory.apiService.updateKabadiwalaPickupPricing(input).requireData() }
+                        .onSuccess { pricing = it; saved = true }
+                        .onFailure { error = "Could not save pickup charges" }
+                    saving = false
+                }
+            })
         }
         composable(Destinations.RECYCLERS_FOR_LOT, arguments = listOf(navArgument("lotId") { type = NavType.StringType })) { entry ->
             val lotId = entry.arguments?.getString("lotId")
@@ -905,6 +954,8 @@ fun AppNavHost(
                     }
                 },
                 onOpenProfile = { navController.navigate(Destinations.PROFILE) },
+                onOpenPickupPricing = { navController.navigate(Destinations.KABADIWALA_PICKUP_PRICING) },
+                showPickupPricing = role == AccountRole.COLLECTOR && !demoMode,
                 onOpenSafety = { navController.navigate(Destinations.SAFETY) },
                 onOpenHelp = { navController.navigate(Destinations.HELP) },
                 onOpenRewards = { navController.navigate(Destinations.REWARDS) },
@@ -1137,8 +1188,21 @@ fun AppNavHost(
                 val vm: SupplyChainViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refreshRecycler() }
-                RecyclerSupplyScreen(state, vm::refreshRecycler, vm::makeOffer, vm::receiveLot, vm::createRequirement, onWithdrawOffer = vm::withdrawOffer, onUpdateRequirement = vm::updateRequirement, onOpenHandoverScanner = { navController.navigate(Destinations.RECYCLER_SCAN) }, onOpenBulkChat = { lotId, collectorId -> openBulkChat(lotId, collectorId, factory.currentAccount?.profileId.orEmpty()) })
+                RecyclerSupplyScreen(state, vm::refreshRecycler, vm::makeOffer, vm::receiveLot, onOpenDemand = { navController.navigate(Destinations.RECYCLER_CREATE_DEMAND) }, onWithdrawOffer = vm::withdrawOffer, onUpdateRequirement = vm::updateRequirement, onOpenHandoverScanner = { navController.navigate(Destinations.RECYCLER_SCAN) }, onOpenBulkChat = { lotId, collectorId -> openBulkChat(lotId, collectorId, factory.currentAccount?.profileId.orEmpty()) })
             }
+        }
+        composable(Destinations.RECYCLER_CREATE_DEMAND) {
+            val vm: SupplyChainViewModel = viewModel(factory = factory)
+            val state by vm.state.collectAsStateWithLifecycle()
+            var supportedMaterials by remember { mutableStateOf<List<String>>(emptyList()) }
+            var materialsError by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(Unit) {
+                runCatching { factory.apiService.materialCategories().requireData() }
+                    .onSuccess { supportedMaterials = it }
+                    .onFailure { materialsError = "Could not load supported materials" }
+            }
+            LaunchedEffect(state.notice) { if (state.notice == "Requirement published to Kabadiwalas.") navController.popBackStack() }
+            RecyclerDemandCreateScreen(supportedMaterials = supportedMaterials, isSubmitting = "create-demand" in state.busy, error = state.error ?: materialsError, onBack = { navController.popBackStack() }, onSubmit = vm::createRequirement)
         }
         composable(Destinations.RECYCLER_ORDERS) {
             if (demoMode) DemoRecyclerOrdersScreen(onOpenScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
@@ -1155,7 +1219,7 @@ fun AppNavHost(
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refresh() }
-                RecyclerPickupsScreen(availability = state.profile?.pickupAvailability, loading = state.loading, saving = state.saving, error = state.error, onRefresh = vm::refresh, onSave = vm::saveAvailability)
+                RecyclerPickupsScreen(availability = state.profile?.pickupAvailability, profile = state.profile, loading = state.loading, saving = state.saving, error = state.error, onRefresh = vm::refresh, onSave = vm::saveAvailability, onSavePricing = vm::savePickupPricing)
             }
         }
         composable(Destinations.RECYCLER_RATES) {
@@ -1164,7 +1228,7 @@ fun AppNavHost(
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) { vm.refresh() }
-                RecyclerRatesScreen(acceptedMaterials = state.profile?.materialsAccepted?.map { it.category }.orEmpty(), rates = state.profile?.rates.orEmpty(), loading = state.loading, saving = state.saving, saved = state.saved, error = state.error, onRefresh = vm::refresh, onSave = vm::saveRates)
+                RecyclerRatesScreen(acceptedMaterials = state.profile?.materialsAccepted?.map { it.category }.orEmpty(), supportedMaterials = state.materialCategories, materialsError = state.materialCategoriesError, rates = state.profile?.rates.orEmpty(), loading = state.loading, saving = state.saving, saved = state.saved, error = state.error, onRefresh = vm::refresh, onSave = vm::saveRates)
             }
         }
         composable(Destinations.RECYCLER_PROFILE) {

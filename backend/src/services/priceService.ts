@@ -19,7 +19,12 @@ export class PriceService {
   }
 
   async board(material: MaterialCategory, location?: string) {
-    const price = await this.repo.latest(material, location);
+    const localPrice = await this.repo.latest(material, location);
+    const localAgeDays = localPrice ? Math.max(0, Math.floor((Date.now() - localPrice.effectiveAt.getTime()) / 86400000)) : null;
+    const localUsable = localPrice && localPrice.source !== 'SYSTEM' && localPrice.qualityStatus === 'VALIDATED' && localAgeDays != null && localAgeDays <= 7;
+    const reference = localUsable ? null : await this.repo.latestReference(material);
+    const price = localUsable ? localPrice : reference ?? localPrice;
+    const isReference = Boolean(reference && !localUsable);
     const requestedLocation = location?.trim() || null;
     const dataAgeDays = price ? Math.max(0, Math.floor((Date.now() - price.effectiveAt.getTime()) / 86400000)) : null;
     const unavailableReason = !price
@@ -37,8 +42,8 @@ export class PriceService {
         materialCategory: material,
         location: requestedLocation,
         requestedLocation,
-        locationMatched: Boolean(price),
-        sourceContext: price ? 'LOCATION_MATCH' : 'NO_LOCAL_RATE',
+        locationMatched: Boolean(localUsable),
+        sourceContext: price ? (isReference ? 'INDIA_REFERENCE' : 'LOCATION_MATCH') : 'NO_LOCAL_RATE',
         priceMin: null,
         priceMax: null,
         marketPrice: null,
@@ -58,7 +63,8 @@ export class PriceService {
       };
     }
 
-    const history = (await this.repo.history(material, location, new Date(Date.now() - 30 * 86400000)))
+    const historyLocation = isReference ? (price.areaName ?? price.city) : location;
+    const history = (await this.repo.history(material, historyLocation, new Date(Date.now() - 30 * 86400000)))
       .filter(point => point.source !== 'SYSTEM' && point.qualityStatus === 'VALIDATED');
     const observationCount = history.length;
     const confidence = observationCount >= 20 ? 'HIGH' : observationCount >= 10 ? 'MEDIUM' : observationCount > 0 ? 'LOW' : 'INSUFFICIENT';
@@ -67,8 +73,8 @@ export class PriceService {
       materialCategory: material,
       location: price.areaName ?? price.city,
       requestedLocation,
-      locationMatched: true,
-      sourceContext: 'LOCATION_MATCH',
+      locationMatched: !isReference,
+      sourceContext: isReference ? 'INDIA_REFERENCE' : 'LOCATION_MATCH',
       priceMin: price.priceMin,
       priceMax: price.priceMax,
       marketPrice: price.marketPrice,
@@ -85,7 +91,9 @@ export class PriceService {
       trend: this.trend(price.marketPrice, history),
       lastUpdated: price.effectiveAt.toISOString(),
       complianceRegime: material === 'BATTERY' ? 'BATTERY_WASTE_RULES' : 'E_WASTE_RULES',
-      disclaimer: 'Indicative buying range; final price is confirmed after inspection.'
+      disclaimer: isReference
+        ? `No verified rate is available for ${requestedLocation ?? 'your area'}. This is a current reference from ${price.areaName ?? price.city}; local offers may differ. Final price is confirmed after inspection.`
+        : 'Indicative buying range; final price is confirmed after inspection.'
     };
   }
 

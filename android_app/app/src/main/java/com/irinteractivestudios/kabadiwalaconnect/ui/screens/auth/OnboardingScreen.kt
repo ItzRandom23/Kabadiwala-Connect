@@ -104,7 +104,7 @@ fun OnboardingScreen(
     val isOperatorSignIn = state.returningUser && state.role == AccountRole.ADMIN
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) {
-            if (isOperatorSignIn) {
+            if (isOperatorSignIn || state.returningUser) {
                 OutlinedButton(
                     onClick = vm::goBack,
                     enabled = !state.isBusy,
@@ -128,6 +128,7 @@ fun OnboardingScreen(
         }
         when (state.step) {
             OnboardingStep.WELCOME -> Welcome(vm)
+            OnboardingStep.SIGN_IN -> SignInEntry(vm)
             OnboardingStep.EMAIL -> EmailEntry(state, vm)
             OnboardingStep.ROLE -> RoleEntry(state, vm)
             OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
@@ -150,6 +151,16 @@ private fun FinishingSignIn() {
     ) {
         CircularProgressIndicator()
         Text(stringResource(R.string.auth_signin_finishing), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun SignInEntry(vm: OnboardingViewModel) {
+    Column(Modifier.fillMaxWidth().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text("Welcome back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Sign in to the account you already created.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        KcPrimaryButton("Continue with phone", vm::usePhoneSignIn)
+        OutlinedButton(onClick = vm::useEmailSignIn, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text("Continue with email") }
     }
 }
 
@@ -205,7 +216,7 @@ private fun Welcome(
     }
     KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
     OutlinedButton(
-        onClick = { vm.toggleReturning(); vm.start() },
+        onClick = vm::startSignIn,
         shape = KcRadius.pill,
         modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)
     ) { Text(stringResource(R.string.auth_existing_account)) }

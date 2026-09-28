@@ -371,6 +371,9 @@ model Collector {
   areaName          String
   address           String?
   dailyPickupCapacity Int              @default(8)
+  pickupFreeRadiusKm Float?
+  pickupFeePerKm    Float?
+  pickupMaxDistanceKm Float?
   accountStatus     AccountStatus     @default(ACTIVE)
   pilotVerifiedAt   DateTime?
   pilotVerifiedBy   String?
@@ -520,6 +523,7 @@ model Recycler {
   pickupAvailable                Boolean                      @default(false)
   maxPickupDistanceKm            Float
   logisticsCostPerKm             Float?
+  pickupFreeRadiusKm             Float?
   pickupFee                      Float?
   pickupIncluded                 Boolean                      @default(false)
   pickupAvailability             PickupAvailability
@@ -1245,6 +1249,8 @@ model PickupRequest {
   finalCategory     MaterialCategory?
   grade             String?
   ratePerKg         Float?
+  grossMaterialAmount Float?
+  pickupCharge      Float?
   finalAmount       Float?
   settlementStatus  PickupSettlementStatus?
   settlementBeforeValue Float?
@@ -1291,6 +1297,7 @@ model PickupSettlementPayment {
   paymentMethod  PaymentMethod
   recordedAt     DateTime
   confirmedAt    DateTime?
+  householdReceivedAt DateTime?
   requestHash    String?
   reference      String?
   notes          String?

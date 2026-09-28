@@ -8,9 +8,10 @@ const avail = z.enum(['TODAY', 'THIS_WEEK', 'FLEXIBLE']);
 const page = z.coerce.number().int().min(1).default(1);
 const limit = z.coerce.number().int().min(1).max(100).default(20);
 const rateRows = z.array(z.object({ materialCategory: mat, pricePerKg: z.number().finite().positive().lt(1_000_000) }).strict()).max(20);
-const profileUpdate = z.object({ pickupAvailable: z.boolean().optional(), pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), logisticsCostPerKm: z.number().finite().nonnegative().max(100000).nullable().optional(), pickupFee: z.number().finite().nonnegative().max(100000).nullable().optional(), pickupIncluded: z.boolean().optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict().superRefine((value, ctx) => {
+const profileUpdate = z.object({ pickupAvailable: z.boolean().optional(), pickupAvailability: avail.optional(), maxPickupDistanceKm: z.number().finite().positive().max(200).optional(), pickupFreeRadiusKm: z.number().finite().min(0).max(200).optional(), logisticsCostPerKm: z.number().finite().nonnegative().max(100000).nullable().optional(), pickupFee: z.number().finite().nonnegative().max(100000).nullable().optional(), pickupIncluded: z.boolean().optional(), operatingHours: z.record(z.string(), z.unknown()).optional() }).strict().superRefine((value, ctx) => {
   if (value.pickupAvailable === true && value.maxPickupDistanceKm === undefined) ctx.addIssue({ code: 'custom', path: ['maxPickupDistanceKm'], message: 'Choose a maximum pickup distance' });
   if (value.pickupAvailable === true && Number(value.pickupIncluded === true) + Number(value.pickupFee != null) + Number(value.logisticsCostPerKm != null) !== 1) ctx.addIssue({ code: 'custom', path: ['pickupFee'], message: 'Choose exactly one pickup pricing option' });
+  if (value.pickupFreeRadiusKm != null && value.maxPickupDistanceKm != null && value.pickupFreeRadiusKm > value.maxPickupDistanceKm) ctx.addIssue({ code: 'custom', path: ['pickupFreeRadiusKm'], message: 'Free distance cannot exceed maximum distance' });
 });
 const parseDateOnly = (value: string): Date | null => {
   const [year, month, day] = value.split('-').map(Number);

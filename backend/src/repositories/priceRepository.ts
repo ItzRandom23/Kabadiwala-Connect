@@ -5,7 +5,7 @@ const locationCandidates = (location?: string) => {
   if (!normalized) return [];
   // Users may enter a locality, city, state and PIN code together. Resolve
   // only exact configured labels, preferring the most specific entered part.
-  // Never silently borrow another city's latest price.
+  // Board fallback is handled separately and explicitly labelled as an India reference.
   const parts = normalized.split(',').map(part => part.trim()).filter(Boolean);
   return Array.from(new Set([normalized, ...parts].filter(Boolean)));
 };
@@ -23,6 +23,15 @@ export class PriceRepository {
     }
 
     return null;
+  }
+
+  // A current verified rate from elsewhere in India is useful as a clearly
+  // labelled reference when the requested locality has no verified rate.
+  async latestReference(material: MaterialCategory) {
+    return this.db.price.findFirst({
+      where: { materialCategory: material, qualityStatus: 'VALIDATED', source: { not: 'SYSTEM' }, effectiveAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+      orderBy: { effectiveAt: 'desc' }
+    });
   }
 
   async history(material: MaterialCategory, location: string | undefined, since: Date) {

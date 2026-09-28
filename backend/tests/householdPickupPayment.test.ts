@@ -8,6 +8,23 @@ import { errorHandler } from '../src/middleware/errors.js';
 const config = { JWT_SECRET: 'a-secure-test-secret', JWT_EXPIRES_IN: '1h' } as never;
 
 describe('operator-reconciled household pickup payments', () => {
+  it('lets the household confirm the recorded agreed amount', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const payment = { id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', amount: 250, status: 'RECORDED' };
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
+      pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue(payment), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...payment, householdReceivedAt: new Date() }), updateMany },
+      pickupRequest: { findFirst: vi.fn().mockResolvedValue({ id: 'pickup-1', householdId: 'household-1', finalAmount: 250, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }) }
+    } as any;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', supplyChainRoutes(jwt, { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never, db));
+    app.use(errorHandler);
+    const response = await request(app).post('/api/v1/household/pickups/pickup-1/payment-received').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+    expect(response.status).toBe(200);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ householdReceivedAt: null }) }));
+  });
   it('records an external UPI payment as pending operator reconciliation', async () => {
     const paymentCreate = vi.fn().mockResolvedValue({ id: 'payment-1', pickupId: 'pickup-1', amount: 250, paymentMethod: 'UPI', status: 'RECORDED' });
     const pickupUpdate = vi.fn().mockResolvedValue({ count: 1 });
@@ -87,7 +104,7 @@ describe('operator-reconciled household pickup payments', () => {
       adminAccount: { findUnique: vi.fn().mockResolvedValue({ active: true, permissions: ['PAYMENT_VERIFICATION'] }) },
       $transaction: vi.fn(async (callback: (tx: any) => unknown) => callback({
         pickupSettlementPayment: {
-          findUnique: vi.fn().mockResolvedValue({ id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', status: 'RECORDED' }),
+          findUnique: vi.fn().mockResolvedValue({ id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', status: 'RECORDED', householdReceivedAt: new Date() }),
           updateMany: updatePayment,
           findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', status: 'VERIFIED' })
         },
