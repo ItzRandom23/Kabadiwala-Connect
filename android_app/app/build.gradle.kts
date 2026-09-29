@@ -194,6 +194,8 @@ dependencies {
     // Compose + Material 3 UI.
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    // Activity Result APIs require FragmentActivity-compatible fragment support.
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
