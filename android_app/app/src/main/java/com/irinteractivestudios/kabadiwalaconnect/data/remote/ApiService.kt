@@ -49,7 +49,7 @@ interface ApiService {
     @GET("household/listings/{listingId}/passport")
     suspend fun getHouseholdListingPassport(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdPassportResponseDto>>
     @GET("household/kabadiwalas")
-    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20): Response<ApiEnvelope<JsonElement>>
+    suspend fun getHouseholdKabadiwalas(@Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null, @Query("radiusKm") radiusKm: Int? = null, @Query("area") area: String? = null, @Query("page") page: Int = 1, @Query("limit") limit: Int = 20, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<JsonElement>>
     @GET("household/kabadiwalas/{kabadiwalaId}")
     suspend fun getHouseholdKabadiwala(@Path("kabadiwalaId") kabadiwalaId: String, @Query("latitude") latitude: Double? = null, @Query("longitude") longitude: Double? = null): Response<ApiEnvelope<KabadiwalaPublicProfileDto>>
     @GET("kabadiwala/pickup-pricing")

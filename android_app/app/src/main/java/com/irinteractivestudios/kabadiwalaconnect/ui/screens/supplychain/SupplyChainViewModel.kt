@@ -68,6 +68,7 @@ data class SupplyChainState(
     val kabadiwalaLatitude: Double? = null,
     val kabadiwalaLongitude: Double? = null,
     val kabadiwalaPage: Int = 1,
+    val kabadiwalaNextCursor: String? = null,
     val kabadiwalaHasMore: Boolean = false,
     val kabadiwalaLoading: Boolean = false,
     val kabadiwalaRequiresLocation: Boolean = false,
@@ -431,8 +432,34 @@ class SupplyChainViewModel(
                 // These reads are independent. Starting them together means a
                 // slow pickup or directory response cannot delay the listing
                 // result that the Household is waiting to see.
-                val listingsRequest = async { fetch { api.getHouseholdListings(limit = 50).also { it.requireData() } } }
-                val pickupsRequest = async { fetch { api.getHouseholdPickups(limit = 50).also { it.requireData() } } }
+                val listingsRequest = async {
+                    fetch { api.getHouseholdListings(limit = 50).also { it.requireData() } }.also { result ->
+                        if (!current()) return@also
+                        result.onSuccess { response ->
+                            _state.value = _state.value.copy(
+                                listings = mergeHouseholdListings(response.requireData()),
+                                householdListingsNextCursor = response.body()?.page?.nextCursor,
+                                householdListingsLoading = false,
+                                householdListingsLoaded = true
+                            )
+                        }.onFailure { error ->
+                            Log.e("HouseholdRefresh", "Failed loading listings (${error::class.java.simpleName})")
+                            val message = householdRefreshError(error, "your listings")
+                            failures += message
+                            _state.value = _state.value.copy(householdListingsLoading = false, householdListingsLoaded = true, error = message)
+                        }
+                    }
+                }
+                val pickupsRequest = async {
+                    fetch { api.getHouseholdPickups(limit = 50).also { it.requireData() } }.also { result ->
+                        if (!current()) return@also
+                        result.onSuccess { response -> _state.value = _state.value.copy(pickups = response.requireData(), householdPickupsNextCursor = response.body()?.page?.nextCursor) }
+                            .onFailure { error ->
+                                Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
+                                failures += householdRefreshError(error, "your pickup history")
+                            }
+                    }
+                }
                 val directoryRequest = async {
                     fetch {
                         api.getHouseholdKabadiwalas(
@@ -441,43 +468,19 @@ class SupplyChainViewModel(
                             requestedRadiusKm,
                             requestedArea.ifBlank { null }
                         ).requireData().toKabadiwalaDirectoryDto()
+                    }.also { result ->
+                        if (!current()) return@also
+                        result.onSuccess { directory ->
+                            if (directoryGeneration == directorySearchGeneration) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaNextCursor = directory.pagination.nextCursor, kabadiwalaHasMore = directory.pagination.nextCursor != null || directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
+                        }.onFailure { error ->
+                            Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
+                            failures += householdRefreshError(error, "nearby Kabadiwalas")
+                        }
                     }
                 }
+                awaitAll(listingsRequest, pickupsRequest, directoryRequest)
                 val listingsResult = listingsRequest.await()
                 if (!current()) return@launch
-                listingsResult.onSuccess { response ->
-                    _state.value = _state.value.copy(
-                        listings = mergeHouseholdListings(response.requireData()),
-                        householdListingsNextCursor = response.body()?.page?.nextCursor,
-                        householdListingsLoading = false,
-                        householdListingsLoaded = true
-                    )
-                }
-                    .onFailure { error ->
-                        Log.e("HouseholdRefresh", "Failed loading listings (${error::class.java.simpleName})")
-                        val message = householdRefreshError(error, "your listings")
-                        failures += message
-                        _state.value = _state.value.copy(
-                            householdListingsLoading = false,
-                            householdListingsLoaded = true,
-                            error = message
-                        )
-                    }
-                val pickupsResult = pickupsRequest.await()
-                if (!current()) return@launch
-                pickupsResult.onSuccess { response -> _state.value = _state.value.copy(pickups = response.requireData(), householdPickupsNextCursor = response.body()?.page?.nextCursor) }
-                    .onFailure { error ->
-                        Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
-                        failures += householdRefreshError(error, "your pickup history")
-                    }
-                val directoryResult = directoryRequest.await()
-                if (!current()) return@launch
-                directoryResult.onSuccess { directory ->
-                    if (directoryGeneration == directorySearchGeneration) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
-                }.onFailure { error ->
-                    Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
-                    failures += householdRefreshError(error, "nearby Kabadiwalas")
-                }
                 _state.value = _state.value.copy(
                     loading = false,
                     initialLoadComplete = failures.isEmpty() || _state.value.initialLoadComplete,
@@ -552,14 +555,14 @@ class SupplyChainViewModel(
         val owner = accountId()
         val query = area.trim()
         if (location == null && query.isBlank()) {
-            _state.value = _state.value.copy(kabadiwalaAreaQuery = "", kabadiwalaLatitude = null, kabadiwalaLongitude = null, kabadiwalas = emptyList(), kabadiwalaRequiresLocation = true, kabadiwalaHasMore = false)
+            _state.value = _state.value.copy(kabadiwalaAreaQuery = "", kabadiwalaLatitude = null, kabadiwalaLongitude = null, kabadiwalas = emptyList(), kabadiwalaNextCursor = null, kabadiwalaRequiresLocation = true, kabadiwalaHasMore = false)
             return
         }
-        _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaLoading = true, error = null)
+        _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaNextCursor = null, kabadiwalaLoading = true, error = null)
         directorySearchJob = viewModelScope.launch {
             runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
-                    if (generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
+                    if (generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaNextCursor = directory.pagination.nextCursor, kabadiwalaHasMore = directory.pagination.nextCursor != null || directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
                 }
                 .onFailure { error -> if (error !is CancellationException && generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
         }
@@ -572,9 +575,9 @@ class SupplyChainViewModel(
         val owner = accountId()
         _state.value = current.copy(kabadiwalaLoading = true)
         directoryPageJob = viewModelScope.launch {
-            runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1).requireData().toKabadiwalaDirectoryDto() }
+            runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1, cursor = current.kabadiwalaNextCursor).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
-                    if (generation == directorySearchGeneration && accountId() == owner && _state.value.kabadiwalaPage == current.kabadiwalaPage) _state.value = _state.value.copy(kabadiwalas = (_state.value.kabadiwalas + directory.items).distinctBy { it.id }, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
+                    if (generation == directorySearchGeneration && accountId() == owner && _state.value.kabadiwalaPage == current.kabadiwalaPage) _state.value = _state.value.copy(kabadiwalas = (_state.value.kabadiwalas + directory.items).distinctBy { it.id }, kabadiwalaPage = current.kabadiwalaPage + 1, kabadiwalaNextCursor = directory.pagination.nextCursor, kabadiwalaHasMore = if (current.kabadiwalaNextCursor != null) directory.pagination.nextCursor != null else directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
                 }
                 .onFailure { error -> if (error !is CancellationException && generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
         }

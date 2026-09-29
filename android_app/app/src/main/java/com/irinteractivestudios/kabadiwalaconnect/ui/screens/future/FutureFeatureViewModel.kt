@@ -42,6 +42,8 @@ data class FutureFeatureState(
     val schemes: List<GovernmentSchemeDto> = emptyList(),
     val activities: List<DiyActivityDto> = emptyList(),
     val conversations: List<ConversationDto> = emptyList(),
+    val conversationsLastSyncedAt: Long? = null,
+    val conversationsRefreshError: String? = null,
     val messages: Map<String, List<ChatMessageDto>> = emptyMap(),
     val messagesNextCursor: Map<String, String> = emptyMap(),
     val loadingOlderMessages: Set<String> = emptySet(),
@@ -292,6 +294,7 @@ class FutureFeatureViewModel(
             conversationsJob?.cancel()
             conversationsOwner = owner
             conversationsRefreshQueued = false
+            _state.value = _state.value.copy(conversations = emptyList(), conversationsLastSyncedAt = null, conversationsRefreshError = null, sending = false)
         } else if (conversationsJob?.isActive == true) {
             conversationsRefreshQueued = true
             return
@@ -305,11 +308,12 @@ class FutureFeatureViewModel(
                     val conversations = api.getConversations().requireData()
                     if (accountId() != owner) return@launch
                     cache?.saveConversations(conversations)
-                    _state.value = _state.value.copy(conversations = conversations)
+                    if (accountId() != owner) return@launch
+                    _state.value = _state.value.copy(conversations = conversations, conversationsLastSyncedAt = System.currentTimeMillis(), conversationsRefreshError = null)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
-                    // Keep the last successful list while connectivity recovers.
+                } catch (error: Exception) {
+                    if (accountId() == owner) _state.value = _state.value.copy(conversationsRefreshError = userFacingError(error, "Could not refresh messages. Saved conversations are shown."))
                 }
             } while (conversationsRefreshQueued && accountId() == owner)
         }
@@ -325,7 +329,7 @@ class FutureFeatureViewModel(
             chatOwner = owner
             exhaustedChatHistory.clear()
             messageRequestGenerations.clear()
-            _state.value = _state.value.copy(messages = emptyMap(), messagesNextCursor = emptyMap())
+            _state.value = _state.value.copy(messages = emptyMap(), messagesNextCursor = emptyMap(), sending = false)
         }
         val generation = (messageRequestGenerations[conversationId] ?: 0L) + 1L
         messageRequestGenerations[conversationId] = generation
@@ -430,7 +434,9 @@ class FutureFeatureViewModel(
     }
 
     private fun sendMessageWithClientId(conversationId: String, trimmed: String, clientId: String) {
+        val owner = accountId()?.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
+            if (accountId() != owner) return@launch
             _state.value = _state.value.copy(sending = true, error = null)
             val pending = ChatMessageDto(
                 id = "local-$clientId",
@@ -445,15 +451,18 @@ class FutureFeatureViewModel(
             upsertLocalMessage(conversationId, pending)
             val sendFailure = try {
                 val message = api.sendMessage(conversationId, SendMessageRequestDto(clientId, trimmed)).requireData()
+                if (accountId() != owner) return@launch
                 cache?.deleteMessage(pending.id)
+                if (accountId() != owner) return@launch
                 upsertLocalMessage(conversationId, message)
                 null
             } catch (cancelled: CancellationException) {
-                upsertLocalMessage(conversationId, pending.copy(status = "FAILED"))
+                if (accountId() == owner) upsertLocalMessage(conversationId, pending.copy(status = "FAILED"))
                 throw cancelled
             } catch (error: Exception) {
                 error
             }
+            if (accountId() != owner) return@launch
             if (sendFailure != null) {
                 val payload = JsonObject().apply {
                     addProperty("id", pending.id)
@@ -461,15 +470,15 @@ class FutureFeatureViewModel(
                     addProperty("clientMessageId", clientId)
                     addProperty("body", trimmed)
                 }
-                val owner = accountId()?.takeIf { it.isNotBlank() }
-                val queued = sendFailure.isRetryableTransportFailure() && syncQueue != null && owner != null && try {
+                val queued = sendFailure.isRetryableTransportFailure() && syncQueue != null && try {
                     syncQueue.enqueueOnce(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner, idempotencyKey = clientId))
-                    true
+                    accountId() == owner
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
                     false
                 }
+                if (accountId() != owner) return@launch
                 upsertLocalMessage(conversationId, pending.copy(status = if (queued) "QUEUED_OFFLINE" else "FAILED"))
                 if (queued) requestSync()
                 else _state.value = _state.value.copy(error = userFacingError(sendFailure, "Message could not be sent. Retry it when ready."))

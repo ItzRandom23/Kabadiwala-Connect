@@ -68,7 +68,8 @@ internal fun JsonElement.toKabadiwalaDirectoryDto(): KabadiwalaDirectoryDto {
 
     return KabadiwalaDirectoryDto(
         items = items,
-        pagination = PageDto(page = page, limit = limit, total = total, totalPages = totalPages),
+        pagination = PageDto(page = page, limit = limit, total = total, totalPages = totalPages,
+            nextCursor = pageObject?.get("nextCursor")?.takeUnless { it.isJsonNull }?.asString),
         requiresLocation = root.booleanValue("requiresLocation") ?: false
     )
 }
@@ -233,7 +234,7 @@ data class LocationDto(val latitude: Double? = null, val longitude: Double? = nu
 data class CreateLotRequestDto(val materialCategory: String, val materialSubcategory: String? = null, val sourceType: String? = null, val wasteRegime: String? = null, val imageProvenance: String? = null, val condition: String, val weight: Double, val weightUnit: String = "KILOGRAM", val collectionLocation: LocationDto, val notes: String? = null)
 data class UpdateLotRequestDto(val weight: Double? = null, val condition: String? = null, val notes: String? = null, val version: Int)
 data class LotDto(val id: String, val collectorId: String? = null, val materialCategory: String, val materialSubcategory: String? = null, val sourceType: String? = null, val wasteRegime: String? = null, val condition: String, val weight: Double, val weightUnit: String? = null, val originalWeight: Double? = null, val originalWeightUnit: String? = null, val imageProvenance: String? = null, val imageQualityStatus: String? = null, val photoUrl: String? = null, val photoReferences: List<String> = emptyList(), val estimatedValue: Double? = null, val quotedPrice: Double? = null, val finalPrice: Double? = null, val collectionLocation: LocationDto? = null, val collectionAreaName: String? = null, val status: String, val notes: String? = null, val version: Int = 1, val createdAt: String? = null, val updatedAt: String? = null)
-data class PageDto(val page: Int = 1, val limit: Int = 100, val total: Int = 0, val totalPages: Int = 0)
+data class PageDto(val page: Int = 1, val limit: Int = 100, val total: Int = 0, val totalPages: Int = 0, val nextCursor: String? = null)
 data class LotPageDto(val items: List<LotDto> = emptyList(), val pagination: PageDto = PageDto())
 
 data class PriceBoardDto(val materialCategory: String, val location: String? = null, val priceMin: Double? = null, val priceMax: Double? = null, val marketPrice: Double? = null, val historicalAverage: Double? = null, val unit: String = "KILOGRAM", val source: PriceSourceDto? = null, val qualityStatus: String = "UNVERIFIED", val ingestedAt: String? = null, val complianceRegime: String? = null, val trend: TrendDto? = null, val lastUpdated: String? = null, val disclaimer: String? = null, val available: Boolean = true)

@@ -43,10 +43,10 @@ const operationKey = (req: any) => {
 };
 const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
 
-/** Pagination is opt-in so clients expecting the legacy array keep working. */
+/** Legacy callers retain an array response, bounded to the newest 100 rows. */
 export async function pagedRows(model: any, where: Record<string, unknown>, query: Record<string, unknown>, select?: Record<string, unknown>) {
   const wantsPage = query.limit !== undefined || query.cursor !== undefined;
-  if (!wantsPage) return { items: await model.findMany({ where, ...(select ? { select } : {}), orderBy: { createdAt: 'desc' } }), page: undefined };
+  if (!wantsPage) return { items: await model.findMany({ where, ...(select ? { select } : {}), orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }), page: undefined };
   const limit = parse(z.coerce.number().int().min(1).max(100), query.limit ?? 50);
   const cursor = query.cursor == null ? null : parse(id, query.cursor);
   if (cursor) {
@@ -171,9 +171,20 @@ function areaSearchPattern(area: string): string {
 }
 
 /** Mongo filters and pages candidates before they are expanded into summaries. */
-export async function nearbyCollectorPage(store: any, input: { latitude?: number; longitude?: number; area: string; radiusKm: number; page: number; limit: number }) {
+export async function nearbyCollectorPage(store: any, input: { latitude?: number; longitude?: number; area: string; radiusKm: number; page: number; limit: number; cursor?: string }) {
   const pattern = input.area ? areaSearchPattern(input.area) : '';
-  if (input.latitude === undefined && !pattern) return { total: 0, profiles: [] };
+  if (input.latitude === undefined && !pattern) return { total: 0, profiles: [], nextCursor: null };
+  const filterKey = createHash('sha256').update(JSON.stringify([input.latitude, input.longitude, input.area, input.radiusKm])).digest('hex').slice(0, 16);
+  let after: { d: number; i: string; q: string } | null = null;
+  if (input.cursor) {
+    try {
+      const decoded = JSON.parse(Buffer.from(input.cursor, 'base64url').toString('utf8'));
+      if (decoded.q !== filterKey || !Number.isFinite(decoded.d) || decoded.d < 0 || typeof decoded.i !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(decoded.i)) throw new Error('cursor mismatch');
+      after = decoded;
+    } catch {
+      throw new AppError('VALIDATION_ERROR', 'Invalid discovery cursor', 422, { code: 'INVALID_CURSOR' });
+    }
+  }
   const areaMatch = { accountStatus: 'ACTIVE', areaName: { $ne: '' }, $or: [
     { areaName: { $regex: pattern, $options: 'i' } },
     { $expr: { $gte: [{ $indexOfCP: [input.area.toLocaleLowerCase('en-IN'), { $toLower: '$areaName' }] }, 0] } }
@@ -215,17 +226,23 @@ export async function nearbyCollectorPage(store: any, input: { latitude?: number
     ], as: 'activeUsers' } },
     { $match: { 'activeUsers.0': { $exists: true } } },
     { $addFields: { distanceSort: { $ifNull: ['$distanceKm', 999999] } } },
+    ...(after ? [{ $match: { $or: [{ distanceSort: { $gt: after.d } }, { distanceSort: after.d, _id: { $gt: after.i } }] } }] : []),
     { $sort: { distanceSort: 1, _id: 1 } },
     { $facet: {
       count: [{ $count: 'total' }],
-      items: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, { $project: {
+      items: [...(after ? [] : [{ $skip: (input.page - 1) * input.limit }]), { $limit: input.limit + 1 }, { $project: {
         _id: 0, id: '$_id', displayName: 1, areaName: 1, latitude: 1, longitude: 1,
-        dailyPickupCapacity: 1, pickupFreeRadiusKm: 1, pickupFeePerKm: 1, pickupMaxDistanceKm: 1
+        dailyPickupCapacity: 1, pickupFreeRadiusKm: 1, pickupFeePerKm: 1, pickupMaxDistanceKm: 1, distanceSort: 1
       } }]
     } }
   );
   const [result] = await store.collector.aggregateRaw({ pipeline }) as Array<{ count?: Array<{ total: number }>; items?: any[] }>;
-  return { total: result?.count?.[0]?.total ?? 0, profiles: result?.items ?? [] };
+  const pageRows = (result?.items ?? []).slice(0, input.limit);
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor = (result?.items?.length ?? 0) > input.limit && last
+    ? Buffer.from(JSON.stringify({ d: last.distanceSort, i: last.id, q: filterKey })).toString('base64url')
+    : null;
+  return { total: result?.count?.[0]?.total ?? 0, profiles: pageRows.map(({ distanceSort: _distanceSort, ...profile }: any) => profile), nextCursor };
 }
 
 /**
@@ -497,18 +514,19 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       area: z.string().trim().max(160).optional(),
       radiusKm: z.coerce.number().finite().positive().max(200).default(25),
       page: z.coerce.number().int().min(1).max(10000).default(1),
-      limit: z.coerce.number().int().min(1).max(50).default(20)
+      limit: z.coerce.number().int().min(1).max(50).default(20),
+      cursor: z.string().min(1).max(512).optional()
     }).refine(value => (value.latitude === undefined) === (value.longitude === undefined), { message: 'Both latitude and longitude are required' }), req.query);
     const areaQuery = locationQuery.area?.trim() || '';
     if (locationQuery.latitude === undefined && !areaQuery) {
       return res.json({ success: true, data: { items: [], pagination: { page: locationQuery.page, limit: locationQuery.limit, total: 0, totalPages: 0 }, requiresLocation: true } });
     }
     if (typeof store.collector?.aggregateRaw === 'function') {
-      const { total, profiles } = await nearbyCollectorPage(store, { latitude: locationQuery.latitude, longitude: locationQuery.longitude, area: areaQuery, radiusKm: locationQuery.radiusKm, page: locationQuery.page, limit: locationQuery.limit });
+      const { total, profiles, nextCursor } = await nearbyCollectorPage(store, { latitude: locationQuery.latitude, longitude: locationQuery.longitude, area: areaQuery, radiusKm: locationQuery.radiusKm, page: locationQuery.page, limit: locationQuery.limit, cursor: locationQuery.cursor });
       const items = await publicPartnerSummaries(profiles, locationQuery.latitude, locationQuery.longitude);
       return res.json({ success: true, data: {
         items,
-        pagination: { page: locationQuery.page, limit: locationQuery.limit, total, totalPages: Math.ceil(total / locationQuery.limit) },
+        pagination: { page: locationQuery.page, limit: locationQuery.limit, total, totalPages: Math.ceil(total / locationQuery.limit), nextCursor },
         requiresLocation: false,
         locationFilter: { area: areaQuery || null, radiusKm: locationQuery.latitude === undefined ? null : locationQuery.radiusKm }
       } });
@@ -574,9 +592,18 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'REASSIGNMENT_REQUIRED' }, select: { id: true, kabadiwalaId: true, listingId: true } });
     if (!pickup) throw new AppError('NOT_FOUND', 'Reassignment options are not available for this pickup', 404, { code: 'REASSIGNMENT_NOT_AVAILABLE' });
     const listing = await store.householdListing.findFirst({ where: { id: pickup.listingId, householdId: req.identity!.collectorId }, select: { materialCategory: true, latitude: true, longitude: true, areaName: true } });
-    const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
+    const nearby = typeof store.collector?.aggregateRaw === 'function'
+      ? await nearbyCollectorPage(store, {
+          ...(listing?.latitude != null && listing?.longitude != null ? { latitude: listing.latitude, longitude: listing.longitude } : {}),
+          area: listing?.areaName ?? '', radiusKm: 200, page: 1, limit: 51
+        })
+      : null;
+    // Older test stores do not provide Mongo aggregation. Production limits
+    // the database result before building the public response.
+    const users = nearby ? [] : await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((row: any) => row.collectorProfileId).filter((value: any): value is string => Boolean(value) && value !== pickup.kabadiwalaId);
-    const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const profiles = nearby?.profiles.filter((profile: any) => profile.id !== pickup.kabadiwalaId).slice(0, 50)
+      ?? (ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true }, take: 50 }) : []);
     const options = profiles.map((profile: any) => {
       const distance = distanceKm(listing?.latitude, listing?.longitude, profile.latitude, profile.longitude);
       return { id: profile.id, displayName: profile.displayName, areaName: profile.areaName, distanceKm: distance == null ? null : Number(distance.toFixed(1)), sameArea: Boolean(listing?.areaName && profile.areaName && areaNamesMatch(String(listing.areaName), String(profile.areaName))) };

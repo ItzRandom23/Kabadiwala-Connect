@@ -14,7 +14,7 @@ describe('nearby collector database paging', () => {
     expect(pipeline[0].$match.latitude).toMatchObject({ $gte: expect.any(Number), $lte: expect.any(Number) });
     expect(pipeline.some(stage => stage.$unionWith?.coll === 'Collector')).toBe(true);
     expect(pipeline.at(-1).$facet.items[0]).toEqual({ $skip: 20 });
-    expect(pipeline.at(-1).$facet.items[1]).toEqual({ $limit: 20 });
+    expect(pipeline.at(-1).$facet.items[1]).toEqual({ $limit: 21 });
     expect(pipeline.some(stage => stage.$lookup?.from === 'User')).toBe(true);
   });
 });

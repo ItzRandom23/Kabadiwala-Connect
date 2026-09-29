@@ -197,13 +197,15 @@ fun RecyclerVerificationScreen(
         )
         Text(stringResource(detailRes), style = MaterialTheme.typography.bodyLarge)
         StatusCard(stringResource(statusLabelRes), stringResource(R.string.recycler_verification_status_detail), statusColors.first, statusColors.second)
+        if (authorizationDetails != null && listOf(authorizationDetails.authority, authorizationDetails.type, authorizationDetails.registrationNumber, authorizationDetails.validUntil).any { !it.isNullOrBlank() }) {
+            VerificationEvidenceSummary(recyclerProfile)
+        }
         if (canSubmit) {
             Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 
         if (status == RecyclerVerificationStatus.VERIFIED) {
-            VerificationEvidenceSummary(recyclerProfile)
             Button(onClick = onOpenMarketplace, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
                 Text(stringResource(R.string.recycler_verification_open_marketplace))
             }
@@ -258,7 +260,6 @@ fun RecyclerVerificationScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = onRefresh, enabled = !loading && !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.recycler_verification_refresh)) }
-            if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcTheme.extended.warning, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -815,6 +816,12 @@ fun RecyclerRatesScreen(
     val layout = rememberKcResponsiveLayout()
     val categories = remember(acceptedMaterials, supportedMaterials, rates) { (acceptedMaterials + rates.map { it.materialCategory } + supportedMaterials).filter { it.isNotBlank() }.distinct() }
     var values by remember(categories, rates) { mutableStateOf(categories.associateWith { category -> rates.firstOrNull { it.materialCategory == category }?.pricePerKg?.toString().orEmpty() }) }
+    var showAllMaterials by remember { mutableStateOf(false) }
+    var materialQuery by remember { mutableStateOf("") }
+    val visibleCategories = categories.filter { category ->
+        (showAllMaterials || category in acceptedMaterials || rates.any { it.materialCategory == category }) &&
+            category.displayMaterial().contains(materialQuery.trim(), ignoreCase = true)
+    }
     val valid = values.values.any { it.toDoubleOrNull()?.let { value -> value > 0 } == true }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineLarge)
@@ -823,7 +830,11 @@ fun RecyclerRatesScreen(
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         if (materialsError) Text("Could not load all supported materials. Refresh to choose more categories.", color = MaterialTheme.colorScheme.error)
         error?.let { Text(stringResource(R.string.recycler_rates_load_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-        categories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
+        Text("${rates.size} published rates · ${acceptedMaterials.size} accepted materials", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(materialQuery, { materialQuery = it }, label = { Text("Find a material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        visibleCategories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
+        if (categories.size > visibleCategories.size && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = true }) { Text("Show all ${categories.size} materials") }
+        if (showAllMaterials && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = false }) { Text("Show accepted materials") }
         if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcTheme.extended.success, style = MaterialTheme.typography.bodyMedium)
         if (error != null || materialsError) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
         Button(onClick = {

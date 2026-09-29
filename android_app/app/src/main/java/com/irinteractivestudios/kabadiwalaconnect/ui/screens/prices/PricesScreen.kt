@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,7 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
     val refreshFailed by vm.refreshFailed.collectAsStateWithLifecycle()
     var selectedMaterial by remember { mutableStateOf("") }
     var locationInput by remember(location) { mutableStateOf(location) }
+    var showAreaEditor by rememberSaveable { mutableStateOf(location.isBlank()) }
     var showLocationRationale by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf(false) }
     var locationBusy by remember { mutableStateOf(false) }
@@ -93,6 +95,7 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
         val cleaned = value.trim()
         if (cleaned.isBlank()) return
         vm.selectLocation(cleaned)
+        showAreaEditor = false
         // selectedLocation changes synchronously, so refresh will request this
         // exact area and the backend will not substitute another city's rate.
         vm.refresh()
@@ -140,9 +143,9 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Column(Modifier.padding(start = 10.dp)) {
+                    Column(Modifier.padding(start = 10.dp).weight(1f)) {
                         Text(
                             if (location.isBlank()) "Choose your market area" else stringResource(R.string.prices_location_context, location),
                             style = MaterialTheme.typography.titleSmall,
@@ -150,14 +153,13 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            if (BuildConfig.DEBUG) "Live rates appear when available; this development build fills gaps with samples."
-                            else "Live local rates appear here when available.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .82f)
-                        )
+                        if (showAreaEditor) Text("Search by locality, city or PIN code.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { showAreaEditor = !showAreaEditor }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(if (showAreaEditor) "Done" else "Change")
                     }
                 }
+                if (showAreaEditor) {
                 OutlinedTextField(
                     value = locationInput,
                     onValueChange = { locationInput = it.take(160) },
@@ -184,9 +186,10 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                     }
                 }
                 if (locationError) Text("Could not determine an area. Enter your locality, city or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
-        if (locations.isNotEmpty()) {
+        if (showAreaEditor && locations.isNotEmpty()) {
             Text("Areas with configured price data", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 locations.take(12).forEach { place -> FilterChip(selected = place == location, onClick = { locationInput = place; applyLocation(place) }, label = { Text(place) }) }

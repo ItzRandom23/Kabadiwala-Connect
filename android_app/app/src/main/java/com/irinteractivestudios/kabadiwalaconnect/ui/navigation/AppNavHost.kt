@@ -1095,7 +1095,9 @@ fun AppNavHost(
                         if (event.accountId == owner && event.type == "CHAT_MESSAGE") vm.loadConversations()
                     }
                 }
-                ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh, currentAccountId = factory.currentAccount?.profileId.orEmpty())
+                ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::loadConversations,
+                    currentAccountId = factory.currentAccount?.profileId.orEmpty(),
+                    lastSyncedAt = state.conversationsLastSyncedAt, refreshError = state.conversationsRefreshError)
             }
         }
         composable(Destinations.CHAT_DETAIL, arguments = listOf(navArgument("conversationId") { type = NavType.StringType })) { entry ->

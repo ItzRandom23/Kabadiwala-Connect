@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
@@ -394,19 +395,27 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable private fun RecyclerDetailsEntry(state: OnboardingState, vm: OnboardingViewModel) {
     var showMaterials by remember { mutableStateOf(false) }
+    var showAuthorization by rememberSaveable { mutableStateOf(false) }
+    var showLogistics by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     Text(stringResource(R.string.auth_recycler_details_title), style = MaterialTheme.typography.headlineMedium)
-    Text("Basic facility information", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text("Facility or business name · Required") }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    Text("Facility details", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text("Facility or business name · Required") }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true,
+        isError = state.recyclerDetailsError != null && state.businessName.isBlank(),
+        supportingText = { if (state.recyclerDetailsError != null && state.businessName.isBlank()) Text("Enter your facility name.") },
+        modifier = Modifier.fillMaxWidth())
     val invalidEmail = state.email.isNotBlank() && !EmailValidator.isValid(state.email)
     OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = invalidEmail, supportingText = { if (invalidEmail) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
     OutlinedTextField(state.alternatePhone, { vm.setAlternatePhone(it.filter(Char::isDigit).take(10)) }, label = { Text("Alternate phone · Optional") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
     Text("Materials accepted · Required", style = MaterialTheme.typography.titleMedium)
     Text(if (state.materialsAccepted.isEmpty()) "No materials selected" else state.materialsAccepted.sorted().joinToString(" · ") { it.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
     OutlinedButton(onClick = { showMaterials = true }, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("recycler_material_picker")) { Text("Choose materials") }
+    if (state.recyclerDetailsError != null && state.materialsAccepted.isEmpty()) Text("Select at least one material.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     if (state.materialCategoriesError) TextButton(onClick = vm::loadMaterialCategories) { Text("Could not load materials · Retry") }
-    Text("Authorization and verification", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-    Text("Add available details now. You can complete the evidence before Admin review.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton(onClick = { showAuthorization = !showAuthorization }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text(if (showAuthorization) "Hide authorization details" else "Add authorization details · Optional")
+    }
+    if (showAuthorization) {
     OutlinedTextField(state.authorizationNumber, vm::setAuthorizationNumber, label = { Text("Registration / authorization number · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(state.authorizationAuthority, vm::setAuthorizationAuthority, label = { Text("Issuing authority · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(state.authorizationType, vm::setAuthorizationType, label = { Text("Authorization type · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -415,7 +424,11 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         val today = java.util.Calendar.getInstance()
         android.app.DatePickerDialog(context, { _, year, month, day -> vm.setAuthorizationValidUntil("%04d-%02d-%02d".format(year, month + 1, day)) }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH)).show()
     }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (state.authorizationValidUntil.isBlank()) "Choose validity date · Optional" else "Valid until ${state.authorizationValidUntil}") }
-    Text("Pickup and logistics", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    }
+    TextButton(onClick = { showLogistics = !showLogistics }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text(if (showLogistics) "Hide pickup settings" else "Set up pickup · Optional")
+    }
+    if (showLogistics) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.auth_pickup_available), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge); Switch(state.pickupAvailable, vm::setPickupAvailable) }
     if (state.pickupAvailable) {
         Text("Pickup availability", style = MaterialTheme.typography.titleSmall)
@@ -427,6 +440,7 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
         if (state.pickupPricing == "PER_KM") OutlinedTextField(state.logisticsCostText, { vm.setLogisticsCostText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text("Cost per km · ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
     }
     OutlinedTextField(state.operatingHours, vm::setOperatingHours, label = { Text("Operating hours · Optional") }, placeholder = { Text("For example, Mon–Sat 10 AM–6 PM") }, modifier = Modifier.fillMaxWidth())
+    }
     state.recyclerDetailsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     if (showMaterials) {
         var query by remember { mutableStateOf("") }

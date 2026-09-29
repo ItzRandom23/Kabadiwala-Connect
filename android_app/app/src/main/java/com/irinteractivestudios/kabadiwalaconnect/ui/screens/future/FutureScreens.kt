@@ -176,9 +176,19 @@ fun DiyActivitiesScreen(activities: List<DiyActivityDto>, modifier: Modifier = M
 }
 
 @Composable
-fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Unit, onRefresh: () -> Unit, currentAccountId: String = "", modifier: Modifier = Modifier) {
+fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Unit, onRefresh: () -> Unit, currentAccountId: String = "", lastSyncedAt: Long? = null, refreshError: String? = null, modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { FeatureHeader(stringResource(R.string.future_messages_title), stringResource(R.string.future_messages_subtitle), Icons.AutoMirrored.Filled.Chat, onRefresh) }
+        if (refreshError != null) item {
+            FeatureSurface {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(refreshError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = onRefresh) { Text("Try again") }
+                }
+            }
+        } else if (lastSyncedAt != null) item {
+            Text("Last synced ${java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(lastSyncedAt))}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (conversations.isEmpty()) item { EmptyFeatureCard(stringResource(R.string.future_no_messages_title), stringResource(R.string.future_no_messages_detail)) }
         items(conversations, key = { it.id }) { conversation ->
             FeatureSurface(Modifier.clickable { onOpen(conversation.id) }) {
