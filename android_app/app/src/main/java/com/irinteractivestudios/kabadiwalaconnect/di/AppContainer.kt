@@ -105,6 +105,7 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val catalogRefreshMutex = Mutex()
+    private val activityRefreshMutex = Mutex()
     private val authenticatedBackgroundWorkReady = AtomicBoolean(false)
     private val authenticatedSessionGeneration = AtomicLong(0L)
     private var lastCatalogRefreshKey: String? = null
@@ -641,6 +642,8 @@ class AppContainer(context: Context) {
 
     /** Pulls durable cross-role events without requiring push infrastructure. */
     suspend fun refreshActivity(): Boolean {
+        if (!activityRefreshMutex.tryLock()) return false
+        try {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
         val account = currentAccount()?.takeIf { it.role in setOf(AccountRole.COLLECTOR, AccountRole.HOUSEHOLD, AccountRole.RECYCLER) } ?: return false
         val stamp = AuthenticatedSessionStamp(authenticatedSessionGeneration(), account.profileId)
@@ -658,6 +661,9 @@ class AppContainer(context: Context) {
             runCatching { reconcileChanges() }
         }
         return true
+        } finally {
+            activityRefreshMutex.unlock()
+        }
     }
 
     fun unreadNotificationCount(accountId: String): Flow<Int> = database.futureCacheDao().unreadNotificationCount(accountId)

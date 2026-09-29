@@ -163,6 +163,71 @@ function areaNamesMatch(profileArea: string, requestedArea: string): boolean {
   return profileParts.some(part => requestedParts.some(queryPart => part.includes(queryPart) || queryPart.includes(part)));
 }
 
+function areaSearchPattern(area: string): string {
+  // Area labels are free text. Match each supplied locality component while
+  // allowing punctuation/spacing differences in older saved profiles.
+  const parts = area.split(/[,;|/]+/).map(normalizeAreaName).filter(Boolean);
+  return parts.map(part => part.split(' ').map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^\\p{L}\\p{N}]*')).join('|');
+}
+
+/** Mongo filters and pages candidates before they are expanded into summaries. */
+export async function nearbyCollectorPage(store: any, input: { latitude?: number; longitude?: number; area: string; radiusKm: number; page: number; limit: number }) {
+  const pattern = input.area ? areaSearchPattern(input.area) : '';
+  if (input.latitude === undefined && !pattern) return { total: 0, profiles: [] };
+  const areaMatch = { accountStatus: 'ACTIVE', areaName: { $ne: '' }, $or: [
+    { areaName: { $regex: pattern, $options: 'i' } },
+    { $expr: { $gte: [{ $indexOfCP: [input.area.toLocaleLowerCase('en-IN'), { $toLower: '$areaName' }] }, 0] } }
+  ] };
+  const areaCandidate = { $match: input.latitude === undefined
+    ? areaMatch
+    : { ...areaMatch, $and: [{ $or: [{ latitude: null }, { longitude: null }] }] } };
+  const pipeline: any[] = [];
+  if (input.latitude !== undefined && input.longitude !== undefined) {
+    const lat = input.latitude;
+    const lng = input.longitude;
+    const latDelta = input.radiusKm / 111.32;
+    const lngDelta = Math.min(180, input.radiusKm / Math.max(0.01, 111.32 * Math.cos(lat * Math.PI / 180)));
+    const minLng = lng - lngDelta;
+    const maxLng = lng + lngDelta;
+    const longitudeMatch = minLng < -180
+      ? { $or: [{ longitude: { $gte: minLng + 360 } }, { longitude: { $lte: maxLng } }] }
+      : maxLng > 180
+      ? { $or: [{ longitude: { $gte: minLng } }, { longitude: { $lte: maxLng - 360 } }] }
+      : { longitude: { $gte: minLng, $lte: maxLng } };
+    pipeline.push({ $match: { accountStatus: 'ACTIVE', latitude: { $gte: Math.max(-90, lat - latDelta), $lte: Math.min(90, lat + latDelta) }, ...longitudeMatch } });
+    const cosine = { $add: [
+      { $multiply: [{ $sin: { $degreesToRadians: lat } }, { $sin: { $degreesToRadians: '$latitude' } }] },
+      { $multiply: [{ $cos: { $degreesToRadians: lat } }, { $cos: { $degreesToRadians: '$latitude' } }, { $cos: { $degreesToRadians: { $subtract: ['$longitude', lng] } } }] }
+    ] };
+    pipeline.push({ $addFields: { distanceKm: { $multiply: [6371, { $acos: { $max: [-1, { $min: [1, cosine] }] } }] } } });
+    pipeline.push({ $match: { $expr: { $and: [
+      { $lte: ['$distanceKm', input.radiusKm] },
+      { $lte: ['$distanceKm', { $ifNull: ['$pickupMaxDistanceKm', 25] }] }
+    ] } } });
+    if (pattern) pipeline.push({ $unionWith: { coll: 'Collector', pipeline: [areaCandidate, { $addFields: { distanceKm: null } }] } });
+  } else {
+    pipeline.push(areaCandidate, { $addFields: { distanceKm: null } });
+  }
+  pipeline.push(
+    { $lookup: { from: 'User', let: { collectorId: '$_id' }, pipeline: [
+      { $match: { $expr: { $eq: ['$collectorProfileId', '$$collectorId'] }, role: 'COLLECTOR', accountStatus: 'ACTIVE' } },
+      { $limit: 1 }, { $project: { _id: 1 } }
+    ], as: 'activeUsers' } },
+    { $match: { 'activeUsers.0': { $exists: true } } },
+    { $addFields: { distanceSort: { $ifNull: ['$distanceKm', 999999] } } },
+    { $sort: { distanceSort: 1, _id: 1 } },
+    { $facet: {
+      count: [{ $count: 'total' }],
+      items: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, { $project: {
+        _id: 0, id: '$_id', displayName: 1, areaName: 1, latitude: 1, longitude: 1,
+        dailyPickupCapacity: 1, pickupFreeRadiusKm: 1, pickupFeePerKm: 1, pickupMaxDistanceKm: 1
+      } }]
+    } }
+  );
+  const [result] = await store.collector.aggregateRaw({ pipeline }) as Array<{ count?: Array<{ total: number }>; items?: any[] }>;
+  return { total: result?.count?.[0]?.total ?? 0, profiles: result?.items ?? [] };
+}
+
 /**
  * Waiting pickups are discoverable only inside the same service boundary used
  * by the collector feed. The accept endpoint must repeat this check because a
@@ -438,6 +503,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (locationQuery.latitude === undefined && !areaQuery) {
       return res.json({ success: true, data: { items: [], pagination: { page: locationQuery.page, limit: locationQuery.limit, total: 0, totalPages: 0 }, requiresLocation: true } });
     }
+    if (typeof store.collector?.aggregateRaw === 'function') {
+      const { total, profiles } = await nearbyCollectorPage(store, { latitude: locationQuery.latitude, longitude: locationQuery.longitude, area: areaQuery, radiusKm: locationQuery.radiusKm, page: locationQuery.page, limit: locationQuery.limit });
+      const items = await publicPartnerSummaries(profiles, locationQuery.latitude, locationQuery.longitude);
+      return res.json({ success: true, data: {
+        items,
+        pagination: { page: locationQuery.page, limit: locationQuery.limit, total, totalPages: Math.ceil(total / locationQuery.limit) },
+        requiresLocation: false,
+        locationFilter: { area: areaQuery || null, radiusKm: locationQuery.latitude === undefined ? null : locationQuery.radiusKm }
+      } });
+    }
+    // Legacy in-memory test doubles do not expose Prisma's aggregateRaw.
     const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
     const ids = users.map((user: { collectorProfileId: string | null }) => user.collectorProfileId).filter(Boolean);
     const profiles = ids.length ? await store.collector.findMany({ where: { id: { in: ids }, accountStatus: 'ACTIVE' }, select: { id: true, displayName: true, areaName: true, latitude: true, longitude: true, dailyPickupCapacity: true, pickupFreeRadiusKm: true, pickupFeePerKm: true, pickupMaxDistanceKm: true } }) : [];
@@ -854,15 +930,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
       return res.json({ success: true, data: items.map((pickup: any) => ({ ...pickup, settlementPayment: paymentByPickup.get(pickup.id) ?? null })), page });
     }
-    const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
-    const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
-    const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: any) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
-    const listingById = new Map<string, any>(waitingListings.map((listing: any) => [listing.id, listing] as [string, any]));
-    const visibleWaiting = waiting.filter((pickup: any) => {
-      const listing = listingById.get(pickup.listingId);
-      return collectorCanSeeWaitingPickup(own, listing);
-    });
-    const visible = [...assigned, ...visibleWaiting];
+    // Preserve the legacy array shape while bounding its work and response.
+    // Current Android clients use the cursor branch above.
+    const { items: visible } = await pagedCollectorPickups(store, req.identity!.collectorId, own, { limit: 100 });
     const payments = visible.length && store.pickupSettlementPayment?.findMany
       ? await store.pickupSettlementPayment.findMany({ where: { pickupId: { in: visible.map((pickup: any) => pickup.id) } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, householdReceivedAt: true, reference: true, status: true } })
       : [];

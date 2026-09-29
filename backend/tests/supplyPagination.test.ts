@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { listingsForCollectorPickupIds, pagedCollectorPickups, pagedRows } from '../src/routes/supplyChainRoutes.js';
+import { listingsForCollectorPickupIds, nearbyCollectorPage, pagedCollectorPickups, pagedRows } from '../src/routes/supplyChainRoutes.js';
+
+describe('nearby collector database paging', () => {
+  it('filters coordinates before paging and keeps an area fallback for profiles without GPS', async () => {
+    let pipeline: any[] = [];
+    const store = { collector: { aggregateRaw: async (query: any) => {
+      pipeline = query.pipeline;
+      return [{ count: [{ total: 23 }], items: [{ id: 'collector-21', areaName: 'Rohini, Delhi' }] }];
+    } } };
+    const result = await nearbyCollectorPage(store, { latitude: 28.72, longitude: 77.11, area: 'Rohini, Delhi', radiusKm: 25, page: 2, limit: 20 });
+    expect(result.total).toBe(23);
+    expect(result.profiles.map((profile: any) => profile.id)).toEqual(['collector-21']);
+    expect(pipeline[0].$match.latitude).toMatchObject({ $gte: expect.any(Number), $lte: expect.any(Number) });
+    expect(pipeline.some(stage => stage.$unionWith?.coll === 'Collector')).toBe(true);
+    expect(pipeline.at(-1).$facet.items[0]).toEqual({ $skip: 20 });
+    expect(pipeline.at(-1).$facet.items[1]).toEqual({ $limit: 20 });
+    expect(pipeline.some(stage => stage.$lookup?.from === 'User')).toBe(true);
+  });
+});
 
 const rows = [
   { id: 'third', householdId: 'owner', createdAt: new Date('2026-01-03T00:00:00Z') },

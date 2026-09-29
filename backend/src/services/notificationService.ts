@@ -13,6 +13,13 @@ export type NotificationInput = {
   channels?: Array<'SMS' | 'PUSH'>;
 };
 
+let wakePushDelivery: (() => void) | undefined;
+
+/** The HTTP process can wake its durable push worker after an event is stored. */
+export function setPushDeliveryWake(wake: (() => void) | undefined) {
+  wakePushDelivery = wake;
+}
+
 /**
  * Create provider outbox rows without making provider configuration a
  * dependency of the business operation. Older test/disposable databases may
@@ -28,6 +35,7 @@ export async function enqueueNotificationDelivery(db: unknown, event: { id: stri
         update: {},
         create: { notificationId: event.id, accountId: event.accountId, channel, status: 'PENDING', attempts: 0, nextAttemptAt: new Date() }
       });
+      if (channel === 'PUSH') wakePushDelivery?.();
     } catch {
       // The in-app event remains authoritative if an optional outbox write fails.
     }

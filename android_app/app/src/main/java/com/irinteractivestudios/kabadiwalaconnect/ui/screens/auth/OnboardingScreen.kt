@@ -3,6 +3,7 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth
 import android.Manifest
 import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,6 +72,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.EmailValidator
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.IndianPhoneValidator
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcMinTouchHeight
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcBrandLogo
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.KcPrimaryButton
@@ -101,43 +105,107 @@ fun OnboardingScreen(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         vm.locationPermissionResult(granted)
     }
-    val isOperatorSignIn = state.returningUser && state.role == AccountRole.ADMIN
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) {
-            if (isOperatorSignIn || state.returningUser) {
-                OutlinedButton(
-                    onClick = vm::goBack,
-                    enabled = !state.isBusy,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_back")
-                ) { Text(stringResource(R.string.common_back)) }
-            } else {
-                Progress(state)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = vm::goBack,
-                        enabled = !state.isBusy,
-                        modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_back")
-                    ) { Text(stringResource(R.string.common_back)) }
-                    OutlinedButton(
-                        onClick = vm::startOver,
-                        enabled = !state.isBusy,
-                        modifier = Modifier.weight(1f).heightIn(min = KcMinTouchHeight).testTag("auth_start_over")
-                    ) { Text(stringResource(R.string.auth_start_over)) }
-                }
+    BackHandler(enabled = state.step != OnboardingStep.WELCOME && state.step != OnboardingStep.COMPLETE) {
+        vm.goBack()
+    }
+    Column(Modifier.fillMaxSize().imePadding()) {
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            when (state.step) {
+                OnboardingStep.WELCOME -> Welcome(vm)
+                OnboardingStep.SIGN_IN -> SignInEntry()
+                OnboardingStep.EMAIL -> EmailEntry(state, vm)
+                OnboardingStep.ROLE -> RoleEntry(state, vm)
+                OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
+                OnboardingStep.RECYCLER_DETAILS -> RecyclerDetailsEntry(state, vm)
+                OnboardingStep.LOCATION_PERMISSION -> LocationPermission(state)
+                OnboardingStep.AREA -> AreaEntry(state, vm)
+                OnboardingStep.PHONE -> PhoneEntry(state, vm)
+                OnboardingStep.OTP -> OtpEntry(state, vm)
+                OnboardingStep.COMPLETE -> if (state.returningUser) FinishingSignIn() else Complete(state)
             }
         }
-        when (state.step) {
-            OnboardingStep.WELCOME -> Welcome(vm)
-            OnboardingStep.SIGN_IN -> SignInEntry(vm)
-            OnboardingStep.EMAIL -> EmailEntry(state, vm)
-            OnboardingStep.ROLE -> RoleEntry(state, vm)
-            OnboardingStep.LANGUAGE -> LanguageEntry(state, vm)
-            OnboardingStep.RECYCLER_DETAILS -> RecyclerDetailsEntry(state, vm)
-            OnboardingStep.LOCATION_PERMISSION -> LocationPermission(state, vm, locationLauncher)
-            OnboardingStep.AREA -> AreaEntry(state, vm)
-            OnboardingStep.PHONE -> PhoneEntry(state, vm)
-            OnboardingStep.OTP -> OtpEntry(state, vm)
-            OnboardingStep.COMPLETE -> if (state.returningUser) FinishingSignIn() else Complete(state)
+        AuthFooter(state, vm, locationLauncher)
+    }
+}
+
+@Composable
+private fun AuthFooter(
+    state: OnboardingState,
+    vm: OnboardingViewModel,
+    locationLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+) {
+    if (state.step == OnboardingStep.COMPLETE || state.step == OnboardingStep.LANGUAGE) return
+    Surface(color = MaterialTheme.colorScheme.background, tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            when (state.step) {
+                OnboardingStep.WELCOME -> {
+                    KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
+                    OutlinedButton(onClick = vm::startSignIn, shape = KcRadius.pill, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) {
+                        Text(stringResource(R.string.auth_existing_account))
+                    }
+                }
+                OnboardingStep.SIGN_IN -> {
+                    KcPrimaryButton(stringResource(R.string.auth_continue_with_phone), vm::usePhoneSignIn)
+                    OutlinedButton(onClick = vm::useEmailSignIn, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) {
+                        Text(stringResource(R.string.auth_continue_with_email))
+                    }
+                }
+                OnboardingStep.EMAIL -> KcPrimaryButton(
+                    if (state.returningUser) stringResource(R.string.auth_sign_in) else stringResource(R.string.auth_continue),
+                    if (state.returningUser) vm::signIn else vm::continueEmail,
+                    enabled = !state.isBusy && EmailValidator.isValid(state.email) && state.password.length >= 8,
+                    testTag = "auth_email_continue"
+                )
+                OnboardingStep.ROLE -> KcPrimaryButton(
+                    stringResource(R.string.auth_continue), vm::continueRole,
+                    enabled = state.roleSelected && !state.isBusy,
+                    testTag = "auth_role_continue"
+                )
+                OnboardingStep.RECYCLER_DETAILS -> KcPrimaryButton(
+                    stringResource(R.string.auth_continue), vm::continueRecyclerDetails,
+                    enabled = vm.canContinueRecyclerDetails() && !state.isBusy,
+                    testTag = "auth_recycler_continue"
+                )
+                OnboardingStep.LOCATION_PERMISSION -> {
+                    KcPrimaryButton(
+                        stringResource(R.string.auth_use_gps),
+                        { locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
+                        icon = Icons.Filled.LocationOn,
+                        enabled = !state.isLocationBusy,
+                        testTag = "auth_use_gps"
+                    )
+                    OutlinedButton(onClick = vm::chooseManualLocation, enabled = !state.isLocationBusy, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_manual_location")) {
+                        Text(stringResource(R.string.auth_enter_manually))
+                    }
+                }
+                OnboardingStep.AREA -> KcPrimaryButton(
+                    stringResource(R.string.auth_continue), vm::continueToPhone,
+                    icon = Icons.Filled.Phone,
+                    enabled = vm.canContinueArea() && !state.isBusy,
+                    testTag = "auth_area_next"
+                )
+                OnboardingStep.PHONE -> KcPrimaryButton(
+                    stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp),
+                    vm::requestOtp,
+                    icon = Icons.Filled.Sms,
+                    enabled = IndianPhoneValidator.isValid(state.phone) && !state.isBusy,
+                    testTag = "auth_send_otp"
+                )
+                OnboardingStep.OTP -> KcPrimaryButton(
+                    stringResource(if (state.isBusy) R.string.auth_verifying else R.string.auth_verify),
+                    vm::verifyOtp,
+                    icon = Icons.Filled.CheckCircle,
+                    enabled = state.otp.length == 6 && !state.isBusy,
+                    testTag = "auth_verify"
+                )
+                OnboardingStep.LANGUAGE, OnboardingStep.COMPLETE -> Unit
+            }
         }
     }
 }
@@ -155,27 +223,11 @@ private fun FinishingSignIn() {
 }
 
 @Composable
-private fun SignInEntry(vm: OnboardingViewModel) {
-    Column(Modifier.fillMaxWidth().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Welcome back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Sign in to the account you already created.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        KcPrimaryButton("Continue with phone", vm::usePhoneSignIn)
-        OutlinedButton(onClick = vm::useEmailSignIn, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)) { Text("Continue with email") }
-    }
-}
-
-@Composable private fun Progress(state: OnboardingState) {
-    val total = if (state.role == AccountRole.RECYCLER) 6 else 5
-    val number = when (state.step) {
-        OnboardingStep.EMAIL, OnboardingStep.ROLE, OnboardingStep.LANGUAGE -> 1
-        OnboardingStep.RECYCLER_DETAILS -> 2
-        OnboardingStep.LOCATION_PERMISSION -> if (state.role == AccountRole.RECYCLER) 3 else 2
-        OnboardingStep.AREA -> if (state.role == AccountRole.RECYCLER) 4 else 3
-        OnboardingStep.PHONE -> if (state.role == AccountRole.RECYCLER) 5 else 4
-        OnboardingStep.OTP -> if (state.role == AccountRole.RECYCLER) 6 else 5
-        else -> 1
-    }
-    Text(stringResource(R.string.auth_step, number, total), style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("onboarding_progress"))
+private fun SignInEntry() {
+    Spacer(Modifier.height(40.dp))
+    Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+    Text(stringResource(R.string.auth_sign_in_title), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+    Text(stringResource(R.string.auth_sign_in_method_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -214,12 +266,6 @@ private fun Welcome(
         WelcomeBenefit(Icons.Filled.AttachMoney, stringResource(R.string.auth_benefit_price_title), stringResource(R.string.auth_benefit_price_detail))
         WelcomeBenefit(Icons.Filled.Verified, stringResource(R.string.auth_benefit_trust_title), stringResource(R.string.auth_benefit_trust_detail))
     }
-    KcPrimaryButton(stringResource(R.string.auth_get_started), vm::start, icon = Icons.Filled.Recycling, testTag = "auth_get_started")
-    OutlinedButton(
-        onClick = vm::startSignIn,
-        shape = KcRadius.pill,
-        modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight)
-    ) { Text(stringResource(R.string.auth_existing_account)) }
     TextButton(
         onClick = vm::useAdminSignIn,
         modifier = Modifier
@@ -298,7 +344,6 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
             color = MaterialTheme.colorScheme.error
         )
     }
-    KcPrimaryButton(if (state.returningUser) stringResource(R.string.auth_sign_in) else stringResource(R.string.auth_continue), if (state.returningUser) vm::signIn else vm::continueEmail, icon = Icons.Filled.CheckCircle, enabled = !state.isBusy, testTag = "auth_email_continue")
 }
 
 @Composable private fun RoleEntry(state: OnboardingState, vm: OnboardingViewModel) {
@@ -313,7 +358,7 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
 }
 
 @Composable private fun RoleCard(role: AccountRole, title: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .35f)), modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)) {
+    Card(onClick = onClick, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = .35f)), modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(48.dp)) {
                 Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(12.dp))
@@ -353,7 +398,8 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     Text(stringResource(R.string.auth_recycler_details_title), style = MaterialTheme.typography.headlineMedium)
     Text("Basic facility information", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
     OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text("Facility or business name · Required") }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
+    val invalidEmail = state.email.isNotBlank() && !EmailValidator.isValid(state.email)
+    OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = invalidEmail, supportingText = { if (invalidEmail) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
     OutlinedTextField(state.alternatePhone, { vm.setAlternatePhone(it.filter(Char::isDigit).take(10)) }, label = { Text("Alternate phone · Optional") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
     Text("Materials accepted · Required", style = MaterialTheme.typography.titleMedium)
     Text(if (state.materialsAccepted.isEmpty()) "No materials selected" else state.materialsAccepted.sorted().joinToString(" · ") { it.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -382,7 +428,6 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     }
     OutlinedTextField(state.operatingHours, vm::setOperatingHours, label = { Text("Operating hours · Optional") }, placeholder = { Text("For example, Mon–Sat 10 AM–6 PM") }, modifier = Modifier.fillMaxWidth())
     state.recyclerDetailsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    KcPrimaryButton(stringResource(R.string.auth_continue), vm::continueRecyclerDetails, icon = Icons.Filled.CheckCircle, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth())
     if (showMaterials) {
         var query by remember { mutableStateOf("") }
         AlertDialog(onDismissRequest = { showMaterials = false }, title = { Text("Materials accepted") }, text = {
@@ -398,7 +443,7 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     }
 }
 
-@Composable private fun LocationPermission(state: OnboardingState, vm: OnboardingViewModel, launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>) {
+@Composable private fun LocationPermission(state: OnboardingState) {
     Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
     Text(stringResource(R.string.auth_location_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.auth_location_detail), style = MaterialTheme.typography.bodyLarge)
@@ -408,14 +453,6 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     if (state.locationError) {
         Text(stringResource(R.string.auth_location_unavailable), color = MaterialTheme.colorScheme.error)
     }
-    KcPrimaryButton(
-        stringResource(R.string.auth_use_gps),
-        { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
-        icon = Icons.Filled.LocationOn,
-        enabled = !state.isLocationBusy,
-        testTag = "auth_use_gps"
-    )
-    OutlinedButton(onClick = vm::chooseManualLocation, enabled = !state.isLocationBusy, modifier = Modifier.fillMaxWidth().heightIn(min = KcMinTouchHeight).testTag("auth_manual_location")) { Text(stringResource(R.string.auth_enter_manually)) }
 }
 
 @Composable private fun AreaEntry(state: OnboardingState, vm: OnboardingViewModel) {
@@ -464,16 +501,10 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
             },
             modifier = Modifier.fillMaxWidth().testTag("auth_name")
         )
-        OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = state.emailError, supportingText = { if (state.emailError) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
+        val invalidEmail = state.email.isNotBlank() && !EmailValidator.isValid(state.email)
+        OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = invalidEmail, supportingText = { if (invalidEmail) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
         Text(stringResource(R.string.auth_email_optional_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    KcPrimaryButton(
-        stringResource(R.string.auth_continue_to_phone),
-        vm::continueToPhone,
-        icon = Icons.Filled.Phone,
-        enabled = state.address.isNotBlank() && (state.role == AccountRole.RECYCLER || state.displayName.isNotBlank()) && !state.isBusy,
-        testTag = "auth_area_next"
-    )
 }
 
 @Composable private fun Complete(state: OnboardingState) {
@@ -529,7 +560,6 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
             color = MaterialTheme.colorScheme.error
         )
     }
-    KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_sending_otp else R.string.auth_send_otp), vm::requestOtp, icon = Icons.Filled.Sms, enabled = !state.isBusy, testTag = "auth_send_otp")
     if (state.returningUser) {
         TextButton(
             onClick = vm::useEmailSignIn,
@@ -547,7 +577,6 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     Text(stringResource(R.string.auth_otp_detail, state.phone), style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(state.otp, vm::setOtp, label = { Text(stringResource(R.string.auth_otp_label)) }, leadingIcon = { Icon(Icons.Filled.Sms, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, isError = state.otpError != null, supportingText = { if (state.otpError != null) Text(stringResource(when (state.otpError) { OtpError.INCORRECT -> R.string.auth_otp_incorrect; OtpError.EXPIRED -> R.string.auth_otp_expired; OtpError.ATTEMPTS_EXCEEDED -> R.string.auth_otp_attempts; OtpError.ACCOUNT_CONFLICT -> R.string.auth_otp_account_conflict; OtpError.MISSING_DETAILS -> R.string.auth_otp_missing_details; OtpError.SERVER -> R.string.auth_server_error; OtpError.NETWORK -> R.string.auth_network_error })) }, modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).testTag("auth_otp"))
     state.challenge?.developmentCodeHint?.let { Text(stringResource(R.string.auth_dev_otp, it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    KcPrimaryButton(stringResource(if (state.isBusy) R.string.auth_verifying else R.string.auth_verify), vm::verifyOtp, icon = Icons.Filled.CheckCircle, enabled = state.otp.length == 6 && !state.isBusy, testTag = "auth_verify")
     OutlinedButton(
         onClick = vm::resetOtp,
         enabled = !state.isBusy,

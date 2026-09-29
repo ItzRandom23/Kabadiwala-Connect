@@ -387,6 +387,7 @@ model Collector {
 
   @@index([accountStatus])
   @@index([accountStatus, pilotVerifiedAt])
+  @@index([accountStatus, latitude, longitude])
   @@index([areaName])
   @@index([phone])
   @@index([email])

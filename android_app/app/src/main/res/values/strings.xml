@@ -424,6 +424,9 @@
     <string name="auth_existing_account">I already have an account</string>
     <string name="auth_email_title">Create your account</string>
     <string name="auth_sign_in_title">Welcome back</string>
+    <string name="auth_sign_in_method_detail">Choose how you want to sign in.</string>
+    <string name="auth_continue_with_phone">Continue with phone</string>
+    <string name="auth_continue_with_email">Continue with email</string>
     <string name="auth_email_detail">Use your email to keep your account and role safe.</string>
     <string name="auth_email_label">Email address</string>
     <string name="auth_email_error">Enter a valid email address.</string>

@@ -8,6 +8,7 @@ type MongoIndex = {
 };
 
 const requiredIndexes = [
+  { collection: 'Collector', name: 'Collector_accountStatus_latitude_longitude_idx', key: { accountStatus: 1, latitude: 1, longitude: 1 } },
   { collection: 'AiInference', name: 'AiInference_lotId_createdAt_idx', key: { lotId: 1, createdAt: 1 } },
   { collection: 'AiInference', name: 'AiInference_feature_modelVersion_createdAt_idx', key: { feature: 1, modelVersion: 1, createdAt: 1 } },
   { collection: 'RefreshToken', name: 'RefreshToken_tokenHash_key', key: { tokenHash: 1 }, unique: true },

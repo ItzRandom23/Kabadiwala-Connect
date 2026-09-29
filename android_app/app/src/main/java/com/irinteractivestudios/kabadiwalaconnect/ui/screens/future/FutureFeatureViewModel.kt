@@ -71,6 +71,7 @@ class FutureFeatureViewModel(
     private var notificationOwner: String? = null
     private var notificationGeneration = 0L
     private var conversationsOwner: String? = null
+    private var conversationsRefreshQueued = false
     private val exhaustedChatHistory = mutableSetOf<String>()
     private val messageRequestGenerations = mutableMapOf<String, Long>()
     private var chatOwner: String? = null
@@ -290,20 +291,27 @@ class FutureFeatureViewModel(
         if (conversationsOwner != owner) {
             conversationsJob?.cancel()
             conversationsOwner = owner
-        } else if (conversationsJob?.isActive == true) return
+            conversationsRefreshQueued = false
+        } else if (conversationsJob?.isActive == true) {
+            conversationsRefreshQueued = true
+            return
+        }
         conversationsJob = viewModelScope.launch {
             val cached = cache?.conversations(owner).orEmpty()
             if (accountId() == owner && _state.value.conversations.isEmpty() && cached.isNotEmpty()) _state.value = _state.value.copy(conversations = cached)
-            try {
-                val conversations = api.getConversations().requireData()
-                if (accountId() != owner) return@launch
-                cache?.saveConversations(conversations)
-                _state.value = _state.value.copy(conversations = conversations)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Keep the last successful list while connectivity recovers.
-            }
+            do {
+                conversationsRefreshQueued = false
+                try {
+                    val conversations = api.getConversations().requireData()
+                    if (accountId() != owner) return@launch
+                    cache?.saveConversations(conversations)
+                    _state.value = _state.value.copy(conversations = conversations)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Keep the last successful list while connectivity recovers.
+                }
+            } while (conversationsRefreshQueued && accountId() == owner)
         }
     }
 
@@ -380,7 +388,9 @@ class FutureFeatureViewModel(
         pollingJob = viewModelScope.launch {
             while (true) {
                 fetchMessages(conversationId)
-                delay(3_000)
+                // Push wakes active chats; this is a fallback for missed push
+                // and development builds without an FCM provider.
+                delay(15_000)
             }
         }
     }

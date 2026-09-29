@@ -333,7 +333,10 @@ class AuthenticationTest {
     @Test fun onboarding_reusesFirstRunLanguageAndDoesNotAskAgain() {
         val vm = TestAuth.onboarding("mr")
         assertEquals("mr", vm.state.value.language)
+        vm.start()
         vm.selectRole(AccountRole.COLLECTOR)
+        assertEquals(OnboardingStep.ROLE, vm.state.value.step)
+        vm.continueRole()
         assertEquals(OnboardingStep.LOCATION_PERMISSION, vm.state.value.step)
     }
 

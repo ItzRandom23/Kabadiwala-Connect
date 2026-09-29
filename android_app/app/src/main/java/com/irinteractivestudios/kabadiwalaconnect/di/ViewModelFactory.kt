@@ -113,7 +113,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
             RecyclerScanViewModel(container.apiService, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerProfileViewModel::class.java) ->
-            RecyclerProfileViewModel(container.apiService)
+            RecyclerProfileViewModel(container.apiService) { container.currentAccount()?.profileId }
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
             FutureFeatureViewModel(container.apiService, FutureCacheStore(container.database.futureCacheDao()), container.database.syncQueueDao(), { container.syncScheduler.requestSync() }) { container.currentAccount()?.profileId }
         modelClass.isAssignableFrom(TransactionTimelineViewModel::class.java) ->
@@ -124,7 +124,7 @@ class KcViewModelFactory(
                 val latitude = account?.latitude
                 val longitude = account?.longitude
                 if (latitude != null && longitude != null) CurrentLocation(latitude, longitude, account.areaName) else null
-            }, container.sessionCoordinator.snapshot, com.irinteractivestudios.kabadiwalaconnect.data.local.RoomSupplySnapshotStore(container.database.supplySnapshotDao()))
+            }, container.sessionCoordinator.snapshot, com.irinteractivestudios.kabadiwalaconnect.data.local.RoomSupplySnapshotStore(container.database.supplySnapshotDao()), container.database)
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService, container.currentAccount()?.permissions.orEmpty())
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

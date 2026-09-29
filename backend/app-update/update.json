@@ -1,8 +1,8 @@
 {
-  "versionCode": 70,
-  "versionName": "0.1.6-beta",
-  "apkUrl": "kabadiwala-connect-0.1.6-beta-debug.apk",
-  "sha256": "4BE49BDE177629537A610FAB084CC5AC4A129F6D1894D8D56C596511572CEFD3",
-  "sizeBytes": 29094163,
-  "releaseNotes": "Improved offline read-only access, sync reliability, account-scoped notifications, pickup history, and pickup hours (7:30 AM–6:30 PM India time)."
+  "versionCode": 71,
+  "versionName": "0.1.7-beta",
+  "apkUrl": "kabadiwala-connect-0.1.7-beta-debug.apk",
+  "sha256": "CCBFB484FA83340F66D44F5E83B7A3BA62854B0D18FE8A19D2391310EF7EDD8B",
+  "sizeBytes": 29091541,
+  "releaseNotes": "Improved push notification refresh, pickup and supply chain pagination, offline access, and sync reliability."
 }

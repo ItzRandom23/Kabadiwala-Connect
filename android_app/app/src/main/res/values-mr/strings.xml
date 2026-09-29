@@ -105,6 +105,9 @@
     <string name="auth_get_started">सुरू करा</string>
     <string name="auth_phone_title">तुमचा मोबाईल नंबर</string>
     <string name="auth_phone_detail">आम्ही या नंबरवर एकदाच वापरता येणारा कोड पाठवू.</string>
+    <string name="auth_sign_in_method_detail">साइन इन करण्याची पद्धत निवडा.</string>
+    <string name="auth_continue_with_phone">फोनने पुढे जा</string>
+    <string name="auth_continue_with_email">ईमेलने पुढे जा</string>
     <string name="auth_phone_label">10 अंकी मोबाईल नंबर</string>
     <string name="auth_phone_error">योग्य भारतीय मोबाईल नंबर टाका.</string>
     <string name="auth_network_error">सेवेशी संपर्क होऊ शकला नाही. कनेक्शन तपासून पुन्हा प्रयत्न करा.</string>

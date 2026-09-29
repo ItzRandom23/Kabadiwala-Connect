@@ -254,9 +254,26 @@ class OnboardingViewModel(
     // The language is selected once on the first-run screen and persisted by
     // MainActivity. Registration reuses that choice instead of asking again.
     fun selectRole(role: AccountRole) {
-        val next = if (role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
-        _state.value = _state.value.copy(role = role, roleSelected = true, roleRequiredAfterSignIn = false, step = next)
-        if (role == AccountRole.RECYCLER) loadMaterialCategories()
+        _state.value = _state.value.copy(role = role, roleSelected = true, roleRequiredAfterSignIn = false)
+    }
+    fun continueRole() {
+        val current = _state.value
+        if (current.step != OnboardingStep.ROLE || !current.roleSelected) return
+        val next = if (current.role == AccountRole.RECYCLER) OnboardingStep.RECYCLER_DETAILS else OnboardingStep.LOCATION_PERMISSION
+        _state.value = current.copy(step = next)
+        if (current.role == AccountRole.RECYCLER) loadMaterialCategories()
+    }
+    fun canContinueRecyclerDetails(): Boolean {
+        val current = _state.value
+        return current.businessName.trim().length >= 2 &&
+            current.materialCategories.isNotEmpty() &&
+            current.materialsAccepted.isNotEmpty()
+    }
+    fun canContinueArea(): Boolean {
+        val current = _state.value
+        return current.address.isNotBlank() &&
+            (current.role == AccountRole.RECYCLER || current.displayName.isNotBlank()) &&
+            (current.email.isBlank() || EmailValidator.isValid(current.email))
     }
     fun loadMaterialCategories() {
         val api = apiService ?: return

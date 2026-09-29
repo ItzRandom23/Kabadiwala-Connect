@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NotificationService, emitNotification } from '../src/services/notificationService.js';
+import { NotificationService, emitNotification, setPushDeliveryWake } from '../src/services/notificationService.js';
 
 describe('notification inbox service', () => {
+  it('wakes push only after the durable delivery row exists', async () => {
+    const wake = vi.fn();
+    const upsert = vi.fn().mockResolvedValue({});
+    setPushDeliveryWake(wake);
+    try {
+      await emitNotification({
+        notificationEvent: { create: vi.fn().mockResolvedValue({ id: 'event-1', accountId: 'recipient-1' }) },
+        notificationDelivery: { upsert }
+      } as never, { accountId: 'recipient-1', type: 'CHAT_MESSAGE', title: 'Message', body: 'New message', channels: ['PUSH'] });
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ accountId: 'recipient-1', channel: 'PUSH' }) }));
+      expect(wake).toHaveBeenCalledOnce();
+    } finally {
+      setPushDeliveryWake(undefined);
+    }
+  });
   it('scopes reads and unread counts to the account', async () => {
     const findMany = vi.fn().mockResolvedValue([]);
     const count = vi.fn().mockResolvedValue(2);

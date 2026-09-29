@@ -66,7 +66,7 @@ class CollectorPhotoCardTest {
         }
 
         composeRule.onNodeWithText("View scrap photo").performScrollTo().performClick()
-        composeRule.onNodeWithText("1 of 1 angle available").assertIsDisplayed()
+        composeRule.onNodeWithText("1 of 1 angle available").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("View scrap photo").performClick()
         composeRule.waitForIdle()
         assertEquals(1, requests)

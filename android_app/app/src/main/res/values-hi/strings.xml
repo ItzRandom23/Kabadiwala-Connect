@@ -105,6 +105,9 @@
     <string name="auth_get_started">शुरू करें</string>
     <string name="auth_phone_title">आपका मोबाइल नंबर</string>
     <string name="auth_phone_detail">हम इस नंबर पर एक बार का कोड भेजेंगे।</string>
+    <string name="auth_sign_in_method_detail">साइन इन करने का तरीका चुनें।</string>
+    <string name="auth_continue_with_phone">फ़ोन से आगे बढ़ें</string>
+    <string name="auth_continue_with_email">ईमेल से आगे बढ़ें</string>
     <string name="auth_phone_label">10 अंकों का मोबाइल नंबर</string>
     <string name="auth_phone_error">सही भारतीय मोबाइल नंबर डालें।</string>
     <string name="auth_network_error">सेवा से संपर्क नहीं हो पाया। कनेक्शन जाँचकर फिर कोशिश करें।</string>

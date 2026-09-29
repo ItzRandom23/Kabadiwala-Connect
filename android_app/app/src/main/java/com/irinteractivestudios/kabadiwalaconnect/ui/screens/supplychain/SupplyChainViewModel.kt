@@ -1,6 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
 
 import androidx.lifecycle.ViewModel
+import androidx.room.withTransaction
 import androidx.lifecycle.viewModelScope
 import android.graphics.BitmapFactory
 import android.util.Log
@@ -8,6 +9,7 @@ import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.local.HouseholdListingCacheDao
+import com.irinteractivestudios.kabadiwalaconnect.data.local.AppDatabase
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toCacheEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.toHouseholdListing
 import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
@@ -150,7 +152,8 @@ class SupplyChainViewModel(
     private val initialHouseholdArea: () -> String? = { null },
     private val initialHouseholdLocation: () -> CurrentLocation? = { null },
     private val sessionSnapshots: StateFlow<SessionSnapshot>? = null,
-    private val supplySnapshotStore: RoomSupplySnapshotStore? = null
+    private val supplySnapshotStore: RoomSupplySnapshotStore? = null,
+    private val localDatabase: AppDatabase? = null
 ) : ViewModel() {
     private fun newHouseholdSearchState() = initialHouseholdLocation().let { location ->
         SupplyChainState(
@@ -891,6 +894,8 @@ class SupplyChainViewModel(
         createListing(input, localPhotoPaths, UUID.randomUUID().toString())
     fun createListing(input: HouseholdListingCreateDto, localPhotoPaths: List<String>, draftId: String) = action("create-listing", AccountRole.HOUSEHOLD, {
         require(localPhotoPaths.any { it.isNotBlank() && File(it).isFile }) { "Add at least one photo before posting." }
+        val listingOwner = accountId()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Sign in again before posting this listing.")
         val operation = "listing-${draftId.ifBlank { UUID.randomUUID().toString() }.take(112)}"
         val operationKey = idempotencyKeys?.getOrCreate(operation)
             ?: UUID.nameUUIDFromBytes(operation.toByteArray()).toString()
@@ -898,36 +903,26 @@ class SupplyChainViewModel(
             api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
+            if (accountId() != listingOwner) throw CancellationException("Account changed while posting listing")
             val transient = error.isRetryableTransportFailure()
             // A definitive rejection means this draft will be corrected and
             // retried as a new request. Release its key so the retry cannot be
             // blocked by an old key bound to another payload.
             if (!transient) idempotencyKeys?.clear(operation)
             if (!transient || syncQueue == null) throw error
-            val account = accountId()?.takeIf { it.isNotBlank() }
-            val localListingId = "local-${operationKey ?: UUID.nameUUIDFromBytes(operation.toByteArray()).toString()}"
-            if (account != null) {
-                householdListingCache?.upsert(
-                    HouseholdListingDto(
-                        id = localListingId,
-                        householdId = account,
-                        materialCategory = input.materialCategory,
-                        estimatedWeight = input.estimatedWeight,
-                        condition = input.condition,
-                        notes = input.notes,
-                        areaName = input.areaName,
-                        pickupAddress = input.pickupAddress,
-                        latitude = input.latitude,
-                        longitude = input.longitude,
-                        estimatedPriceMin = input.estimatedPriceMin,
-                        estimatedPriceMax = input.estimatedPriceMax,
-                        status = "PENDING_SYNC"
-                    ).toCacheEntity(account, synced = false)
-                )
-            }
+            val account = listingOwner
+            val localListingId = "local-$operationKey"
+            val localListing = HouseholdListingDto(
+                id = localListingId, householdId = account,
+                materialCategory = input.materialCategory, estimatedWeight = input.estimatedWeight,
+                condition = input.condition, notes = input.notes, areaName = input.areaName,
+                pickupAddress = input.pickupAddress, latitude = input.latitude, longitude = input.longitude,
+                estimatedPriceMin = input.estimatedPriceMin, estimatedPriceMax = input.estimatedPriceMax,
+                status = "PENDING_SYNC"
+            ).toCacheEntity(account, synced = false)
             val payload = JsonObject().apply {
                 add("input", com.google.gson.JsonParser.parseString(Gson().toJson(input.copy(photoReference = null))))
-                operationKey?.let { addProperty("idempotencyKey", it) }
+                addProperty("idempotencyKey", operationKey)
                 addProperty("idempotencyOperation", operation)
                 addProperty("localListingId", localListingId)
                 val paths = localPhotoPaths.filter { it.isNotBlank() }
@@ -936,19 +931,16 @@ class SupplyChainViewModel(
                     addProperty("photoPath", paths.first())
                 }
             }
-            val queueAccount = account?.takeIf { it.isNotBlank() }
-            val alreadyQueued = operationKey?.let { key ->
-                queueAccount?.let { owner -> syncQueue.findUidByOperationAndIdempotencyKey("CREATE_HOUSEHOLD_LISTING", owner, key) }
+            val item = SyncQueueItemEntity(
+                operation = "CREATE_HOUSEHOLD_LISTING", payloadJson = Gson().toJson(payload),
+                createdAtEpochMs = System.currentTimeMillis(), accountId = account,
+                idempotencyKey = operationKey
+            )
+            val persist = suspend {
+                syncQueue.enqueueOnce(item)
+                householdListingCache?.upsert(localListing)
             }
-            if (alreadyQueued == null) {
-                syncQueue.enqueueOnce(SyncQueueItemEntity(
-                    operation = "CREATE_HOUSEHOLD_LISTING",
-                    payloadJson = Gson().toJson(payload),
-                    createdAtEpochMs = System.currentTimeMillis(),
-                    accountId = queueAccount,
-                    idempotencyKey = operationKey
-                ))
-            }
+            if (localDatabase != null) localDatabase.withTransaction { persist() } else persist()
             // Keep the key until the worker receives an applied response. A
             // repeated offline tap must replay the same server mutation, not
             // create a second listing with a fresh idempotency key.

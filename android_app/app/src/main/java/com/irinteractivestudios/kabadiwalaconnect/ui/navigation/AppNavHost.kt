@@ -22,6 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -67,6 +70,8 @@ import androidx.navigation.navArgument
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.quotes.QuoteRequestScreen
@@ -86,6 +91,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerPr
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerOrdersViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.FutureFeatureViewModel
+import com.irinteractivestudios.kabadiwalaconnect.notifications.PushRefreshEvents
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.RewardsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.SchemesScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.future.DiyActivitiesScreen
@@ -188,12 +194,24 @@ fun AppNavHost(
         }
     }
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val appLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated) {
         val activityFeedRole = role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD || role == AccountRole.RECYCLER
         if (sessionAuthenticated && !demoMode && activityFeedRole && factory.currentAccount?.profileId?.isNotBlank() == true) {
-            while (true) {
+            appLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    runCatching { factory.refreshActivity() }
+                    delay(120_000)
+                }
+            }
+        }
+    }
+    LaunchedEffect(factory.currentAccount?.profileId, sessionAuthenticated, demoMode) {
+        val owner = factory.currentAccount?.profileId ?: return@LaunchedEffect
+        if (demoMode || !sessionAuthenticated) return@LaunchedEffect
+        PushRefreshEvents.events.collect { event ->
+            if (event.accountId == owner && factory.currentAccount?.profileId == owner) {
                 runCatching { factory.refreshActivity() }
-                delay(30_000)
             }
         }
     }
@@ -1062,10 +1080,19 @@ fun AppNavHost(
             else {
                 val vm: FutureFeatureViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                val lifecycleOwner = LocalLifecycleOwner.current
+                val owner = factory.currentAccount?.profileId
                 LaunchedEffect(Unit) {
-                    while (true) {
-                        vm.loadConversations()
-                        kotlinx.coroutines.delay(5_000)
+                    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        while (true) {
+                            vm.loadConversations()
+                            delay(20_000)
+                        }
+                    }
+                }
+                LaunchedEffect(owner) {
+                    PushRefreshEvents.events.collect { event ->
+                        if (event.accountId == owner && event.type == "CHAT_MESSAGE") vm.loadConversations()
                     }
                 }
                 ChatListScreen(state.conversations, { navController.navigate(Destinations.chatDetail(it)) }, vm::refresh, currentAccountId = factory.currentAccount?.profileId.orEmpty())
@@ -1077,9 +1104,24 @@ fun AppNavHost(
             else {
                 val vm: FutureFeatureViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                val lifecycleOwner = LocalLifecycleOwner.current
+                val owner = factory.currentAccount?.profileId
                 val conversation = state.conversations.firstOrNull { it.id == id }
-                LaunchedEffect(id) { vm.loadConversations(); vm.startPolling(id) }
-                androidx.compose.runtime.DisposableEffect(id) { onDispose { vm.stopPolling() } }
+                LaunchedEffect(id, lifecycleOwner) {
+                    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        vm.loadConversations()
+                        vm.startPolling(id)
+                        try { awaitCancellation() } finally { vm.stopPolling() }
+                    }
+                }
+                LaunchedEffect(id, owner) {
+                    PushRefreshEvents.events.collect { event ->
+                        if (event.accountId == owner && event.type == "CHAT_MESSAGE" && event.route == "messages/$id") {
+                            vm.loadMessages(id)
+                            vm.loadConversations()
+                        }
+                    }
+                }
                 conversation?.let {
                 ChatDetailScreen(
                     conversation = it,
@@ -1120,10 +1162,19 @@ fun AppNavHost(
             } else {
                 val vm: RecyclerProfileViewModel = viewModel(factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
+                val lifecycleOwner = LocalLifecycleOwner.current
+                val owner = factory.currentAccount?.profileId
                 LaunchedEffect(Unit) {
-                    while (true) {
-                        vm.refresh()
-                        delay(30_000)
+                    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        while (true) {
+                            vm.refresh()
+                            delay(120_000)
+                        }
+                    }
+                }
+                LaunchedEffect(owner) {
+                    PushRefreshEvents.events.collect { event ->
+                        if (event.accountId == owner) vm.refresh()
                     }
                 }
                 LaunchedEffect(state.profile?.id, state.profile?.authorizationStatus) {

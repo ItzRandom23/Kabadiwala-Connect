@@ -23,6 +23,7 @@ import { DatabaseAuthenticationRateLimiter, OtpRateLimiter } from './services/ra
 import { SessionService } from './services/sessionService.js';
 import { AccountPrivacyService } from './services/accountPrivacyService.js';
 import { createNotificationDeliveryService } from './services/notificationDeliveryService.js';
+import { setPushDeliveryWake } from './services/notificationService.js';
 
 const config = loadConfig();
 // Index maintenance is a best-effort startup task. Some MongoDB deployments
@@ -88,9 +89,25 @@ recyclerFreshnessTimer.unref();
 const runSmsDelivery = () => notificationDelivery.dispatchPendingSms()
   .then(result => { if (result.sent || result.retried) console.log(`Notification SMS worker: sent=${result.sent}, retried=${result.retried}`); })
   .catch(error => console.warn('Notification SMS worker skipped:', error));
-const runPushDelivery = () => notificationDelivery.dispatchPendingPush()
-  .then(result => { if (result.sent || result.retried) console.log(`Notification push worker: sent=${result.sent}, retried=${result.retried}`); })
-  .catch(error => console.warn('Notification push worker skipped:', error));
+let pushRunning = false;
+let pushRequestedWhileRunning = false;
+const runPushDelivery = async () => {
+  if (pushRunning) { pushRequestedWhileRunning = true; return; }
+  pushRunning = true;
+  try {
+    const result = await notificationDelivery.dispatchPendingPush();
+    if (result.sent || result.retried) console.log(`Notification push worker: sent=${result.sent}, retried=${result.retried}`);
+  } catch (error) {
+    console.warn('Notification push worker skipped:', error);
+  } finally {
+    pushRunning = false;
+    if (pushRequestedWhileRunning) {
+      pushRequestedWhileRunning = false;
+      queueMicrotask(() => { void runPushDelivery(); });
+    }
+  }
+};
+setPushDeliveryWake(() => { queueMicrotask(() => { void runPushDelivery(); }); });
 void runSmsDelivery();
 void runPushDelivery();
 const smsDeliveryTimer = setInterval(runSmsDelivery, 30 * 1000);
@@ -106,6 +123,7 @@ const shutdown = async () => {
   clearInterval(recyclerFreshnessTimer);
   clearInterval(smsDeliveryTimer);
   clearInterval(pushDeliveryTimer);
+  setPushDeliveryWake(undefined);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

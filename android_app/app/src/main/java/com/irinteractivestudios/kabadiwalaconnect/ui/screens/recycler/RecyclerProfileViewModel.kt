@@ -14,6 +14,9 @@ import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class RecyclerProfileState(
@@ -26,60 +29,94 @@ data class RecyclerProfileState(
     val materialCategoriesError: Boolean = false
 )
 
-class RecyclerProfileViewModel(private val api: ApiService) : ViewModel() {
+class RecyclerProfileViewModel(private val api: ApiService, private val accountId: () -> String? = { null }) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerProfileState())
     val state: StateFlow<RecyclerProfileState> = _state.asStateFlow()
+    private var refreshJob: Job? = null
+    private var refreshGeneration = 0L
+    private var refreshOwner: String? = null
 
     fun refresh() {
-        if (_state.value.loading && _state.value.profile != null) return
-        viewModelScope.launch {
+        if (_state.value.saving) return
+        val owner = accountId()
+        if (refreshOwner != owner) _state.value = RecyclerProfileState()
+        if (refreshJob?.isActive == true && refreshOwner == owner) return
+        refreshOwner = owner
+        val generation = ++refreshGeneration
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null, saved = false)
-            runCatching { api.getRecyclerProfile().requireData() }
-                .onSuccess { profile ->
-                    val categories = runCatching { api.materialCategories().requireData() }.getOrDefault(emptyList())
+            try {
+                val profile = api.getRecyclerProfile().requireData()
+                val categories = if (_state.value.materialCategories.isEmpty()) {
+                    runCatching { api.materialCategories().requireData() }.getOrDefault(emptyList())
+                } else _state.value.materialCategories
+                if (refreshGeneration == generation && accountId() == owner) {
                     _state.value = _state.value.copy(loading = false, profile = profile, materialCategories = categories, materialCategoriesError = categories.isEmpty(), error = null)
                 }
-                .onFailure { error -> _state.value = _state.value.copy(loading = false, error = userFacingError(error, "Could not load recycler profile")) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (refreshGeneration == generation && accountId() == owner) {
+                    _state.value = _state.value.copy(loading = false, error = userFacingError(error, "Could not load recycler profile"))
+                }
+            }
         }
+    }
+
+    private fun stopRefreshBeforeSave() {
+        refreshGeneration++
+        refreshJob?.cancel()
+        refreshJob = null
+        _state.value = _state.value.copy(loading = false)
     }
 
     fun saveRates(rates: List<RecyclerRateUpdateDto>) {
         if (rates.isEmpty() || _state.value.saving) return
+        stopRefreshBeforeSave()
+        val owner = accountId()
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerRates(RecyclerRatesUpdateRequestDto(rates)).requireData() }
-                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Rates could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Rates could not be saved")) }
         }
     }
 
     fun saveAvailability(value: String) {
         if (_state.value.saving) return
+        stopRefreshBeforeSave()
+        val owner = accountId()
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerProfile(RecyclerProfileUpdateRequestDto(pickupAvailability = value)).requireData() }
-                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Availability could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Availability could not be saved")) }
         }
     }
 
     fun savePickupPricing(input: RecyclerProfileUpdateRequestDto) {
         if (_state.value.saving) return
+        stopRefreshBeforeSave()
+        val owner = accountId()
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerProfile(input).requireData() }
-                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Pickup charges could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Pickup charges could not be saved")) }
         }
     }
 
     fun submitVerification(request: RecyclerVerificationRequestDto) {
         if (_state.value.saving) return
+        stopRefreshBeforeSave()
+        val owner = accountId()
         viewModelScope.launch {
             _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.submitRecyclerVerificationRequest(request).requireData() }
-                .onSuccess { _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
                 .onFailure { error ->
+                    if (accountId() != owner) return@onFailure
                     val remote = error as? RemoteApiException
                     val message = if (remote?.code == "VALIDATION_ERROR" && remote.message.contains("expiry", ignoreCase = true)) {
                         "You entered an invalid expiry date. Use a future date in YYYY-MM-DD format."

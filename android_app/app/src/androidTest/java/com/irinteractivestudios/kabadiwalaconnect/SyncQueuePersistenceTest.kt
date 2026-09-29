@@ -2,6 +2,7 @@ package com.irinteractivestudios.kabadiwalaconnect
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.irinteractivestudios.kabadiwalaconnect.data.local.AppDatabase
@@ -9,6 +10,8 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheS
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.HouseholdListingCacheEntity
+import java.io.File
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.NotificationDto
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -43,6 +46,40 @@ class SyncQueuePersistenceTest {
         database?.close()
         database = null
         context.deleteDatabase(databaseName)
+    }
+
+    @Test
+    fun offlineListingAndPhotoSurviveDatabaseReopenForOnlyTheirAccount() = runBlocking {
+        val photo = File(context.filesDir, "offline-listing-persistence-photo.jpg")
+        photo.writeBytes(byteArrayOf(1, 2, 3))
+        try {
+            database = openDatabase()
+            database!!.withTransaction {
+                database!!.syncQueueDao().enqueueOnce(SyncQueueItemEntity(
+                    operation = "CREATE_HOUSEHOLD_LISTING",
+                    payloadJson = """{"localListingId":"local-listing-a","photoPaths":["${photo.absolutePath.replace("\\", "\\\\")}"]}""",
+                    createdAtEpochMs = 1L,
+                    accountId = "account-a",
+                    idempotencyKey = "listing-key-a"
+                ))
+                database!!.householdListingCacheDao().upsert(HouseholdListingCacheEntity(
+                    id = "local-listing-a", accountId = "account-a", payloadJson = """{"id":"local-listing-a","status":"PENDING_SYNC"}""",
+                    synced = false, createdAtEpochMs = 1L, updatedAtEpochMs = 1L
+                ))
+            }
+            database!!.close()
+            database = openDatabase()
+            val queued = database!!.syncQueueDao().observeForAccount("account-a").first()
+            val cached = database!!.householdListingCacheDao().findForAccount("account-a")
+            assertEquals(1, queued.size)
+            assertEquals("listing-key-a", queued.single().idempotencyKey)
+            assertEquals("local-listing-a", cached.single().id)
+            assertTrue(photo.isFile)
+            assertTrue(database!!.syncQueueDao().observeForAccount("account-b").first().isEmpty())
+            assertTrue(database!!.householdListingCacheDao().findForAccount("account-b").isEmpty())
+        } finally {
+            photo.delete()
+        }
     }
 
     @Test
