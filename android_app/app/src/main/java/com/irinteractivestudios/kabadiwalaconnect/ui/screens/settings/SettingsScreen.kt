@@ -303,7 +303,7 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     showLogoutConfirm = false
                     onLogout()
-                }) { Text(stringResource(R.string.settings_logout)) }
+                }, modifier = Modifier.testTag("settings_logout_confirm")) { Text(stringResource(R.string.settings_logout)) }
             }
         )
     }

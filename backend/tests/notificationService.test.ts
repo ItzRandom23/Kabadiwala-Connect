@@ -25,6 +25,26 @@ describe('notification inbox service', () => {
     expect(result).toBeNull();
   });
 
+  it('paginates with a stable cursor while preserving account isolation', async () => {
+    const findFirst = vi.fn().mockResolvedValue({ id: 'owned-cursor' });
+    const findMany = vi.fn().mockResolvedValue([{ id: 'older-1' }, { id: 'older-2' }, { id: 'extra' }]);
+    const service = new NotificationService({ notificationEvent: { findFirst, findMany } } as never);
+    const page = await service.page('account-1', false, 2, 'owned-cursor');
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: 'owned-cursor', accountId: 'account-1' }, select: { id: true } });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { accountId: 'account-1' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      cursor: { id: 'owned-cursor' }, skip: 1, take: 3
+    }));
+    expect(page).toEqual({ items: [{ id: 'older-1' }, { id: 'older-2' }], nextCursor: 'older-2' });
+  });
+
+  it('rejects a cursor from another account', async () => {
+    const findMany = vi.fn();
+    const service = new NotificationService({ notificationEvent: { findFirst: vi.fn().mockResolvedValue(null), findMany } } as never);
+    await expect(service.page('account-1', false, 20, 'account-2-event')).rejects.toMatchObject({ code: 'VALIDATION_ERROR', status: 422 });
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
   it('uses a stable event ID and returns the existing event on a retry', async () => {
     const existing = { id: 'stable-event', accountId: 'account-1', type: 'QUOTE_RECEIVED' };
     const create = vi.fn().mockRejectedValue({ code: 'P2002' });

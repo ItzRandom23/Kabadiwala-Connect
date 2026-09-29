@@ -17,6 +17,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.auth.RoomCollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SecureSessionRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionCoordinator
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.AuthenticatedSessionStamp
+import com.irinteractivestudios.kabadiwalaconnect.data.auth.OfflineAccessPolicy
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.CollectorProfileRepository
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ApiService
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RetrofitProvider
@@ -246,6 +247,15 @@ class AppContainer(context: Context) {
         sessionCoordinator.beginRestoration()
         revokeAuthenticatedBackgroundWork()
         val cachedAccount = currentAccount()
+        if (!hasValidSession() && connectivityObserver.state.value != ConnectionState.ONLINE &&
+            OfflineAccessPolicy.eligible(cachedAccount,
+                secureStorage.get(SecureStorage.LAST_AUTHENTICATED_AT)?.toLongOrNull(), System.currentTimeMillis())) {
+            // No protected request or WorkManager replay is permitted until
+            // online restoration succeeds. MainActivity requires device unlock
+            // before it displays the cached data.
+            sessionCoordinator.offlineReadOnly(cachedAccount!!)
+            return null
+        }
         val hasRefreshToken = !secureStorage.get(SecureStorage.REFRESH_TOKEN).isNullOrBlank()
         val restoredAccount = when {
             !hasValidSession() -> {
@@ -268,7 +278,7 @@ class AppContainer(context: Context) {
                 // bounced the user back to sign-in.
                 authenticationRepository.refreshAccount()
                     ?: cachedAccount.takeIf {
-                        connectivityObserver.state.value == ConnectionState.OFFLINE &&
+                        connectivityObserver.state.value != ConnectionState.ONLINE &&
                             hasValidSession() && currentAccount()?.profileId == it.profileId
                     }
             }
@@ -393,7 +403,16 @@ class AppContainer(context: Context) {
         }
     }
 
-    suspend fun refreshAccount(): AccountProfile? = authenticationRepository.refreshAccount()
+    suspend fun refreshAccount(): AccountProfile? {
+        val accountId = currentAccount()?.id
+        val sessionGeneration = authenticatedSessionGeneration()
+        val refreshed = authenticationRepository.refreshAccount()
+        if (refreshed != null && refreshed.id == accountId && currentAccount()?.id == accountId &&
+            sessionGeneration == authenticatedSessionGeneration() && hasValidSession()) {
+            sessionCoordinator.authenticated(refreshed)
+        }
+        return refreshed
+    }
 
     /**
      * The authenticated recycler profile is the server's source of truth for
@@ -417,8 +436,16 @@ class AppContainer(context: Context) {
         return updated
     }
 
-    suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile? =
-        authenticationRepository.updateAccountProfile(update)
+    suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile? {
+        val accountId = currentAccount()?.id
+        val sessionGeneration = authenticatedSessionGeneration()
+        val updated = authenticationRepository.updateAccountProfile(update)
+        if (updated != null && updated.id == accountId && currentAccount()?.id == accountId &&
+            sessionGeneration == authenticatedSessionGeneration() && hasValidSession()) {
+            sessionCoordinator.authenticated(updated)
+        }
+        return updated
+    }
 
     suspend fun refreshCatalogs(location: String? = null, latitude: Double? = null, longitude: Double? = null, force: Boolean = false) = catalogRefreshMutex.withLock {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return@withLock
@@ -620,8 +647,8 @@ class AppContainer(context: Context) {
         val response = apiService.getActivityChanges(secureStorage.get(SecureStorage.ACTIVITY_CURSOR)).requireData()
         if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId)) return false
         val accountId = stamp.accountId
-        if (response.notifications.isNotEmpty()) {
-            FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications)
+        if (response.notifications.isNotEmpty() && accountId != null) {
+            FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications, accountId)
         }
         response.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.ACTIVITY_CURSOR, it) }
         // Collector catalogue reconciliation already protects unsynced local
@@ -746,6 +773,7 @@ class AppContainer(context: Context) {
      */
     suspend fun clearAccount() {
         revokeAuthenticatedBackgroundWork()
+        (appContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)?.cancelAll()
         sessionCoordinator.beginRestoration()
         val accountId = currentAccount()?.profileId
         IdempotencyKeyStore(appContext).clearAccount(accountId)
@@ -763,6 +791,7 @@ class AppContainer(context: Context) {
             database.futureCacheDao().clearNotifications()
             database.pendingPhotoUploadDao().clearAll()
             database.householdListingCacheDao().clearAll()
+            database.supplySnapshotDao().clearAll()
         }
         withContext(Dispatchers.IO) {
             File(appContext.filesDir, "lot_photos").deleteRecursively()
@@ -770,6 +799,7 @@ class AppContainer(context: Context) {
             File(appContext.filesDir, "household_photos").deleteRecursively()
         }
         secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)
+        secureStorage.remove(SecureStorage.LAST_AUTHENTICATED_AT)
         secureStorage.remove(SecureStorage.ACCOUNT_ROLE)
         secureStorage.remove(SecureStorage.ACCOUNT_VERIFICATION_STATUS)
         secureStorage.remove(SecureStorage.ACCOUNT_PHONE)
@@ -798,8 +828,10 @@ class AppContainer(context: Context) {
      */
     fun expireAccountSession() {
         revokeAuthenticatedBackgroundWork()
+        (appContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)?.cancelAll()
         sessionCoordinator.expired()
         secureStorage.remove(SecureStorage.AUTH_TOKEN)
+        secureStorage.remove(SecureStorage.LAST_AUTHENTICATED_AT)
         secureStorage.remove(SecureStorage.REFRESH_TOKEN)
         secureStorage.remove(SecureStorage.SESSION_EXPIRY)
         secureStorage.remove(SecureStorage.ACCOUNT_EMAIL)

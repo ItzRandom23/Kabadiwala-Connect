@@ -10,6 +10,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recyclers.Recyclers
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.PrefsLanguageStore
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.PrefsAppearanceStore
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings.SettingsViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile.AccountProfileViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots.LotManagementViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerMarketplaceViewModel
@@ -60,12 +61,13 @@ class KcViewModelFactory(
     val disputeRepository: com.irinteractivestudios.kabadiwalaconnect.data.repository.DisputeRepository get() = container.disputeRepository
     val apiService get() = container.apiService
     val syncQueue get() = container.database.syncQueueDao()
-    fun requestSync() = container.syncScheduler.requestSync()
+    fun requestSync() = container.syncScheduler.requestSync(forceRetry = true)
     suspend fun resetSyncItem(uid: Long): Boolean {
         val accountId = container.currentAccount()?.profileId ?: return false
         return container.database.syncQueueDao().resetForRetry(uid, accountId) > 0
     }
     val currentAccount: AccountProfile? get() = container.currentAccount()
+    val sessionSnapshots get() = container.sessionCoordinator.snapshot
     fun updateStoredAccountLanguage(tag: String) = container.updateStoredAccountLanguage(tag)
     suspend fun refreshCatalogs(location: String? = null, current: CurrentLocation? = null, force: Boolean = false) =
         container.refreshCatalogs(location, current?.latitude, current?.longitude, force)
@@ -91,6 +93,8 @@ class KcViewModelFactory(
             EarningsViewModel(container.earningsRepository)
         modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
             SettingsViewModel(PrefsLanguageStore(app), appVersionOf(app), PrefsAppearanceStore(app))
+        modelClass.isAssignableFrom(AccountProfileViewModel::class.java) ->
+            AccountProfileViewModel(container.sessionCoordinator.snapshot, container::updateAccountProfile)
         modelClass.isAssignableFrom(OnboardingViewModel::class.java) ->
             OnboardingViewModel(
                 auth = container.authenticationRepository,
@@ -107,7 +111,7 @@ class KcViewModelFactory(
         modelClass.isAssignableFrom(RecyclerOrdersViewModel::class.java) ->
             RecyclerOrdersViewModel(container.apiService, FormalisationCacheStore(app), { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerScanViewModel::class.java) ->
-            RecyclerScanViewModel(container.apiService, container.database.syncQueueDao(), FormalisationCacheStore(app), { container.currentAccount()?.profileId }, { container.syncScheduler.requestSync() }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId })
+            RecyclerScanViewModel(container.apiService, FormalisationCacheStore(app), { container.currentAccount()?.profileId }, IdempotencyKeyStore(app) { container.currentAccount()?.profileId })
         modelClass.isAssignableFrom(RecyclerProfileViewModel::class.java) ->
             RecyclerProfileViewModel(container.apiService)
         modelClass.isAssignableFrom(FutureFeatureViewModel::class.java) ->
@@ -120,7 +124,7 @@ class KcViewModelFactory(
                 val latitude = account?.latitude
                 val longitude = account?.longitude
                 if (latitude != null && longitude != null) CurrentLocation(latitude, longitude, account.areaName) else null
-            }, container.sessionCoordinator.snapshot)
+            }, container.sessionCoordinator.snapshot, com.irinteractivestudios.kabadiwalaconnect.data.local.RoomSupplySnapshotStore(container.database.supplySnapshotDao()))
         modelClass.isAssignableFrom(AdminConsoleViewModel::class.java) ->
             AdminConsoleViewModel(container.apiService, container.currentAccount()?.permissions.orEmpty())
         else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.simpleName}")

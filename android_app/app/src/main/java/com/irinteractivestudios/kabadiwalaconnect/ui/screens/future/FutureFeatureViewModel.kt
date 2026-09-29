@@ -23,9 +23,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
@@ -41,9 +43,13 @@ data class FutureFeatureState(
     val activities: List<DiyActivityDto> = emptyList(),
     val conversations: List<ConversationDto> = emptyList(),
     val messages: Map<String, List<ChatMessageDto>> = emptyMap(),
+    val messagesNextCursor: Map<String, String> = emptyMap(),
+    val loadingOlderMessages: Set<String> = emptySet(),
     val analytics: DisputeAnalyticsDto? = null,
     val notifications: List<NotificationDto> = emptyList(),
     val unreadNotifications: Int = 0,
+    val notificationsNextCursor: String? = null,
+    val notificationsLoadingMore: Boolean = false,
     val sending: Boolean = false,
     val drafts: Map<String, String> = emptyMap(),
     val draftingConversationId: String? = null
@@ -61,15 +67,96 @@ class FutureFeatureViewModel(
     private var pollingJob: Job? = null
     private var conversationsJob: Job? = null
     private var refreshJob: Job? = null
+    private var notificationJob: Job? = null
+    private var notificationOwner: String? = null
+    private var notificationGeneration = 0L
+    private var conversationsOwner: String? = null
+    private val exhaustedChatHistory = mutableSetOf<String>()
+    private val messageRequestGenerations = mutableMapOf<String, Long>()
+    private var chatOwner: String? = null
+
+    private suspend fun withPendingNotificationReads(owner: String, items: List<NotificationDto>): List<NotificationDto> {
+        val queued = syncQueue?.observeForAccount(owner)?.first().orEmpty().filter { it.lastErrorCode == null || it.attempts < 3 }
+        if (queued.isEmpty()) return items
+        val readAll = queued.any { it.operation == "MARK_ALL_NOTIFICATIONS_READ" }
+        val readIds = queued.asSequence().filter { it.operation == "MARK_NOTIFICATION_READ" }
+            .mapNotNull { runCatching { JsonParser.parseString(it.payloadJson).asJsonObject.get("id")?.asString }.getOrNull() }
+            .toSet()
+        if (!readAll && readIds.isEmpty()) return items
+        val pendingAt = System.currentTimeMillis().toString()
+        return items.map { if (it.readAt.isNullOrBlank() && (readAll || it.id in readIds)) it.copy(readAt = pendingAt) else it }
+    }
+
+    fun refreshNotifications() {
+        notificationJob?.cancel()
+        val owner = accountId()?.takeIf { it.isNotBlank() } ?: return
+        val generation = ++notificationGeneration
+        if (notificationOwner != owner) {
+            notificationOwner = owner
+            _state.value = _state.value.copy(notifications = emptyList(), unreadNotifications = 0, notificationsNextCursor = null)
+        }
+        notificationJob = viewModelScope.launch {
+            val cached = cache?.notifications(owner).orEmpty()
+            if (accountId() == owner && generation == notificationGeneration && _state.value.notifications.isEmpty() && cached.isNotEmpty()) {
+                _state.value = _state.value.copy(notifications = cached, unreadNotifications = cached.count { it.readAt.isNullOrBlank() })
+            }
+            try {
+                val response = api.getNotifications(limit = 50)
+                val items = withPendingNotificationReads(owner, response.requireData())
+                if (accountId() != owner || generation != notificationGeneration) return@launch
+                cache?.saveNotifications(items, owner)
+                _state.value = _state.value.copy(
+                    notifications = items,
+                    unreadNotifications = items.count { it.readAt.isNullOrBlank() },
+                    notificationsNextCursor = response.body()?.page?.nextCursor,
+                    error = null
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (accountId() == owner && generation == notificationGeneration) _state.value = _state.value.copy(error = userFacingError(error, "Could not refresh notifications. Cached notifications are shown."))
+            }
+        }
+    }
+
+    fun loadMoreNotifications() {
+        val cursor = _state.value.notificationsNextCursor ?: return
+        if (_state.value.notificationsLoadingMore) return
+        val owner = accountId()?.takeIf { it.isNotBlank() } ?: return
+        val generation = notificationGeneration
+        viewModelScope.launch {
+            _state.value = _state.value.copy(notificationsLoadingMore = true)
+            try {
+                val response = api.getNotifications(limit = 50, cursor = cursor)
+                val page = withPendingNotificationReads(owner, response.requireData())
+                if (accountId() != owner || generation != notificationGeneration || _state.value.notificationsNextCursor != cursor) return@launch
+                val merged = (_state.value.notifications + page).distinctBy { it.id }
+                cache?.appendNotifications(page, owner)
+                _state.value = _state.value.copy(
+                    notifications = merged,
+                    unreadNotifications = merged.count { it.readAt.isNullOrBlank() },
+                    notificationsNextCursor = response.body()?.page?.nextCursor,
+                    error = null
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (accountId() == owner && generation == notificationGeneration) _state.value = _state.value.copy(error = userFacingError(error, "Could not load older notifications. Try again."))
+            } finally {
+                if (accountId() == owner && generation == notificationGeneration) _state.value = _state.value.copy(notificationsLoadingMore = false)
+            }
+        }
+    }
 
     fun refresh() {
         refreshJob?.cancel()
+        val owner = accountId()
         refreshJob = viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
             val previous = _state.value
             val cachedSchemes = cache?.schemes().orEmpty()
             val cachedActivities = cache?.activities().orEmpty()
-            val cachedNotifications = cache?.notifications(accountId()).orEmpty()
+            val cachedNotifications = cache?.notifications(owner).orEmpty()
             supervisorScope {
                 val schemes = async {
                     request(previous.schemes.ifEmpty { cachedSchemes }) { api.getGovernmentSchemes().requireData().also { cache?.saveSchemes(it) } }
@@ -83,7 +170,7 @@ class FutureFeatureViewModel(
                 }
                 val analytics = async { request(previous.analytics) { api.getDisputeAnalytics().requireData() } }
                 val notifications = async {
-                    request(previous.notifications.ifEmpty { cachedNotifications }) { api.getNotifications(limit = 100).requireData().also { cache?.saveNotifications(it, accountId()) } }
+                    request(previous.notifications.ifEmpty { cachedNotifications }) { api.getNotifications(limit = 100).requireData().let { items -> owner?.let { withPendingNotificationReads(it, items) } ?: items }.also { items -> if (accountId() == owner) owner?.let { cache?.saveNotifications(items, it) } } }
                 }
                 val schemesResult = schemes.await()
                 val activitiesResult = activities.await()
@@ -97,6 +184,7 @@ class FutureFeatureViewModel(
                 // Keep the inbox summary consistent with the rows currently
                 // rendered. The separate count endpoint can lag the list query.
                 val resolvedUnread = resolvedNotifications.count { it.readAt.isNullOrBlank() }
+                if (accountId() != owner) return@supervisorScope
                 _state.value = _state.value.copy(
                     loading = false,
                     error = if (failureCount > 0) "Some information could not be refreshed. Cached data is shown." else null,
@@ -123,8 +211,13 @@ class FutureFeatureViewModel(
     }
 
     fun markNotificationRead(id: String) {
+        val owner = accountId()?.takeIf { it.isNotBlank() } ?: return
+        val original = _state.value.notifications.firstOrNull { it.id == id } ?: return
+        if (!original.readAt.isNullOrBlank()) return
+        val updated = _state.value.notifications.map { if (it.id == id) it.copy(readAt = System.currentTimeMillis().toString()) else it }
+        _state.value = _state.value.copy(notifications = updated, unreadNotifications = (_state.value.unreadNotifications - 1).coerceAtLeast(0))
         viewModelScope.launch {
-            val wasUnread = _state.value.notifications.firstOrNull { it.id == id }?.readAt.isNullOrBlank()
+            cache?.appendNotifications(updated, owner)
             val failure = try {
                 api.markNotificationRead(id).requireData()
                 null
@@ -134,8 +227,7 @@ class FutureFeatureViewModel(
                 error
             }
             if (failure != null) {
-                val owner = accountId()?.takeIf { it.isNotBlank() }
-                val queued = failure.isRetryableTransportFailure() && syncQueue != null && owner != null && try {
+                val queued = failure.isRetryableTransportFailure() && syncQueue != null && try {
                     syncQueue.enqueue(SyncQueueItemEntity(operation = "MARK_NOTIFICATION_READ", payloadJson = JsonObject().apply { addProperty("id", id) }.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner))
                     true
                 } catch (cancelled: CancellationException) {
@@ -144,20 +236,24 @@ class FutureFeatureViewModel(
                     false
                 }
                 if (!queued) {
-                    _state.value = _state.value.copy(error = userFacingError(failure, "Could not update this notification. Try again."))
+                    if (accountId() == owner) {
+                        val rolledBack = _state.value.notifications.map { if (it.id == id) original else it }
+                        cache?.appendNotifications(listOf(original), owner)
+                        _state.value = _state.value.copy(notifications = rolledBack, unreadNotifications = rolledBack.count { it.readAt.isNullOrBlank() }, error = userFacingError(failure, "Could not update this notification. Try again."))
+                    }
                     return@launch
                 }
                 requestSync()
-            }
-            if (_state.value.notifications.any { it.id == id }) {
-                val updated = _state.value.notifications.map { if (it.id == id) it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) else it }
-                cache?.saveNotifications(updated, accountId())
-                _state.value = _state.value.copy(notifications = updated, unreadNotifications = if (wasUnread) (_state.value.unreadNotifications - 1).coerceAtLeast(0) else _state.value.unreadNotifications)
             }
         }
     }
 
     fun markAllNotificationsRead() {
+        val owner = accountId()?.takeIf { it.isNotBlank() } ?: return
+        val original = _state.value.notifications
+        val readAt = System.currentTimeMillis().toString()
+        val updated = original.map { it.copy(readAt = it.readAt ?: readAt) }
+        _state.value = _state.value.copy(notifications = updated, unreadNotifications = 0)
         viewModelScope.launch {
             val failure = try {
                 api.markAllNotificationsRead().requireData()
@@ -168,8 +264,7 @@ class FutureFeatureViewModel(
                 error
             }
             if (failure != null) {
-                val owner = accountId()?.takeIf { it.isNotBlank() }
-                val queued = failure.isRetryableTransportFailure() && syncQueue != null && owner != null && try {
+                val queued = failure.isRetryableTransportFailure() && syncQueue != null && try {
                     syncQueue.enqueue(SyncQueueItemEntity(operation = "MARK_ALL_NOTIFICATIONS_READ", payloadJson = "{}", createdAtEpochMs = System.currentTimeMillis(), accountId = owner))
                     true
                 } catch (cancelled: CancellationException) {
@@ -178,26 +273,30 @@ class FutureFeatureViewModel(
                     false
                 }
                 if (!queued) {
-                    _state.value = _state.value.copy(error = userFacingError(failure, "Could not update your notifications. Try again."))
+                    if (accountId() == owner) {
+                        cache?.appendNotifications(original, owner)
+                        _state.value = _state.value.copy(notifications = original, unreadNotifications = original.count { it.readAt.isNullOrBlank() }, error = userFacingError(failure, "Could not update your notifications. Try again."))
+                    }
                     return@launch
                 }
                 requestSync()
             }
-            if (failure == null || _state.value.notifications.isNotEmpty()) {
-                val updated = _state.value.notifications.map { it.copy(readAt = it.readAt ?: System.currentTimeMillis().toString()) }
-                cache?.saveNotifications(updated, accountId())
-                _state.value = _state.value.copy(notifications = updated, unreadNotifications = 0)
-            }
+            if (accountId() == owner) cache?.markAllNotificationsRead(owner, readAt)
         }
     }
 
     fun loadConversations() {
-        if (conversationsJob?.isActive == true) return
+        val owner = accountId()
+        if (conversationsOwner != owner) {
+            conversationsJob?.cancel()
+            conversationsOwner = owner
+        } else if (conversationsJob?.isActive == true) return
         conversationsJob = viewModelScope.launch {
-            val cached = cache?.conversations(accountId()).orEmpty()
-            if (_state.value.conversations.isEmpty() && cached.isNotEmpty()) _state.value = _state.value.copy(conversations = cached)
+            val cached = cache?.conversations(owner).orEmpty()
+            if (accountId() == owner && _state.value.conversations.isEmpty() && cached.isNotEmpty()) _state.value = _state.value.copy(conversations = cached)
             try {
                 val conversations = api.getConversations().requireData()
+                if (accountId() != owner) return@launch
                 cache?.saveConversations(conversations)
                 _state.value = _state.value.copy(conversations = conversations)
             } catch (cancelled: CancellationException) {
@@ -213,19 +312,67 @@ class FutureFeatureViewModel(
     }
 
     private suspend fun fetchMessages(conversationId: String) {
+        val owner = accountId()
+        if (chatOwner != owner) {
+            chatOwner = owner
+            exhaustedChatHistory.clear()
+            messageRequestGenerations.clear()
+            _state.value = _state.value.copy(messages = emptyMap(), messagesNextCursor = emptyMap())
+        }
+        val generation = (messageRequestGenerations[conversationId] ?: 0L) + 1L
+        messageRequestGenerations[conversationId] = generation
+        val current = { accountId() == owner && messageRequestGenerations[conversationId] == generation }
         val cached = cache?.messages(conversationId, accountId()).orEmpty()
-        if (_state.value.messages[conversationId].isNullOrEmpty() && cached.isNotEmpty()) {
+        if (current() && _state.value.messages[conversationId].isNullOrEmpty() && cached.isNotEmpty()) {
             _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to cached))
         }
         val result = try {
-            api.getMessages(conversationId).requireData().also { cache?.saveMessages(it) }
+            val response = api.getMessages(conversationId)
+            val items = response.requireData()
+            if (!current()) return
+            cache?.saveMessages(items)
+            if (!current()) return
+            val next = response.body()?.page?.nextCursor
+            if (conversationId !in exhaustedChatHistory && conversationId !in _state.value.messagesNextCursor && next != null) {
+                _state.value = _state.value.copy(messagesNextCursor = _state.value.messagesNextCursor + (conversationId to next))
+            }
+            items
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             cached
         }
             .mergePending(_state.value.messages[conversationId].orEmpty() + cached)
-        _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to result))
+        if (current()) _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to result))
+    }
+
+    fun loadOlderMessages(conversationId: String) {
+        val cursor = _state.value.messagesNextCursor[conversationId] ?: return
+        if (conversationId in _state.value.loadingOlderMessages) return
+        val owner = accountId() ?: return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(loadingOlderMessages = _state.value.loadingOlderMessages + conversationId)
+            try {
+                val response = api.getMessages(conversationId, cursor = cursor)
+                val older = response.requireData()
+                if (accountId() != owner || _state.value.messagesNextCursor[conversationId] != cursor) return@launch
+                cache?.saveMessages(older)
+                val merged = older.mergePending(_state.value.messages[conversationId].orEmpty())
+                val next = response.body()?.page?.nextCursor
+                if (next == null) exhaustedChatHistory += conversationId
+                _state.value = _state.value.copy(
+                    messages = _state.value.messages + (conversationId to merged),
+                    messagesNextCursor = if (next == null) _state.value.messagesNextCursor - conversationId else _state.value.messagesNextCursor + (conversationId to next),
+                    error = null
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (accountId() == owner) _state.value = _state.value.copy(error = userFacingError(error, "Could not load older messages. Try again."))
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(loadingOlderMessages = _state.value.loadingOlderMessages - conversationId)
+            }
+        }
     }
 
     fun startPolling(conversationId: String) {
@@ -306,7 +453,7 @@ class FutureFeatureViewModel(
                 }
                 val owner = accountId()?.takeIf { it.isNotBlank() }
                 val queued = sendFailure.isRetryableTransportFailure() && syncQueue != null && owner != null && try {
-                    syncQueue.enqueue(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner))
+                    syncQueue.enqueueOnce(SyncQueueItemEntity(operation = "SEND_CHAT_MESSAGE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner, idempotencyKey = clientId))
                     true
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -354,8 +501,7 @@ class FutureFeatureViewModel(
 }
 
 private fun List<ChatMessageDto>.mergePending(cached: List<ChatMessageDto>): List<ChatMessageDto> {
-    val serverClientIds = map { it.clientMessageId }.toSet()
-    return (this + cached.filter { it.status != "SENT" && it.status != "READ" && it.clientMessageId !in serverClientIds })
+    return (this + cached)
         .distinctBy { it.clientMessageId.ifBlank { it.id } }
         .sortedBy { it.createdAt.orEmpty() }
 }

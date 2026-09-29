@@ -5,7 +5,7 @@ Kabadiwala Connect is one Android-first product connecting informal e-waste coll
 ## Current release
 
 - Android source/build version: `0.1.5-beta` (`versionCode 69`)
-- Latest OTA artifact in `backend/app-update`: `0.1.5-beta` (`versionCode 69`), built as `envTestingDebug`.
+- Latest OTA artifact in `backend/app-update`: `0.1.6-beta` (`versionCode 70`), built as `envTestingDebug`.
 - Environments: `envTesting` and `production`
 - OTA manifest: `backend/app-update/update.json`
 - Backend update path: `/app/update.json`

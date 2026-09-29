@@ -29,7 +29,7 @@ describe('Mongo optional unique indexes', () => {
 
     const creates = commands.filter(command => command.createIndexes);
     const drops = commands.filter(command => command.dropIndexes);
-    expect(creates).toHaveLength(14);
+    expect(creates).toHaveLength(28);
     expect(drops).toHaveLength(6);
     expect(creates).toContainEqual(expect.objectContaining({
       createIndexes: 'User',
@@ -42,6 +42,18 @@ describe('Mongo optional unique indexes', () => {
     expect(creates).toContainEqual(expect.objectContaining({
       createIndexes: 'RefreshToken',
       indexes: [expect.objectContaining({ name: 'RefreshToken_tokenHash_key', unique: true })]
+    }));
+    expect(creates).toContainEqual(expect.objectContaining({
+      createIndexes: 'NotificationEvent',
+      indexes: [expect.objectContaining({ name: 'NotificationEvent_accountId_createdAt_id_idx' })]
+    }));
+    expect(creates).toContainEqual(expect.objectContaining({
+      createIndexes: 'PickupRequest',
+      indexes: [expect.objectContaining({ name: 'PickupRequest_status_kabadiwalaId_createdAt_id_idx' })]
+    }));
+    expect(creates).toContainEqual(expect.objectContaining({
+      createIndexes: 'BulkOffer',
+      indexes: [expect.objectContaining({ name: 'BulkOffer_bulkLotId_createdAt_id_idx' })]
     }));
   });
 
@@ -64,7 +76,7 @@ describe('Mongo optional unique indexes', () => {
     await ensureOptionalUniqueIndexes(db);
 
     expect(commands.filter(command => command.dropIndexes)).toHaveLength(0);
-    expect(commands.filter(command => command.createIndexes)).toHaveLength(8);
+    expect(commands.filter(command => command.createIndexes)).toHaveLength(22);
   });
 
   it('skips maintenance when Prisma cannot decode the MongoDB index cursor', async () => {

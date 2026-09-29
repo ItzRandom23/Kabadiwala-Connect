@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { AppError } from '../utils/errors.js';
 
 export type NotificationInput = {
   accountId: string;
@@ -78,6 +79,22 @@ export class NotificationService {
       orderBy: { createdAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 100)
     });
+  }
+
+  async page(accountId: string, unreadOnly = false, limit = 50, cursor?: string) {
+    const pageSize = Math.min(Math.max(limit, 1), 100);
+    if (cursor) {
+      const owned = await this.db.notificationEvent.findFirst({ where: { id: cursor, accountId }, select: { id: true } });
+      if (!owned) throw new AppError('VALIDATION_ERROR', 'Invalid notification cursor', 422, { code: 'INVALID_CURSOR' });
+    }
+    const rows = await this.db.notificationEvent.findMany({
+      where: { accountId, ...(unreadOnly ? { readAt: null } : {}) },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: pageSize + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    const items = rows.slice(0, pageSize);
+    return { items, nextCursor: rows.length > pageSize ? items[items.length - 1]?.id ?? null : null };
   }
 
   async unreadCount(accountId: string) {

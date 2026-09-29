@@ -23,6 +23,9 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        val container = (application as? KabadiwalaApp)?.container ?: return
+        val recipient = message.data["recipientAccountId"]?.takeIf { it.isNotBlank() } ?: return
+        if (!mayDisplayPush(recipient, container.currentAccount()?.profileId, container.hasValidSession())) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
@@ -64,13 +67,8 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
         NotificationManagerCompat.from(this).notify(message.data["notificationId"]?.hashCode() ?: body.hashCode(), notification)
     }
 
-    private fun pushCopy(type: String?): Pair<String, String> = when (type) {
-        "PICKUP_REQUESTED", "PICKUP_REASSIGNED_TO_COLLECTOR" ->
-            "New pickup request" to "A household selected you for a pickup. Tap to review it."
-        "PICKUP_WAITING_FOR_PICKUP" ->
-            "Pickup needed nearby" to "A household is waiting for a Kabadiwala. Tap to view pickups."
-        "CHAT_MESSAGE" ->
-            "New message" to "You have a new chat message. Tap to read it."
+    private fun pushCopy(type: String?): Pair<String, String> = pickupPushCopy(type) ?: when (type) {
+        "CHAT_MESSAGE" -> "New message" to "You have a new chat message. Tap to read it."
         else -> getString(R.string.app_name) to getString(R.string.notification_generic_body)
     }
 }

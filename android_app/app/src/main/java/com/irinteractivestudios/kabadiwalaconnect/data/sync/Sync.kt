@@ -126,13 +126,15 @@ class SyncWorker(
         // rows owned by the currently authenticated account; legacy rows with
         // no owner remain visible as unresolved instead of crossing accounts.
         val eligibleOperations = syncOperationsForRole(currentRole)
-        val pending = queue.observePendingForAccount(accountId).first()
-            .filter { item -> item.operation in eligibleOperations }
-            // A pickup request can reference a household listing created in
-            // the same offline session. Always create that server record first,
-            // even when both operations have identical millisecond timestamps.
-            .sortedWith(compareBy<SyncQueueItemEntity> { householdOperationPriority(it.operation) }.thenBy { it.createdAtEpochMs }.thenBy { it.uid })
-            .take(BATCH_SIZE)
+        if (currentRole == AccountRole.RECYCLER) {
+            // Earlier builds queued inventory-changing receipt confirmations.
+            // Preserve their rows for inspection, but require a fresh online
+            // QR confirmation rather than replaying a physical handover later.
+            queue.findByOperationForAccount(accountId, "CONFIRM_SUPPLY_HANDOVER")
+                .filter { it.lastErrorCode != "ONLINE_CONFIRMATION_REQUIRED" }
+                .forEach { queue.markFailed(it.uid, accountId, "ONLINE_CONFIRMATION_REQUIRED", Long.MAX_VALUE) }
+        }
+        val pending = queue.readyBatch(accountId, eligibleOperations, System.currentTimeMillis(), BATCH_SIZE)
         if (BuildConfig.DEBUG) {
             val allQueued = queue.observeAll().first()
             Log.d(TAG, "queue state: total=${allQueued.size}, owned=${allQueued.count { it.accountId == accountId }}, eligible=${pending.size}, role=$currentRole")
@@ -154,15 +156,15 @@ class SyncWorker(
             if (!sessionStillCurrent()) return Result.success()
             // A prior operation in this run may have rebound this row from a
             // temporary local listing ID to its permanent server ID.
-            val item = queue.observeForAccount(accountId).first().firstOrNull { it.uid == selectedItem.uid }
+            val item = queue.findForAccount(selectedItem.uid, accountId)
                 ?: continue
             if (item.operation == "REQUEST_HOUSEHOLD_PICKUP") {
                 val listingId = runCatching {
                     JsonParser.parseString(item.payloadJson).asJsonObject.get("listingId")?.asString
                 }.getOrNull().orEmpty()
                 if (listingId.startsWith("local-")) {
-                    val createStillQueued = queue.observeForAccount(accountId).first().any { queued ->
-                        queued.operation == "CREATE_HOUSEHOLD_LISTING" && runCatching {
+                    val createStillQueued = queue.findByOperationForAccount(accountId, "CREATE_HOUSEHOLD_LISTING").any { queued ->
+                        runCatching {
                             JsonParser.parseString(queued.payloadJson).asJsonObject.get("localListingId")?.asString == listingId
                         }.getOrDefault(false)
                     }
@@ -200,7 +202,7 @@ class SyncWorker(
                 }
                 QueueResult.RETRY -> { queue.incrementAttempts(item.uid, accountId, retryAt(item.attempts)); return Result.retry() }
                 QueueResult.REJECTED -> {
-                    queue.markFailed(item.uid, accountId, "EXTENDED_OPERATION_REJECTED", retryAt(item.attempts))
+                    queue.markFailed(item.uid, accountId, "EXTENDED_OPERATION_REJECTED", Long.MAX_VALUE)
                     return Result.failure()
                 }
             }
@@ -227,7 +229,10 @@ class SyncWorker(
             .filter { item -> operationPairs.none { (queued, _) -> queued.uid == item.uid } }
         invalidItems.forEach { item -> queue.markFailed(item.uid, accountId, "INVALID_SYNC_OPERATION", Long.MAX_VALUE) }
         val operations = operationPairs.map { it.second }
-        if (operations.isEmpty()) return if (deferredOperation) Result.retry() else pullChanges(app, backgroundApi, sessionGeneration, accountId)
+        if (operations.isEmpty()) {
+            val moreReady = queue.hasReady(accountId, eligibleOperations, System.currentTimeMillis())
+            return if (deferredOperation || moreReady) Result.retry() else pullChanges(app, backgroundApi, sessionGeneration, accountId)
+        }
 
         return try {
             if (!sessionStillCurrent()) return Result.success()
@@ -279,15 +284,15 @@ class SyncWorker(
                         }
                         queue.remove(item.uid, accountId)
                     } else {
-                        // Keep rejected/conflicting work visible locally instead of
-                        // silently dropping the user's action. The pending query
-                        // stops automatic retries after three attempts.
-                        queue.markFailed(item.uid, accountId, result.errorCode ?: "SYNC_${result.status}", retryAt(item.attempts))
+                        // A server rejection or conflict needs user review. Keep
+                        // the row in Sync Center until its explicit retry resets it.
+                        queue.markFailed(item.uid, accountId, result.errorCode ?: "SYNC_${result.status}", Long.MAX_VALUE)
                     }
                 }
             }
             if (!sessionStillCurrent()) Result.success()
-            else if (deferredOperation || results.size < operations.size) Result.retry() else pullChanges(app, backgroundApi, sessionGeneration, accountId)
+            else if (deferredOperation || results.size < operations.size || queue.hasReady(accountId, eligibleOperations, System.currentTimeMillis())) Result.retry()
+            else pullChanges(app, backgroundApi, sessionGeneration, accountId)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -427,15 +432,6 @@ class SyncWorker(
                     val dispute = api.disputeHandover(handoverId, body).requireData()
                     app.container.database.disputeDao().markSyncedForAccount(localId, dispute.id, accountId)
                 }
-                "CONFIRM_SUPPLY_HANDOVER" -> {
-                    api.confirmSupplyHandover(SupplyHandoverConfirmRequestDto(
-                        qrCodeData = payload.string("qrCodeData"),
-                        actualWeightKg = payload.get("actualWeightKg")?.asDouble,
-                        acceptedWeightKg = payload.get("acceptedWeightKg")?.asDouble,
-                        materialMatch = payload.get("materialMatch")?.asBoolean ?: true,
-                        reasonCode = payload.get("reasonCode")?.asString
-                    ), payload.get("idempotencyKey")?.asString).requireData()
-                }
                 "REQUEST_HOUSEHOLD_PICKUP" -> {
                     api.requestHouseholdPickup(
                         payload.string("listingId"),
@@ -463,7 +459,7 @@ class SyncWorker(
     }
 
     private suspend fun findHouseholdListing(api: ApiService, listingId: String) = runCatching {
-        api.getHouseholdListings().requireData().firstOrNull { it.id == listingId }
+        api.getHouseholdListing(listingId).requireData()
     }.getOrNull()
 
     private fun clearQueuedIdempotencyKey(app: KabadiwalaApp, item: SyncQueueItemEntity) {
@@ -479,8 +475,7 @@ class SyncWorker(
             "MARK_HANDOVER" -> api.getHandover(payload.string("id")).requireData().collectorConfirmedAt != null
             "UPDATE_HANDOVER_EVIDENCE" -> api.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
             "CANCEL_LOT" -> api.getLot(payload.string("id")).requireData().status == "CANCELLED"
-            "CONFIRM_SUPPLY_HANDOVER" -> api.getSupplyHandovers().requireData().firstOrNull { it.id == payload.string("handoverId") }?.status in setOf("COMPLETED", "REVIEW_REQUIRED")
-            "REQUEST_HOUSEHOLD_PICKUP" -> api.getHouseholdPickups().requireData().any { it.listingId == payload.string("listingId") && (payload.get("kabadiwalaId")?.asString == null || it.kabadiwalaId == payload.get("kabadiwalaId")?.asString) && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
+            "REQUEST_HOUSEHOLD_PICKUP" -> api.getHouseholdListing(payload.string("listingId")).requireData().pickups.any { (payload.get("kabadiwalaId")?.asString == null || it.kabadiwalaId == payload.get("kabadiwalaId")?.asString) && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
             else -> false
         }
     }.getOrDefault(false)
@@ -541,7 +536,7 @@ internal fun syncOperationsForRole(role: AccountRole?): Set<String> {
     return when (role) {
         AccountRole.HOUSEHOLD -> notificationOperations + setOf("CREATE_HOUSEHOLD_LISTING", "REQUEST_HOUSEHOLD_PICKUP")
         AccountRole.COLLECTOR -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CREATE_LOT", "UPDATE_LOT", "RECORD_PAYMENT", "REQUEST_QUOTE", "ACCEPT_QUOTE", "REJECT_QUOTE", "CANCEL_LOT", "CREATE_HANDOVER", "MARK_HANDOVER", "UPDATE_HANDOVER_EVIDENCE", "CREATE_DISPUTE")
-        AccountRole.RECYCLER -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CONFIRM_SUPPLY_HANDOVER")
+        AccountRole.RECYCLER -> notificationOperations + setOf("SEND_CHAT_MESSAGE")
         else -> emptySet()
     }
 }
@@ -567,15 +562,19 @@ private fun Long.toIsoTimestamp(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm
 class SyncScheduler(private val context: Context) {
 
     /** Queues a sync attempt for when connectivity returns. */
-    fun requestSync() {
+    fun requestSync(forceRetry: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .addTag(WORK_TAG)
             .build()
-        // REPLACE is intentional for a user-triggered retry. KEEP can leave
-        // a stale/enqueued worker blocking every subsequent retry forever
-        // (especially after a process death or expired token).
-        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(WORK_TAG, ExistingWorkPolicy.REPLACE, request)
+        // Ordinary enqueue calls must not cancel a worker partway through a
+        // photo upload or idempotent batch. Explicit Sync Center retries may
+        // replace a stalled/backed-off worker after the user resets its row.
+        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+            WORK_TAG,
+            if (forceRetry) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 
     companion object {

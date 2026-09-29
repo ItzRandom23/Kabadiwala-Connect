@@ -85,6 +85,8 @@ import androidx.compose.material3.Text as MaterialText
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import com.irinteractivestudios.kabadiwalaconnect.util.UiActionTrace
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -152,6 +154,13 @@ private fun statusName(value: String) = localizedSupplyChainText(value.replace('
 private fun money(value: Double?) = value?.let { "₹${"%.2f".format(it)}" } ?: localizedSupplyChainText("Pending inspection")
 
 @Composable
+private fun TraceBusyFrames(busy: Set<String>) {
+    LaunchedEffect(busy) {
+        if (busy.isNotEmpty()) withFrameNanos { busy.forEach(UiActionTrace::frameDrawn) }
+    }
+}
+
+@Composable
 fun HouseholdSupplyScreen(
     state: SupplyChainState,
     onRefresh: () -> Unit,
@@ -170,13 +179,16 @@ fun HouseholdSupplyScreen(
     onLoadPickupQr: (String) -> Unit = {},
     onClearPickupQr: () -> Unit = {},
     onOpenPickupChat: (String) -> Unit = {},
+    onLoadMoreHistory: () -> Unit = {},
     initialArea: String = "",
     busy: Set<String> = emptySet()
 ) {
+    TraceBusyFrames(busy)
     val layout = rememberKcResponsiveLayout()
+    val pickupsByListing = remember(state.pickups) { state.pickups.groupBy { it.listingId } }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         item { HouseholdWelcomeHeader(initialArea, onRefresh, state.loading, layout.isCompact) }
-        item { Text("Household pickup hours: 10:30 AM–6:00 PM India time. Your pickup QR appears after the Kabadiwala starts the trip and marks Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("Household pickup hours: 7:30 AM–6:30 PM India time. Your pickup QR appears after the Kabadiwala starts the trip and marks Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item {
             HouseholdSalePanel(
                 busy = "create-listing" in busy,
@@ -184,7 +196,11 @@ fun HouseholdSupplyScreen(
                 compact = layout.isCompact
             )
         }
-        if (state.initialLoadComplete || state.listings.isNotEmpty() || state.pickups.isNotEmpty()) item { SummaryStrip("${state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }} open", "${state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }} active pickups", layout.isCompact) }
+        if (state.initialLoadComplete || state.listings.isNotEmpty() || state.pickups.isNotEmpty()) item {
+            val open = state.listings.count { it.status in setOf("POSTED", "PENDING_SYNC") }
+            val active = state.pickups.count { it.status !in listOf("COMPLETED", "CANCELLED", "REJECTED") }
+            SummaryStrip("$open${if (state.householdListingsNextCursor != null) "+" else ""} open", "$active${if (state.householdPickupsNextCursor != null) "+" else ""} active pickups", layout.isCompact)
+        }
         state.error?.let { message -> item { ErrorPanel(message, onRefresh) } }
         if (state.pendingPhotoUpload != null) item {
             OutlinedButton(onClick = onRetryPhoto, enabled = "upload-listing-photo" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -197,7 +213,7 @@ fun HouseholdSupplyScreen(
         items(state.listings, key = { it.id }) { listing ->
             HouseholdListingCard(
                 listing = listing,
-                pickups = state.pickups.filter { it.listingId == listing.id },
+                pickups = pickupsByListing[listing.id].orEmpty(),
                 pickupPendingSync = listing.id in state.pendingPickupListingIds,
                 kabadiwalas = state.kabadiwalas,
                 busy = busy,
@@ -216,6 +232,15 @@ fun HouseholdSupplyScreen(
                 onClearPickupQr = onClearPickupQr,
                 onOpenPickupChat = onOpenPickupChat
             )
+        }
+        if (state.householdListingsNextCursor != null || state.householdPickupsNextCursor != null) item {
+            OutlinedButton(
+                onClick = onLoadMoreHistory,
+                enabled = "household-history-page" !in busy,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            ) {
+                Text(if ("household-history-page" in busy) "Loading older history…" else "Load older history")
+            }
         }
     }
 }
@@ -585,7 +610,7 @@ private fun HouseholdListingCard(
                 Text("Stage: request → scheduled → weighed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 item.scheduledSlot?.let { Text("Scheduled: ${IndiaFormat.dateTimeIso(it) ?: "Time unavailable"}") }
                 if ((item.pickupCharge ?: 0.0) > 0 && item.finalAmount == null) Text("Quoted pickup charge: ${money(item.pickupCharge)}. This will be deducted from the final material value after weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.status == "SCHEDULED") Text("The Kabadiwala can start the trip during pickup hours (10:30 AM–6:00 PM India time). The QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == "SCHEDULED") Text("The Kabadiwala can start the trip during pickup hours (7:30 AM–6:30 PM India time). The QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.status == "IN_TRANSIT") Text("The Kabadiwala is on the way. Your QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.kabadiwalaId != null && item.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")) {
                     OutlinedButton(onClick = { onOpenPickupChat(item.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -1334,8 +1359,10 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMorePickups: () -> Unit = {}, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}) {
     val layout = rememberKcResponsiveLayout()
+    TraceBusyFrames(state.busy)
+    val listingsById = remember(state.listings) { state.listings.associateBy { it.id } }
     var showBulk by remember { mutableStateOf(false) }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
     val title = when (section) {
@@ -1360,24 +1387,32 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         }
         val hasCollectorSnapshot = state.initialLoadComplete || state.cachedAtEpochMs > 0L || state.pickups.isNotEmpty() || state.inventory.isNotEmpty()
         if (!hasCollectorSnapshot && state.loading) item { LoadingPanel("Loading your collection desk…") }
+        if (state.showingCachedEvidence && hasCollectorSnapshot) item {
+            Text("Showing saved data. Refresh when connected to confirm the latest pickup and stock status.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (section == KabadiwalaSection.HOME && hasCollectorSnapshot) item {
             CollectorOverview(state, onOpenInventory, onOpenPickups)
         }
         if (section == KabadiwalaSection.HOME || section == KabadiwalaSection.PICKUPS) item {
-            Text("Pickup shift: 10:30 AM–6:00 PM India time. Start trip during this shift, then mark Arrived at the household to unlock its QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Pickup shift: 7:30 AM–6:30 PM India time. Start trip during this shift, then mark Arrived at the household to unlock its QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         when (section) {
             KabadiwalaSection.HOME, KabadiwalaSection.PICKUPS -> {
                 if (section == KabadiwalaSection.PICKUPS) {
-                    item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }} waiting", "${state.pickups.count { it.status == "SCHEDULED" }} scheduled", layout.isCompact) }
+                    item { SummaryStrip("${state.pickups.count { it.status == "REQUESTED" || it.status == "WAITING_FOR_PICKUP" }}${if (state.collectorAssignedNextCursor != null || state.collectorWaitingNextCursor != null) "+" else ""} waiting", "${state.pickups.count { it.status == "SCHEDULED" }}${if (state.collectorAssignedNextCursor != null) "+" else ""} scheduled", layout.isCompact) }
                 }
                 item { Text(if (section == KabadiwalaSection.HOME) "Next pickups" else "Pickup queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                 if (state.initialLoadComplete && !state.loading && state.pickups.isEmpty()) item { EmptyPanel("No household pickups", "New requests will appear here.") }
-                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, state.listings.firstOrNull { it.id == pickup.listingId }, listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr, onOpenPickupChat) }
+                items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, listingsById[pickup.listingId], listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr, onOpenPickupChat) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Text("View all ${state.pickups.size} pickups")
+                        Text("View pickups")
+                    }
+                }
+                if (section == KabadiwalaSection.PICKUPS && (state.collectorAssignedNextCursor != null || state.collectorWaitingNextCursor != null || state.collectorHistoryNextCursor != null)) item {
+                    TextButton(onClick = onLoadMorePickups, enabled = "collector-pickups-page" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text(stringResource(if ("collector-pickups-page" in state.busy) R.string.collector_loading_older_pickups else R.string.collector_load_older_pickups))
                     }
                 }
             }
@@ -1400,6 +1435,9 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                         item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
                         items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk, onPrepareBulkHandover, onOpenBulkChat) }
+                        if (state.collectorLotsNextCursor != null) item {
+                            TextButton(onClick = onLoadMoreLots, enabled = "more-collector-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if ("more-collector-lots" in state.busy) "Loading older lots…" else "Load older lots") }
+                        }
                         val bulkHandovers = state.handovers.filter { it.bulkLotId != null && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED") }
                         if (bulkHandovers.isNotEmpty()) item { Text("Recycler handovers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         items(bulkHandovers, key = { "bulk-handover-${it.id}" }) { handover ->
@@ -1410,6 +1448,9 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                         item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
                         items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat) }
+                        if (state.collectorOffersNextCursor != null) item {
+                            TextButton(onClick = onLoadMoreOffers, enabled = "more-collector-offers" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if ("more-collector-offers" in state.busy) "Loading older offers…" else "Load older offers") }
+                        }
                     }
                     else -> {
                         item { Text("Captured lot records", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -1621,7 +1662,8 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary)
                 Text(materialName(listing?.materialCategory ?: "OTHER"), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                StatusChip(statusName(pickup.status))
+                val accepting = "pickup-decision-${pickup.id}" in busy
+                StatusChip(if (accepting && pickup.status in setOf("REQUESTED", "WAITING_FOR_PICKUP")) "Accepting · syncing" else statusName(pickup.status))
                 if (pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED")) {
                     Box {
                         IconButton(onClick = { showMoreActions = true }, modifier = Modifier.size(48.dp)) {
@@ -1699,11 +1741,11 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 )
             }
             when (pickup.status) {
-                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, enabled = "pickup-decision-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if ("pickup-decision-${pickup.id}" in busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Claim pickup") }
+                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, enabled = "pickup-decision-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if ("pickup-decision-${pickup.id}" in busy) Text("Claiming…") else Text("Claim pickup") }
                 "REQUESTED" -> {
                     val decisionPending = "pickup-decision-${pickup.id}" in busy
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = { onAccept(pickup.listingId) }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { if (decisionPending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Accept pickup") }
+                        Button(onClick = { onAccept(pickup.listingId) }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text(if (decisionPending) "Accepting…" else "Accept pickup") }
                         OutlinedButton(onClick = { showReject = true }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Decline") }
                     }
                 }
@@ -1711,15 +1753,15 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     val schedulePending = "schedule-${pickup.id}" in busy
                     Button(onClick = { showSchedule = true }, enabled = !schedulePending, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if (schedulePending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Schedule pickup") }
                     if (isPickupWorkTimeNow()) {
-                        Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start now") }
+                        Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, enabled = "status-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(if ("status-${pickup.id}" in busy) "Starting…" else "Start now") }
                     } else {
-                        Text("Pickup work hours are 10:30 AM–6:00 PM India time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Pickup work hours are 7:30 AM–6:30 PM India time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 "SCHEDULED" -> if (isPickupWorkTimeNow()) {
-                    Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Start trip") }
+                    Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, enabled = "status-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(if ("status-${pickup.id}" in busy) "Starting…" else "Start trip") }
                 } else {
-                    Text("Start trip during pickup hours: 10:30 AM–6:00 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Start trip during pickup hours: 7:30 AM–6:30 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 "IN_TRANSIT" -> {
                     Text("At the household? Mark Arrived to unlock their one-time QR. Ask them to show it before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1788,7 +1830,7 @@ private fun paymentMethodName(value: String) = when (value) { "UPI", "DIGITAL_WA
 private fun isPickupWorkTimeNow(): Boolean {
     val indiaNow = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
     val minutesSinceMidnight = indiaNow.get(java.util.Calendar.HOUR_OF_DAY) * 60 + indiaNow.get(java.util.Calendar.MINUTE)
-    return minutesSinceMidnight in (10 * 60 + 30)..(18 * 60)
+    return minutesSinceMidnight in (7 * 60 + 30)..(18 * 60 + 30)
 }
 
 @Composable
@@ -1961,7 +2003,7 @@ private fun SchedulePickupDialog(
                 timeInMillis = now.timeInMillis
                 add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
             }
-            for (minutesOfDay in (10 * 60 + 30)..(18 * 60) step 15) {
+            for (minutesOfDay in (7 * 60 + 30)..(18 * 60 + 30) step 15) {
                 val slot = (day.clone() as java.util.Calendar).apply {
                     set(java.util.Calendar.HOUR_OF_DAY, minutesOfDay / 60)
                     set(java.util.Calendar.MINUTE, minutesOfDay % 60)
@@ -1988,7 +2030,7 @@ private fun SchedulePickupDialog(
         title = { Text("Schedule collection") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Pickups run 10:30 AM–6:00 PM. Choose a time at least $PICKUP_MIN_LEAD_MINUTES minutes from now.", style = MaterialTheme.typography.bodyMedium)
+                Text("Pickups run 7:30 AM–6:30 PM. Choose a time at least $PICKUP_MIN_LEAD_MINUTES minutes from now.", style = MaterialTheme.typography.bodyMedium)
                 if (slots.isEmpty()) Text("No pickup times are available in the next 14 days.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
@@ -2260,21 +2302,25 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
 }
 
 @Composable
-fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onOpenDemand: () -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
+fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onOpenDemand: () -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}, onLoadMoreDemand: () -> Unit = {}) {
+    TraceBusyFrames(state.busy)
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
-        item { Text("Recycler handovers are arranged with the Kabadiwala; this flow has no fixed shift. The separate household pickup shift is 10:30 AM–6:00 PM India time. Scan the collector's signed QR within 2 hours of preparation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("Recycler handovers are arranged with the Kabadiwala; this flow has no fixed shift. The separate household pickup shift is 7:30 AM–6:30 PM India time. Scan the collector's signed QR within 2 hours of preparation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { Button(onClick = onOpenDemand, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (!state.initialLoadComplete && state.loading) item { LoadingPanel("Loading recycler marketplace…") }
         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
         items(state.bulkLots, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive) }
+        if (state.recyclerLotsNextCursor != null) item { TextButton(onClick = onLoadMoreLots, enabled = "more-recycler-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_lots)) } }
         item { Text("My offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
         items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer, onOpenBulkChat = { onOpenBulkChat(it.bulkLotId, state.bulkLots.firstOrNull { lot -> lot.id == it.bulkLotId }?.kabadiwalaId.orEmpty()) }) }
+        if (state.recyclerOffersNextCursor != null) item { TextButton(onClick = onLoadMoreOffers, enabled = "more-recycler-offers" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_offers)) } }
         item { Text("My demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement, onUpdate = onUpdateRequirement) }
+        if (state.recyclerRequirementsNextCursor != null) item { TextButton(onClick = onLoadMoreDemand, enabled = "more-recycler-demands" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_demand)) } }
         item { Text("Pools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.pools.isEmpty()) item { EmptyPanel("No pools yet", "Collectors can combine reserved stock for your demand.") }
         items(state.pools, key = { "pool-${it.id}" }) { pool ->

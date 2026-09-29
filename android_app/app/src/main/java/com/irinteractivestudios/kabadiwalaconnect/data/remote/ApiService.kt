@@ -41,9 +41,9 @@ interface ApiService {
     @GET("household/listings/{listingId}/photo/{photoIndex}")
     suspend fun getHouseholdListingPhotoAtIndex(@Path("listingId") listingId: String, @Path("photoIndex") photoIndex: Int): Response<ResponseBody>
     @GET("household/listings")
-    suspend fun getHouseholdListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    suspend fun getHouseholdListings(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("household/listings/{listingId}")
-    suspend fun getHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<JsonObject>>
+    suspend fun getHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<HouseholdListingDto>>
     @PATCH("household/listings/{listingId}")
     suspend fun updateHouseholdListing(@Path("listingId") listingId: String, @Body body: HouseholdListingUpdateDto): Response<ApiEnvelope<HouseholdListingDto>>
     @GET("household/listings/{listingId}/passport")
@@ -61,7 +61,7 @@ interface ApiService {
     @POST("household/listings/{listingId}/pickups")
     suspend fun requestHouseholdPickup(@Path("listingId") listingId: String, @Body body: PickupRequestCreateDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<PickupRequestDto>>
     @GET("household/pickups")
-    suspend fun getHouseholdPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    suspend fun getHouseholdPickups(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<PickupRequestDto>>>
     @GET("household/pickups/{pickupId}")
     suspend fun getHouseholdPickup(@Path("pickupId") pickupId: String): Response<ApiEnvelope<JsonObject>>
     @GET("household/pickups/{pickupId}/qr")
@@ -79,15 +79,15 @@ interface ApiService {
     @POST("household/pickups/{pickupId}/cancel")
     suspend fun cancelHouseholdPickup(@Path("pickupId") pickupId: String, @Body body: CancellationRequestDto = CancellationRequestDto()): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/listings")
-    suspend fun getKabadiwalaListings(): Response<ApiEnvelope<List<HouseholdListingDto>>>
+    suspend fun getKabadiwalaListings(@Query("pickupIds") pickupIds: String? = null): Response<ApiEnvelope<List<HouseholdListingDto>>>
     @GET("kabadiwala/listings/{listingId}/photo")
     suspend fun getKabadiwalaListingPhoto(@Path("listingId") listingId: String): Response<ResponseBody>
     @GET("kabadiwala/listings/{listingId}/photo/{photoIndex}")
     suspend fun getKabadiwalaListingPhotoAtIndex(@Path("listingId") listingId: String, @Path("photoIndex") photoIndex: Int): Response<ResponseBody>
     @GET("kabadiwala/pickups")
-    suspend fun getKabadiwalaPickups(): Response<ApiEnvelope<List<PickupRequestDto>>>
+    suspend fun getKabadiwalaPickups(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null, @Query("scope") scope: String? = null): Response<ApiEnvelope<List<PickupRequestDto>>>
     @POST("kabadiwala/listings/{listingId}/accept")
-    suspend fun acceptHouseholdListing(@Path("listingId") listingId: String): Response<ApiEnvelope<JsonObject>>
+    suspend fun acceptHouseholdListing(@Path("listingId") listingId: String, @Header("X-Request-ID") requestId: String? = null): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/reject")
     suspend fun rejectKabadiwalaPickup(@Path("pickupId") pickupId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/pickups/{pickupId}/confirm-availability")
@@ -113,19 +113,19 @@ interface ApiService {
     @POST("kabadiwala/bulk-lots")
     suspend fun createBulkLot(@Body body: BulkLotCreateDto): Response<ApiEnvelope<BulkLotDto>>
     @GET("kabadiwala/bulk-lots")
-    suspend fun getKabadiwalaBulkLots(): Response<ApiEnvelope<List<BulkLotDto>>>
+    suspend fun getKabadiwalaBulkLots(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<BulkLotDto>>>
     @POST("kabadiwala/bulk-lots/{lotId}/cancel")
     suspend fun cancelBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/bulk-offers")
-    suspend fun getKabadiwalaBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
+    suspend fun getKabadiwalaBulkOffers(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<BulkOfferDto>>>
     @GET("recycler/bulk-lots")
-    suspend fun getRecyclerBulkLots(): Response<ApiEnvelope<List<BulkLotDto>>>
+    suspend fun getRecyclerBulkLots(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<BulkLotDto>>>
     @GET("recycler/bulk-lots/{lotId}")
     suspend fun getRecyclerBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<BulkLotDto>>
     @POST("recycler/bulk-lots/{lotId}/offers")
     suspend fun makeBulkLotOffer(@Path("lotId") lotId: String, @Body body: BulkOfferCreateDto): Response<ApiEnvelope<BulkOfferDto>>
     @GET("recycler/offers")
-    suspend fun getRecyclerBulkOffers(): Response<ApiEnvelope<List<BulkOfferDto>>>
+    suspend fun getRecyclerBulkOffers(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<BulkOfferDto>>>
     @POST("recycler/offers/{offerId}/withdraw")
     suspend fun withdrawRecyclerOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
     @GET("kabadiwala/procurement-requirements")
@@ -143,7 +143,7 @@ interface ApiService {
     @PATCH("recycler/procurement-requirements/{requirementId}")
     suspend fun updateProcurementRequirement(@Path("requirementId") requirementId: String, @Body body: ProcurementRequirementUpdateDto): Response<ApiEnvelope<ProcurementRequirementDto>>
     @GET("recycler/procurement-requirements")
-    suspend fun getRecyclerProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
+    suspend fun getRecyclerProcurementRequirements(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
     @GET("kabadiwala/route-advantage")
     suspend fun getRouteAdvantage(@Query("materialCategory") materialCategory: String, @Query("quantityKg") quantityKg: Double, @Query("grade") grade: String = "UNSPECIFIED", @Query("areaName") areaName: String? = null): Response<ApiEnvelope<RouteAdvantageResponseDto>>
     @GET("kabadiwala/pool-opportunities")
@@ -363,7 +363,7 @@ interface ApiService {
     suspend fun getEarnings(): Response<ApiEnvelope<EarningsLedgerDto>>
 
     @GET("notifications")
-    suspend fun getNotifications(@Query("unread") unreadOnly: Boolean = false, @Query("limit") limit: Int = 50): Response<ApiEnvelope<List<NotificationDto>>>
+    suspend fun getNotifications(@Query("unread") unreadOnly: Boolean = false, @Query("limit") limit: Int = 50, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<NotificationDto>>>
 
     @GET("notifications/unread-count")
     suspend fun getNotificationUnreadCount(): Response<ApiEnvelope<UnreadCountDto>>
@@ -437,7 +437,7 @@ interface ApiService {
     suspend fun createPickupConversation(@Body body: CreatePickupConversationRequestDto): Response<ApiEnvelope<ConversationDto>>
 
     @GET("future/conversations/{conversationId}/messages")
-    suspend fun getMessages(@Path("conversationId") conversationId: String, @Query("limit") limit: Int = 50): Response<ApiEnvelope<List<ChatMessageDto>>>
+    suspend fun getMessages(@Path("conversationId") conversationId: String, @Query("limit") limit: Int = 50, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<ChatMessageDto>>>
 
     @POST("future/conversations/{conversationId}/messages")
     suspend fun sendMessage(@Path("conversationId") conversationId: String, @Body body: SendMessageRequestDto): Response<ApiEnvelope<ChatMessageDto>>

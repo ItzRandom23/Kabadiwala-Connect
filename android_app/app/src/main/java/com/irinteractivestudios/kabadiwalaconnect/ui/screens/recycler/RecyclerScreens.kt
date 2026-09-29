@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -100,8 +99,7 @@ fun RecyclerVerificationScreen(
     saved: Boolean = false,
     onRefresh: () -> Unit = {},
     onSubmit: (RecyclerVerificationRequestDto) -> Unit = {},
-    onOpenMarketplace: () -> Unit = {},
-    onLogout: () -> Unit = {}
+    onOpenMarketplace: () -> Unit = {}
 ) {
     val layout = rememberKcResponsiveLayout()
     // Once the server profile is present it owns this screen's state. An
@@ -127,7 +125,6 @@ fun RecyclerVerificationScreen(
     val context = LocalContext.current
     var declarationAccepted by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<Int?>(null) }
-    var showLogoutConfirm by remember { mutableStateOf(false) }
     val detailRes = when (status) {
         RecyclerVerificationStatus.PENDING -> when {
             authorizationExpired -> R.string.recycler_verification_expired_detail
@@ -185,9 +182,6 @@ fun RecyclerVerificationScreen(
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(stringResource(R.string.recycler_verification_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(recyclerProfile?.name ?: profile?.displayName ?: stringResource(R.string.nav_profile), style = MaterialTheme.typography.titleMedium, maxLines = if (layout.isCompact) 2 else 1)
-                }
-                androidx.compose.material3.IconButton(onClick = { showLogoutConfirm = true }) {
-                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.settings_logout))
                 }
             }
         }
@@ -266,20 +260,6 @@ fun RecyclerVerificationScreen(
             OutlinedButton(onClick = onRefresh, enabled = !loading && !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.recycler_verification_refresh)) }
             if (saved) Text(stringResource(R.string.recycler_verification_submitted), modifier = Modifier.weight(1f).padding(top = 15.dp), color = KcTheme.extended.warning, style = MaterialTheme.typography.labelLarge)
         }
-    }
-    if (showLogoutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
-            title = { Text(stringResource(R.string.settings_logout)) },
-            text = { Text(stringResource(R.string.settings_logout_warning)) },
-            dismissButton = { TextButton(onClick = { showLogoutConfirm = false }) { Text(stringResource(R.string.common_back)) } },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLogoutConfirm = false
-                    onLogout()
-                }) { Text(stringResource(R.string.settings_logout)) }
-            }
-        )
     }
 }
 
@@ -865,8 +845,8 @@ private fun String.displayMaterial(): String = when (this) {
 @Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text("$label · ₹/kg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }
 
 @Composable
-fun RecyclerProfileScreen(profile: AccountProfile?, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null) {
-    ProfileScreen(profile, onSave = onSave, saving = saving, saveError = saveError)
+fun RecyclerProfileScreen(profile: AccountProfile?, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null, onOpenSettings: () -> Unit = {}) {
+    ProfileScreen(profile, onSave = onSave, saving = saving, saveError = saveError, onOpenSettings = onOpenSettings)
 }
 
 @Composable private fun StatusCard(label: String, detail: String, color: androidx.compose.ui.graphics.Color, contentColor: androidx.compose.ui.graphics.Color) { Surface(color = color, contentColor = contentColor, shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f)), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CheckCircle, null, tint = contentColor); Column(Modifier.padding(start = 12.dp)) { Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium) } } } }

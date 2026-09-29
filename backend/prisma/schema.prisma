@@ -1048,6 +1048,7 @@ model ChatMessage {
 
   @@unique([conversationId, clientMessageId])
   @@index([conversationId, createdAt])
+  @@index([conversationId, createdAt, id])
   @@index([senderId, createdAt])
 }
 
@@ -1082,6 +1083,7 @@ model PickupChatMessage {
 
   @@unique([conversationId, clientMessageId])
   @@index([conversationId, createdAt])
+  @@index([conversationId, createdAt, id])
   @@index([senderId, createdAt])
 }
 
@@ -1096,6 +1098,7 @@ model NotificationEvent {
   createdAt DateTime  @default(now())
 
   @@index([accountId, readAt, createdAt])
+  @@index([accountId, createdAt, id])
 }
 
 // A household rating is tied to one completed pickup and intentionally stores
@@ -1222,6 +1225,7 @@ model HouseholdListing {
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   @@index([householdId, status, createdAt])
+  @@index([householdId, createdAt, id])
   @@index([materialCategory, status, createdAt])
 }
 
@@ -1268,6 +1272,10 @@ model PickupRequest {
   updatedAt         DateTime     @updatedAt
   @@unique([listingId, kabadiwalaId])
   @@index([householdId, status, createdAt])
+  @@index([householdId, createdAt, id])
+  @@index([kabadiwalaId, createdAt, id])
+  @@index([kabadiwalaId, status, createdAt, id])
+  @@index([status, kabadiwalaId, createdAt, id])
   @@index([kabadiwalaId, status, scheduledSlot])
   @@index([status, scheduledSlot])
 }
@@ -1345,6 +1353,7 @@ model InventoryMovement {
   createdAt          DateTime @default(now())
 
   @@index([kabadiwalaId, createdAt])
+  @@index([kabadiwalaId, createdAt, id])
   @@index([inventoryBalanceId, createdAt])
   @@index([sourceType, sourceId])
 }
@@ -1367,6 +1376,8 @@ model BulkLot {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   @@index([kabadiwalaId, status, createdAt])
+  @@index([kabadiwalaId, createdAt, id])
+  @@index([status, createdAt, id])
   @@index([materialCategory, status, createdAt])
 }
 
@@ -1379,7 +1390,9 @@ model BulkOffer {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   @@unique([bulkLotId, recyclerId])
+  @@index([bulkLotId, createdAt, id])
   @@index([recyclerId, status, createdAt])
+  @@index([recyclerId, createdAt, id])
 }
 
 model ProcurementRequirement {
@@ -1396,6 +1409,7 @@ model ProcurementRequirement {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   @@index([recyclerId, status, createdAt])
+  @@index([recyclerId, createdAt, id])
   @@index([materialCategory, status, createdAt])
 }
 

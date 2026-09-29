@@ -4,10 +4,15 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import android.os.SystemClock
+import android.util.Log
+import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
 import retrofit2.Retrofit
+import retrofit2.Invocation
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 /** Retrofit construction point. The base URL is supplied at build time. */
 object RetrofitProvider {
@@ -48,6 +53,21 @@ object RetrofitProvider {
             chain.proceed(request)
         }
         val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val requestId = original.header("X-Request-ID") ?: UUID.randomUUID().toString()
+                val request = original.newBuilder().header("X-Request-ID", requestId).build()
+                val operation = original.tag(Invocation::class.java)?.method()?.name ?: "unknown"
+                val started = SystemClock.elapsedRealtimeNanos()
+                try {
+                    val response = chain.proceed(request)
+                    if (BuildConfig.DEBUG) Log.d("KcApiTiming", "requestId=$requestId operation=$operation durationMs=${(SystemClock.elapsedRealtimeNanos() - started) / 1_000_000} status=${response.code}")
+                    response
+                } catch (error: IOException) {
+                    if (BuildConfig.DEBUG) Log.w("KcApiTiming", "requestId=$requestId operation=$operation durationMs=${(SystemClock.elapsedRealtimeNanos() - started) / 1_000_000} failure=${error.javaClass.simpleName}")
+                    throw error
+                }
+            }
             .addInterceptor(authInterceptor)
             .addInterceptor { chain ->
                 // A photo classification may need one additional Lite-model

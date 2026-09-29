@@ -43,6 +43,100 @@ const operationKey = (req: any) => {
 };
 const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
 
+/** Pagination is opt-in so clients expecting the legacy array keep working. */
+export async function pagedRows(model: any, where: Record<string, unknown>, query: Record<string, unknown>, select?: Record<string, unknown>) {
+  const wantsPage = query.limit !== undefined || query.cursor !== undefined;
+  if (!wantsPage) return { items: await model.findMany({ where, ...(select ? { select } : {}), orderBy: { createdAt: 'desc' } }), page: undefined };
+  const limit = parse(z.coerce.number().int().min(1).max(100), query.limit ?? 50);
+  const cursor = query.cursor == null ? null : parse(id, query.cursor);
+  if (cursor) {
+    const owned = await model.findFirst({ where: { ...where, id: cursor }, select: { id: true } });
+    if (!owned) throw new AppError('VALIDATION_ERROR', 'Invalid page cursor', 422, { code: 'INVALID_CURSOR' });
+  }
+  const rows = await model.findMany({ where, ...(select ? { select } : {}), orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: limit + 1, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+  const items = rows.slice(0, limit);
+  return { items, page: { nextCursor: rows.length > limit ? items[items.length - 1]?.id ?? null : null } };
+}
+
+/**
+ * A collector's feed combines assigned work with nearby unclaimed requests.
+ * Scan candidate pickups in bounded batches so an account with years of
+ * history never loads every row just to render the first screen. Location
+ * filtering is performed on the matching listing; the next cursor also
+ * advances past out-of-area candidates when a batch contains no visible row.
+ */
+export async function pagedCollectorPickups(store: any, collectorId: string, collector: any, query: Record<string, unknown>) {
+  const limit = parse(z.coerce.number().int().min(1).max(100), query.limit ?? 50);
+  const cursor = query.cursor == null ? null : parse(id, query.cursor);
+  const scope = parse(z.enum(['all', 'active', 'assigned', 'waiting', 'history']), query.scope ?? 'all');
+  const terminalStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED'];
+  const candidateWhere = scope === 'history'
+    ? { kabadiwalaId: collectorId, status: { in: terminalStatuses } }
+    : scope === 'assigned'
+    ? { kabadiwalaId: collectorId, status: { notIn: terminalStatuses } }
+    : scope === 'waiting'
+    ? { kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }
+    : { OR: [
+      { kabadiwalaId: collectorId, ...(scope === 'active' ? { status: { notIn: terminalStatuses } } : {}) },
+      { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }
+    ] };
+  if (cursor) {
+    const candidate = await store.pickupRequest.findFirst({ where: { id: cursor, ...candidateWhere }, select: { id: true } });
+    if (!candidate) {
+      throw new AppError('VALIDATION_ERROR', 'Invalid page cursor', 422, { code: 'INVALID_CURSOR' });
+    }
+  }
+  const visible: any[] = [];
+  // Match the existing feed's explicit public projection. In particular,
+  // unclaimed requests must not reveal household account IDs or private
+  // settlement evidence just because pagination is enabled.
+  const select = { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true };
+  let scanCursor = cursor;
+  let examined = 0;
+  let exhausted = false;
+  const batchSize = 100;
+  const scanBudget = 1000;
+  while (visible.length < limit && examined < scanBudget) {
+    const take = Math.min(batchSize, scanBudget - examined);
+    const rows = await store.pickupRequest.findMany({
+      where: candidateWhere,
+      select,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
+      ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {})
+    });
+    if (!rows.length) { exhausted = true; break; }
+    const waitingIds = rows.filter((row: any) => row.kabadiwalaId == null).map((row: any) => row.listingId);
+    const listings = waitingIds.length ? await store.householdListing.findMany({ where: { id: { in: waitingIds } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
+    const listingById = new Map<string, any>(listings.map((listing: any) => [listing.id, listing] as [string, any]));
+    const examinedBeforeBatch = examined;
+    for (const row of rows) {
+      scanCursor = row.id;
+      examined++;
+      if (row.kabadiwalaId != null || collectorCanSeeWaitingPickup(collector, listingById.get(row.listingId))) visible.push(row);
+      if (visible.length == limit) break;
+    }
+    if (rows.length < take && examined - examinedBeforeBatch == rows.length) { exhausted = true; break; }
+  }
+  return { items: visible, page: { nextCursor: exhausted ? null : scanCursor } };
+}
+
+export async function listingsForCollectorPickupIds(store: any, collectorId: string, pickupIds: string[]) {
+  const [pickups, own] = await Promise.all([
+    store.pickupRequest.findMany({ where: { id: { in: pickupIds }, OR: [{ kabadiwalaId: collectorId }, { kabadiwalaId: null, status: 'WAITING_FOR_PICKUP' }] }, select: { listingId: true, kabadiwalaId: true, status: true } }),
+    store.collector.findUnique({ where: { id: collectorId }, select: { areaName: true, latitude: true, longitude: true, pickupMaxDistanceKm: true } })
+  ]);
+  const listings = pickups.length ? await store.householdListing.findMany({ where: { id: { in: pickups.map((pickup: any) => pickup.listingId) } }, select: { id: true, materialCategory: true, estimatedWeight: true, condition: true, notes: true, photoReference: true, photoReferences: true, areaName: true, pickupAddress: true, latitude: true, longitude: true, estimatedPriceMin: true, estimatedPriceMax: true, status: true, createdAt: true, updatedAt: true } }) : [];
+  const listingById = new Map<string, any>(listings.map((listing: any) => [listing.id, listing] as [string, any]));
+  return pickups.flatMap((pickup: any) => {
+    const listing = listingById.get(pickup.listingId);
+    if (!listing || (pickup.kabadiwalaId == null && !collectorCanSeeWaitingPickup(own, listing))) return [];
+    const { photoReference, photoReferences, ...safe } = listing;
+    const addressVisible = pickup.kabadiwalaId == collectorId && !['CANCELLED', 'REJECTED'].includes(pickup.status);
+    return [{ ...safe, pickupAddress: addressVisible ? safe.pickupAddress : null, latitude: addressVisible ? safe.latitude : null, longitude: addressVisible ? safe.longitude : null, photoAttached: Boolean(photoReference || photoReferences?.length), photoCount: photoReferences?.length || (photoReference ? 1 : 0) }];
+  });
+}
+
 function distanceKm(aLat?: number | null, aLng?: number | null, bLat?: number | null, bLng?: number | null) {
   if ([aLat, aLng, bLat, bLng].some(value => value == null)) return null;
   const radians = (value: number) => value * Math.PI / 180;
@@ -165,8 +259,12 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!profiles.length) return [];
     const ids = profiles.map(profile => profile.id);
     const [completed, reviews, pickupDays] = await Promise.all([
-      store.pickupRequest.findMany({ where: { kabadiwalaId: { in: ids }, status: 'COMPLETED' }, select: { kabadiwalaId: true, actualWeight: true, finalCategory: true } }),
-      store.householdPickupReview?.findMany
+      store.pickupRequest.groupBy
+        ? store.pickupRequest.groupBy({ by: ['kabadiwalaId', 'finalCategory'], where: { kabadiwalaId: { in: ids }, status: 'COMPLETED' }, _count: { _all: true }, _sum: { actualWeight: true } })
+        : store.pickupRequest.findMany({ where: { kabadiwalaId: { in: ids }, status: 'COMPLETED' }, select: { kabadiwalaId: true, actualWeight: true, finalCategory: true } }),
+      store.householdPickupReview?.groupBy
+        ? store.householdPickupReview.groupBy({ by: ['kabadiwalaId'], where: { kabadiwalaId: { in: ids }, verified: true }, _count: { _all: true }, _avg: { rating: true } })
+        : store.householdPickupReview?.findMany
         ? store.householdPickupReview.findMany({ where: { kabadiwalaId: { in: ids }, verified: true }, select: { kabadiwalaId: true, rating: true } })
         : Promise.resolve([]),
       store.collectorPickupDay?.findMany
@@ -174,9 +272,26 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         : Promise.resolve([])
     ]);
     const todayByCollector = new Map(pickupDays.map((row: any) => [row.collectorId, row]));
+    const pickupByCollector = new Map<string, { count: number; weight: number; categories: Set<string> }>();
+    for (const row of completed) {
+      if (!row.kabadiwalaId) continue;
+      const summary = pickupByCollector.get(row.kabadiwalaId) ?? { count: 0, weight: 0, categories: new Set<string>() };
+      summary.count += row._count?._all ?? 1;
+      summary.weight += row._sum?.actualWeight ?? row.actualWeight ?? 0;
+      if (row.finalCategory) summary.categories.add(row.finalCategory);
+      pickupByCollector.set(row.kabadiwalaId, summary);
+    }
+    const reviewsByCollector = new Map<string, { count: number; total: number }>();
+    for (const row of reviews) {
+      const summary = reviewsByCollector.get(row.kabadiwalaId) ?? { count: 0, total: 0 };
+      const count = row._count?._all ?? 1;
+      summary.count += count;
+      summary.total += (row._avg?.rating ?? row.rating ?? 0) * count;
+      reviewsByCollector.set(row.kabadiwalaId, summary);
+    }
     return profiles.map(profile => {
-      const partnerPickups = completed.filter((row: any) => row.kabadiwalaId === profile.id);
-      const partnerReviews = reviews.filter((row: any) => row.kabadiwalaId === profile.id);
+      const partnerPickups = pickupByCollector.get(profile.id);
+      const partnerReviews = reviewsByCollector.get(profile.id);
       const today: any = todayByCollector.get(profile.id);
       const capacity = today?.capacity ?? profile.dailyPickupCapacity ?? 8;
       const slots = Math.max(0, capacity - (today?.bookedCount ?? 0));
@@ -192,11 +307,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         acceptingPickups: slots > 0,
         availablePickupSlots: slots,
         pickupPricing: { freeRadiusKm: profile.pickupFreeRadiusKm ?? 0, feePerKm: profile.pickupFeePerKm ?? 0, maxDistanceKm: profile.pickupMaxDistanceKm ?? 25, estimatedFee: distance == null ? null : Number((Math.max(0, distance - (profile.pickupFreeRadiusKm ?? 0)) * (profile.pickupFeePerKm ?? 0)).toFixed(2)) },
-        completedPickupCount: partnerPickups.length,
-        acceptedWeightKg: Number(partnerPickups.reduce((sum: number, row: any) => sum + (row.actualWeight ?? 0), 0).toFixed(2)),
-        collectedMaterials: [...new Set(partnerPickups.map((row: any) => row.finalCategory).filter(Boolean))],
-        ratingAverage: partnerReviews.length ? Number((partnerReviews.reduce((sum: number, row: any) => sum + row.rating, 0) / partnerReviews.length).toFixed(2)) : null,
-        reviewCount: partnerReviews.length
+        completedPickupCount: partnerPickups?.count ?? 0,
+        acceptedWeightKg: Number((partnerPickups?.weight ?? 0).toFixed(2)),
+        collectedMaterials: [...(partnerPickups?.categories ?? [])],
+        ratingAverage: partnerReviews?.count ? Number((partnerReviews.total / partnerReviews.count).toFixed(2)) : null,
+        reviewCount: partnerReviews?.count ?? 0
       };
     });
   };
@@ -279,8 +394,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     await sendPrivateListingPhoto(storage, listing, photoIndex, res);
   });
   router.get('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
-    const listings = await store.householdListing.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
-    res.json({ success: true, data: listings.map(householdListingDto) });
+    const { items, page } = await pagedRows(store.householdListing, { householdId: req.identity!.collectorId }, req.query);
+    res.json({ success: true, data: items.map(householdListingDto), ...(page ? { page } : {}) });
   });
   router.get('/household/listings/:listingId', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -526,13 +641,13 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (result.created && !result.replayed) {
       await Promise.allSettled([
         emitNotification(store, { accountId: input.kabadiwalaId, type: 'PICKUP_REQUESTED', title: 'New pickup request', body: 'A household selected you for a pickup request. Review and accept it when available.', route: `kabadiwala/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUESTED:${result.pickup.id}:${input.kabadiwalaId}` }),
-        emitNotification(store, { accountId: req.identity!.collectorId, type: 'PICKUP_REQUESTED', title: 'Pickup request sent', body: 'Your pickup request was sent to the selected Kabadiwala.', route: `household/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUESTED:${result.pickup.id}:${req.identity!.collectorId}` })
+        emitNotification(store, { accountId: req.identity!.collectorId, type: 'PICKUP_REQUEST_SENT', title: 'Pickup request sent', body: 'Your pickup request was sent to the selected Kabadiwala.', route: `household/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUEST_SENT:${result.pickup.id}:${req.identity!.collectorId}` })
       ]);
     }
     res.status(result.created ? 201 : 200).json({ success: true, data: result.pickup, ...(result.replayed ? { message: 'Pickup request already processed' } : {}) });
   });
   router.get('/household/pickups', requireHousehold(jwt, collectors), async (req, res) => {
-    const pickups = await store.pickupRequest.findMany({ where: { householdId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } });
+    const { items: pickups, page } = await pagedRows(store.pickupRequest, { householdId: req.identity!.collectorId }, req.query);
     const ids = pickups.map((pickup: any) => pickup.id);
     const [reviews, payments] = await Promise.all([
       ids.length && store.householdPickupReview?.findMany ? store.householdPickupReview.findMany({ where: { pickupId: { in: ids } }, select: { pickupId: true, rating: true } }) : Promise.resolve([]),
@@ -544,7 +659,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       ...pickup,
       householdReviewRating: reviewByPickup.get(pickup.id) ?? null,
       settlementPayment: paymentByPickup.get(pickup.id) ?? null
-    })) });
+    })), ...(page ? { page } : {}) });
   });
   router.get('/household/pickups/:pickupId', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
@@ -680,6 +795,12 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
 
   router.get('/kabadiwala/listings', requireAuth(jwt, collectors), async (req, res) => {
+    // The paged pickup UI asks only for listings on its visible page. Resolve
+    // ownership from those pickups before returning location or photo state.
+    if (req.query.pickupIds !== undefined) {
+      const pickupIds = parse(z.array(id).min(1).max(100), String(req.query.pickupIds).split(','));
+      return res.json({ success: true, data: await listingsForCollectorPickupIds(store, req.identity!.collectorId, pickupIds) });
+    }
     const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { listingId: true, status: true } });
     const assignedListingIds = new Set(assigned.map((pickup: { listingId: string }) => pickup.listingId));
     const addressVisibleListingIds = new Set(assigned.filter((pickup: { listingId: string; status: string }) => !['CANCELLED', 'REJECTED'].includes(pickup.status)).map((pickup: { listingId: string }) => pickup.listingId));
@@ -724,7 +845,15 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     await sendPrivateListingPhoto(storage, listing, photoIndex, res);
   });
   router.get('/kabadiwala/pickups', requireAuth(jwt, collectors), async (req, res) => {
-    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
+    const own = store.collector?.findUnique ? await store.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true, pickupMaxDistanceKm: true } }) : null;
+    if (req.query.limit !== undefined || req.query.cursor !== undefined) {
+      const { items, page } = await pagedCollectorPickups(store, req.identity!.collectorId, own, req.query);
+      const payments = items.length && store.pickupSettlementPayment?.findMany
+        ? await store.pickupSettlementPayment.findMany({ where: { pickupId: { in: items.map((pickup: any) => pickup.id) } }, select: { pickupId: true, amount: true, paymentMethod: true, recordedAt: true, householdReceivedAt: true, reference: true, status: true } })
+        : [];
+      const paymentByPickup = new Map(payments.map((payment: any) => [payment.pickupId, payment]));
+      return res.json({ success: true, data: items.map((pickup: any) => ({ ...pickup, settlementPayment: paymentByPickup.get(pickup.id) ?? null })), page });
+    }
     const assigned = await store.pickupRequest.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } });
     const waiting = own ? await store.pickupRequest.findMany({ where: { status: 'WAITING_FOR_PICKUP', kabadiwalaId: null }, select: { id: true, listingId: true, kabadiwalaId: true, status: true, requestedSlot: true, scheduledSlot: true, availabilityConfirmedAt: true, actualWeight: true, finalCategory: true, grade: true, ratePerKg: true, grossMaterialAmount: true, pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, householdQrScannedAt: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) : [];
     const waitingListings = waiting.length ? await store.householdListing.findMany({ where: { id: { in: waiting.map((pickup: any) => pickup.listingId) } }, select: { id: true, areaName: true, latitude: true, longitude: true } }) : [];
@@ -788,12 +917,13 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_AVAILABILITY_CONFIRMED', 'PICKUP_REQUEST', pickupId, { scheduledSlot: scheduledSlot?.toISOString() ?? pickup.scheduledSlot?.toISOString() ?? null });
       return updated;
     }));
+    if (scheduledSlot) await emitNotification(store, { accountId: result.householdId, type: 'PICKUP_SCHEDULED', title: 'Pickup time confirmed', body: 'Your Kabadiwala confirmed the pickup time. Open the listing for details.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_SCHEDULED:${pickupId}:${scheduledSlot.toISOString()}` });
     res.json({ success: true, data: result });
   });
   router.post('/kabadiwala/pickups/:pickupId/schedule', requireAuth(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const { scheduledSlot: requestedSlot } = parse(z.object({ scheduledSlot: z.string().datetime() }), req.body);
-    const currentPickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } }, select: { acceptedAt: true } });
+    const currentPickup = await store.pickupRequest.findFirst({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: ['ACCEPTED', 'SCHEDULED', 'REASSIGNMENT_REQUIRED'] } }, select: { acceptedAt: true, householdId: true } });
     if (!currentPickup) throw new AppError('CONFLICT', 'Pickup cannot be scheduled', 409, { code: 'PICKUP_NOT_SCHEDULABLE' });
     const scheduledSlot = validateCollectorPickupSlot(requestedSlot, currentPickup.acceptedAt);
     await store.$transaction(async (tx: any) => {
@@ -804,6 +934,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!updated.count) throw new AppError('CONFLICT', 'Pickup changed before scheduling', 409, { code: 'PICKUP_SCHEDULE_CONFLICT' });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'PICKUP_SCHEDULED', 'PICKUP_REQUEST', pickupId, { scheduledSlot: scheduledSlot.toISOString() });
     });
+    await emitNotification(store, { accountId: currentPickup.householdId, type: 'PICKUP_SCHEDULED', title: 'Pickup time confirmed', body: 'Your Kabadiwala confirmed the pickup time. Open the listing for details.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_SCHEDULED:${pickupId}:${scheduledSlot.toISOString()}` });
     res.json({ success: true, data: { status: 'SCHEDULED' } });
   });
   router.post('/kabadiwala/pickups/:pickupId/cancel', requireAuth(jwt, collectors), async (req, res) => {
@@ -849,11 +980,14 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     // scheduled pickups still follow the same transition. The conditional
     // update keeps the mutation race-safe and idempotent.
     const allowed = next === 'IN_TRANSIT' ? ['ACCEPTED', 'SCHEDULED'] : ['IN_TRANSIT'];
-    await store.$transaction(async (tx: any) => {
+    const householdId = await store.$transaction(async (tx: any) => {
       const updated = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: { in: allowed } }, data: { status: next, ...(next === 'IN_TRANSIT' ? { inTransitAt: new Date() } : { arrivedAt: new Date() }) } });
       if (!updated.count) throw new AppError('CONFLICT', 'Invalid pickup transition', 409);
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', `PICKUP_${next}`, 'PICKUP_REQUEST', pickupId, { status: next });
+      const pickup = await tx.pickupRequest.findUniqueOrThrow({ where: { id: pickupId }, select: { householdId: true } });
+      return pickup.householdId;
     });
+    await emitNotification(store, { accountId: householdId, type: next === 'ARRIVED' ? 'PICKUP_ARRIVED' : 'PICKUP_IN_TRANSIT', title: next === 'ARRIVED' ? 'Kabadiwala has arrived' : 'Kabadiwala is on the way', body: next === 'ARRIVED' ? 'Your pickup QR is ready to show at handover.' : 'Your Kabadiwala has started the pickup trip.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_${next}:${pickupId}` });
     res.json({ success: true, data: { status: next } });
   });
   router.post('/kabadiwala/pickups/:pickupId/confirm-household-qr', requireAuth(jwt, collectors), async (req, res) => {
@@ -968,6 +1102,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'COMPLETE_PICKUP', entityId: pickupId, requestHash: operationHash, response: jsonValue(completed) } });
       return { pickup: completed, replayed: false };
     });
+    if (!result.replayed) await emitNotification(store, { accountId: result.pickup.householdId, type: 'PICKUP_WEIGHED', title: 'Review your final pickup amount', body: 'The Kabadiwala recorded the weight and final amount. Review the settlement before payment.', route: `household/pickups/${pickupId}`, dedupeKey: `PICKUP_WEIGHED:${pickupId}` });
     res.status(result.replayed ? 200 : 201).json({ success: true, data: result.pickup, ...(result.replayed ? { message: 'Pickup completion already processed' } : {}) });
   });
   router.post('/kabadiwala/pickups/:pickupId/settlement-payment', requireAuth(jwt, collectors), async (req, res) => {
@@ -1035,8 +1170,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await auditSupplyEvent(tx, req.identity!.collectorId, 'ADMIN', input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED_BY_OPERATOR', 'PICKUP_REQUEST', payment.pickupId, { paymentId, decision: input.decision, notes: input.notes ?? null });
       return tx.pickupSettlementPayment.findUniqueOrThrow({ where: { id: paymentId } });
     }));
-    const recipients = [...new Set([result.householdId, result.collectorId])];
-    await Promise.all(recipients.map(accountId => emitNotification(store, { accountId, type: input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED', title: input.decision === 'VERIFY' ? 'Pickup payment reconciled' : 'Pickup payment needs review', body: input.decision === 'VERIFY' ? 'An operator reconciled the pickup payment record.' : 'An operator flagged the pickup payment for follow-up.', route: `household/pickups/${result.pickupId}`, dedupeKey: `PICKUP_PAYMENT_RECONCILED:${result.id}:${input.decision}:${accountId}` })));
+    const recipients = [
+      { accountId: result.householdId, route: `household/pickups/${result.pickupId}` },
+      { accountId: result.collectorId, route: `kabadiwala/pickups/${result.pickupId}` },
+    ];
+    await Promise.all(recipients.map(({ accountId, route }) => emitNotification(store, { accountId, type: input.decision === 'VERIFY' ? 'PICKUP_PAYMENT_RECONCILED' : 'PICKUP_PAYMENT_DISPUTED', title: input.decision === 'VERIFY' ? 'Pickup payment reconciled' : 'Pickup payment needs review', body: input.decision === 'VERIFY' ? 'An operator reconciled the pickup payment record.' : 'An operator flagged the pickup payment for follow-up.', route, dedupeKey: `PICKUP_PAYMENT_RECONCILED:${result.id}:${input.decision}:${accountId}` })));
     res.json({ success: true, data: { ...result, kind: 'HOUSEHOLD_PICKUP_SETTLEMENT' } });
   });
   router.get('/kabadiwala/inventory', requireAuth(jwt, collectors), async (req, res) => {
@@ -1045,8 +1183,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/kabadiwala/inventory/movements', requireAuth(jwt, collectors), async (req, res) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 50) || 50));
-    const movements = await store.inventoryMovement.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' }, take: limit });
-    res.json({ success: true, data: movements });
+    const { items, page } = await pagedRows(store.inventoryMovement, { kabadiwalaId: req.identity!.collectorId }, { ...req.query, limit });
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.post('/kabadiwala/bulk-lots', requireAuth(jwt, collectors), async (req, res) => {
     const input = parse(bulkInput, req.body);
@@ -1076,7 +1214,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     res.status(result.replayed ? 200 : 201).json({ success: true, data: result.lot, ...(result.replayed ? { message: 'Bulk lot already created' } : {}) });
   });
   router.get('/kabadiwala/bulk-lots', requireAuth(jwt, collectors), async (req, res) => {
-    res.json({ success: true, data: await store.bulkLot.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+    const { items, page } = await pagedRows(store.bulkLot, { kabadiwalaId: req.identity!.collectorId }, req.query);
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.post('/kabadiwala/bulk-lots/:lotId/cancel', requireAuth(jwt, collectors), async (req, res) => {
     const lotId = parse(id, req.params.lotId);
@@ -1097,12 +1236,13 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/kabadiwala/bulk-offers', requireAuth(jwt, collectors), async (req, res) => {
     const lots = await store.bulkLot.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true } });
-    const offers = await store.bulkOffer.findMany({ where: { bulkLotId: { in: lots.map((lot: { id: string }) => lot.id) } }, orderBy: { createdAt: 'desc' } });
-    res.json({ success: true, data: offers });
+    const { items, page } = await pagedRows(store.bulkOffer, { bulkLotId: { in: lots.map((lot: { id: string }) => lot.id) } }, req.query);
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
 
-  router.get('/recycler/bulk-lots', requireRecycler(jwt, db), async (_req, res) => {
-    res.json({ success: true, data: await store.bulkLot.findMany({ where: { status: 'LISTED' }, select: { id: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, notes: true, status: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }) });
+  router.get('/recycler/bulk-lots', requireRecycler(jwt, db), async (req, res) => {
+    const { items, page } = await pagedRows(store.bulkLot, { status: 'LISTED' }, req.query, { id: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, notes: true, status: true, createdAt: true, updatedAt: true });
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.get('/recycler/bulk-lots/:lotId', requireRecycler(jwt, db), async (req, res) => {
     const lotId = parse(id, req.params.lotId);
@@ -1127,7 +1267,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     res.status(201).json({ success: true, data: offer });
   });
   router.get('/recycler/offers', requireRecycler(jwt, db), async (req, res) => {
-    res.json({ success: true, data: await store.bulkOffer.findMany({ where: { recyclerId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+    const { items, page } = await pagedRows(store.bulkOffer, { recyclerId: req.identity!.collectorId }, req.query);
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.post('/recycler/offers/:offerId/withdraw', requireRecycler(jwt, db), async (req, res) => {
     const offerId = parse(id, req.params.offerId);
@@ -1219,7 +1360,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     res.json({ success: true, data: updated });
   });
   router.get('/recycler/procurement-requirements', requireRecycler(jwt, db), async (req, res) => {
-    res.json({ success: true, data: await store.procurementRequirement.findMany({ where: { recyclerId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) });
+    const { items, page } = await pagedRows(store.procurementRequirement, { recyclerId: req.identity!.collectorId }, req.query);
+    res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.get('/kabadiwala/procurement-requirements', requireAuth(jwt, collectors), async (_req, res) => {
     const requirements = await store.procurementRequirement.findMany({ where: { status: 'OPEN', OR: [{ deadline: null }, { deadline: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' }, take: 100 });

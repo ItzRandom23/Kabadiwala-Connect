@@ -68,6 +68,7 @@ describe('household pickup chat', () => {
     expect(sent.status).toBe(201);
     expect(sent.body.data).toMatchObject({ senderId: 'household-1', senderRole: 'HOUSEHOLD', body: 'I will be home at 5 PM.' });
     expect(db.notificationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ accountId: 'collector-1', type: 'CHAT_MESSAGE', route: 'messages/pickup-conversation-1' }) }));
+    expect(db.notificationEvent.create.mock.calls[0][0].data.body).not.toContain('home at 5 PM');
     expect(db.notificationDelivery.upsert).toHaveBeenCalledTimes(1);
 
     const unread = await request(app).get('/future/conversations').set(collectorAuth);
@@ -82,12 +83,23 @@ describe('household pickup chat', () => {
     const read = await request(app).get(`/future/conversations/${created.body.data.id}/messages`).set(collectorAuth);
     expect(read.status).toBe(200);
     expect(read.body.data).toHaveLength(1);
+    expect(read.body.page).toEqual({ nextCursor: null });
     expect(db.pickupChatMessage.updateMany).toHaveBeenCalled();
     const afterRead = await request(app).get('/future/conversations').set(collectorAuth);
     expect(afterRead.body.data[0].unreadCount).toBe(0);
 
     const denied = await request(app).get(`/future/conversations/${created.body.data.id}/messages`).set(otherHouseholdAuth);
     expect(denied.status).toBe(404);
+  });
+
+  it('rejects a chat page cursor outside the assigned conversation', async () => {
+    const { app, jwt, db } = fixture();
+    db.pickupChatMessage.findFirst.mockResolvedValueOnce(null);
+    const result = await request(app)
+      .get('/future/conversations/pickup-conversation-1/messages?cursor=another-account-message')
+      .set({ Authorization: `Bearer ${jwt.generateHouseholdToken('household-1')}` });
+    expect(result.status).toBe(422);
+    expect(db.pickupChatMessage.findMany).not.toHaveBeenCalled();
   });
 
   it('refuses to open chat until the Kabadiwala accepts and assignment exists', async () => {

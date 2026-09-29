@@ -49,6 +49,13 @@
 
     <!-- Shared UI states -->
     <string name="common_loading">Please wait…</string>
+    <string name="notifications_load_older">Load older notifications</string>
+    <string name="chat_load_older">Load older messages</string>
+    <string name="recycler_load_older_lots">Load older lots</string>
+    <string name="recycler_load_older_offers">Load older offers</string>
+    <string name="recycler_load_older_demand">Load older demand</string>
+    <string name="collector_load_older_pickups">Load older pickups</string>
+    <string name="collector_loading_older_pickups">Loading older pickups…</string>
     <string name="common_retry">Try again</string>
     <string name="common_ok">OK</string>
     <string name="common_back">Back</string>

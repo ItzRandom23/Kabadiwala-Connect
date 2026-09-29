@@ -62,7 +62,8 @@ class SyncQueuePersistenceTest {
                 operation = "REQUEST_HOUSEHOLD_PICKUP",
                 payloadJson = "{\"id\":\"pickup-b\",\"idempotencyKey\":\"pickup-key-b\"}",
                 createdAtEpochMs = 2L,
-                accountId = "account-b"
+                accountId = "account-b",
+                idempotencyKey = "pickup-key-b"
             )
         )
         database!!.close()

@@ -13,7 +13,7 @@ class UserFacingErrorsTest {
             "Could not load operator data"
         )
 
-        assertEquals("Could not load operator data", result)
+        assertEquals("The server could not finish this action. Please retry shortly.", result)
         assertFalse(result.contains("Prisma", ignoreCase = true))
     }
 
@@ -23,11 +23,11 @@ class UserFacingErrorsTest {
             userFacingError(RemoteApiException("TOKEN_INVALID", "Bearer token required", 401), "fallback")
         )
         assertEquals(
-            "Too many requests. Please wait a moment and try again.",
+            "Too many requests. Please wait a moment and retry.",
             userFacingError(RemoteApiException("OTP_RATE_LIMITED", "Too many requests", 429), "fallback")
         )
         assertEquals(
-            "This action is not available for your role.",
+            "This action is not available for your account.",
             userFacingError(RemoteApiException("AUTHORIZATION_ERROR", "Recycler access required", 403), "fallback")
         )
     }

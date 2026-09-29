@@ -1,13 +1,19 @@
 package com.irinteractivestudios.kabadiwalaconnect
 
 import android.Manifest
+import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import android.widget.Toast
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
@@ -21,10 +27,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,6 +51,7 @@ import com.irinteractivestudios.kabadiwalaconnect.ui.components.LoadingContent
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.AppNavHost
 import com.irinteractivestudios.kabadiwalaconnect.ui.navigation.Destinations
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.InitialLanguageScreen
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.offline.OfflineReadOnlyScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
@@ -71,12 +80,31 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class MainActivity : ComponentActivity() {
     private val pendingNotificationRoute = mutableStateOf<String?>(null)
+    private var offlineDeviceUnlocked by mutableStateOf(false)
+    private val offlineUnlockLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        offlineDeviceUnlocked = result.resultCode == Activity.RESULT_OK
+    }
+
+    override fun onStop() {
+        super.onStop()
+        offlineDeviceUnlocked = false
+    }
+
+    private fun requestOfflineDeviceUnlock() {
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager ?: return
+        if (!keyguard.isDeviceSecure) return
+        val challenge = keyguard.createConfirmDeviceCredentialIntent(
+            "Open saved Kabadiwala data", "Unlock this device to view your cached account."
+        ) ?: return
+        offlineUnlockLauncher.launch(challenge)
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleManager.wrap(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val activityStartNs = SystemClock.elapsedRealtimeNanos()
         super.onCreate(savedInstanceState)
         val restoringActivityState = savedInstanceState != null
         enableEdgeToEdge()
@@ -212,12 +240,40 @@ class MainActivity : ComponentActivity() {
                             sessionBootstrap = app.container.sessionCoordinator.snapshot.value
                             activeRole = AccountRole.COLLECTOR
                         }
+                    } else if (!previewMode && connection == ConnectionState.ONLINE &&
+                        liveSession.state == SessionState.OFFLINE_READ_ONLY) {
+                        withContext(Dispatchers.IO) { app.container.restoreAuthenticatedSession() }
+                        sessionBootstrap = app.container.sessionCoordinator.snapshot.value
+                        offlineDeviceUnlocked = false
                     }
                 }
                 if (bootstrap == null || bootstrap.state == SessionState.RESTORING) {
                     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                         LoadingContent(Modifier.fillMaxSize())
                     }
+                    return@KabadiwalaConnectTheme
+                }
+                if (bootstrap.state == SessionState.OFFLINE_READ_ONLY && bootstrap.account != null) {
+                    DisposableEffect(Unit) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+                    }
+                    val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                    OfflineReadOnlyScreen(
+                        account = bootstrap.account,
+                        database = app.container.database,
+                        unlocked = offlineDeviceUnlocked && connection != ConnectionState.ONLINE,
+                        canUnlock = keyguard?.isDeviceSecure == true,
+                        onUnlock = ::requestOfflineDeviceUnlock,
+                        onSignOut = {
+                            offlineDeviceUnlocked = false
+                            uiScope.launch {
+                                app.container.authenticationRepository.logout()
+                                app.container.clearAccount()
+                                sessionBootstrap = app.container.sessionCoordinator.snapshot.value
+                            }
+                        }
+                    )
                     return@KabadiwalaConnectTheme
                 }
                 // A NavController saved by Android can contain a protected route
@@ -255,6 +311,14 @@ class MainActivity : ComponentActivity() {
                 val initialRoute = if (restoreSettingsAfterLocaleChange) Destinations.SETTINGS else defaultInitialRoute
                 val backStack by navController.currentBackStackEntryAsState()
                 val route = backStack?.destination?.route
+                LaunchedEffect(route) {
+                    if (BuildConfig.DEBUG && route != null) {
+                        val routeObservedNs = SystemClock.elapsedRealtimeNanos()
+                        withFrameNanos { }
+                        val frameNs = SystemClock.elapsedRealtimeNanos()
+                        Log.d("KcScreenTiming", "route=${route.take(80)} stage=frame sinceRouteObservedMs=${(frameNs - routeObservedNs) / 1_000_000} sinceActivityCreateMs=${(frameNs - activityStartNs) / 1_000_000}")
+                    }
+                }
                 val kabadiwalaDemo = demoMode && renderedRole == AccountRole.COLLECTOR && demoRoleName == AccountRole.COLLECTOR.name
                 val recyclerPendingRoute = route in setOf(Destinations.RECYCLER_VERIFY, Destinations.RECYCLER_PROFILE, Destinations.SETTINGS)
                 val recyclerPendingShell = renderedRole == AccountRole.RECYCLER &&

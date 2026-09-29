@@ -205,7 +205,7 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 }
 
 @Composable
-fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, hasOlderMessages: Boolean = false, loadingOlderMessages: Boolean = false, onLoadOlder: () -> Unit = {}, modifier: Modifier = Modifier) {
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scrollScope = rememberCoroutineScope()
@@ -229,6 +229,9 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
         Text(if (conversation.type == "PICKUP") "Pickup conversation" else if (conversation.collectorId == currentAccountId) "Recycler conversation" else "Kabadiwala conversation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(14.dp))
+        if (hasOlderMessages) TextButton(onClick = onLoadOlder, enabled = !loadingOlderMessages, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {
+            Text(stringResource(if (loadingOlderMessages) R.string.common_loading else R.string.chat_load_older))
+        }
         LazyColumn(Modifier.weight(1f), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(messages, key = { it.id }) { message ->
                 val isMine = message.senderId.isBlank() || message.senderId == currentAccountId
@@ -346,6 +349,9 @@ fun NotificationsScreen(
     onRefresh: () -> Unit,
     onOpen: (NotificationDto) -> Unit,
     onMarkAllRead: () -> Unit,
+    hasMore: Boolean = false,
+    loadingMore: Boolean = false,
+    onLoadMore: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -378,6 +384,11 @@ fun NotificationsScreen(
                     Text(notification.body, style = MaterialTheme.typography.bodyMedium)
                     notification.createdAt?.take(16)?.let { Text(it.replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+            }
+        }
+        if (hasMore) item {
+            TextButton(onClick = onLoadMore, enabled = !loadingMore, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(stringResource(if (loadingMore) R.string.common_loading else R.string.notifications_load_older))
             }
         }
     }

@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ChatMessageDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.DiyActivityDto
@@ -120,8 +121,18 @@ interface FutureCacheDao {
     fun unreadNotificationCount(accountId: String): Flow<Int>
     @Query("DELETE FROM future_notifications WHERE accountId = :accountId")
     suspend fun clearNotificationsForAccount(accountId: String)
+    @Query("DELETE FROM future_notifications WHERE accountId = :accountId AND id NOT IN (SELECT id FROM future_notifications WHERE accountId = :accountId ORDER BY createdAt DESC, id DESC LIMIT 1000)")
+    suspend fun pruneNotificationsForAccount(accountId: String)
+    @Query("UPDATE future_notifications SET readAt = :readAt WHERE accountId = :accountId AND readAt IS NULL")
+    suspend fun markAllNotificationsRead(accountId: String, readAt: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveNotifications(items: List<NotificationCacheEntity>)
+    @Transaction
+    suspend fun replaceNotificationsForAccount(accountId: String, items: List<NotificationCacheEntity>) {
+        clearNotificationsForAccount(accountId)
+        saveNotifications(items)
+        pruneNotificationsForAccount(accountId)
+    }
     @Query("DELETE FROM future_notifications")
     suspend fun clearNotifications()
 }
@@ -139,17 +150,16 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
     suspend fun saveMessages(items: List<ChatMessageDto>) { dao.saveMessages(items.map { MessageCacheEntity(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }) }
     suspend fun deleteMessage(id: String) { dao.deleteMessage(id) }
     suspend fun notifications(accountId: String? = null): List<NotificationDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.notificationsForAccount(it) } ?: emptyList()).map { NotificationDto(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) }
-    suspend fun saveNotifications(items: List<NotificationDto>, accountId: String? = null) {
-        val accounts = buildSet {
-            accountId?.takeIf { it.isNotBlank() }?.let(::add)
-            items.map { it.accountId }.filter { it.isNotBlank() }.forEach(::add)
-        }
-        for (activeAccount in accounts) dao.clearNotificationsForAccount(activeAccount)
-        dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
+    suspend fun saveNotifications(items: List<NotificationDto>, accountId: String) {
+        if (accountId.isBlank()) return
+        dao.replaceNotificationsForAccount(accountId, items.filter { it.accountId == accountId }.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
     }
-    suspend fun appendNotifications(items: List<NotificationDto>) {
-        dao.saveNotifications(items.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
+    suspend fun appendNotifications(items: List<NotificationDto>, accountId: String) {
+        if (accountId.isBlank()) return
+        dao.saveNotifications(items.filter { it.accountId == accountId }.map { NotificationCacheEntity(it.id, it.accountId, it.type, it.title, it.body, it.route, it.readAt, it.createdAt) })
+        dao.pruneNotificationsForAccount(accountId)
     }
+    suspend fun markAllNotificationsRead(accountId: String, readAt: String) { dao.markAllNotificationsRead(accountId, readAt) }
     suspend fun clearNotifications() { dao.clearNotifications() }
 }
 

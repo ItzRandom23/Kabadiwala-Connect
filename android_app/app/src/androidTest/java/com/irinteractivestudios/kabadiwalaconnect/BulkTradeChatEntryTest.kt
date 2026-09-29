@@ -48,7 +48,7 @@ class BulkTradeChatEntryTest {
                 RecyclerSupplyScreen(
                     state = SupplyChainState(loading = false, initialLoadComplete = true,
                         offers = listOf(BulkOfferDto(id = "offer-1", bulkLotId = "bulk-1", recyclerId = "recycler-1", status = "ACCEPTED"))),
-                    onRefresh = {}, onOffer = { _, _ -> }, onReceive = {}, onCreateDemand = {},
+                    onRefresh = {}, onOffer = { _, _ -> }, onReceive = {}, onOpenDemand = {},
                     onOpenBulkChat = { lotId, collectorId -> selected = lotId to collectorId }
                 )
             }

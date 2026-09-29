@@ -122,7 +122,7 @@ describe('waiting pickup lifecycle', () => {
       accountId: 'collector-1', type: 'PICKUP_REQUESTED', route: 'kabadiwala/pickups/pickup-assigned-1'
     }) });
     expect(notificationCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
-      accountId: 'household-1', type: 'PICKUP_REQUESTED', route: 'household/pickups/pickup-assigned-1'
+      accountId: 'household-1', type: 'PICKUP_REQUEST_SENT', route: 'household/pickups/pickup-assigned-1'
     }) });
   });
 

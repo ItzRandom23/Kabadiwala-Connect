@@ -7,6 +7,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -21,7 +22,11 @@ import kotlinx.coroutines.flow.Flow
     tableName = "sync_queue",
     // Migration 17->18 creates this index for retry scheduling. Keep it in
     // the entity schema so Room validates upgraded databases successfully.
-    indices = [Index(value = ["nextAttemptAtEpochMs"])]
+    indices = [
+        Index(value = ["nextAttemptAtEpochMs"]),
+        Index(value = ["accountId", "nextAttemptAtEpochMs"]),
+        Index(value = ["accountId", "operation", "idempotencyKey"])
+    ]
 )
 data class SyncQueueItemEntity(
     @PrimaryKey(autoGenerate = true) val uid: Long = 0L,
@@ -35,7 +40,9 @@ data class SyncQueueItemEntity(
     val lastErrorCode: String? = null,
     /** WorkManager may run again before a transient provider failure is safe to retry. */
     val nextAttemptAtEpochMs: Long = 0L,
-    val accountId: String? = null
+    val accountId: String? = null,
+    /** Indexed, exact-match key for safe local deduplication. */
+    val idempotencyKey: String? = null
 )
 
 @Dao
@@ -44,8 +51,29 @@ interface SyncQueueDao {
     suspend fun enqueue(item: SyncQueueItemEntity): Long
 
     /** Stable idempotency keys must map to one local outbox row as well as one server mutation. */
-    @Query("SELECT uid FROM sync_queue WHERE operation = :operation AND accountId = :accountId AND payloadJson LIKE '%' || :idempotencyKey || '%' LIMIT 1")
+    @Query("SELECT uid FROM sync_queue WHERE operation = :operation AND accountId = :accountId AND idempotencyKey = :idempotencyKey LIMIT 1")
     suspend fun findUidByOperationAndIdempotencyKey(operation: String, accountId: String, idempotencyKey: String): Long?
+
+    @Transaction
+    suspend fun enqueueOnce(item: SyncQueueItemEntity): Boolean {
+        val account = item.accountId ?: return false
+        val key = item.idempotencyKey ?: return false
+        if (findUidByOperationAndIdempotencyKey(item.operation, account, key) != null) return false
+        enqueue(item)
+        return true
+    }
+
+    @Query("SELECT * FROM sync_queue WHERE uid = :uid AND accountId = :accountId LIMIT 1")
+    suspend fun findForAccount(uid: Long, accountId: String): SyncQueueItemEntity?
+
+    @Query("SELECT * FROM sync_queue WHERE accountId = :accountId AND operation = :operation ORDER BY createdAtEpochMs ASC")
+    suspend fun findByOperationForAccount(accountId: String, operation: String): List<SyncQueueItemEntity>
+
+    @Query("SELECT * FROM sync_queue WHERE accountId = :accountId AND operation IN (:operations) AND (lastErrorCode IS NULL OR attempts < 3) AND nextAttemptAtEpochMs <= :nowEpochMs ORDER BY CASE WHEN operation = 'CREATE_HOUSEHOLD_LISTING' THEN 0 WHEN operation = 'REQUEST_HOUSEHOLD_PICKUP' THEN 1 ELSE 2 END, createdAtEpochMs ASC, uid ASC LIMIT :limit")
+    suspend fun readyBatch(accountId: String, operations: Set<String>, nowEpochMs: Long, limit: Int): List<SyncQueueItemEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM sync_queue WHERE accountId = :accountId AND operation IN (:operations) AND (lastErrorCode IS NULL OR attempts < 3) AND nextAttemptAtEpochMs <= :nowEpochMs LIMIT 1)")
+    suspend fun hasReady(accountId: String, operations: Set<String>, nowEpochMs: Long): Boolean
 
     @Query("SELECT * FROM sync_queue ORDER BY createdAtEpochMs ASC")
     fun observeAll(): Flow<List<SyncQueueItemEntity>>

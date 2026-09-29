@@ -15,12 +15,14 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
@@ -49,7 +52,8 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
     onSave: ((ProfileEditDraft) -> Unit)? = null,
     saving: Boolean = false,
-    saveError: String? = null
+    saveError: String? = null,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     var editing by remember(profile?.profileId) { mutableStateOf(false) }
     Column(
@@ -81,7 +85,17 @@ fun ProfileScreen(
                     Icon(Icons.Filled.Edit, contentDescription = null)
                     Text("  Edit account details")
                 }
+                if (saving) Text("Saving changes…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 saveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        if (onOpenSettings != null) {
+            OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth().testTag("recycler_open_settings")
+            ) {
+                Icon(Icons.Filled.Settings, contentDescription = null)
+                Text("  ${stringResource(R.string.nav_settings)}")
             }
         }
     }

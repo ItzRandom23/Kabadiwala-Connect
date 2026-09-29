@@ -13,15 +13,16 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationCacheStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.IdempotencyKeyStore
 import com.irinteractivestudios.kabadiwalaconnect.data.local.FormalisationSnapshot
-import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
-import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
 import com.irinteractivestudios.kabadiwalaconnect.util.SingleFlightGate
 import com.google.gson.JsonObject
-import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class RecyclerOrdersState(
     val loading: Boolean = true,
@@ -37,19 +38,36 @@ class RecyclerOrdersViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerOrdersState())
     val state: StateFlow<RecyclerOrdersState> = _state.asStateFlow()
+    private var refreshJob: Job? = null
+    private var refreshGeneration = 0L
 
     fun refresh() {
-        viewModelScope.launch {
-            val cached = cache?.load(accountIdProvider())?.handovers.orEmpty()
-            if (cached.isNotEmpty()) _state.value = RecyclerOrdersState(loading = true, handovers = cached, showingCachedEvidence = true)
-            _state.value = _state.value.copy(loading = true, error = false)
-            runCatching { api.getSupplyHandovers().requireData() }
-                .onSuccess { items ->
-                    _state.value = RecyclerOrdersState(loading = false, handovers = items)
-                    val prior = cache?.load(accountIdProvider()) ?: FormalisationSnapshot()
-                    cache?.save(accountIdProvider(), prior.copy(handovers = items))
+        refreshJob?.cancel()
+        val generation = ++refreshGeneration
+        val owner = accountIdProvider()
+        refreshJob = viewModelScope.launch {
+            fun current() = generation == refreshGeneration && accountIdProvider() == owner
+            try {
+                val cached = withContext(Dispatchers.IO) { cache?.load(owner)?.handovers.orEmpty() }
+                if (!current()) return@launch
+                val visible = _state.value.handovers.ifEmpty { cached }
+                _state.value = RecyclerOrdersState(loading = visible.isEmpty(), handovers = visible, showingCachedEvidence = visible.isNotEmpty())
+                val items = api.getSupplyHandovers().requireData()
+                if (!current()) return@launch
+                _state.value = RecyclerOrdersState(loading = false, handovers = items)
+                withContext(Dispatchers.IO) {
+                    if (current()) {
+                        val prior = cache?.load(owner) ?: FormalisationSnapshot()
+                        cache?.save(owner, prior.copy(handovers = items))
+                    }
                 }
-                .onFailure { _state.value = RecyclerOrdersState(loading = false, handovers = cached, error = cached.isEmpty(), showingCachedEvidence = cached.isNotEmpty()) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (current()) {
+                    _state.value = _state.value.copy(loading = false, error = _state.value.handovers.isEmpty(), showingCachedEvidence = _state.value.handovers.isNotEmpty())
+                }
+            }
         }
     }
 }
@@ -69,10 +87,8 @@ data class RecyclerScanState(
 
 class RecyclerScanViewModel(
     private val api: ApiService,
-    private val queue: SyncQueueDao? = null,
     private val cache: FormalisationCacheStore? = null,
     private val accountIdProvider: () -> String? = { null },
-    private val requestSync: (() -> Unit)? = null,
     private val idempotencyKeys: IdempotencyKeyStore? = null
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerScanState())
@@ -115,15 +131,7 @@ class RecyclerScanViewModel(
                     val key = idempotencyKeys?.getOrCreate(operation) ?: operation
                     runCatching { api.confirmSupplyHandover(request, key).requireData() }
                         .onSuccess { result -> idempotencyKeys?.clear(operation); _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false) }
-                        .onFailure { error ->
-                            val transient = error is java.io.IOException || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode == 408) || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode == 429) || ((error as? com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException)?.httpCode ?: 0) >= 500
-                            if (transient && queue != null) {
-                                val payload = JsonObject().apply { addProperty("handoverId", supply.id); addProperty("qrCodeData", supply.qrCodeData.orEmpty()); addProperty("actualWeightKg", actualWeight); addProperty("acceptedWeightKg", actualWeight); addProperty("materialMatch", materialMatch); addProperty("idempotencyKey", key); addProperty("idempotencyOperation", operation); notes?.trim()?.takeIf(String::isNotEmpty)?.let { addProperty("reasonCode", it) } }
-                                queue.enqueue(SyncQueueItemEntity(operation = "CONFIRM_SUPPLY_HANDOVER", payloadJson = Gson().toJson(payload), createdAtEpochMs = System.currentTimeMillis(), accountId = accountIdProvider()))
-                                requestSync?.invoke()
-                                _state.value = _state.value.copy(confirming = false, supplyQueued = true, supplyVerified = supply.copy(status = "SYNC_PENDING", finalAcceptedKg = actualWeight, finalValue = actualWeight * supply.quotedRatePerKg))
-                            } else _state.value = _state.value.copy(confirming = false, error = true)
-                        }
+                        .onFailure { _state.value = _state.value.copy(confirming = false, supplyQueued = false, error = true) }
                 } finally {
                     confirmGate.exit()
                     }

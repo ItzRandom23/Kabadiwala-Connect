@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 
 /** Real collector authentication against the versioned backend API. */
 class RemoteAuthenticationRepository(
@@ -47,6 +48,7 @@ class RemoteAuthenticationRepository(
     // in flight. Serialize credential replacement so an old refresh response
     // cannot overwrite credentials issued by a newer login.
     private val credentialMutex = Mutex()
+    private val profileRequestVersion = AtomicLong(0)
 
     private suspend fun persistAuthenticatedSession(
         token: String,
@@ -57,6 +59,7 @@ class RemoteAuthenticationRepository(
         onSessionWillChange()
         session.save(token, expiry, refreshToken)
         storage?.saveAccount(profile)
+        storage?.put(SecureStorage.LAST_AUTHENTICATED_AT, System.currentTimeMillis().toString())
     }
 
     override suspend fun requestOtp(phoneNumber: String): OtpChallenge {
@@ -258,6 +261,7 @@ class RemoteAuthenticationRepository(
                     null
                 } else {
                     session.save(refreshed.token, expiry, refreshed.refreshToken)
+                    storage?.put(SecureStorage.LAST_AUTHENTICATED_AT, System.currentTimeMillis().toString())
                     refreshed.token
                 }
             }
@@ -279,6 +283,7 @@ class RemoteAuthenticationRepository(
     }
 
     override suspend fun refreshAccount(): AccountProfile? = runCatching {
+        val requestVersion = profileRequestVersion.get()
         val stamp = AuthenticatedSessionStamp(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))
         if (!session.isSessionValid() && refreshAccessToken() == null) return@runCatching null
         if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) return@runCatching storage?.readAccount()
@@ -288,10 +293,12 @@ class RemoteAuthenticationRepository(
         // from encrypted storage while the rotating session is refreshed.
         storage?.readAccount()?.takeIf { it.role == AccountRole.ADMIN }?.let { return@runCatching it }
         val remote = api.getAccountProfile().requireData().toDomain()
+        if (requestVersion != profileRequestVersion.get()) return@runCatching null
         if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) return@runCatching storage?.readAccount()
         // Role is an authorization result owned by the server. Never preserve
         // or synthesize a local presentation role across refreshes.
         storage?.saveAccount(remote)
+        storage?.put(SecureStorage.LAST_AUTHENTICATED_AT, System.currentTimeMillis().toString())
         remote
     }.onFailure {
         if (it is CancellationException) throw it
@@ -300,6 +307,7 @@ class RemoteAuthenticationRepository(
     }.getOrNull()
 
     override suspend fun updateAccountProfile(update: AccountProfileUpdate): AccountProfile {
+        val requestVersion = profileRequestVersion.incrementAndGet()
         val stamp = AuthenticatedSessionStamp(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))
         val result = api.updateAccountProfile(
             AccountProfileUpdateRequestDto(
@@ -313,7 +321,7 @@ class RemoteAuthenticationRepository(
                 preferredLanguage = update.preferredLanguage?.let(LocaleManager::toBackendName)
             )
         ).requireData().toDomain()
-        if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID))) {
+        if (!stamp.matches(sessionGenerationProvider(), storage?.get(SecureStorage.ACCOUNT_PROFILE_ID)) || requestVersion != profileRequestVersion.get()) {
             return storage?.readAccount() ?: result
         }
         storage?.saveAccount(result)

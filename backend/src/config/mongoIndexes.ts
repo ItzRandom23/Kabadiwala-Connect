@@ -15,7 +15,21 @@ const requiredIndexes = [
   { collection: 'RefreshToken', name: 'RefreshToken_familyId_createdAt_idx', key: { familyId: 1, createdAt: 1 } },
   { collection: 'LoginAudit', name: 'LoginAudit_actorId_createdAt_idx', key: { actorId: 1, createdAt: 1 } },
   { collection: 'LoginAudit', name: 'LoginAudit_outcome_createdAt_idx', key: { outcome: 1, createdAt: 1 } },
-  { collection: 'RequestRateLimit', name: 'RequestRateLimit_resetAt_idx', key: { resetAt: 1 } }
+  { collection: 'RequestRateLimit', name: 'RequestRateLimit_resetAt_idx', key: { resetAt: 1 } },
+  { collection: 'HouseholdListing', name: 'HouseholdListing_householdId_createdAt_id_idx', key: { householdId: 1, createdAt: 1, id: 1 } },
+  { collection: 'PickupRequest', name: 'PickupRequest_householdId_createdAt_id_idx', key: { householdId: 1, createdAt: 1, id: 1 } },
+  { collection: 'PickupRequest', name: 'PickupRequest_kabadiwalaId_createdAt_id_idx', key: { kabadiwalaId: 1, createdAt: 1, id: 1 } },
+  { collection: 'PickupRequest', name: 'PickupRequest_kabadiwalaId_status_createdAt_id_idx', key: { kabadiwalaId: 1, status: 1, createdAt: 1, id: 1 } },
+  { collection: 'PickupRequest', name: 'PickupRequest_status_kabadiwalaId_createdAt_id_idx', key: { status: 1, kabadiwalaId: 1, createdAt: 1, id: 1 } },
+  { collection: 'NotificationEvent', name: 'NotificationEvent_accountId_createdAt_id_idx', key: { accountId: 1, createdAt: 1, id: 1 } },
+  { collection: 'ChatMessage', name: 'ChatMessage_conversationId_createdAt_id_idx', key: { conversationId: 1, createdAt: 1, id: 1 } },
+  { collection: 'PickupChatMessage', name: 'PickupChatMessage_conversationId_createdAt_id_idx', key: { conversationId: 1, createdAt: 1, id: 1 } },
+  { collection: 'InventoryMovement', name: 'InventoryMovement_kabadiwalaId_createdAt_id_idx', key: { kabadiwalaId: 1, createdAt: 1, id: 1 } },
+  { collection: 'BulkLot', name: 'BulkLot_kabadiwalaId_createdAt_id_idx', key: { kabadiwalaId: 1, createdAt: 1, id: 1 } },
+  { collection: 'BulkLot', name: 'BulkLot_status_createdAt_id_idx', key: { status: 1, createdAt: 1, id: 1 } },
+  { collection: 'BulkOffer', name: 'BulkOffer_recyclerId_createdAt_id_idx', key: { recyclerId: 1, createdAt: 1, id: 1 } },
+  { collection: 'BulkOffer', name: 'BulkOffer_bulkLotId_createdAt_id_idx', key: { bulkLotId: 1, createdAt: 1, id: 1 } },
+  { collection: 'ProcurementRequirement', name: 'ProcurementRequirement_recyclerId_createdAt_id_idx', key: { recyclerId: 1, createdAt: 1, id: 1 } }
 ] as const;
 
 const optionalUniqueIndexes = [

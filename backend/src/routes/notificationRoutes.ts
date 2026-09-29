@@ -24,8 +24,9 @@ export const notificationRoutes = (jwt: JwtService, db: PrismaClient) => {
     .get('/', async (req, res) => {
       const unreadOnly = req.query.unread === 'true';
       const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 50;
-      const items = await service.list(req.identity!.collectorId, unreadOnly, Number.isFinite(limit) ? limit : 50);
-      res.json({ success: true, data: items, message: 'Notifications retrieved' });
+      const cursor = typeof req.query.cursor === 'string' && req.query.cursor.length <= 128 ? req.query.cursor : undefined;
+      const page = await service.page(req.identity!.collectorId, unreadOnly, Number.isFinite(limit) ? limit : 50, cursor);
+      res.json({ success: true, data: page.items, page: { nextCursor: page.nextCursor }, message: 'Notifications retrieved' });
     })
     .get('/unread-count', async (req, res) => {
       res.json({ success: true, data: { count: await service.unreadCount(req.identity!.collectorId) }, message: 'Unread count retrieved' });

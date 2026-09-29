@@ -8,6 +8,8 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 // Firebase configuration is deployment-owned. Local builds remain useful
 // without google-services.json; configured builds apply the official plugin.
 if (file("google-services.json").isFile) {
@@ -137,8 +139,8 @@ android {
         // while supporting Room / DataStore / WorkManager / security-crypto.
         minSdk = 23
         targetSdk = 37
-        versionCode = 69
-        versionName = "0.1.5-beta"
+        versionCode = 70
+        versionName = "0.1.6-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

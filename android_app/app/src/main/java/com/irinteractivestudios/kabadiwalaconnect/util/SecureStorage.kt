@@ -29,6 +29,7 @@ interface SecureStorage {
         const val COLLECTOR_ID = "collector_id"
 
         const val SESSION_EXPIRY = "session_expiry"
+        const val LAST_AUTHENTICATED_AT = "last_authenticated_at"
         const val ACCOUNT_EMAIL = "account_email"
         const val ACCOUNT_PHONE = "account_phone"
         const val ACCOUNT_DISPLAY_NAME = "account_display_name"

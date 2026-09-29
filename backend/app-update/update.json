@@ -1,8 +1,8 @@
 {
-  "versionCode": 69,
-  "versionName": "0.1.5-beta",
-  "apkUrl": "kabadiwala-connect-0.1.5-beta-debug.apk",
-  "sha256": "B02BFE1E5501C1101A03C088A1A00C30150C15D244D7FCBDD745B91B353B334B",
-  "sizeBytes": 28901025,
-  "releaseNotes": "Improved recycler verification and onboarding, pickup pricing and collection workflows, supply chain offers, and local price guidance."
+  "versionCode": 70,
+  "versionName": "0.1.6-beta",
+  "apkUrl": "kabadiwala-connect-0.1.6-beta-debug.apk",
+  "sha256": "448E7D8471B8F9098734994553BB1DD65849027E56C914D3D58BB4CBE28BF4C6",
+  "sizeBytes": 29018986,
+  "releaseNotes": "Improved offline read-only access, sync reliability, account-scoped notifications, pickup history, and pickup hours (7:30 AM–6:30 PM India time)."
 }

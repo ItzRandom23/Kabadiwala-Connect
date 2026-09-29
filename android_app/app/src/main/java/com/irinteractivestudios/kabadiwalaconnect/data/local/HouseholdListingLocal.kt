@@ -43,6 +43,9 @@ interface HouseholdListingCacheDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<HouseholdListingCacheEntity>)
 
+    @Query("DELETE FROM household_listings WHERE accountId = :accountId AND synced = 1 AND id IN (SELECT id FROM household_listings WHERE accountId = :accountId AND synced = 1 ORDER BY createdAtEpochMs DESC LIMIT -1 OFFSET 1000)")
+    suspend fun pruneSyncedForAccount(accountId: String)
+
     @Query("DELETE FROM household_listings WHERE id = :listingId AND accountId = :accountId")
     suspend fun removeForAccount(listingId: String, accountId: String)
 

@@ -15,10 +15,13 @@ import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadD
 import com.irinteractivestudios.kabadiwalaconnect.data.local.PendingPhotoUploadEntity
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueDao
 import com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity
+import com.irinteractivestudios.kabadiwalaconnect.data.local.RoomSupplySnapshotStore
+import com.irinteractivestudios.kabadiwalaconnect.data.local.SupplySnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.auth.SessionSnapshot
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.*
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountRole
 import com.irinteractivestudios.kabadiwalaconnect.util.ImagePipeline
+import com.irinteractivestudios.kabadiwalaconnect.util.UiActionTrace
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import okhttp3.MultipartBody
@@ -52,6 +55,11 @@ data class SupplyChainState(
     val initialLoadComplete: Boolean = false,
     val error: String? = null,
     val listings: List<HouseholdListingDto> = emptyList(),
+    val householdListingsNextCursor: String? = null,
+    val householdPickupsNextCursor: String? = null,
+    val collectorAssignedNextCursor: String? = null,
+    val collectorWaitingNextCursor: String? = null,
+    val collectorHistoryNextCursor: String? = null,
     val kabadiwalas: List<KabadiwalaProfileDto> = emptyList(),
     val kabadiwalaRadiusKm: Int = 25,
     val kabadiwalaAreaQuery: String = "",
@@ -73,7 +81,12 @@ data class SupplyChainState(
     val inventoryMovements: List<InventoryMovementDto> = emptyList(),
     val bulkLots: List<BulkLotDto> = emptyList(),
     val offers: List<BulkOfferDto> = emptyList(),
+    val collectorLotsNextCursor: String? = null,
+    val collectorOffersNextCursor: String? = null,
     val requirements: List<ProcurementRequirementDto> = emptyList(),
+    val recyclerLotsNextCursor: String? = null,
+    val recyclerOffersNextCursor: String? = null,
+    val recyclerRequirementsNextCursor: String? = null,
     val routeAdvantage: RouteAdvantageResponseDto? = null,
     val poolOpportunities: List<PoolOpportunityDto> = emptyList(),
     val poolSuggestions: List<PoolSuggestionDto> = emptyList(),
@@ -136,7 +149,8 @@ class SupplyChainViewModel(
     private val languageProvider: () -> String = { LocaleManager.ENGLISH },
     private val initialHouseholdArea: () -> String? = { null },
     private val initialHouseholdLocation: () -> CurrentLocation? = { null },
-    private val sessionSnapshots: StateFlow<SessionSnapshot>? = null
+    private val sessionSnapshots: StateFlow<SessionSnapshot>? = null,
+    private val supplySnapshotStore: RoomSupplySnapshotStore? = null
 ) : ViewModel() {
     private fun newHouseholdSearchState() = initialHouseholdLocation().let { location ->
         SupplyChainState(
@@ -149,14 +163,22 @@ class SupplyChainViewModel(
     val state: StateFlow<SupplyChainState> = _state.asStateFlow()
     private var stateAccountId: String? = null
     private var householdRefreshGeneration = 0L
+    private var directorySearchGeneration = 0L
+    private var directorySearchJob: Job? = null
+    private var directoryPageJob: Job? = null
+    private var profileLoadGeneration = 0L
+    private var profileLoadJob: Job? = null
     private var householdRefreshJob: Job? = null
     private var pendingHouseholdRefresh: HouseholdRefreshRequest? = null
     private var householdQueueObservationJob: Job? = null
     private var householdQueueObservationAccountId: String? = null
+    private var observedAuthenticatedAccountId: String? = null
     private var supplyRefreshGeneration = 0L
     private var supplyRefreshJob: Job? = null
     private var materialDetectionJob: Job? = null
     private var householdPriceEstimateJob: Job? = null
+    private val actionJobs = mutableMapOf<String, Job>()
+    private val terminalCollectorPickupStatuses = setOf("COMPLETED", "CANCELLED", "REJECTED")
 
     private data class HouseholdRefreshRequest(val radiusKm: Int, val areaQuery: String)
 
@@ -170,14 +192,26 @@ class SupplyChainViewModel(
                 snapshots.collect { snapshot ->
                     val account = snapshot.account
                     if (!snapshot.restorable || account == null) {
+                        observedAuthenticatedAccountId = null
+                        actionJobs.values.toList().forEach(Job::cancel)
+                        actionJobs.clear()
                         observePendingPickupQueue(null)
                         householdRefreshGeneration++
                         pendingHouseholdRefresh = null
                         householdRefreshJob?.cancel()
                         householdRefreshJob = null
+                        directorySearchGeneration++
+                        directorySearchJob?.cancel()
+                        directoryPageJob?.cancel()
+                        profileLoadGeneration++
+                        profileLoadJob?.cancel()
                         supplyRefreshGeneration++
                         supplyRefreshJob?.cancel()
-                    } else if ((stateAccountId == null || stateAccountId == account.profileId) && accountId() == account.profileId) {
+                    } else if (observedAuthenticatedAccountId != account.profileId && accountId() == account.profileId) {
+                        // Profile saves and verification updates publish a new
+                        // account snapshot. They do not invalidate all supply
+                        // data or justify another full dashboard request fanout.
+                        observedAuthenticatedAccountId = account.profileId
                         observePendingPickupQueue(account.profileId.takeIf { account.role == AccountRole.HOUSEHOLD })
                         when (account.role) {
                             AccountRole.HOUSEHOLD -> refreshHousehold()
@@ -201,8 +235,8 @@ class SupplyChainViewModel(
             message.contains("QR is invalid or expired", ignoreCase = true) -> "This QR is invalid or expired. Ask the household to refresh it and scan again."
             message.contains("reason code is required", ignoreCase = true) -> "Choose why the final material, weight, or value differs from the listing."
             message.contains("already been scanned", ignoreCase = true) -> "This pickup was already verified. Refresh the pickup list to see the update."
-            code in setOf("HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED") || remote?.httpCode == 401 -> "Your session expired. Please sign in again."
-            remote?.code == "HTTP_403" || remote?.httpCode == 403 -> "This action is not available for your role."
+            code in setOf("HTTP_401", "AUTHENTICATION_REQUIRED", "TOKEN_EXPIRED") || remote?.httpCode == 401 -> error.toAppFailure().message
+            remote?.code == "HTTP_403" || remote?.httpCode == 403 -> error.toAppFailure().message
             code == "EMPTY_RESPONSE" -> "The server returned an incomplete response. Please try again."
             code in setOf("INVALID_PHOTO", "PHOTO_REQUIRED", "PHOTO_UPLOAD_FAILED") -> "That photo could not be uploaded. Choose another clear image and retry."
             code == "PHOTO_STORAGE_UNAVAILABLE" -> "Photo upload is temporarily unavailable. Your listing was not posted; try again later."
@@ -210,7 +244,7 @@ class SupplyChainViewModel(
             remote?.httpCode == 409 -> message.ifBlank { "That record changed. Refresh and try again." }
             remote?.httpCode == 422 -> message.takeUnless { it == "Invalid request" }.orEmpty().ifBlank { "Review the required details and try again." }
             error is IllegalStateException && error.message?.contains("photo", ignoreCase = true) == true -> "The selected photo is no longer available. Choose it again."
-            error is IOException -> "Connection issue. Check your internet and retry."
+            error is IOException -> error.toAppFailure().message
             remote?.httpCode != null && remote.httpCode >= 500 -> "The server couldn't finish this action. Check your connection and try again."
             !remote?.message.isNullOrBlank() -> remote.message
             else -> "Could not complete this action. Please try again."
@@ -266,10 +300,17 @@ class SupplyChainViewModel(
     private fun resetForAccountChange() {
         val current = accountId()?.takeIf { it.isNotBlank() }
         if (current == stateAccountId) return
+        actionJobs.values.toList().forEach(Job::cancel)
+        actionJobs.clear()
         householdRefreshGeneration++
         pendingHouseholdRefresh = null
         householdRefreshJob?.cancel()
         householdRefreshJob = null
+        directorySearchGeneration++
+        directorySearchJob?.cancel()
+        directoryPageJob?.cancel()
+        profileLoadGeneration++
+        profileLoadJob?.cancel()
         supplyRefreshGeneration++
         supplyRefreshJob?.cancel()
         materialDetectionJob?.cancel()
@@ -296,8 +337,10 @@ class SupplyChainViewModel(
         val account = accountId()?.takeIf { it.isNotBlank() } ?: return remote
         val cache = householdListingCache ?: return remote
         val local = cache.findForAccount(account).map { it.toHouseholdListing() }
-        val pending = local.filter { cached -> cached.id !in remote.map { it.id }.toSet() && cached.status == "PENDING_SYNC" }
+        val remoteIds = remote.mapTo(HashSet(remote.size)) { it.id }
+        val pending = local.filter { cached -> cached.id !in remoteIds && cached.status == "PENDING_SYNC" }
         cache.upsertAll(remote.map { it.toCacheEntity(account, synced = true) })
+        cache.pruneSyncedForAccount(account)
         return (remote + pending).distinctBy { it.id }
     }
 
@@ -333,8 +376,9 @@ class SupplyChainViewModel(
         )
     }
 
-    private fun saveCache() {
-        cache?.save(accountId(), FormalisationSnapshot(
+    private suspend fun saveCache() {
+        val owner = accountId()
+        val snapshot = FormalisationSnapshot(
             routeAdvantage = _state.value.routeAdvantage,
             poolOpportunities = _state.value.poolOpportunities,
             pools = _state.value.pools,
@@ -343,7 +387,8 @@ class SupplyChainViewModel(
             handovers = _state.value.handovers,
             passport = _state.value.passport,
             safety = _state.value.safety
-        ))
+        )
+        withContext(Dispatchers.IO) { cache?.save(owner, snapshot) }
     }
 
     fun refreshHousehold(radiusKm: Int? = null, areaQuery: String? = null) {
@@ -358,6 +403,7 @@ class SupplyChainViewModel(
             return
         }
         val generation = ++householdRefreshGeneration
+        val directoryGeneration = directorySearchGeneration
         val refreshAccount = accountId()
         householdRefreshJob = viewModelScope.launch {
             try {
@@ -382,8 +428,8 @@ class SupplyChainViewModel(
                 // These reads are independent. Starting them together means a
                 // slow pickup or directory response cannot delay the listing
                 // result that the Household is waiting to see.
-                val listingsRequest = async { fetch { mergeHouseholdListings(api.getHouseholdListings().requireData()) } }
-                val pickupsRequest = async { fetch { api.getHouseholdPickups().requireData() } }
+                val listingsRequest = async { fetch { api.getHouseholdListings(limit = 50).also { it.requireData() } } }
+                val pickupsRequest = async { fetch { api.getHouseholdPickups(limit = 50).also { it.requireData() } } }
                 val directoryRequest = async {
                     fetch {
                         api.getHouseholdKabadiwalas(
@@ -396,9 +442,10 @@ class SupplyChainViewModel(
                 }
                 val listingsResult = listingsRequest.await()
                 if (!current()) return@launch
-                listingsResult.onSuccess {
+                listingsResult.onSuccess { response ->
                     _state.value = _state.value.copy(
-                        listings = it,
+                        listings = mergeHouseholdListings(response.requireData()),
+                        householdListingsNextCursor = response.body()?.page?.nextCursor,
                         householdListingsLoading = false,
                         householdListingsLoaded = true
                     )
@@ -415,7 +462,7 @@ class SupplyChainViewModel(
                     }
                 val pickupsResult = pickupsRequest.await()
                 if (!current()) return@launch
-                pickupsResult.onSuccess { _state.value = _state.value.copy(pickups = it) }
+                pickupsResult.onSuccess { response -> _state.value = _state.value.copy(pickups = response.requireData(), householdPickupsNextCursor = response.body()?.page?.nextCursor) }
                     .onFailure { error ->
                         Log.e("HouseholdRefresh", "Failed loading pickups (${error::class.java.simpleName})")
                         failures += householdRefreshError(error, "your pickup history")
@@ -423,7 +470,7 @@ class SupplyChainViewModel(
                 val directoryResult = directoryRequest.await()
                 if (!current()) return@launch
                 directoryResult.onSuccess { directory ->
-                    _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
+                    if (directoryGeneration == directorySearchGeneration) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaRadiusKm = requestedRadiusKm, kabadiwalaAreaQuery = requestedArea, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation)
                 }.onFailure { error ->
                     Log.e("HouseholdRefresh", "Failed loading directory (${error::class.java.simpleName})")
                     failures += householdRefreshError(error, "nearby Kabadiwalas")
@@ -458,45 +505,90 @@ class SupplyChainViewModel(
         return failures.first()
     }
 
+    fun loadMoreHouseholdHistory() {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        val listingsCursor = _state.value.householdListingsNextCursor
+        val pickupsCursor = _state.value.householdPickupsNextCursor
+        if (listingsCursor == null && pickupsCursor == null) return
+        val owner = accountId()
+        val busyKey = "household-history-page"
+        if (busyKey in _state.value.busy) return
+        _state.value = _state.value.copy(busy = _state.value.busy + busyKey)
+        viewModelScope.launch {
+            try {
+                val listingsRequest = listingsCursor?.let { cursor -> async { fetch { api.getHouseholdListings(limit = 50, cursor = cursor).also { it.requireData() } } } }
+                val pickupsRequest = pickupsCursor?.let { cursor -> async { fetch { api.getHouseholdPickups(limit = 50, cursor = cursor).also { it.requireData() } } } }
+                listingsRequest?.await()?.onSuccess { response ->
+                    if (accountId() == owner && _state.value.householdListingsNextCursor == listingsCursor) {
+                        _state.value = _state.value.copy(
+                            listings = mergeHouseholdListings((_state.value.listings + response.requireData()).distinctBy { it.id }),
+                            householdListingsNextCursor = response.body()?.page?.nextCursor
+                        )
+                    }
+                }?.onFailure { if (accountId() == owner) _state.value = _state.value.copy(error = friendly(it)) }
+                pickupsRequest?.await()?.onSuccess { response ->
+                    if (accountId() == owner && _state.value.householdPickupsNextCursor == pickupsCursor) {
+                        _state.value = _state.value.copy(
+                            pickups = (_state.value.pickups + response.requireData()).distinctBy { it.id },
+                            householdPickupsNextCursor = response.body()?.page?.nextCursor
+                        )
+                    }
+                }?.onFailure { if (accountId() == owner) _state.value = _state.value.copy(error = friendly(it)) }
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(busy = _state.value.busy - busyKey)
+            }
+        }
+    }
+
     fun searchHouseholdKabadiwalas(area: String, radiusKm: Int = _state.value.kabadiwalaRadiusKm, location: CurrentLocation? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        resetForAccountChange()
+        directorySearchJob?.cancel()
+        directoryPageJob?.cancel()
+        val generation = ++directorySearchGeneration
+        val owner = accountId()
         val query = area.trim()
         if (location == null && query.isBlank()) {
             _state.value = _state.value.copy(kabadiwalaAreaQuery = "", kabadiwalaLatitude = null, kabadiwalaLongitude = null, kabadiwalas = emptyList(), kabadiwalaRequiresLocation = true, kabadiwalaHasMore = false)
             return
         }
-        resetForAccountChange()
         _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaLoading = true, error = null)
-        viewModelScope.launch {
+        directorySearchJob = viewModelScope.launch {
             runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
-                    _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
+                    if (generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalas = directory.items, kabadiwalaPage = 1, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaRequiresLocation = directory.requiresLocation, kabadiwalaLoading = false, error = null)
                 }
-                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
+                .onFailure { error -> if (error !is CancellationException && generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
         }
     }
     fun loadMoreHouseholdKabadiwalas() {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
         val current = _state.value
         if (current.kabadiwalaLoading || !current.kabadiwalaHasMore) return
+        val generation = directorySearchGeneration
+        val owner = accountId()
         _state.value = current.copy(kabadiwalaLoading = true)
-        viewModelScope.launch {
+        directoryPageJob = viewModelScope.launch {
             runCatching { api.getHouseholdKabadiwalas(current.kabadiwalaLatitude, current.kabadiwalaLongitude, current.kabadiwalaRadiusKm, current.kabadiwalaAreaQuery.ifBlank { null }, current.kabadiwalaPage + 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
-                    _state.value = _state.value.copy(kabadiwalas = _state.value.kabadiwalas + directory.items, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
+                    if (generation == directorySearchGeneration && accountId() == owner && _state.value.kabadiwalaPage == current.kabadiwalaPage) _state.value = _state.value.copy(kabadiwalas = (_state.value.kabadiwalas + directory.items).distinctBy { it.id }, kabadiwalaPage = directory.pagination.page, kabadiwalaHasMore = directory.pagination.page < directory.pagination.totalPages, kabadiwalaLoading = false)
                 }
-                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
+                .onFailure { error -> if (error !is CancellationException && generation == directorySearchGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalaLoading = false, error = friendly(error)) }
         }
     }
     fun openKabadiwalaProfile(kabadiwalaId: String, latitude: Double? = null, longitude: Double? = null) {
         if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        profileLoadJob?.cancel()
+        val generation = ++profileLoadGeneration
+        val owner = accountId()
         _state.value = _state.value.copy(selectedKabadiwalaId = kabadiwalaId, kabadiwalaProfile = null, kabadiwalaProfileLoading = true, error = null)
-        viewModelScope.launch {
+        profileLoadJob = viewModelScope.launch {
             runCatching { api.getHouseholdKabadiwala(kabadiwalaId, latitude ?: _state.value.kabadiwalaLatitude, longitude ?: _state.value.kabadiwalaLongitude).requireData() }
-                .onSuccess { profile -> _state.value = _state.value.copy(kabadiwalaProfile = profile, kabadiwalaProfileLoading = false) }
-                .onFailure { error -> _state.value = _state.value.copy(kabadiwalaProfileLoading = false, error = friendly(error)) }
+                .onSuccess { profile -> if (generation == profileLoadGeneration && accountId() == owner && _state.value.selectedKabadiwalaId == kabadiwalaId) _state.value = _state.value.copy(kabadiwalaProfile = profile, kabadiwalaProfileLoading = false) }
+                .onFailure { error -> if (error !is CancellationException && generation == profileLoadGeneration && accountId() == owner) _state.value = _state.value.copy(kabadiwalaProfileLoading = false, error = friendly(error)) }
         }
     }
-    fun closeKabadiwalaProfile() { _state.value = _state.value.copy(selectedKabadiwalaId = null, kabadiwalaProfile = null, kabadiwalaProfileLoading = false) }
+    fun closeKabadiwalaProfile() { profileLoadJob?.cancel(); profileLoadGeneration++; _state.value = _state.value.copy(selectedKabadiwalaId = null, kabadiwalaProfile = null, kabadiwalaProfileLoading = false) }
     fun increaseHouseholdRadius() {
         val next = when (_state.value.kabadiwalaRadiusKm) { 5 -> 10; 10 -> 25; 25 -> 50; 50 -> 100; 100 -> 200; else -> 200 }
         if (next != _state.value.kabadiwalaRadiusKm) searchHouseholdKabadiwalas(_state.value.kabadiwalaAreaQuery, next, _state.value.kabadiwalaLatitude?.let { CurrentLocation(it, _state.value.kabadiwalaLongitude ?: return, _state.value.kabadiwalaAreaQuery) })
@@ -507,48 +599,179 @@ class SupplyChainViewModel(
         // Always let the newest collector refresh replace an in-flight one.
         // Otherwise a queue read started before accept/reject can finish last
         // and put the old REQUESTED row back on screen.
-        cache?.load(accountId())?.let(::applyCached)
-        load { current ->
+        load { current -> coroutineScope {
+        val savedSupply = withContext(Dispatchers.IO) { supplySnapshotStore?.load(accountId(), "COLLECTOR") }
+        if (current() && savedSupply != null && _state.value.pickups.isEmpty() && _state.value.inventory.isEmpty()) {
+            _state.value = _state.value.copy(listings = savedSupply.first.listings, pickups = savedSupply.first.pickups, inventory = savedSupply.first.inventory, cachedAtEpochMs = savedSupply.second, showingCachedEvidence = true)
+        }
+        val cached = withContext(Dispatchers.IO) { cache?.load(accountId()) }
+        if (current()) cached?.let(::applyCached)
         var partialFailure = false
         suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
         val previous = _state.value
-        val listings = optional(previous.listings) { api.getKabadiwalaListings().requireData() }
-        val pickups = optional(previous.pickups) { api.getKabadiwalaPickups().requireData() }
-        val inventory = optional(previous.inventory) { api.getKabadiwalaInventory().requireData() }
-        val inventoryMovements = optional(previous.inventoryMovements) { api.getInventoryMovements(limit = 100).requireData() }
-        val requirements = optional(previous.requirements) { api.getProcurementRequirements().requireData() }
-        val offers = optional(previous.offers) { api.getKabadiwalaBulkOffers().requireData() }
-        val bulkLots = optional(previous.bulkLots) { api.getKabadiwalaBulkLots().requireData() }
-        val opportunities = optional(previous.poolOpportunities) { api.getPoolOpportunities().requireData() }
-        val suggestions = optional(previous.poolSuggestions) { api.getPoolSuggestions().requireData() }
-        val demandIntelligence = optional(previous.demandIntelligence) { api.getDemandIntelligence().requireData() }
-        val pools = optional(previous.pools) { api.getKabadiwalaPools().requireData() }
-        val handovers = optional(previous.handovers) { api.getKabadiwalaHandovers().requireData() }
-        val passport = optional(previous.passport) { api.getCollectorPassport().requireData() }
-        val safety = optional(previous.safety) { api.getSafety().requireData() }
-        if (!current()) return@load
+        // Start independent requests together. The former serial chain made
+        // every dashboard visit wait for the sum of fourteen network latencies.
+        val assignedRequest = async {
+            optional(previous.pickups.filter { it.status !in terminalCollectorPickupStatuses && it.kabadiwalaId != null }) {
+                val response = api.getKabadiwalaPickups(limit = 50, scope = "assigned")
+                val rows = response.requireData()
+                if (current()) _state.value = _state.value.copy(collectorAssignedNextCursor = response.body()?.page?.nextCursor)
+                rows
+            }.also { if (current()) _state.value = _state.value.copy(pickups = (it + previous.pickups.filter { old -> old.kabadiwalaId == null || old.status in terminalCollectorPickupStatuses }).distinctBy { pickup -> pickup.id }) }
+        }
+        val waitingRequest = async { optional(previous.pickups.filter { it.status == "WAITING_FOR_PICKUP" && it.kabadiwalaId == null }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "waiting"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorWaitingNextCursor = response.body()?.page?.nextCursor); rows } }
+        val historyRequest = async { optional(previous.pickups.filter { it.status in terminalCollectorPickupStatuses }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "history"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorHistoryNextCursor = response.body()?.page?.nextCursor); rows } }
+        val inventoryRequest = async { optional(previous.inventory) { api.getKabadiwalaInventory().requireData() }.also { if (current()) _state.value = _state.value.copy(inventory = it) } }
+        val movementsRequest = async { optional(previous.inventoryMovements) { api.getInventoryMovements(limit = 100).requireData() } }
+        val requirementsRequest = async { optional(previous.requirements) { api.getProcurementRequirements().requireData() } }
+        val offersRequest = async { optional(previous.offers) { val response = api.getKabadiwalaBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorOffersNextCursor = response.body()?.page?.nextCursor); rows } }
+        val bulkLotsRequest = async { optional(previous.bulkLots) { val response = api.getKabadiwalaBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorLotsNextCursor = response.body()?.page?.nextCursor); rows } }
+        val opportunitiesRequest = async { optional(previous.poolOpportunities) { api.getPoolOpportunities().requireData() } }
+        val suggestionsRequest = async { optional(previous.poolSuggestions) { api.getPoolSuggestions().requireData() } }
+        val intelligenceRequest = async { optional(previous.demandIntelligence) { api.getDemandIntelligence().requireData() } }
+        val poolsRequest = async { optional(previous.pools) { api.getKabadiwalaPools().requireData() } }
+        val handoversRequest = async { optional(previous.handovers) { api.getKabadiwalaHandovers().requireData() } }
+        val passportRequest = async { optional(previous.passport) { api.getCollectorPassport().requireData() } }
+        val safetyRequest = async { optional(previous.safety) { api.getSafety().requireData() } }
+        val pickups = (assignedRequest.await() + waitingRequest.await() + historyRequest.await()).distinctBy { it.id }
+        val listings = optional(previous.listings) {
+            pickups.chunked(50).map { page -> async { api.getKabadiwalaListings(page.joinToString(",") { it.id }).requireData() } }.awaitAll().flatten()
+        }
+        if (current()) _state.value = _state.value.copy(listings = listings)
+        val inventory = inventoryRequest.await()
+        val inventoryMovements = movementsRequest.await()
+        val requirements = requirementsRequest.await()
+        val offers = offersRequest.await()
+        val bulkLots = bulkLotsRequest.await()
+        val opportunities = opportunitiesRequest.await()
+        val suggestions = suggestionsRequest.await()
+        val demandIntelligence = intelligenceRequest.await()
+        val pools = poolsRequest.await()
+        val handovers = handoversRequest.await()
+        val passport = passportRequest.await()
+        val safety = safetyRequest.await()
+        if (!current()) return@coroutineScope
         _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, listings = listings, pickups = pickups, inventory = inventory, inventoryMovements = inventoryMovements, bulkLots = bulkLots, offers = offers, requirements = requirements, poolOpportunities = opportunities, poolSuggestions = suggestions, demandIntelligence = demandIntelligence, pools = pools, handovers = handovers, passport = passport, safety = safety, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
-        if (!partialFailure) saveCache()
+        if (!partialFailure) {
+            saveCache()
+            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "COLLECTOR", SupplySnapshot(listings = listings, pickups = pickups, inventory = inventory)) }
+        }
+        } }
+    }
+    fun loadMoreCollectorLots() {
+        val cursor = _state.value.collectorLotsNextCursor ?: return
+        val generation = supplyRefreshGeneration
+        action("more-collector-lots", AccountRole.COLLECTOR) {
+            val owner = accountId()
+            val response = api.getKabadiwalaBulkLots(limit = 50, cursor = cursor)
+            val rows = response.requireData()
+            if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.collectorLotsNextCursor == cursor) {
+                _state.value = _state.value.copy(bulkLots = (_state.value.bulkLots + rows).distinctBy { it.id }, collectorLotsNextCursor = response.body()?.page?.nextCursor)
+            }
+            "Older lots loaded."
         }
     }
+    fun loadMoreCollectorOffers() {
+        val cursor = _state.value.collectorOffersNextCursor ?: return
+        val generation = supplyRefreshGeneration
+        action("more-collector-offers", AccountRole.COLLECTOR) {
+            val owner = accountId()
+            val response = api.getKabadiwalaBulkOffers(limit = 50, cursor = cursor)
+            val rows = response.requireData()
+            if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.collectorOffersNextCursor == cursor) {
+                _state.value = _state.value.copy(offers = (_state.value.offers + rows).distinctBy { it.id }, collectorOffersNextCursor = response.body()?.page?.nextCursor)
+            }
+            "Older offers loaded."
+        }
+    }
+    fun loadMoreCollectorPickups() {
+        if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
+        val assignedCursor = _state.value.collectorAssignedNextCursor
+        val waitingCursor = _state.value.collectorWaitingNextCursor
+        val historyCursor = _state.value.collectorHistoryNextCursor
+        if (assignedCursor == null && waitingCursor == null && historyCursor == null) return
+        val owner = accountId()
+        val generation = supplyRefreshGeneration
+        val busyKey = "collector-pickups-page"
+        if (busyKey in _state.value.busy) return
+        _state.value = _state.value.copy(busy = _state.value.busy + busyKey)
+        viewModelScope.launch {
+            try {
+                val newPickupIds = mutableListOf<String>()
+                val assignedRequest = assignedCursor?.let { cursor -> async { fetch { api.getKabadiwalaPickups(limit = 50, cursor = cursor, scope = "assigned").also { it.requireData() } } } }
+                val waitingRequest = waitingCursor?.let { cursor -> async { fetch { api.getKabadiwalaPickups(limit = 50, cursor = cursor, scope = "waiting").also { it.requireData() } } } }
+                val historyRequest = historyCursor?.let { cursor -> async { fetch { api.getKabadiwalaPickups(limit = 50, cursor = cursor, scope = "history").also { it.requireData() } } } }
+                assignedRequest?.await()?.onSuccess { response ->
+                    if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.collectorAssignedNextCursor == assignedCursor) {
+                        newPickupIds += response.requireData().map { it.id }
+                        val current = _state.value.pickups
+                        _state.value = _state.value.copy(
+                            pickups = (current.filter { it.kabadiwalaId != null && it.status !in terminalCollectorPickupStatuses } + response.requireData() + current.filter { it.kabadiwalaId == null || it.status in terminalCollectorPickupStatuses }).distinctBy { it.id },
+                            collectorAssignedNextCursor = response.body()?.page?.nextCursor
+                        )
+                    }
+                }?.onFailure { error -> if (error !is CancellationException && accountId() == owner && generation == supplyRefreshGeneration) _state.value = _state.value.copy(error = friendly(error)) }
+                waitingRequest?.await()?.onSuccess { response ->
+                    if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.collectorWaitingNextCursor == waitingCursor) {
+                        newPickupIds += response.requireData().map { it.id }
+                        val current = _state.value.pickups
+                        _state.value = _state.value.copy(
+                            pickups = (current.filter { it.kabadiwalaId != null && it.status !in terminalCollectorPickupStatuses } + current.filter { it.kabadiwalaId == null } + response.requireData() + current.filter { it.status in terminalCollectorPickupStatuses }).distinctBy { it.id },
+                            collectorWaitingNextCursor = response.body()?.page?.nextCursor
+                        )
+                    }
+                }?.onFailure { error -> if (error !is CancellationException && accountId() == owner && generation == supplyRefreshGeneration) _state.value = _state.value.copy(error = friendly(error)) }
+                historyRequest?.await()?.onSuccess { response ->
+                    if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.collectorHistoryNextCursor == historyCursor) {
+                        newPickupIds += response.requireData().map { it.id }
+                        _state.value = _state.value.copy(
+                            pickups = (_state.value.pickups + response.requireData()).distinctBy { it.id },
+                            collectorHistoryNextCursor = response.body()?.page?.nextCursor
+                        )
+                    }
+                }?.onFailure { error -> if (error !is CancellationException && accountId() == owner && generation == supplyRefreshGeneration) _state.value = _state.value.copy(error = friendly(error)) }
+                newPickupIds.distinct().chunked(50).forEach { ids ->
+                    fetch { api.getKabadiwalaListings(ids.joinToString(",")).requireData() }
+                        .onSuccess { listings -> if (accountId() == owner && generation == supplyRefreshGeneration) _state.value = _state.value.copy(listings = (_state.value.listings + listings).distinctBy { it.id }) }
+                        .onFailure { error -> if (error !is CancellationException && accountId() == owner && generation == supplyRefreshGeneration) _state.value = _state.value.copy(error = friendly(error)) }
+                }
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(busy = _state.value.busy - busyKey)
+            }
+        }
+    }
+
     fun refreshRecycler() {
         if (!allowed(AccountRole.RECYCLER) || !protectedSessionReady()) return
         resetForAccountChange()
         if (supplyRefreshJob?.isActive == true) return
-        cache?.load(accountId())?.let(::applyCached)
-        load { current ->
+        load { current -> coroutineScope {
+        val savedSupply = withContext(Dispatchers.IO) { supplySnapshotStore?.load(accountId(), "RECYCLER") }
+        if (current() && savedSupply != null && _state.value.bulkLots.isEmpty() && _state.value.offers.isEmpty()) {
+            _state.value = _state.value.copy(bulkLots = savedSupply.first.bulkLots, offers = savedSupply.first.offers, requirements = savedSupply.first.requirements, cachedAtEpochMs = savedSupply.second, showingCachedEvidence = true)
+        }
+        val cached = withContext(Dispatchers.IO) { cache?.load(accountId()) }
+        if (current()) cached?.let(::applyCached)
         var partialFailure = false
         suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
         val previous = _state.value
-        val lots = optional(previous.bulkLots) { api.getRecyclerBulkLots().requireData() }
-        val offers = optional(previous.offers) { api.getRecyclerBulkOffers().requireData() }
-        val requirements = optional(previous.requirements) { api.getRecyclerProcurementRequirements().requireData() }
-        val pools = optional(previous.pools) { api.getRecyclerPools().requireData() }
-        val handovers = optional(previous.handovers) { api.getSupplyHandovers().requireData() }
-        if (!current()) return@load
+        val lotsRequest = async { optional(previous.bulkLots) { val response = api.getRecyclerBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerLotsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(bulkLots = it) } }
+        val offersRequest = async { optional(previous.offers) { val response = api.getRecyclerBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerOffersNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(offers = it) } }
+        val requirementsRequest = async { optional(previous.requirements) { val response = api.getRecyclerProcurementRequirements(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerRequirementsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(requirements = it) } }
+        val poolsRequest = async { optional(previous.pools) { api.getRecyclerPools().requireData() } }
+        val handoversRequest = async { optional(previous.handovers) { api.getSupplyHandovers().requireData() } }
+        val lots = lotsRequest.await()
+        val offers = offersRequest.await()
+        val requirements = requirementsRequest.await()
+        val pools = poolsRequest.await()
+        val handovers = handoversRequest.await()
+        if (!current()) return@coroutineScope
         _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, bulkLots = lots, offers = offers, requirements = requirements, pools = pools, handovers = handovers, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
-        if (!partialFailure) saveCache()
+        if (!partialFailure) {
+            saveCache()
+            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "RECYCLER", SupplySnapshot(bulkLots = lots, offers = offers, requirements = requirements)) }
         }
+        } }
     }
     private suspend fun <T> fetch(block: suspend () -> T): Result<T> = try {
         Result.success(block())
@@ -556,6 +779,45 @@ class SupplyChainViewModel(
         throw error
     } catch (error: Exception) {
         Result.failure(error)
+    }
+    fun loadMoreRecyclerLots() {
+        val cursor = _state.value.recyclerLotsNextCursor ?: return
+        val generation = supplyRefreshGeneration
+        action("more-recycler-lots", AccountRole.RECYCLER) {
+            val owner = accountId()
+            val response = api.getRecyclerBulkLots(limit = 50, cursor = cursor)
+            val rows = response.requireData()
+            if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.recyclerLotsNextCursor == cursor) {
+                _state.value = _state.value.copy(bulkLots = (_state.value.bulkLots + rows).distinctBy { it.id }, recyclerLotsNextCursor = response.body()?.page?.nextCursor)
+            }
+            "Older lots loaded."
+        }
+    }
+    fun loadMoreRecyclerOffers() {
+        val cursor = _state.value.recyclerOffersNextCursor ?: return
+        val generation = supplyRefreshGeneration
+        action("more-recycler-offers", AccountRole.RECYCLER) {
+            val owner = accountId()
+            val response = api.getRecyclerBulkOffers(limit = 50, cursor = cursor)
+            val rows = response.requireData()
+            if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.recyclerOffersNextCursor == cursor) {
+                _state.value = _state.value.copy(offers = (_state.value.offers + rows).distinctBy { it.id }, recyclerOffersNextCursor = response.body()?.page?.nextCursor)
+            }
+            "Older offers loaded."
+        }
+    }
+    fun loadMoreRecyclerRequirements() {
+        val cursor = _state.value.recyclerRequirementsNextCursor ?: return
+        val generation = supplyRefreshGeneration
+        action("more-recycler-demands", AccountRole.RECYCLER) {
+            val owner = accountId()
+            val response = api.getRecyclerProcurementRequirements(limit = 50, cursor = cursor)
+            val rows = response.requireData()
+            if (accountId() == owner && generation == supplyRefreshGeneration && _state.value.recyclerRequirementsNextCursor == cursor) {
+                _state.value = _state.value.copy(requirements = (_state.value.requirements + rows).distinctBy { it.id }, recyclerRequirementsNextCursor = response.body()?.page?.nextCursor)
+            }
+            "Older demand loaded."
+        }
     }
 
     private fun load(block: suspend (isCurrent: () -> Boolean) -> Unit) {
@@ -585,16 +847,31 @@ class SupplyChainViewModel(
         }
         resetForAccountChange()
         if (key in _state.value.busy) return
+        UiActionTrace.begin(key)
+        if (requiredRole == AccountRole.COLLECTOR || requiredRole == AccountRole.RECYCLER) {
+            // A read started before this action must not repaint the old server
+            // snapshot over its pending or newly confirmed local state.
+            supplyRefreshGeneration++
+            supplyRefreshJob?.cancel()
+            supplyRefreshJob = null
+        }
         _state.value = _state.value.copy(busy = _state.value.busy + key, error = null, notice = null)
-        viewModelScope.launch {
+        UiActionTrace.statePublished(key)
+        val requestAccount = accountId()
+        actionJobs[key] = viewModelScope.launch {
+            var succeeded = false
             try {
-                _state.value = _state.value.copy(notice = block())
+                val notice = block()
+                if (accountId() == requestAccount && protectedSessionReady()) _state.value = _state.value.copy(notice = notice)
+                succeeded = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                _state.value = _state.value.copy(error = friendly(error))
+                if (accountId() == requestAccount && protectedSessionReady()) _state.value = _state.value.copy(error = friendly(error))
             } finally {
-                _state.value = _state.value.copy(busy = _state.value.busy - key)
+                UiActionTrace.finish(key, succeeded)
+                actionJobs.remove(key)
+                if (accountId() == requestAccount) _state.value = _state.value.copy(busy = _state.value.busy - key)
             }
         }
     }
@@ -616,6 +893,7 @@ class SupplyChainViewModel(
         require(localPhotoPaths.any { it.isNotBlank() && File(it).isFile }) { "Add at least one photo before posting." }
         val operation = "listing-${draftId.ifBlank { UUID.randomUUID().toString() }.take(112)}"
         val operationKey = idempotencyKeys?.getOrCreate(operation)
+            ?: UUID.nameUUIDFromBytes(operation.toByteArray()).toString()
         val created = try {
             api.createHouseholdListing(input.copy(photoReference = null), operationKey).requireData()
         } catch (error: Throwable) {
@@ -663,11 +941,12 @@ class SupplyChainViewModel(
                 queueAccount?.let { owner -> syncQueue.findUidByOperationAndIdempotencyKey("CREATE_HOUSEHOLD_LISTING", owner, key) }
             }
             if (alreadyQueued == null) {
-                syncQueue.enqueue(SyncQueueItemEntity(
+                syncQueue.enqueueOnce(SyncQueueItemEntity(
                     operation = "CREATE_HOUSEHOLD_LISTING",
                     payloadJson = Gson().toJson(payload),
                     createdAtEpochMs = System.currentTimeMillis(),
-                    accountId = queueAccount
+                    accountId = queueAccount,
+                    idempotencyKey = operationKey
                 ))
             }
             // Keep the key until the worker receives an applied response. A
@@ -748,12 +1027,13 @@ class SupplyChainViewModel(
                 key
             )
             if (alreadyQueued == null) {
-                syncQueue.enqueue(
+                syncQueue.enqueueOnce(
                     SyncQueueItemEntity(
                         operation = "REQUEST_HOUSEHOLD_PICKUP",
                         payloadJson = Gson().toJson(payload),
                         createdAtEpochMs = System.currentTimeMillis(),
-                        accountId = queueAccount
+                        accountId = queueAccount,
+                        idempotencyKey = key
                     )
                 )
             }
@@ -1016,7 +1296,9 @@ class SupplyChainViewModel(
     fun confirmHouseholdPaymentReceived(pickupId: String) = action("payment-received-$pickupId", AccountRole.HOUSEHOLD, { api.confirmHouseholdPaymentReceived(pickupId).requireData(); refreshHousehold(); "Payment receipt confirmed." })
     fun acceptListing(listingId: String) = action("pickup-decision-${_state.value.pickups.firstOrNull { it.listingId == listingId }?.id ?: listingId}", AccountRole.COLLECTOR, {
         try {
-            api.acceptHouseholdListing(listingId).requireSuccess()
+            val requestId = UUID.randomUUID().toString()
+            UiActionTrace.requestLinked("pickup-decision-${_state.value.pickups.firstOrNull { it.listingId == listingId }?.id ?: listingId}", requestId)
+            api.acceptHouseholdListing(listingId, requestId).requireSuccess()
             val acceptedAt = java.time.Instant.now().toString()
             _state.value = _state.value.copy(
                 pickups = _state.value.pickups.map { pickup ->

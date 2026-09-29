@@ -11,6 +11,7 @@ export interface TransactionalSmsProvider {
 
 export type PushNotification = {
   token: string;
+  recipientAccountId: string;
   title: string;
   body: string;
   route?: string | null;
@@ -135,6 +136,7 @@ export class FcmPushProvider implements PushProvider {
           data: {
             notificationId: input.notificationId ?? '',
             type: input.type ?? '',
+            recipientAccountId: input.recipientAccountId,
           },
           // Data-only FCM messages need high priority to wake the app promptly;
           // Android still applies the user's notification/channel settings.
@@ -299,8 +301,8 @@ export class NotificationDeliveryService {
       if (!claimed.count) continue;
       try {
         const event = await db.notificationEvent.findUnique({ where: { id: row.notificationId } });
-        if (!event) {
-          await db.notificationDelivery.update({ where: { id: row.id }, data: { status: 'SKIPPED', claimedAt: null, lastError: 'NOTIFICATION_EVENT_MISSING' } });
+        if (!event || event.accountId !== row.accountId) {
+          await db.notificationDelivery.update({ where: { id: row.id }, data: { status: 'SKIPPED', claimedAt: null, lastError: !event ? 'NOTIFICATION_EVENT_MISSING' : 'RECIPIENT_MISMATCH' } });
           continue;
         }
         const preference = await this.accountPushPreference(row.accountId);
@@ -341,7 +343,12 @@ export class NotificationDeliveryService {
           if (!targetClaimed.count) continue;
           const attempts = target.attempts + 1;
           try {
-            const result = await this.pushProvider.send({ token: target.token, title: event.title, body: event.body, route: event.route, type: event.type, notificationId: event.id });
+            const currentDevice = await db.notificationDevice.findFirst({ where: { id: target.deviceId, token: target.token, accountId: row.accountId, enabled: true }, select: { id: true } });
+            if (!currentDevice) {
+              await targetStore.update({ where: { id: target.id }, data: { status: 'SKIPPED', claimedAt: null, lastError: 'DEVICE_OWNER_CHANGED' } });
+              continue;
+            }
+            const result = await this.pushProvider.send({ token: target.token, recipientAccountId: row.accountId, title: event.title, body: event.body, route: event.route, type: event.type, notificationId: event.id });
             await targetStore.update({ where: { id: target.id }, data: { status: 'SENT', claimedAt: null, sentAt: new Date(), providerMessageId: result.providerMessageId, lastError: null } });
           } catch (error) {
             if (error instanceof InvalidPushTokenError) {

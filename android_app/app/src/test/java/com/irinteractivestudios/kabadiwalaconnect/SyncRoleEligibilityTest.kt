@@ -25,7 +25,7 @@ class SyncRoleEligibilityTest {
         assertTrue("SEND_CHAT_MESSAGE" in recycler)
         assertTrue("REQUEST_HOUSEHOLD_PICKUP" in household)
         assertFalse("REQUEST_HOUSEHOLD_PICKUP" in collector)
-        assertTrue("CONFIRM_SUPPLY_HANDOVER" in recycler)
+        assertFalse("CONFIRM_SUPPLY_HANDOVER" in recycler)
         assertFalse("CONFIRM_SUPPLY_HANDOVER" in collector)
         assertTrue(syncOperationsForRole(AccountRole.ADMIN).isEmpty())
     }

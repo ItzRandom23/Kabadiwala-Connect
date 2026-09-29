@@ -30,7 +30,7 @@ describe('FCM push delivery', () => {
       return new Response(JSON.stringify({ name: 'projects/kabadiwala-staging/messages/1' }), { status: 200 });
     }));
 
-    const result = await new FcmPushProvider(pushConfig).send({ token: 'fcm-device-token', title: 'Private pickup', body: 'Address: 1 Example Lane', route: 'handovers/document/private-id', type: 'PICKUP_CONFIRMED', notificationId: 'event-1' });
+    const result = await new FcmPushProvider(pushConfig).send({ token: 'fcm-device-token', recipientAccountId: 'account-1', title: 'Private pickup', body: 'Address: 1 Example Lane', route: 'handovers/document/private-id', type: 'PICKUP_CONFIRMED', notificationId: 'event-1' });
 
     expect(result).toEqual({ providerMessageId: 'projects/kabadiwala-staging/messages/1' });
     expect(requestBodies[0]).toContain('assertion=');
@@ -38,7 +38,7 @@ describe('FCM push delivery', () => {
     expect(JSON.parse(requestBodies[1])).toEqual({
       message: {
         token: 'fcm-device-token',
-        data: { notificationId: 'event-1', type: 'PICKUP_CONFIRMED' },
+        data: { notificationId: 'event-1', type: 'PICKUP_CONFIRMED', recipientAccountId: 'account-1' },
         android: { priority: 'HIGH' }
       }
     });
@@ -77,10 +77,11 @@ describe('FCM push delivery', () => {
         updateMany: vi.fn().mockImplementation(async ({ data }: any) => { parent.status = data.status; parent.attempts += data.attempts.increment; return { count: 1 }; }),
         update: parentUpdate
       },
-      notificationEvent: { findUnique: vi.fn().mockResolvedValue({ id: 'event-1', type: 'PICKUP_CONFIRMED', title: 'Pickup', body: 'Confirmed', route: 'home' }) },
+      notificationEvent: { findUnique: vi.fn().mockResolvedValue({ id: 'event-1', accountId: 'account-1', type: 'PICKUP_CONFIRMED', title: 'Pickup', body: 'Confirmed', route: 'home' }) },
       user: { findFirst: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE', pushNotificationsEnabled: true }) },
       notificationDevice: {
         findMany: vi.fn().mockResolvedValue([{ id: 'device-1', token: 'token-1' }, { id: 'device-2', token: 'token-2' }]),
+        findFirst: vi.fn().mockResolvedValue({ id: 'device-1' }),
         updateMany: vi.fn().mockResolvedValue({ count: 0 })
       },
       notificationDeliveryTarget: targetStore
@@ -91,7 +92,25 @@ describe('FCM push delivery', () => {
 
     expect(result).toEqual({ processed: 1, sent: 1, retried: 0, skipped: false });
     expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ recipientAccountId: 'account-1' }));
     expect(targets.map(item => item.status)).toEqual(['SENT', 'SENT']);
     expect(parentUpdate).toHaveBeenCalledWith({ where: { id: 'delivery-1' }, data: expect.objectContaining({ status: 'SENT' }) });
+  });
+
+  it('never sends a delivery whose stored recipient differs from its event', async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const send = vi.fn();
+    const fakeDb = {
+      notificationDelivery: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'delivery-1', notificationId: 'event-1', accountId: 'household-1', status: 'PENDING', attempts: 0 }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update
+      },
+      notificationEvent: { findUnique: vi.fn().mockResolvedValue({ id: 'event-1', accountId: 'collector-1', type: 'PICKUP_REQUESTED' }) },
+      notificationDeliveryTarget: {}
+    };
+    await new NotificationDeliveryService(fakeDb as never, pushConfig, undefined, { send }).dispatchPendingPush();
+    expect(send).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ where: { id: 'delivery-1' }, data: expect.objectContaining({ status: 'SKIPPED', lastError: 'RECIPIENT_MISMATCH' }) });
   });
 });

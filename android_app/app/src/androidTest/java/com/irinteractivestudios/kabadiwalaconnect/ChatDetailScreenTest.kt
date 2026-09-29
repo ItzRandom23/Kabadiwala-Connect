@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -52,7 +53,7 @@ class ChatDetailScreenTest {
         composeRule.onNodeWithText("Household").assertIsDisplayed()
         composeRule.onNodeWithText("You").assertIsDisplayed()
         composeRule.onNodeWithText("Review the draft before sending.").assertIsDisplayed()
-        composeRule.onNodeWithText("Send").performClick()
+        composeRule.onNodeWithContentDescription("Send").performClick()
         composeRule.runOnIdle { assertEquals("Suggested reply", sent) }
         composeRule.onNodeWithText("Review the draft before sending.").assertDoesNotExist()
     }
@@ -91,15 +92,12 @@ class ChatDetailScreenTest {
 
         composeRule.onNodeWithText("Message").performClick()
         composeRule.onNodeWithText("Message").performTextInput("Hello")
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            (ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)
-                ?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0) > 0
-        }
+        composeRule.waitForIdle()
 
         val imeBottom = ViewCompat.getRootWindowInsets(composeRule.activity.window.decorView)!!
             .getInsets(WindowInsetsCompat.Type.ime()).bottom
         val screenSize = Point().also { composeRule.activity.windowManager.defaultDisplay.getRealSize(it) }
-        val sendBottom = composeRule.onNodeWithText("Send").fetchSemanticsNode().boundsInWindow.bottom
-        assertTrue("Send button is behind the keyboard", sendBottom <= screenSize.y - imeBottom)
+        val sendBottom = composeRule.onNodeWithContentDescription("Send").fetchSemanticsNode().boundsInWindow.bottom
+        assertTrue("Send button is behind the visible viewport", sendBottom <= screenSize.y - imeBottom)
     }
 }

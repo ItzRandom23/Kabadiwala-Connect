@@ -605,9 +605,25 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const identity = actor(req);
     const context = await assertConversationParticipant(db, req.params.conversationId, identity);
     const limit = pageNumber(req.query.limit, 50, 100);
-    const messages = context.kind === 'PICKUP'
-      ? await db.pickupChatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit })
-      : await db.chatMessage.findMany({ where: { conversationId: req.params.conversationId }, orderBy: { createdAt: 'desc' }, take: limit });
+    const cursor = typeof req.query.cursor === 'string' && req.query.cursor.length <= 128 ? req.query.cursor : undefined;
+    if (cursor) {
+      const cursorQuery = { where: { id: cursor, conversationId: req.params.conversationId }, select: { id: true } };
+      const owned = context.kind === 'PICKUP'
+        ? await db.pickupChatMessage.findFirst(cursorQuery)
+        : await db.chatMessage.findFirst(cursorQuery);
+      if (!owned) throw new AppError('VALIDATION_ERROR', 'Invalid chat cursor', 422, { code: 'INVALID_CURSOR' });
+    }
+    const pageQuery = {
+      where: { conversationId: req.params.conversationId },
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    };
+    const rows = context.kind === 'PICKUP'
+      ? await db.pickupChatMessage.findMany(pageQuery)
+      : await db.chatMessage.findMany(pageQuery);
+    const messages = rows.slice(0, limit);
+    const nextCursor = rows.length > limit ? messages[messages.length - 1]?.id ?? null : null;
     const unreadFilter = { conversationId: req.params.conversationId, senderId: { not: identity.collectorId }, readAt: null };
     const readUpdate = { status: MessageStatus.READ, readAt: new Date() };
     if (context.kind === 'PICKUP') await db.pickupChatMessage.updateMany({ where: unreadFilter, data: readUpdate });
@@ -616,7 +632,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       where: { accountId: identity.collectorId, type: 'CHAT_MESSAGE', route: `messages/${req.params.conversationId}`, readAt: null },
       data: { readAt: new Date() }
     });
-    return res.json({ success: true, data: messages.reverse(), message: 'Messages retrieved' });
+    return res.json({ success: true, data: messages.reverse(), page: { nextCursor }, message: 'Messages retrieved' });
   });
 
   router.post('/conversations/:conversationId/messages', async (req, res) => {
@@ -647,7 +663,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
       accountId: recipientId,
       type: 'CHAT_MESSAGE',
       title: context.kind === 'PICKUP' ? 'New pickup message' : 'New recycler trade message',
-      body: `${identity.role === 'HOUSEHOLD' ? 'Household' : identity.role === 'RECYCLER' ? 'Recycler' : 'Kabadiwala'}: ${message.body.slice(0, 120)}`,
+      body: `You have a new ${context.kind === 'PICKUP' ? 'pickup' : 'recycler trade'} message.`,
       route: `messages/${conversation.id}`,
       dedupeKey: `CHAT_MESSAGE:${message.id}`,
       channels: ['PUSH']

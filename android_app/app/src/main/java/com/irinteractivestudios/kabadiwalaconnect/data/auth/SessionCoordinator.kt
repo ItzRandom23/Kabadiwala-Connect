@@ -9,6 +9,7 @@ enum class SessionState {
     RESTORING,
     UNAUTHENTICATED,
     AUTHENTICATED,
+    OFFLINE_READ_ONLY,
     EXPIRED
 }
 
@@ -36,6 +37,10 @@ class SessionCoordinator {
 
     fun authenticated(account: AccountProfile) {
         _snapshot.value = SessionSnapshot(SessionState.AUTHENTICATED, account)
+    }
+
+    fun offlineReadOnly(account: AccountProfile) {
+        _snapshot.value = SessionSnapshot(SessionState.OFFLINE_READ_ONLY, account)
     }
 
     fun unauthenticated() {
