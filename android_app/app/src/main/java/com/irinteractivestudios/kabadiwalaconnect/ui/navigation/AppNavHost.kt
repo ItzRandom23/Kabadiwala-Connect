@@ -894,9 +894,12 @@ fun AppNavHost(
                 pushNotificationsEnabled = pushNotificationsEnabled,
                 appVersion = vm.appVersion,
                 onLanguageChange = { tag ->
-                    vm.setLanguage(tag)
-                    factory.updateStoredAccountLanguage(tag)
-                    onLanguageChange(tag)
+                    if (vm.setLanguage(tag)) {
+                        factory.updateStoredAccountLanguage(tag)
+                        onLanguageChange(tag)
+                    } else {
+                        Toast.makeText(pickupChatContext, "Could not save language. Try again.", Toast.LENGTH_LONG).show()
+                    }
                 },
                 onAppearanceChange = { mode -> vm.setAppearance(mode); onAppearanceChange(mode) },
                 onSmsNotificationsChange = { enabled ->

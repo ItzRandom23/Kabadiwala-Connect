@@ -1,5 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin
 
+import com.irinteractivestudios.kabadiwalaconnect.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -67,10 +69,10 @@ fun AdminConsoleScreen(
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text("Operator console", style = MaterialTheme.typography.headlineSmall)
-                Text("Restricted operations", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_ffdf3f8e46d5), style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.ui_copy_7850d367d470), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = onLogout) { Text("Sign out") }
+            TextButton(onClick = onLogout) { Text(stringResource(R.string.ui_copy_dc1649a16c14)) }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             state.availableSections.forEach { section ->
@@ -88,7 +90,7 @@ fun AdminConsoleScreen(
             }
         }
         if (state.availableSections.isEmpty()) {
-            Text("No operator permissions are assigned to this account. Contact your system administrator.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_55b4cfc1987d), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (state.section == AdminSection.TOOLS) {
             AdminTools(
                 busy = state.actionBusy,
@@ -101,10 +103,10 @@ fun AdminConsoleScreen(
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (state.loading) "Loading…" else "${state.items.size} open item(s)", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(onClick = onRefresh, enabled = !state.loading && !state.actionBusy) { Text("Refresh") }
+                OutlinedButton(onClick = onRefresh, enabled = !state.loading && !state.actionBusy) { Text(stringResource(R.string.future_refresh)) }
             }
             if (!state.loading && state.items.isEmpty()) {
-                Text("No operator actions waiting.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_573c2b8891b7), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             state.items.forEach { item ->
                 when (state.section) {
@@ -167,9 +169,9 @@ fun AdminConsoleScreen(
     state.selected?.let { item ->
         if (state.section == AdminSection.RECYCLERS) RecyclerRecordDetailsDialog(item, onClearSelection) else AlertDialog(
             onDismissRequest = onClearSelection,
-            title = { Text("Record details") },
+            title = { Text(stringResource(R.string.ui_copy_1b56311b7190)) },
             text = { Text(item.entrySet().joinToString("\n") { (key, value) -> "$key: ${if (value.isJsonPrimitive) value.asString else value.toString()}" }) },
-            confirmButton = { TextButton(onClick = onClearSelection) { Text("Close") } }
+            confirmButton = { TextButton(onClick = onClearSelection) { Text(stringResource(R.string.ui_copy_bbfa773e5a63)) } }
         )
     }
 }
@@ -178,13 +180,13 @@ fun AdminConsoleScreen(
 private fun AdminTools(busy: Boolean, canManagePrices: Boolean, canExportDataset: Boolean, onImportPrice: () -> Unit, onUpdatePrice: () -> Unit, onExportDataset: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Validated data tools", style = MaterialTheme.typography.titleLarge)
-            Text("Server permission required. Every action is audited.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_c9cbfddb0325), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.ui_copy_722ca9a41b46), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (canManagePrices) {
-                Button(onClick = onImportPrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Import price row") }
-                OutlinedButton(onClick = onUpdatePrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Update price observation") }
+                Button(onClick = onImportPrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_967aa2ec641b)) }
+                OutlinedButton(onClick = onUpdatePrice, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_f6faafb54917)) }
             }
-            if (canExportDataset) OutlinedButton(onClick = onExportDataset, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Export safe dataset") }
+            if (canExportDataset) OutlinedButton(onClick = onExportDataset, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_75bb403efd26)) }
         }
     }
 }
@@ -201,8 +203,8 @@ private fun RecyclerReviewCard(item: JsonObject, busy: Boolean, canAuthorize: Bo
             Text("Materials  ${materials.take(3).joinToString(" · ").ifBlank { "Not provided" }}${if (materials.size > 3) " · +${materials.size - 3}" else ""}")
             Text("Pickup  ${if (item.booleanValue("pickupAvailable")) "Available" else "Not available"}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onSelect(item) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Review") }
-                if (canAuthorize) Button(onClick = onReview, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Verify") }
+                OutlinedButton(onClick = { onSelect(item) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.ui_copy_e29a79fe0c34)) }
+                if (canAuthorize) Button(onClick = onReview, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.nav_verification)) }
             }
         }
     }
@@ -247,7 +249,7 @@ private fun ReviewCard(title: String, subtitle: String, item: JsonObject, action
             Text(item.compactSummary(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onAction, enabled = !busy) { Text(actionLabel) }
-                if (onSelect != null) OutlinedButton(onClick = { onSelect(item) }, enabled = !busy) { Text("Review") }
+                if (onSelect != null) OutlinedButton(onClick = { onSelect(item) }, enabled = !busy) { Text(stringResource(R.string.ui_copy_e29a79fe0c34)) }
             }
         }
     }
@@ -265,17 +267,17 @@ private fun RecyclerAuthorizationDialog(item: JsonObject, busy: Boolean, onDismi
     val valid = !busy && when (status) { "VERIFIED" -> canVerify && source.trim().length >= 3; "REJECTED" -> reason.trim().length >= 10; else -> true }
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.imePadding(), title = { Text("Review ${item.stringValue("name").ifBlank { "facility" }}") }, text = {
         Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Decision", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ui_copy_7f59a1f1d55a), style = MaterialTheme.typography.titleMedium)
             listOf("UNDER_REVIEW" to "Under review", "VERIFIED" to "Verified", "REJECTED" to "Rejected").forEach { (key, label) -> FilterChip(selected = status == key, onClick = { status = key }, label = { Text(label) }, modifier = Modifier.fillMaxWidth()) }
             HorizontalDivider()
-            Text("Submitted information", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ui_copy_c3ca3378be44), style = MaterialTheme.typography.titleMedium)
             DetailRow("Registration", item.stringValue("licenseNumber"))
             DetailRow("Authority", item.stringValue("authorizationAuthority"))
             DetailRow("Authorization type", item.stringValue("authorizationType"))
             DetailRow("Evidence", item.stringValue("authorizationEvidenceReference"))
             DetailRow("Valid until", submittedDate)
             if (status == "VERIFIED") {
-                if (!canVerify) Text("The Recycler must complete registration, authority, type, and evidence before verification.", color = MaterialTheme.colorScheme.error)
+                if (!canVerify) Text(stringResource(R.string.ui_copy_37d631396dd1), color = MaterialTheme.colorScheme.error)
                 AdminField("Verification method · Required", source) { source = it.take(500) }
                 OutlinedButton(onClick = {
                     val today = java.util.Calendar.getInstance()
@@ -285,7 +287,7 @@ private fun RecyclerAuthorizationDialog(item: JsonObject, busy: Boolean, onDismi
             } else if (status == "REJECTED") AdminField("Rejection reason · Required", reason) { reason = it.take(500) }
             else AdminField("Review note · Optional", reason) { reason = it.take(500) }
         }
-    }, confirmButton = { Button(onClick = { onSubmit(status, reason, null, null, null, null, source, validUntil) }, enabled = valid) { Text("Submit") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { onSubmit(status, reason, null, null, null, null, source, validUntil) }, enabled = valid) { Text(stringResource(R.string.ui_copy_2dacf6595984)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -297,7 +299,7 @@ private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit)
     val materials = item.getAsJsonArray("materialsAccepted")?.mapNotNull { runCatching { it.asJsonObject.stringValue("category") }.getOrNull() }.orEmpty()
     AlertDialog(onDismissRequest = onDismiss, title = { Text(item.stringValue("name").ifBlank { "Facility review" }) }, text = {
         Column(Modifier.heightIn(max = 540.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("FACILITY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.ui_copy_545a82e70321), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             DetailRow("Business name", item.stringValue("name"))
             DetailRow("Phone", contact?.stringValue("phone").orEmpty())
             DetailRow("Alternate phone", contact?.stringValue("alternatePhone").orEmpty())
@@ -305,7 +307,7 @@ private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit)
             DetailRow("Address", location?.stringValue("address").orEmpty())
             DetailRow("Area", location?.stringValue("areaName").orEmpty())
             HorizontalDivider()
-            Text("AUTHORIZATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.ui_copy_aa0e448155e8), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             DetailRow("Status", item.stringValue("authorizationStatus").replace('_', ' '))
             DetailRow("Registration number", authorization?.stringValue("registrationNumber").orEmpty())
             DetailRow("Authority", authorization?.stringValue("authority").orEmpty())
@@ -314,7 +316,7 @@ private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit)
             DetailRow("Valid until", authorization?.stringValue("validUntil")?.take(10).orEmpty())
             authorization?.stringValue("reviewReason")?.takeIf(String::isNotBlank)?.let { DetailRow("Review feedback", it) }
             HorizontalDivider()
-            Text("LOGISTICS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.ui_copy_96d4e0e4b015), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             DetailRow("Materials accepted", materials.joinToString(" · "))
             DetailRow("Pickup", if (item.booleanValue("pickupAvailable")) "Available" else "Not available")
             if (item.booleanValue("pickupAvailable")) {
@@ -324,7 +326,7 @@ private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit)
             }
             DetailRow("Operating hours", item.objectValue("operatingHours")?.stringValue("description").orEmpty())
         }
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_copy_bbfa773e5a63)) } })
 }
 
 @Composable private fun DetailRow(label: String, value: String) {
@@ -338,13 +340,13 @@ private fun RecyclerRecordDetailsDialog(item: JsonObject, onDismiss: () -> Unit)
 private fun DisputeResolutionDialog(id: String, busy: Boolean, onDismiss: () -> Unit, onSubmit: (String, String?) -> Unit) {
     var resolution by remember { mutableStateOf("ACCEPT_COLLECTOR") }
     var notes by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Resolve dispute") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_6118c3f7fd9e)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(id)
             listOf("ACCEPT_COLLECTOR", "ACCEPT_RECYCLER", "SPLIT_DIFFERENCE", "OTHER").forEach { FilterChip(selected = resolution == it, onClick = { resolution = it }, label = { Text(it) }) }
             AdminField("Notes", notes) { notes = it }
         }
-    }, confirmButton = { Button(onClick = { onSubmit(resolution, notes) }, enabled = !busy && notes.isNotBlank()) { Text("Resolve") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { onSubmit(resolution, notes) }, enabled = !busy && notes.isNotBlank()) { Text(stringResource(R.string.ui_copy_ac7f958cc028)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -355,7 +357,7 @@ private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolea
     var provider by remember { mutableStateOf("") }
     var reference by remember { mutableStateOf("") }
     var evidence by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Payment review") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_cc9b6db0d9c0)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(id)
             if (reverse) {
@@ -364,19 +366,19 @@ private fun PaymentActionDialog(id: String, busy: Boolean, pickupPayment: Boolea
                 AdminField("External reference", reference) { reference = it }
                 AdminField("Evidence reference", evidence) { evidence = it }
             } else if (dispute) {
-                Text("Explain why the external cash/UPI record does not reconcile.")
+                Text(stringResource(R.string.ui_copy_5705862a4bf6))
                 AdminField("Reconciliation note", reason) { reason = it }
             } else Text(if (pickupPayment && !householdConfirmed) "Waiting for the household to confirm receipt of the recorded payment." else if (pickupPayment) "Confirm that this recorded cash/UPI payment matches the pickup evidence." else "Choose the audited action for this payment.")
         }
     }, confirmButton = {
-        if (reverse) Button(onClick = { onReverse(reason, provider, reference, evidence) }, enabled = !busy && reason.isNotBlank()) { Text("Reverse") }
-        else if (dispute) Button(onClick = { onDisputePickup(reason) }, enabled = !busy && reason.isNotBlank()) { Text("Flag for follow-up") }
+        if (reverse) Button(onClick = { onReverse(reason, provider, reference, evidence) }, enabled = !busy && reason.isNotBlank()) { Text(stringResource(R.string.ui_copy_57f993376879)) }
+        else if (dispute) Button(onClick = { onDisputePickup(reason) }, enabled = !busy && reason.isNotBlank()) { Text(stringResource(R.string.ui_copy_b1cb15296af0)) }
         else Button(onClick = onVerify, enabled = !busy && (!pickupPayment || householdConfirmed)) { Text(if (pickupPayment) "Reconcile" else "Verify") }
     }, dismissButton = {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (!reverse && pickupPayment && !dispute) TextButton(onClick = { dispute = true }) { Text("Flag mismatch") }
-            else if (!reverse && !pickupPayment && !dispute) TextButton(onClick = { reverse = true }) { Text("Reverse instead") }
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            if (!reverse && pickupPayment && !dispute) TextButton(onClick = { dispute = true }) { Text(stringResource(R.string.ui_copy_1fcb73759cf7)) }
+            else if (!reverse && !pickupPayment && !dispute) TextButton(onClick = { reverse = true }) { Text(stringResource(R.string.ui_copy_fc924e10f47c)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     })
 }
@@ -386,14 +388,14 @@ private fun AnomalyResolutionDialog(id: String, busy: Boolean, onDismiss: () -> 
     var action by remember { mutableStateOf("ACKNOWLEDGE") }
     var resolution by remember { mutableStateOf("") }
     var evidence by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Resolve anomaly") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_dd4a98432c31)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(id)
             listOf("ACCEPT_AS_RECORDED", "REVERT_TO_QUOTE", "RELEASE_RESERVATION", "ACKNOWLEDGE").forEach { FilterChip(selected = action == it, onClick = { action = it }, label = { Text(it) }) }
             AdminField("Resolution", resolution) { resolution = it }
             AdminField("Evidence reference", evidence) { evidence = it }
         }
-    }, confirmButton = { Button(onClick = { onSubmit(action, resolution, evidence) }, enabled = !busy && resolution.length >= 2) { Text("Resolve") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(onClick = { onSubmit(action, resolution, evidence) }, enabled = !busy && resolution.length >= 2) { Text(stringResource(R.string.ui_copy_ac7f958cc028)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -429,7 +431,7 @@ private fun PriceUpdateDialog(busy: Boolean, onDismiss: () -> Unit, onSubmit: (S
 
 @Composable
 private fun AdminFormDialog(title: String, busy: Boolean, onDismiss: () -> Unit, actionLabel: String, fields: List<Pair<String, String>>, onValue: (Int, String) -> Unit, onSubmit: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { fields.forEachIndexed { index, (label, value) -> AdminField(label, value) { onValue(index, it) } } } }, confirmButton = { Button(onClick = onSubmit, enabled = !busy) { Text(actionLabel) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) { fields.forEachIndexed { index, (label, value) -> AdminField(label, value) { onValue(index, it) } } } }, confirmButton = { Button(onClick = onSubmit, enabled = !busy) { Text(actionLabel) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable

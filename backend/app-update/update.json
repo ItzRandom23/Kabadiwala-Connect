@@ -1,8 +1,8 @@
 {
-  "versionCode": 72,
-  "versionName": "0.1.8-beta",
-  "apkUrl": "kabadiwala-connect-0.1.8-beta-debug.apk",
-  "sha256": "F65FF7A59F378468711992424FA2D9C0541804D2EEDC45DE0B89EB06DFD3E47E",
-  "sizeBytes": 29124301,
-  "releaseNotes": "Improved offline future feature access, pricing and recycler screens, and supply chain pickup pagination."
+  "versionCode": 73,
+  "versionName": "0.1.9-beta",
+  "apkUrl": "kabadiwala-connect-0.1.9-beta-debug.apk",
+  "sha256": "F6C1DE5CF7BA52FDAA91EFC650C323C82089E535E0A71AB8F514EB0FA5455722",
+  "sizeBytes": 31686528,
+  "releaseNotes": "Expanded localized app copy across 20 supported Indian languages and improved language resource coverage."
 }

@@ -426,28 +426,28 @@ fun RecyclerMarketplaceScreen(
                     FilterChip(
                         selected = materialFilter == "All",
                         onClick = { materialFilter = "All" },
-                        label = { Text("All") }
+                        label = { Text(stringResource(R.string.safety_all)) }
                     )
                 }
                 item {
                     FilterChip(
                         selected = materialFilter == "PCB",
                         onClick = { materialFilter = "PCB" },
-                        label = { Text("PCB") }
+                        label = { Text(stringResource(R.string.ui_copy_70606d6bfa77)) }
                     )
                 }
                 item {
                     FilterChip(
                         selected = materialFilter == "Copper",
                         onClick = { materialFilter = "Copper" },
-                        label = { Text("Copper") }
+                        label = { Text(stringResource(R.string.home_price_copper)) }
                     )
                 }
                 item {
                     FilterChip(
                         selected = needsResponseOnly,
                         onClick = { needsResponseOnly = !needsResponseOnly },
-                        label = { Text("Needs response") }
+                        label = { Text(stringResource(R.string.ui_copy_1c000c699af7)) }
                     )
                 }
             }
@@ -504,7 +504,7 @@ fun RecyclerMarketplaceScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
                                 ) {
-                                    Text("Make an offer")
+                                    Text(stringResource(R.string.ui_copy_63f67aed8b97))
                                 }
                             }
                         }
@@ -525,7 +525,7 @@ private fun LiveMarketplaceCard(lot: MarketplaceLot, submitted: Boolean, submitt
             Text(lot.range, style = MaterialTheme.typography.bodyMedium, color = KcTheme.extended.warning)
             if (submitted) Text(stringResource(R.string.recycler_offer_sent), color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
             else {
-                OutlinedTextField(rateText, { rateText = it.filter { char -> char.isDigit() || char == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(rateText, { rateText = it.filter { char -> char.isDigit() || char == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_b76ac98c768f)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                 Button(onClick = { val rate = rateText.toDoubleOrNull() ?: return@Button; onOfferSent(lot.requestId, rate) }, enabled = rateText.toDoubleOrNull()?.let { it > 0 } == true && !submitting, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { if (submitting) CircularProgressIndicator(Modifier.padding(end = 8.dp)); Text(if (submitting) "Sending…" else "Send offer") }
             }
         }
@@ -543,11 +543,11 @@ private fun OperationsPulse(openLots: Int, needsResponse: Int) {
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Column {
-                Text("OPEN", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.ui_copy_33906a7dfdec), style = MaterialTheme.typography.labelSmall)
                 Text(openLots.toString(), style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"), color = MaterialTheme.colorScheme.onSurface)
             }
             Column {
-                Text("RESPONSE", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.ui_copy_c4c92ee8b1c7), style = MaterialTheme.typography.labelSmall)
                 Text(needsResponse.toString(), style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"), color = MaterialTheme.colorScheme.primary)
             }
         }
@@ -574,10 +574,10 @@ fun RecyclerOrdersScreen(
                 if (!demoMode) TextButton(onClick = onRefresh) { Text(stringResource(R.string.future_refresh)) }
             }
         }
-        item { Text("Recycler handovers are arranged with the Kabadiwala; no fixed recycler shift is enforced. Scan the signed QR within 2 hours after it is prepared.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text(stringResource(R.string.ui_copy_628b9f798996), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (demoMode) {
             item { DemoDataBanner() }
-            item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text("Copper Cable · 12.4 kg", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text("Pulkit · Kothrud, Pune", style = MaterialTheme.typography.bodyMedium); Text("₹535/kg · Pickup arranged", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text("  Scan handover QR") } } } }
+            item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text(stringResource(R.string.ui_copy_1aac17eab604), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text(stringResource(R.string.ui_copy_6bf3d6a002ae), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.ui_copy_444420a8f1a2), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.ui_copy_a3f0118b1910)) } } } }
             item { Text(stringResource(R.string.recycler_no_orders), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else if (liveLoading) {
             item { LoadingContent(Modifier.fillMaxWidth().heightIn(min = 300.dp)) }
@@ -610,10 +610,10 @@ private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
                 Text(stringResource(R.string.recycler_order_reference, handover.referenceId.ifBlank { handover.id.takeLast(8) }), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(stringResource(R.string.recycler_order_weight, handover.finalAcceptedKg ?: handover.quotedWeightKg), style = MaterialTheme.typography.bodyLarge)
-            Text("${handover.materialCategory.replace('_', ' ')} · ₹${"%.0f".format(handover.finalRatePerKg ?: handover.quotedRatePerKg)}/kg", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.ui_copy_942b539440f3, handover.materialCategory.replace('_', ' '), "%.0f".format(handover.finalRatePerKg ?: handover.quotedRatePerKg)), style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.recycler_order_status, status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             handover.expiresAt?.let { Text("QR expires: ${com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (qrExpired) Text("QR expired. Ask the Kabadiwala to prepare a fresh handover QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            if (qrExpired) Text(stringResource(R.string.ui_copy_b7ba58863e37), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
         }
     }
@@ -676,7 +676,7 @@ fun RecyclerScanScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text(stringResource(R.string.recycler_passport_matched), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
                     Text("${handover.referenceId} · ${handover.materialCategory.replace('_', ' ')}", fontWeight = FontWeight.SemiBold)
-                    Text("Declared ${"%.1f".format(handover.quotedWeightKg)} kg · quoted ₹${"%.0f".format(handover.quotedRatePerKg)}/kg")
+                    Text(stringResource(R.string.ui_copy_a48304fae928, "%.1f".format(handover.quotedWeightKg), "%.0f".format(handover.quotedRatePerKg)))
                     Text(if (state.supplyFromCache) "Matched from saved passport · server confirmation is pending." else "Signed QR matched to the current server record.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(actualWeight, { actualWeight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.handover_final_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
@@ -686,7 +686,7 @@ fun RecyclerScanScreen(
                         Text(if (state.supplyQueued) "Saved on device — waiting to sync" else if (state.supplyConfirmed != null) "Receipt recorded" else "Confirm received material")
                     }
                     state.supplyQueued.takeIf { it }?.let { Text(stringResource(R.string.recycler_receipt_saved), color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge) }
-                    state.supplyConfirmed?.let { confirmed -> Text("Server receipt: ${statusNameForSupply(confirmed.status)} · final ${"%.1f".format(confirmed.finalAcceptedKg ?: 0.0)} kg", color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge) }
+                    state.supplyConfirmed?.let { confirmed -> Text(stringResource(R.string.ui_copy_95f79e5abc82, statusNameForSupply(confirmed.status), "%.1f".format(confirmed.finalAcceptedKg ?: 0.0)), color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge) }
                 }
             }
         }
@@ -745,17 +745,17 @@ fun RecyclerPickupsScreen(
             DemoDataBanner()
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text("PCB · Kothrud", Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }
-                    Text("Today · 2:00–4:00 PM · Approx. 8.5 kg", style = MaterialTheme.typography.bodyMedium)
-                    Text("Exact address is shared only after acceptance.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.ui_copy_8c640ec935e8), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }
+                    Text(stringResource(R.string.ui_copy_893c1a36eccd), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.ui_copy_c9d5dc070597), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (pickupReady) Text(stringResource(R.string.recycler_pickup_ready), color = KcTheme.extended.success, style = MaterialTheme.typography.labelLarge)
-                    else Button(onClick = { pickupReady = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Mark pickup ready") }
+                    else Button(onClick = { pickupReady = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_f024533938d2)) }
                 }
             }
         } else {
             Text(stringResource(R.string.recycler_pickups_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-            error?.let { Text("Couldn’t load availability. Your saved setting is unchanged.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            error?.let { Text(stringResource(R.string.ui_copy_e20444c30f74), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("TODAY" to "Today", "THIS_WEEK" to "This week", "FLEXIBLE" to "Flexible").forEach { (value, label) ->
                     FilterChip(selected = selectedAvailability == value, onClick = { selectedAvailability = value }, label = { Text(label) })
@@ -764,28 +764,28 @@ fun RecyclerPickupsScreen(
             OperationalSurface {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary)
-                    Text("Availability · ${selectedAvailability.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.ui_copy_94a285f814bc, selectedAvailability.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.recycler_availability_visible), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            error?.let { OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") } }
+            error?.let { OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.common_retry)) } }
             Button(onClick = { onSave(selectedAvailability) }, enabled = !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
                 Text(if (saving) "Saving…" else "Save availability")
             }
             HorizontalDivider()
-            Text("Pickup charges", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Show Kabadiwalas how far your facility can collect and what transport costs.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_321def52e839), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_85f335fd0fc5), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Facility pickup available", modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.ui_copy_6a16e2fe1b83), modifier = Modifier.weight(1f))
                 Switch(checked = pickupEnabled, onCheckedChange = { pickupEnabled = it })
             }
             if (pickupEnabled) {
-                OutlinedTextField(maxKm, { maxKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum distance · km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(maxKm, { maxKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_8598b6125c92)) }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("FREE" to "Free", "FIXED" to "Fixed fee", "PER_KM" to "Per km").forEach { (key, label) -> FilterChip(selected = pricingMode == key, onClick = { pricingMode = key }, label = { Text(label) }) }
                 }
-                if (pricingMode == "PER_KM") OutlinedTextField(freeKm, { freeKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Free within · km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                if (pricingMode == "PER_KM") OutlinedTextField(freeKm, { freeKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_88026327403e)) }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 if (pricingMode != "FREE") OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(if (pricingMode == "FIXED") "Fixed pickup fee · ₹" else "Beyond free distance · ₹/km") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
             }
             val max = maxKm.toDoubleOrNull()
@@ -828,15 +828,15 @@ fun RecyclerRatesScreen(
         Text(stringResource(R.string.recycler_rates_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (demoMode) DemoDataBanner()
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (materialsError) Text("Could not load all supported materials. Refresh to choose more categories.", color = MaterialTheme.colorScheme.error)
+        if (materialsError) Text(stringResource(R.string.ui_copy_e828ee900b54), color = MaterialTheme.colorScheme.error)
         error?.let { Text(stringResource(R.string.recycler_rates_load_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-        Text("${rates.size} published rates · ${acceptedMaterials.size} accepted materials", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(materialQuery, { materialQuery = it }, label = { Text("Find a material") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text(stringResource(R.string.ui_copy_25e5313f975c, rates.size, acceptedMaterials.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(materialQuery, { materialQuery = it }, label = { Text(stringResource(R.string.ui_copy_d48f6233962b)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         visibleCategories.forEach { category -> RateEditor(category.displayMaterial(), values[category].orEmpty()) { value -> values = values + (category to value) } }
-        if (categories.size > visibleCategories.size && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = true }) { Text("Show all ${categories.size} materials") }
-        if (showAllMaterials && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = false }) { Text("Show accepted materials") }
+        if (categories.size > visibleCategories.size && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = true }) { Text(stringResource(R.string.ui_copy_83c5840ff9e4, categories.size)) }
+        if (showAllMaterials && materialQuery.isBlank()) TextButton(onClick = { showAllMaterials = false }) { Text(stringResource(R.string.ui_copy_eb127c0c7f2c)) }
         if (saved) Text(stringResource(R.string.recycler_rate_draft_saved), color = KcTheme.extended.success, style = MaterialTheme.typography.bodyMedium)
-        if (error != null || materialsError) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Try again") }
+        if (error != null || materialsError) OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.common_retry)) }
         Button(onClick = {
             onSave(values.mapNotNull { (category, value) -> value.toDoubleOrNull()?.takeIf { it > 0 }?.let { RecyclerRateUpdateDto(category, it) } })
         }, enabled = valid && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
@@ -853,7 +853,7 @@ private fun String.displayMaterial(): String = when (this) {
     else -> replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
 
-@Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text("$label · ₹/kg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }
+@Composable private fun RateEditor(label: String, value: String, onValueChange: (String) -> Unit) { OutlinedTextField(value, { onValueChange(it.filter { char -> char.isDigit() || char == '.' }.take(7)) }, label = { Text(stringResource(R.string.ui_copy_1157ba826e05, label)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = value.isNotBlank() && value.toDoubleOrNull()?.let { it <= 0 } == true, modifier = Modifier.fillMaxWidth()) }
 
 @Composable
 fun RecyclerProfileScreen(profile: AccountProfile?, onSave: ((ProfileEditDraft) -> Unit)? = null, saving: Boolean = false, saveError: String? = null, onOpenSettings: () -> Unit = {}) {

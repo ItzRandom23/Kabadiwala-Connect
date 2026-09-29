@@ -64,8 +64,9 @@ private class TestEarningsRepository(initial: EarningsSummary = EarningsSummary(
 
 private class TestLanguageStore(var tag: String = "en") : LanguageStore {
     override fun load(): String = tag
-    override fun save(tag: String) {
+    override fun save(tag: String): Boolean {
         this.tag = tag
+        return true
     }
 }
 
@@ -206,5 +207,15 @@ class ViewModelStateTest {
         val vm = SettingsViewModel(TestLanguageStore("mr"), "1.0")
         assertEquals("mr", vm.language.value)
         assertEquals("1.0", vm.appVersion)
+    }
+
+    @Test
+    fun settings_doesNotApplyLanguageWhenPersistenceFails() {
+        val vm = SettingsViewModel(object : LanguageStore {
+            override fun load() = "en"
+            override fun save(tag: String) = false
+        })
+        assertEquals(false, vm.setLanguage("hi"))
+        assertEquals("en", vm.language.value)
     }
 }

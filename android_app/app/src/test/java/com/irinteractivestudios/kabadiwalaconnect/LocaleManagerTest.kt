@@ -11,6 +11,8 @@ class LocaleManagerTest {
     @Test
     fun supported_containsEnglishHindiMarathi() {
         assertTrue(LocaleManager.SUPPORTED.containsAll(listOf("en", "hi", "mr")))
+        assertTrue("Bodo should not be advertised until its translations are complete", !LocaleManager.SUPPORTED.contains("brx"))
+        assertTrue("Kashmiri should not be advertised until its translations are complete", !LocaleManager.SUPPORTED.contains("ks"))
     }
 
     @Test
@@ -42,9 +44,16 @@ class LocaleManagerTest {
 
     @Test
     fun everyAdvertisedLanguageRoundTripsThroughBackendName() {
-        assertEquals(23, LocaleManager.SUPPORTED.distinct().size)
+        assertEquals(21, LocaleManager.SUPPORTED.distinct().size)
         LocaleManager.SUPPORTED.forEach { tag ->
             assertEquals(tag, LocaleManager.fromBackendName(LocaleManager.toBackendName(tag)))
+            assertEquals(tag, LocaleManager.fromBackendName(tag))
         }
+        assertEquals("hi", LocaleManager.fromBackendName("hi-IN"))
+        assertEquals("mr", LocaleManager.fromBackendName(" marathi "))
+        assertEquals("en", LocaleManager.normalizeTag("brx"))
+        assertEquals("en", LocaleManager.normalizeTag("ks"))
+        assertEquals("ENGLISH", LocaleManager.toBackendName("brx"))
+        assertEquals("ENGLISH", LocaleManager.toBackendName("ks"))
     }
 }

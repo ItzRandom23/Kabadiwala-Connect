@@ -6,10 +6,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.irinteractivestudios.kabadiwalaconnect.util.LocaleManager
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Checks locale selection and a small resource sample; it is not a translation coverage test. */
+/** Checks that every advertised locale resolves resources and survives a fresh context. */
 @RunWith(AndroidJUnit4::class)
 class LocaleResourceTest {
 
@@ -54,15 +55,33 @@ class LocaleResourceTest {
     }
 
     @Test
-    fun savedLanguageSurvivesFreshContextWrap() {
+    fun everySupportedLanguageLocalizesNewlyExternalizedUiCopy() {
+        val english = LocaleManager.applyTag(context, LocaleManager.ENGLISH)
+        val longUiCopy = R.string.ui_copy_55b4cfc1987d
+        val adminTitle = R.string.ui_copy_ffdf3f8e46d5
+        val englishFormat = english.getString(R.string.ui_copy_55b4cfc1987d)
+
+        LocaleManager.SUPPORTED.filterNot { it == LocaleManager.ENGLISH }.forEach { tag ->
+            val localized = LocaleManager.applyTag(context, tag)
+            assertNotEquals("$tag fell back to English for an extracted screen message", englishFormat, localized.getString(longUiCopy))
+            assertNotEquals("$tag fell back to English for an extracted screen title", english.getString(adminTitle), localized.getString(adminTitle))
+            assertTrue("$tag produced an empty screen message", localized.getString(longUiCopy).isNotBlank())
+        }
+    }
+
+    @Test
+    fun everySupportedLanguageSurvivesFreshContextWrap() {
         val original = LocaleManager.persistedTag(context)
         val hadSelection = LocaleManager.hasPersistedTag(context)
         try {
-            listOf(LocaleManager.HINDI, LocaleManager.MARATHI, LocaleManager.TAMIL, LocaleManager.ENGLISH).forEach { tag ->
-                LocaleManager.persistTag(context, tag)
+            LocaleManager.SUPPORTED.forEach { tag ->
+                assertEquals("Could not persist $tag", true, LocaleManager.persistTag(context, tag))
                 val fresh = LocaleManager.wrap(context)
                 assertEquals(tag, fresh.resources.configuration.locales[0].language)
                 assertEquals(tag, LocaleManager.persistedTag(fresh))
+                if (tag != LocaleManager.ENGLISH) {
+                    assertNotEquals("$tag did not resolve its app name", "Kabadiwala Connect", fresh.getString(R.string.app_name))
+                }
             }
         } finally {
             if (hadSelection) LocaleManager.persistTag(context, original)

@@ -1,5 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.components
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
@@ -47,7 +48,7 @@ fun KcBrandLogo(
 private fun KcBrandLogoDarkPreview() {
     KabadiwalaConnectTheme(darkTheme = true) {
         Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.padding(20.dp)) {
-            KcBrandLogo(contentDescription = "Kabadiwala Connect")
+            KcBrandLogo(contentDescription = stringResource(R.string.app_name))
         }
     }
 }

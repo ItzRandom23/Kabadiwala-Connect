@@ -106,6 +106,7 @@ class AppContainer(context: Context) {
     private val preferenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val catalogRefreshMutex = Mutex()
     private val activityRefreshMutex = Mutex()
+    private val languageUpdateMutex = Mutex()
     private val authenticatedBackgroundWorkReady = AtomicBoolean(false)
     private val authenticatedSessionGeneration = AtomicLong(0L)
     private var lastCatalogRefreshKey: String? = null
@@ -390,16 +391,21 @@ class AppContainer(context: Context) {
         // while preserving the offline-first behaviour of the picker.
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
         preferenceScope.launch {
-            runCatching {
-                apiService.updatePreferences(
-                    PreferencesUpdateDto(preferredLanguage = LocaleManager.toBackendName(normalized))
-                ).requireData()
-            }.onSuccess {
-                // Do not let a late response update a different account after
-                // logout/login on a shared device.
-                currentAccount()
-                    ?.takeIf { it.profileId == accountId }
-                    ?.let { secureStorage.saveAccount(it.copy(preferredLanguage = normalized)) }
+            languageUpdateMutex.withLock {
+                // Rapid language changes must reach the backend in selection
+                // order. A response for an earlier choice must not replace
+                // the latest local preference or another account's profile.
+                if (currentAccount()?.profileId != accountId ||
+                    LocaleManager.persistedTag(appContext) != normalized) return@withLock
+                runCatching {
+                    apiService.updatePreferences(
+                        PreferencesUpdateDto(preferredLanguage = LocaleManager.toBackendName(normalized))
+                    ).requireData()
+                }.onSuccess {
+                    currentAccount()
+                        ?.takeIf { it.profileId == accountId && LocaleManager.persistedTag(appContext) == normalized }
+                        ?.let { secureStorage.saveAccount(it.copy(preferredLanguage = normalized)) }
+                }
             }
         }
     }

@@ -188,7 +188,7 @@ fun HouseholdSupplyScreen(
     val pickupsByListing = remember(state.pickups) { state.pickups.groupBy { it.listingId } }
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         item { HouseholdWelcomeHeader(initialArea, onRefresh, state.loading, layout.isCompact) }
-        item { Text("Household pickup hours: 7:30 AM–6:30 PM India time. Your pickup QR appears after the Kabadiwala starts the trip and marks Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text(stringResource(R.string.ui_copy_c54cc1bc59fc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item {
             HouseholdSalePanel(
                 busy = "create-listing" in busy,
@@ -207,7 +207,7 @@ fun HouseholdSupplyScreen(
                 Text(if ("upload-listing-photo" in busy) "Uploading photo…" else "Retry photo upload")
             }
         }
-        item { Text("My listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_2f0993983a8b), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.householdListingsLoading && state.listings.isEmpty()) item { LoadingPanel("Loading your listings…") }
         if (state.householdListingsLoaded && state.listings.isEmpty() && state.error == null) item { EmptyPanel("No listings yet", "Post your first listing to request pickup.") }
         items(state.listings, key = { it.id }) { listing ->
@@ -353,14 +353,14 @@ fun HouseholdKabadiwalasScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 BoxRule()
-                Text("Find a collection partner", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Text("Verified, active Kabadiwalas serving your area.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_fc38ee6380fb), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_b944a83236e6), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Search across India", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Enter a locality, city, state or PIN code. Partners appear only where service is active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_117d564cbafe), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_cd59058314ca), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -371,14 +371,14 @@ fun HouseholdKabadiwalasScreen(
                     gpsAccuracyMeters = null
                     gpsStreetAddressUnavailable = false
                 },
-                label = { Text("Area, city, state or PIN code") },
+                label = { Text(stringResource(R.string.ui_copy_4b373d484f61)) },
                 leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
         }
         item {
-            Text("Search radius", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.ui_copy_8df84e7acd3d), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -388,7 +388,7 @@ fun HouseholdKabadiwalasScreen(
                     FilterChip(
                         selected = radiusKm == distance,
                         onClick = { radiusKm = distance },
-                        label = { Text("$distance km", maxLines = 1) },
+                        label = { Text(stringResource(R.string.ui_copy_982c8e50d607, distance), maxLines = 1) },
                         modifier = Modifier.heightIn(min = 48.dp)
                     )
                 }
@@ -400,21 +400,21 @@ fun HouseholdKabadiwalasScreen(
                     gpsAccuracyMeters = null
                     gpsStreetAddressUnavailable = false
                     onSearch(area.trim(), radiusKm)
-                }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
+                }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_f4fd898b8fb9)) }
                 OutlinedButton(onClick = {
                     val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (hasLocation) loadCurrentLocation() else showLocationRationale = true
                 }, enabled = !locationBusy && !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                     if (locationBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.LocationOn, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Use current location", maxLines = 1)
+                    Text(stringResource(R.string.ui_copy_622c745f6090), maxLines = 1)
                 }
             }
-            if (locationError) Text("Location unavailable. Search by area or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+            if (locationError) Text(stringResource(R.string.ui_copy_947e7e7a11c1), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
             gpsAccuracyMeters?.let { accuracy ->
-                Text("GPS fix accuracy: about ±${accuracy.roundToInt().coerceAtLeast(1)} m. Partner distance uses coordinates.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_40dd5197b0c9, accuracy.roundToInt().coerceAtLeast(1)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (gpsStreetAddressUnavailable) Text("Street address is missing from map data; GPS coordinates are still used for this search.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+            if (gpsStreetAddressUnavailable) Text(stringResource(R.string.ui_copy_27efb33a8815), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         if (state.kabadiwalaLoading) item { CircularProgressIndicator(Modifier.size(26.dp)) }
@@ -438,28 +438,28 @@ fun HouseholdKabadiwalasScreen(
                         StatusChip(if (kabadiwala.acceptingPickups) "Accepting" else "Busy today")
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        kabadiwala.distanceKm?.let { Text("${"%.1f".format(it)} km away", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+                        kabadiwala.distanceKm?.let { Text(stringResource(R.string.recyclers_distance_km, "%.1f".format(it)), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                         if (kabadiwala.ratingAverage != null && kabadiwala.reviewCount > 0) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(17.dp))
-                                Text("${"%.1f".format(kabadiwala.ratingAverage)} · ${kabadiwala.reviewCount} verified", style = MaterialTheme.typography.labelMedium)
+                                Text(stringResource(R.string.ui_copy_f1e76e0f8207, "%.1f".format(kabadiwala.ratingAverage), kabadiwala.reviewCount), style = MaterialTheme.typography.labelMedium)
                             }
-                        } else Text("No verified ratings yet", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else Text(stringResource(R.string.ui_copy_143533681319), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${kabadiwala.completedPickupCount} completed pickups · ${"%.1f".format(kabadiwala.acceptedWeightKg)} kg collected", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.ui_copy_b4c5c8f56a08, kabadiwala.completedPickupCount, "%.1f".format(kabadiwala.acceptedWeightKg)), style = MaterialTheme.typography.bodySmall)
                     if (kabadiwala.collectedMaterials.isNotEmpty()) Text(kabadiwala.collectedMaterials.joinToString(" · ") { materialName(it) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedButton(onClick = { onOpenProfile(kabadiwala.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("View profile and pickup details") }
+                    OutlinedButton(onClick = { onOpenProfile(kabadiwala.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_8d3a84d16704)) }
                 }
             }
         }
-        if (state.kabadiwalaHasMore) item { OutlinedButton(onClick = onLoadMore, enabled = !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Load more partners") } }
+        if (state.kabadiwalaHasMore) item { OutlinedButton(onClick = onLoadMore, enabled = !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_76dee9398c79)) } }
     }
     if (showLocationRationale) AlertDialog(
         onDismissRequest = { showLocationRationale = false },
-        title = { Text("Use your current location?") },
-        text = { Text("Location is used only to find nearby collection partners. You can search by area instead.") },
-        confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Continue") } },
-        dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text("Search by area") } }
+        title = { Text(stringResource(R.string.ui_copy_c46c55963043)) },
+        text = { Text(stringResource(R.string.ui_copy_9ff28e725543)) },
+        confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text(stringResource(R.string.payment_save)) } },
+        dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text(stringResource(R.string.ui_copy_fe837a0b12cf)) } }
     )
 }
 
@@ -473,7 +473,7 @@ fun KabadiwalaPublicProfileScreen(
     onDismiss: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onDismiss) { Text("← Back to partners") }
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_copy_bc485bb987b7)) }
         Text(profile?.displayName ?: "Kabadiwala profile", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -481,26 +481,26 @@ fun KabadiwalaPublicProfileScreen(
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 profile?.let { item ->
                     Text(item.areaName, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    item.distanceKm?.let { Text("Approximately ${"%.1f".format(it)} km away", color = MaterialTheme.colorScheme.primary) }
+                    item.distanceKm?.let { Text(stringResource(R.string.ui_copy_14d1fa260b92, "%.1f".format(it)), color = MaterialTheme.colorScheme.primary) }
                     StatusChip(if (item.acceptingPickups) "Accepting pickups" else "No slots available today")
                     item.pickupPricing?.let { pricing ->
                         Text(if (pricing.feePerKm == 0.0) "Free pickup up to ${pricing.maxDistanceKm.toInt()} km" else "Free within ${pricing.freeRadiusKm.toInt()} km · ${money(pricing.feePerKm)} per km beyond", style = MaterialTheme.typography.bodyMedium)
-                        pricing.estimatedFee?.let { Text("Estimated pickup charge for your distance: ${money(it)}", color = MaterialTheme.colorScheme.primary) }
+                        pricing.estimatedFee?.let { Text(stringResource(R.string.ui_copy_b2f1f1ffaddf, money(it)), color = MaterialTheme.colorScheme.primary) }
                     }
                     HorizontalDivider()
-                    Text("Verified track record", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text("${item.completedPickupCount} completed pickups · ${"%.1f".format(item.acceptedWeightKg)} kg accepted")
+                    Text(stringResource(R.string.ui_copy_fc6b8a65ae7d), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ui_copy_cd66b6bb18bc, item.completedPickupCount, "%.1f".format(item.acceptedWeightKg)))
                     if (item.collectedMaterials.isNotEmpty()) Text("Materials: ${item.collectedMaterials.joinToString(" · ") { materialName(it) }}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (item.ratingAverage != null && item.reviewCount > 0) Text("★ ${"%.1f".format(item.ratingAverage)} from ${item.reviewCount} verified household ratings")
-                    else Text("No verified household ratings yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (item.ratingAverage != null && item.reviewCount > 0) Text(stringResource(R.string.ui_copy_16ad6e9c02a8, "%.1f".format(item.ratingAverage), item.reviewCount))
+                    else Text(stringResource(R.string.ui_copy_6283b7bd2692), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider()
-                    Text("Rate your completed pickup", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    if (pickups.isEmpty()) Text("Your completed pickups with this Kabadiwala will appear here when they are ready for a rating.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_3b39ed848820), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    if (pickups.isEmpty()) Text(stringResource(R.string.ui_copy_6feb5061a510), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     pickups.forEach { pickup ->
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("${materialName(pickup.finalCategory ?: "OTHER")} · ${"%.1f".format(pickup.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.ui_copy_3786e15cb669, materialName(pickup.finalCategory ?: "OTHER"), "%.1f".format(pickup.actualWeight ?: 0.0)), style = MaterialTheme.typography.bodyMedium)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Your rating", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                Text(stringResource(R.string.ui_copy_83cd624d2e1a), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                                 (1..5).forEach { rating ->
                                     IconButton(onClick = { onRatePickup(pickup.id, rating) }, modifier = Modifier.size(40.dp)) {
                                         Icon(Icons.Filled.Star, contentDescription = "Rate $rating stars", tint = MaterialTheme.colorScheme.tertiary)
@@ -525,13 +525,13 @@ fun KabadiwalaPickupPricingScreen(pricing: PickupPricingDto?, saving: Boolean, e
     val maxValue = maximum.toDoubleOrNull()
     val valid = freeValue != null && perKmValue != null && maxValue != null && freeValue >= 0 && perKmValue >= 0 && maxValue > 0 && maxValue <= 200 && freeValue <= maxValue
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onBack) { Text("← Back to settings") }
-        Text("Pickup charges", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Choose how far you travel for free and the charge for each additional kilometre. Households can see this before requesting pickup.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(free, { free = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Free pickup within · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(perKm, { perKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Charge beyond free distance · ₹/km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(maximum, { maximum = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum pickup distance · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-        if (saved) Text("Pickup charges saved", color = MaterialTheme.colorScheme.primary)
+        TextButton(onClick = onBack) { Text(stringResource(R.string.ui_copy_d0fcd2732aba)) }
+        Text(stringResource(R.string.ui_copy_321def52e839), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.ui_copy_78a7d9b54038), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(free, { free = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_0a60314504b2)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(perKm, { perKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_d93e4ec937b6)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(maximum, { maximum = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_576bfbc1605e)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        if (saved) Text(stringResource(R.string.ui_copy_fdee150f212e), color = MaterialTheme.colorScheme.primary)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = { if (valid) onSave(PickupPricingDto(freeValue, perKmValue, maxValue)) }, enabled = valid && !saving, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text(if (saving) "Saving…" else "Save pickup charges") }
     }
@@ -572,20 +572,20 @@ private fun HouseholdListingCard(
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Recycling, null, tint = MaterialTheme.colorScheme.primary); Text(friendlyMaterial(listing.materialCategory).title, Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(pickup?.status ?: if (pickupPendingSync) "PENDING_SYNC" else listing.status)) }
-            Text("Approx. ${"%.1f".format(listing.estimatedWeight)} kg · ${listing.condition.lowercase()}", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.ui_copy_505420b9e7e6, "%.1f".format(listing.estimatedWeight), listing.condition.lowercase()), style = MaterialTheme.typography.bodyMedium)
             val pickupAddress = listing.pickupAddress?.takeIf(String::isNotBlank) ?: listing.areaName
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("Pickup address · $pickupAddress", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (listing.photoAttached == true || !listing.photoReference.isNullOrBlank() || listing.photoReferences.isNotEmpty()) Text("Photo attached · visible to partner", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(stringResource(R.string.ui_copy_5ba89bef4034, pickupAddress), Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (listing.photoAttached == true || !listing.photoReference.isNullOrBlank() || listing.photoReferences.isNotEmpty()) Text(stringResource(R.string.ui_copy_6b2f1c4c133c), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             val minEstimate = listing.estimatedPriceMin
             val maxEstimate = listing.estimatedPriceMax
-            if (minEstimate != null && maxEstimate != null) Text("Estimate · ₹${"%.0f".format(minEstimate)}–₹${"%.0f".format(maxEstimate)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            if (minEstimate != null && maxEstimate != null) Text(stringResource(R.string.ui_copy_d3c1c4fc6bd6, "%.0f".format(minEstimate), "%.0f".format(maxEstimate)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             if (pickup == null && listing.status == "POSTED") {
                 if (pickupPendingSync) {
-                    Text("Pickup request saved offline. Waiting for a connection to send it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.ui_copy_d9ebcab9261d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    Text("Send to nearby Kabadiwalas. The first one to accept gets this pickup; everyone else sees it as taken.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_096cb1118d2e), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = { onRequestPickup(listing.id, null) }, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Notify nearby Kabadiwalas")
+                        Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_567da6ba2dee))
                     }
                 }
                 if (!pickupPendingSync && kabadiwalas.isNotEmpty()) {
@@ -601,33 +601,33 @@ private fun HouseholdListingCard(
                     }
                     }
                 } else if (!pickupPendingSync && kabadiwalas.isEmpty()) {
-                    Text("No Kabadiwala is available within ${radiusKm} km right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_c9c7bbf7cec9, radiusKm), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (radiusKm < 20) OutlinedButton(onClick = onIncreaseRadius, enabled = "pickup-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text("Increase radius to ${if (radiusKm == 5) 10 else 25} km")
+                        Icon(Icons.Filled.LocationOn, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_52508dd7b5ae, if (radiusKm == 5) 10 else 25))
                     }
                 }
-                TextButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel listing") }
+                TextButton(onClick = { showCancelListing = true }, enabled = "cancel-listing-${listing.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_c3be5e282d6f)) }
             } else if (pickup == null && pickups.any { it.status == "CANCELLED" }) {
-                Text("A previous pickup request was cancelled. You can choose another partner.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_7105c5c6087c), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             pickup?.let { item ->
                 PickupJourneyTimeline(item)
                 item.scheduledSlot?.let { Text("Scheduled: ${IndiaFormat.dateTimeIso(it) ?: "Time unavailable"}") }
-                if ((item.pickupCharge ?: 0.0) > 0 && item.finalAmount == null) Text("Quoted pickup charge: ${money(item.pickupCharge)}. This will be deducted from the final material value after weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.status == "SCHEDULED") Text("The Kabadiwala can start the trip during pickup hours (7:30 AM–6:30 PM India time). The QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.status == "IN_TRANSIT") Text("The Kabadiwala is on the way. Your QR appears after they mark Arrived.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if ((item.pickupCharge ?: 0.0) > 0 && item.finalAmount == null) Text(stringResource(R.string.ui_copy_c2ca2a97b68e, money(item.pickupCharge)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == "SCHEDULED") Text(stringResource(R.string.ui_copy_97df03205744), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.status == "IN_TRANSIT") Text(stringResource(R.string.ui_copy_0264bf4f33e6), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.kabadiwalaId != null && item.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")) {
                     OutlinedButton(onClick = { onOpenPickupChat(item.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Message Kabadiwala")
+                        Text(stringResource(R.string.ui_copy_9b1318f8a1b8))
                     }
                 }
                 if (item.status == "ARRIVED") {
                     if (item.householdQrScannedAt != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text("Household handover verified", Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.ui_copy_f8755d7001f5), Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                         }
                     } else {
                         Button(
@@ -643,25 +643,25 @@ private fun HouseholdListingCard(
                     }
                 }
                 if (item.finalAmount != null) {
-                    Text("You receive ${money(item.finalAmount)} · ${"%.1f".format(item.actualWeight ?: 0.0)} kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    if ((item.pickupCharge ?: 0.0) > 0) Text("Material value ${money(item.grossMaterialAmount)} − pickup charge ${money(item.pickupCharge)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_15f2de309c67, money(item.finalAmount), "%.1f".format(item.actualWeight ?: 0.0)), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    if ((item.pickupCharge ?: 0.0) > 0) Text(stringResource(R.string.ui_copy_2e3e55b0fa5a, money(item.grossMaterialAmount), money(item.pickupCharge)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (item.status in setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED")) {
-                    OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Cancel pickup") }
+                    OutlinedButton(onClick = { showCancelPickup = true }, enabled = "cancel-pickup-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_34d25e7def08)) }
                 }
                 if (item.status in setOf("ACCEPTED", "SCHEDULED")) {
-                    OutlinedButton(onClick = { showReschedule = true }, enabled = "reschedule-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Choose another time") }
+                    OutlinedButton(onClick = { showReschedule = true }, enabled = "reschedule-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_d442fe995b0c)) }
                 }
                 if (item.settlementStatus == "PENDING_HOUSEHOLD_CONFIRMATION") {
-                    Text("The Kabadiwala weighed your items. Review the final amount before accepting payment.", style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = { showSettlement = true }, enabled = "settlement-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Collect ${money(item.finalAmount)} from Kabadiwala") }
+                    Text(stringResource(R.string.ui_copy_6f446a4c3eaa), style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = { showSettlement = true }, enabled = "settlement-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f17b42d2c414, money(item.finalAmount))) }
                 } else if (item.settlementStatus == "ACCEPTED" && item.settlementPayment == null) {
-                    Text("Collect ${money(item.finalAmount)} from the Kabadiwala. Ask them to record the cash or UPI payment, then confirm receipt here.", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.ui_copy_a728f47870a7, money(item.finalAmount)), style = MaterialTheme.typography.bodyMedium)
                 } else if (item.settlementPayment?.status == "RECORDED" && item.settlementPayment.householdReceivedAt == null) {
-                    Text("Kabadiwala recorded ${money(item.settlementPayment.amount)} by ${paymentMethodName(item.settlementPayment.paymentMethod)}. Confirm only after you actually receive it.", style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = { showPaymentConfirmation = true }, enabled = "payment-received-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Confirm ${money(item.settlementPayment.amount)} received") }
+                    Text(stringResource(R.string.ui_copy_0b9fc10a8f1f, money(item.settlementPayment.amount), paymentMethodName(item.settlementPayment.paymentMethod)), style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = { showPaymentConfirmation = true }, enabled = "payment-received-${item.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f41e8e49f77b, money(item.settlementPayment.amount))) }
                 } else if (item.settlementPayment?.householdReceivedAt != null) {
-                    Text("You confirmed receipt of ${money(item.settlementPayment.amount)} · ${statusName(item.settlementPayment.status)}", color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.ui_copy_49be55c8ac2e, money(item.settlementPayment.amount), statusName(item.settlementPayment.status)), color = MaterialTheme.colorScheme.primary)
                 } else if (item.settlementStatus == "DISPUTED") {
                     Text("Settlement is under review${item.settlementReasonCode?.let { " · $it" } ?: ""}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
@@ -670,10 +670,10 @@ private fun HouseholdListingCard(
     }
     if (showCancelListing) AlertDialog(
         onDismissRequest = { showCancelListing = false },
-        title = { Text("Cancel this listing?") },
-        text = { Text("The listing and any pending pickup requests will be cancelled. You can create a new listing later.") },
-        confirmButton = { TextButton(onClick = { showCancelListing = false; onCancelListing(listing.id) }) { Text("Cancel listing") } },
-        dismissButton = { TextButton(onClick = { showCancelListing = false }) { Text("Keep listing") } }
+        title = { Text(stringResource(R.string.ui_copy_0a67db09b076)) },
+        text = { Text(stringResource(R.string.ui_copy_00d5c0a78c94)) },
+        confirmButton = { TextButton(onClick = { showCancelListing = false; onCancelListing(listing.id) }) { Text(stringResource(R.string.ui_copy_c3be5e282d6f)) } },
+        dismissButton = { TextButton(onClick = { showCancelListing = false }) { Text(stringResource(R.string.ui_copy_7ba68e2a27c8)) } }
     )
     pickup?.let { item ->
         if (showPickupQr && item.status == "ARRIVED" && item.householdQrScannedAt == null) {
@@ -686,33 +686,33 @@ private fun HouseholdListingCard(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(Icons.Filled.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
-                        Text("Verify this pickup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-                        Text("Ask the Kabadiwala to scan this QR before weighing your scrap.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
+                        Text(stringResource(R.string.ui_copy_95510e2a9b00), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                        Text(stringResource(R.string.ui_copy_cca8bd689033), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp))
                         when {
                             qr != null -> {
                                 val bitmap = remember(qr.qrCodeData) { createSupplyQr(qr.qrCodeData) }
-                                if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = "One-time household pickup verification QR", modifier = Modifier.size(260.dp), contentScale = ContentScale.Fit)
-                                else Text("Could not create this QR. Refresh and try again.", color = MaterialTheme.colorScheme.error)
-                                Text("This one-time QR expires shortly. Keep it open while it is scanned.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
-                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp).heightIn(min = 50.dp)) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Refresh QR") }
+                                if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = stringResource(R.string.ui_copy_5a010fda197e), modifier = Modifier.size(260.dp), contentScale = ContentScale.Fit)
+                                else Text(stringResource(R.string.ui_copy_a859c25730d6), color = MaterialTheme.colorScheme.error)
+                                Text(stringResource(R.string.ui_copy_271560c5fa94), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp).heightIn(min = 50.dp)) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_32ece51bb874)) }
                             }
                             pickupQrLoadingId == item.id -> CircularProgressIndicator(Modifier.padding(24.dp))
                             pickupQrError != null -> {
                                 Text(pickupQrError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
-                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 50.dp)) { Text("Try again") }
+                                OutlinedButton(onClick = { onLoadPickupQr(item.id) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 50.dp)) { Text(stringResource(R.string.common_retry)) }
                             }
                         }
-                        TextButton(onClick = { showPickupQr = false; onClearPickupQr() }, modifier = Modifier.padding(top = 18.dp).heightIn(min = 48.dp)) { Text("Close") }
+                        TextButton(onClick = { showPickupQr = false; onClearPickupQr() }, modifier = Modifier.padding(top = 18.dp).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_bbfa773e5a63)) }
                     }
                 }
             }
         }
         if (showCancelPickup) AlertDialog(
             onDismissRequest = { showCancelPickup = false },
-            title = { Text("Cancel this pickup?") },
-            text = { Text("The request will be closed and this listing will be available again if the partner has not started the trip.") },
-            confirmButton = { TextButton(onClick = { showCancelPickup = false; onCancelPickup(item.id) }) { Text("Cancel pickup") } },
-            dismissButton = { TextButton(onClick = { showCancelPickup = false }) { Text("Keep pickup") } }
+            title = { Text(stringResource(R.string.ui_copy_cbfb65200498)) },
+            text = { Text(stringResource(R.string.ui_copy_eada4e0172d3)) },
+            confirmButton = { TextButton(onClick = { showCancelPickup = false; onCancelPickup(item.id) }) { Text(stringResource(R.string.ui_copy_34d25e7def08)) } },
+            dismissButton = { TextButton(onClick = { showCancelPickup = false }) { Text(stringResource(R.string.ui_copy_f7c449371849)) } }
         )
         if (showReschedule) ReschedulePickupDialog(
             onDismiss = { showReschedule = false },
@@ -726,10 +726,10 @@ private fun HouseholdListingCard(
         )
         if (showPaymentConfirmation) AlertDialog(
             onDismissRequest = { showPaymentConfirmation = false },
-            title = { Text("Confirm payment received") },
-            text = { Text("Confirm only if you received ${money(item.settlementPayment?.amount)} from the Kabadiwala. Your pickup QR was scanned before weighing; this step confirms the payment itself.") },
-            confirmButton = { TextButton(onClick = { showPaymentConfirmation = false; onConfirmPaymentReceived(item.id) }) { Text("I received the payment") } },
-            dismissButton = { TextButton(onClick = { showPaymentConfirmation = false }) { Text("Not yet") } }
+            title = { Text(stringResource(R.string.ui_copy_a2b007791f23)) },
+            text = { Text(stringResource(R.string.ui_copy_0aa81585fb02, money(item.settlementPayment?.amount))) },
+            confirmButton = { TextButton(onClick = { showPaymentConfirmation = false; onConfirmPaymentReceived(item.id) }) { Text(stringResource(R.string.ui_copy_3d977c25cb73)) } },
+            dismissButton = { TextButton(onClick = { showPaymentConfirmation = false }) { Text(stringResource(R.string.ui_copy_8de95fd5b412)) } }
         )
     }
 }
@@ -1030,8 +1030,7 @@ fun HouseholdListingCreateScreen(
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
-                Text(
-                    "Add photos and a few simple details",
+                Text(stringResource(R.string.ui_copy_cddcbc052f05),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -1045,8 +1044,8 @@ fun HouseholdListingCreateScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Show the scrap clearly", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Add up to 6 photos from different angles. Clear photos help your Kabadiwala prepare.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_e47f65514817), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.ui_copy_e0ee14da7a77), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (photoPaths.isNotEmpty()) {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(photoPaths, key = { it }) { path ->
@@ -1072,7 +1071,7 @@ fun HouseholdListingCreateScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Close,
-                                                        contentDescription = "Remove photo",
+                                                        contentDescription = stringResource(R.string.ui_copy_c8f5eda8ace9),
                                                         tint = MaterialTheme.colorScheme.inverseOnSurface,
                                                         modifier = Modifier.padding(5.dp)
                                                     )
@@ -1102,8 +1101,8 @@ fun HouseholdListingCreateScreen(
                                 }
                             }
                         }
-                        if (photoPaths.isEmpty()) Text("Add at least one clear photo to continue.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (photoError) Text("Some photos could not be processed. Please choose a JPEG, PNG, or WebP image.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if (photoPaths.isEmpty()) Text(stringResource(R.string.ui_copy_2b8e24e8e891), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (photoError) Text(stringResource(R.string.ui_copy_71cbf209bd34), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         if (cameraError) Text(
                             when {
                                 cameraPermissionBlocked -> "Camera access is blocked. Allow it in Settings, or choose a photo from your gallery."
@@ -1117,14 +1116,14 @@ fun HouseholdListingCreateScreen(
                 }
             }
             item {
-                Text("What are you selling?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Pick the closest everyday description. You can change the AI suggestion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_a981b2ac7aeb), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_ecce877a2443), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (state.materialDetectionStatus) {
-                    HouseholdMaterialDetectionStatus.PROCESSING -> Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Checking the first photo…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall) }
+                    HouseholdMaterialDetectionStatus.PROCESSING -> Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text(stringResource(R.string.ui_copy_a572ecef3372), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall) }
                     HouseholdMaterialDetectionStatus.SUCCESS -> {
                         state.materialSuggestion?.let {
                             val item = it.itemName?.takeIf(String::isNotBlank)?.let { name -> "$name · " }.orEmpty()
-                            Text("Detected: $item${friendlyMaterial(it.materialCategory).title}. Please check it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(R.string.ui_copy_f15ef7469817, item, friendlyMaterial(it.materialCategory).title), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                             val minPerKg = it.estimatedPriceMinPerKg
                             val maxPerKg = it.estimatedPriceMaxPerKg
                             if (minPerKg != null && maxPerKg != null && minPerKg > 0 && maxPerKg >= minPerKg) {
@@ -1134,18 +1133,18 @@ fun HouseholdListingCreateScreen(
                                     color = MaterialTheme.colorScheme.secondary
                                 )
                             }
-                        } ?: Text("AI returned no suggestion. Try detection again.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        } ?: Text(stringResource(R.string.ui_copy_28e9b3ba50b6), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                     HouseholdMaterialDetectionStatus.LOW_CONFIDENCE -> {
                         state.materialSuggestion?.let { suggestion ->
-                            Text("AI suggestion: ${friendlyMaterial(suggestion.materialCategory).title}. Please check it below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                        } ?: Text("We couldn't identify this confidently. Please choose below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                            Text(stringResource(R.string.ui_copy_f7095c693613, friendlyMaterial(suggestion.materialCategory).title), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                        } ?: Text(stringResource(R.string.ui_copy_642193879ff0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     }
                     HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR -> Text(state.materialDetectionMessage ?: "Photo detection is unavailable right now. You can still choose the material below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     HouseholdMaterialDetectionStatus.IDLE -> if (photoPaths.isNotEmpty()) {
-                        Text("Preparing AI photo check…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_fc547bf26724), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        Text("Add a photo to start AI detection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_5d4adccbe1c5), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if ((state.materialDetectionStatus in setOf(HouseholdMaterialDetectionStatus.IDLE, HouseholdMaterialDetectionStatus.UNSUPPORTED_IMAGE, HouseholdMaterialDetectionStatus.NETWORK_ERROR, HouseholdMaterialDetectionStatus.SERVICE_ERROR) ||
@@ -1157,9 +1156,9 @@ fun HouseholdListingCreateScreen(
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.ui_copy_82eaf0734632))
                         Spacer(Modifier.width(8.dp))
-                        Text("Try detection again")
+                        Text(stringResource(R.string.ui_copy_ddab1d36ac2b))
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -1175,10 +1174,10 @@ fun HouseholdListingCreateScreen(
                 }
             }
             if (isHazardous) item {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Handle with care", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer); Text("Do not dismantle, burn, puncture or mix it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(safetyAcknowledged, { safetyAcknowledged = it }); Text("I understand", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer) } } }
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(stringResource(R.string.lot_hazard), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer); Text(stringResource(R.string.ui_copy_48b42de8981f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(safetyAcknowledged, { safetyAcknowledged = it }); Text(stringResource(R.string.ui_copy_842a9bdd000f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer) } } }
             }
-            item { Text("Condition", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase().replaceFirstChar(Char::uppercase)) }) } } }
-            item { OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text("Approximate weight · kg") }, supportingText = { if (weightError) Text("Enter a weight between 0 and 500 kg") }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
+            item { Text(stringResource(R.string.lot_condition_label), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("INTACT", "DAMAGED", "PARTIAL").forEach { FilterChip(selected = condition == it, onClick = { condition = it }, label = { Text(it.lowercase().replaceFirstChar(Char::uppercase)) }) } } }
+            item { OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.ui_copy_619d7c8212c8)) }, supportingText = { if (weightError) Text(stringResource(R.string.ui_copy_9aed921864c5)) }, isError = weightError, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
             item {
                 Surface(
                     shape = MaterialTheme.shapes.medium,
@@ -1186,7 +1185,7 @@ fun HouseholdListingCreateScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Estimated price range", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.ui_copy_961a0d35f11e), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         when {
                             currentPriceEstimate != null -> {
                                 Text(
@@ -1200,7 +1199,7 @@ fun HouseholdListingCreateScreen(
                             }
                             state.householdPriceEstimateLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Text("Checking current local prices…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.ui_copy_debb0d64d730), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall)
                             }
                             else -> Text(
                                 if (state.materialSuggestion?.source.equals("AI", ignoreCase = true) &&
@@ -1229,12 +1228,12 @@ fun HouseholdListingCreateScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { if (!imeVisible) Text("Full pickup address") },
-                    placeholder = { if (imeVisible) Text("Full pickup address") },
+                    label = { if (!imeVisible) Text(stringResource(R.string.ui_copy_6ceee0a8f70e)) },
+                    placeholder = { if (imeVisible) Text(stringResource(R.string.ui_copy_6ceee0a8f70e)) },
                     supportingText = {
                         if (imeVisible) Text(if (addressError) "Add a complete address" else "Street/block and house number", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        else if (addressError) Text("Add a complete pickup address")
-                        else Text("Add house or unit details. For a different pickup place, use GPS while there.")
+                        else if (addressError) Text(stringResource(R.string.ui_copy_2d5bd7acc987))
+                        else Text(stringResource(R.string.ui_copy_4d62f4b69c3b))
                     },
                     isError = addressError,
                     minLines = if (imeVisible) 1 else 2,
@@ -1243,8 +1242,8 @@ fun HouseholdListingCreateScreen(
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Where is the scrap right now?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text("Your account address is kept separately. Use GPS while you are at the pickup place, or choose your saved account location if the scrap is there.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_33db3aa77038), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ui_copy_66c07170ab8f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(
                         onClick = requestPickupLocation,
                         enabled = !detectingPickupLocation,
@@ -1268,7 +1267,7 @@ fun HouseholdListingCreateScreen(
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         ) {
-                            Text("Use saved account location · ${initialPickupAddress.take(64)}")
+                            Text(stringResource(R.string.ui_copy_1eb5d1831201, initialPickupAddress.take(64)))
                         }
                     }
                     if (pickupLatitude != null && pickupLongitude != null) {
@@ -1286,7 +1285,7 @@ fun HouseholdListingCreateScreen(
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(checked = pickupLocationConfirmed, onCheckedChange = { pickupLocationConfirmed = it })
-                                    Text("Yes, this is where the scrap will be picked up.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    Text(stringResource(R.string.ui_copy_01ddf58eeaa3), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                                 }
                             }
                         }
@@ -1296,8 +1295,8 @@ fun HouseholdListingCreateScreen(
                     }
                 }
             }
-            item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text("Phone, laptop or storage device?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text("Tell us if it may contain personal data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text("May contain personal data", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text("I removed my account", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text("Request destruction evidence", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
-            item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional)") }, minLines = 3, maxLines = 4) }
+            item { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { Text(stringResource(R.string.ui_copy_70260f2b9579), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Text(stringResource(R.string.ui_copy_c8bc68e4cd1d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataBearingDevice, { dataBearingDevice = it; if (!it) { ownerPreparationCompleted = false; dataDestructionRequested = false } }); Text(stringResource(R.string.ui_copy_af0f616254a6), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; if (dataBearingDevice) { Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ownerPreparationCompleted, { ownerPreparationCompleted = it }); Text(stringResource(R.string.ui_copy_fcdad39da790), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(dataDestructionRequested, { dataDestructionRequested = it }); Text(stringResource(R.string.ui_copy_f59c3807a845), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer) } } } } }
+            item { OutlinedTextField(notes, { notes = it.take(1000) }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.lot_notes_label)) }, minLines = 3, maxLines = 4) }
         }
          state.error?.let { message ->
              Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -1305,8 +1304,7 @@ fun HouseholdListingCreateScreen(
              }
          }
          if (missingPostRequirements.isNotEmpty() && "create-listing" !in busy && !imeVisible) {
-             Text(
-                "To post, ${missingPostRequirements.joinToString() }.",
+             Text(stringResource(R.string.ui_copy_305aa35012c1, missingPostRequirements.joinToString()),
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1392,13 +1390,13 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
         val hasCollectorSnapshot = state.initialLoadComplete || state.cachedAtEpochMs > 0L || state.pickups.isNotEmpty() || state.inventory.isNotEmpty()
         if (!hasCollectorSnapshot && state.loading) item { LoadingPanel("Loading your collection desk…") }
         if (state.showingCachedEvidence && hasCollectorSnapshot) item {
-            Text("Showing saved data. Refresh when connected to confirm the latest pickup and stock status.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_08484d351755), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (section == KabadiwalaSection.HOME && hasCollectorSnapshot) item {
             CollectorOverview(state, onOpenInventory, onOpenPickups)
         }
         if (section == KabadiwalaSection.HOME || section == KabadiwalaSection.PICKUPS) item {
-            Text("Pickup shift: 7:30 AM–6:30 PM India time. Start trip during this shift, then mark Arrived at the household to unlock its QR.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_c0593d30aadf), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         when (section) {
@@ -1411,7 +1409,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 items(if (section == KabadiwalaSection.HOME) state.pickups.take(2) else state.pickups, key = { it.id }) { pickup -> PickupCard(pickup, listingsById[pickup.listingId], listingPhotos[pickup.listingId].orEmpty(), listingPhotoErrors[pickup.listingId], "photos-${pickup.listingId}" in state.busy, state.busy, onLoadListingPhotos, onAccept, onSchedule, onStatus, onComplete, onRejectPickup, onCancelPickup, onReassignPickup, onRecordPickupPayment, onVerifyHouseholdPickupQr, onOpenPickupChat) }
                 if (section == KabadiwalaSection.HOME && state.pickups.size > 2) item {
                     TextButton(onClick = onOpenPickups, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Text("View pickups")
+                        Text(stringResource(R.string.ui_copy_e1ebb3edfe78))
                     }
                 }
                 if (section == KabadiwalaSection.PICKUPS && (state.collectorAssignedNextCursor != null || state.collectorWaitingNextCursor != null || state.collectorHistoryNextCursor != null)) item {
@@ -1424,7 +1422,7 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 item { InventoryTotals(state.inventory) }
                 if (state.initialLoadComplete && !state.loading && state.inventory.isEmpty()) item { EmptyPanel("Inventory is empty", "Complete a pickup to add weighed material.") }
                 items(state.inventory, key = { it.id }) { InventoryCard(it) }
-                item { Button(onClick = { showBulk = true }, enabled = state.inventory.any { it.availableKg > 0 }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Storefront, null); Spacer(Modifier.width(8.dp)); Text("Create recycler lot") } }
+                item { Button(onClick = { showBulk = true }, enabled = state.inventory.any { it.availableKg > 0 }, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Storefront, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_587862aa9efd)) } }
             }
             KabadiwalaSection.LOTS -> {
                 val visibleCapturedLots = capturedLots.filter { it.status != LotStatus.CANCELLED }
@@ -1436,20 +1434,20 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                 }
                 when (lotsMode) {
                     "LOTS" -> {
-                        item { Text("Bulk lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        item { Text(stringResource(R.string.ui_copy_f9f6a58c24f9), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
                         items(state.bulkLots, key = { it.id }) { lot -> BulkLotCard(lot, onCancelBulk, onPrepareBulkHandover, onOpenBulkChat) }
                         if (state.collectorLotsNextCursor != null) item {
                             TextButton(onClick = onLoadMoreLots, enabled = "more-collector-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if ("more-collector-lots" in state.busy) "Loading older lots…" else "Load older lots") }
                         }
                         val bulkHandovers = state.handovers.filter { it.bulkLotId != null && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED") }
-                        if (bulkHandovers.isNotEmpty()) item { Text("Recycler handovers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        if (bulkHandovers.isNotEmpty()) item { Text(stringResource(R.string.ui_copy_d4d63ac52b21), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         items(bulkHandovers, key = { "bulk-handover-${it.id}" }) { handover ->
                             SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement)
                         }
                     }
                     "OFFERS" -> {
-                        item { Text("Recycler offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        item { Text(stringResource(R.string.ui_copy_8e79f9d8555e), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
                         items(state.offers, key = { it.id }) { offer -> OfferCard(offer, onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat) }
                         if (state.collectorOffersNextCursor != null) item {
@@ -1457,10 +1455,9 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                         }
                     }
                     else -> {
-                        item { Text("Captured lot records", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        item { Text(stringResource(R.string.ui_copy_a21cd26a5d59), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         item {
-                            Text(
-                                "Saved records stay visible. Use weighed inventory to publish a recycler lot.",
+                            Text(stringResource(R.string.ui_copy_c4dbfff0d52d),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1511,19 +1508,19 @@ private fun LotsModeSelector(
         FilterChip(
             selected = selected == "LOTS",
             onClick = { onSelect("LOTS") },
-            label = { Text("Lots", maxLines = 1) },
+            label = { Text(stringResource(R.string.ui_copy_79029175a3c3), maxLines = 1) },
             modifier = Modifier.weight(1f)
         )
         FilterChip(
             selected = selected == "OFFERS",
             onClick = { onSelect("OFFERS") },
-            label = { Text("Offers", maxLines = 1) },
+            label = { Text(stringResource(R.string.ui_copy_43c94306c1e7), maxLines = 1) },
             modifier = Modifier.weight(1f)
         )
         FilterChip(
             selected = selected == "RECORDS",
             onClick = { onSelect("RECORDS") },
-            label = { Text("Records", maxLines = 1) },
+            label = { Text(stringResource(R.string.ui_copy_e51c55255be9), maxLines = 1) },
             modifier = Modifier.weight(1f)
         )
     }
@@ -1542,14 +1539,14 @@ private fun CollectorOverview(state: SupplyChainState, onOpenInventory: () -> Un
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Today at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Pickup workload and available stock.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                Text(stringResource(R.string.ui_copy_07e282127341), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_c931788532ce), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Waiting pickups", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                    Text(stringResource(R.string.ui_copy_13ce8d4c7378), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
                     Text(waiting.toString(), style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold)
-                    Text("Need your attention", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
+                    Text(stringResource(R.string.ui_copy_1686d8a80a77), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .82f))
                 }
                 Column(Modifier.width(126.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     CollectorMetric(scheduled.toString(), "Scheduled", Modifier.fillMaxWidth())
@@ -1579,9 +1576,9 @@ private fun CollectorDeskHeader(onRefresh: () -> Unit, loading: Boolean) {
             }
         }
         Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("KABADIWALA · FIELD DESK", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text("Collection desk", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Your pickup queue and stock", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_ab467fb3d8d1), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_9b7cbf9a74b9), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_6dc7aca25dea), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         IconButton(onClick = onRefresh, enabled = !loading) {
             if (loading) CircularProgressIndicator(Modifier.size(22.dp)) else Icon(Icons.Filled.Refresh, "Refresh")
@@ -1592,8 +1589,7 @@ private fun CollectorDeskHeader(onRefresh: () -> Unit, loading: Boolean) {
 @Composable
 private fun FieldToolsHeader(onRefresh: () -> Unit, loading: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "Plan routes, coordinate shared stock, and review safe handling.",
+        Text(stringResource(R.string.ui_copy_be16e37870c1),
             Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1631,10 +1627,10 @@ private fun SupplyChainToolsShortcut(onClick: () -> Unit) {
         ) {
             Icon(Icons.Filled.Recycling, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Field tools", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text("Routes · pooling · safety · records", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.home_field_tools), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_58bac9913ad3), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("Open", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.ui_copy_cf9b77061f7b), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1656,7 +1652,7 @@ private fun PickupJourneyTimeline(pickup: PickupRequestDto) {
         else -> 0
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Pickup progress · ${stages[current]}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.ui_copy_9b5a90f1411b, stages[current]), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
         stages.chunked(columns).forEachIndexed { rowIndex, row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 row.forEachIndexed { columnIndex, label ->
@@ -1712,18 +1708,18 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 if (pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED")) {
                     Box {
                         IconButton(onClick = { showMoreActions = true }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More pickup actions")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.ui_copy_0bdafff306d6))
                         }
                         DropdownMenu(expanded = showMoreActions, onDismissRequest = { showMoreActions = false }) {
                             if (pickup.status in setOf("ACCEPTED", "SCHEDULED")) {
                                 DropdownMenuItem(
-                                    text = { Text("Cancel pickup") },
+                                    text = { Text(stringResource(R.string.ui_copy_34d25e7def08)) },
                                     onClick = { showMoreActions = false; showCancel = true }
                                 )
                             }
                             if (pickup.status in setOf("IN_TRANSIT", "ARRIVED")) {
                                 DropdownMenuItem(
-                                    text = { Text("Report issue / reassign") },
+                                    text = { Text(stringResource(R.string.ui_copy_d5d1482a618f)) },
                                     onClick = { showMoreActions = false; showReassign = true }
                                 )
                             }
@@ -1733,7 +1729,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
             }
             val confirmedPickupAddress = listing?.pickupAddress?.takeIf { it.isNotBlank() && pickup.status != "WAITING_FOR_PICKUP" }
             val pickupLocation = confirmedPickupAddress ?: listing?.areaName ?: "Area unavailable"
-            Text("Approx. ${"%.1f".format(listing?.estimatedWeight ?: 0.0)} kg · $pickupLocation")
+            Text(stringResource(R.string.ui_copy_505420b9e7e6, "%.1f".format(listing?.estimatedWeight ?: 0.0), pickupLocation))
             PickupJourneyTimeline(pickup)
             val directionsDestination = if (pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED")) pickupDirectionsDestination(listing) else null
             if (directionsDestination != null) {
@@ -1747,14 +1743,14 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 ) {
                     Icon(Icons.Filled.Directions, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Show directions")
+                    Text(stringResource(R.string.ui_copy_e36720dff49c))
                 }
             }
             if (pickup.kabadiwalaId != null && pickup.status in setOf("ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")) {
                 OutlinedButton(onClick = { onOpenPickupChat(pickup.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Message household")
+                    Text(stringResource(R.string.ui_copy_519770e958fa))
                 }
             }
             val photoCount = listing?.photoCount ?: 0
@@ -1769,7 +1765,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 ) {
-                    Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "View scrap photos")
+                    Icon(Icons.Filled.AddPhotoAlternate, contentDescription = stringResource(R.string.ui_copy_bb4c02e2725c))
                     Spacer(Modifier.width(8.dp))
                     Text(if (photoCount == 1) "View scrap photo" else "View $photoCount scrap angles")
                 }
@@ -1787,35 +1783,35 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                 )
             }
             when (pickup.status) {
-                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, enabled = "pickup-decision-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if ("pickup-decision-${pickup.id}" in busy) Text("Claiming…") else Text("Claim pickup") }
+                "WAITING_FOR_PICKUP" -> Button(onClick = { onAccept(pickup.listingId) }, enabled = "pickup-decision-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if ("pickup-decision-${pickup.id}" in busy) Text(stringResource(R.string.ui_copy_25b55e8298c7)) else Text(stringResource(R.string.ui_copy_c3c7836a6362)) }
                 "REQUESTED" -> {
                     val decisionPending = "pickup-decision-${pickup.id}" in busy
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = { onAccept(pickup.listingId) }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text(if (decisionPending) "Accepting…" else "Accept pickup") }
-                        OutlinedButton(onClick = { showReject = true }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text("Decline") }
+                        OutlinedButton(onClick = { showReject = true }, enabled = !decisionPending, modifier = Modifier.weight(1f).heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_b59cf9ed55bb)) }
                     }
                 }
                 "ACCEPTED" -> {
                     val schedulePending = "schedule-${pickup.id}" in busy
-                    Button(onClick = { showSchedule = true }, enabled = !schedulePending, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if (schedulePending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Schedule pickup") }
+                    Button(onClick = { showSchedule = true }, enabled = !schedulePending, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { if (schedulePending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text(stringResource(R.string.demo_schedule_pickup)) }
                     if (isPickupWorkTimeNow()) {
                         Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, enabled = "status-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(if ("status-${pickup.id}" in busy) "Starting…" else "Start now") }
                     } else {
-                        Text("Pickup work hours are 7:30 AM–6:30 PM India time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_1a95258c37c6), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 "SCHEDULED" -> if (isPickupWorkTimeNow()) {
                     Button(onClick = { onStatus(pickup.id, "IN_TRANSIT") }, enabled = "status-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(if ("status-${pickup.id}" in busy) "Starting…" else "Start trip") }
                 } else {
-                    Text("Start trip during pickup hours: 7:30 AM–6:30 PM.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_3e37016ef70a), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 "IN_TRANSIT" -> {
-                    Text("At the household? Mark Arrived to unlock their one-time QR. Ask them to show it before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Mark arrived") }
+                    Text(stringResource(R.string.ui_copy_01eeeae331be), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = { onStatus(pickup.id, "ARRIVED") }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_0828af7f409b)) }
                 }
                 "ARRIVED" -> {
                     if (pickup.householdQrScannedAt == null) {
-                        Text("Scan the household’s one-time pickup QR before weighing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_648e93d69590), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(
                             onClick = {
                                 scannerLaunchError = false
@@ -1829,20 +1825,20 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                                 }.onFailure { scannerLaunchError = true }
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
-                        ) { Icon(Icons.Filled.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Scan household pickup QR") }
-                        if (scannerLaunchError) Text("Could not open the QR scanner. Check camera access and try again.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        ) { Icon(Icons.Filled.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_32de422fb324)) }
+                        if (scannerLaunchError) Text(stringResource(R.string.ui_copy_cfb8f707ce75), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     } else {
-                        Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record final weight") }
+                        Button(onClick = { showComplete = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_e18355dc201a)) }
                     }
                 }
                 "COMPLETED" -> {
-                    Text("Added to inventory · paid household ${money(pickup.finalAmount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    if ((pickup.pickupCharge ?: 0.0) > 0) Text("Material ${money(pickup.grossMaterialAmount)} · pickup charge ${money(pickup.pickupCharge)}", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.ui_copy_be735b699c73, money(pickup.finalAmount)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    if ((pickup.pickupCharge ?: 0.0) > 0) Text(stringResource(R.string.ui_copy_66a5223089da, money(pickup.grossMaterialAmount), money(pickup.pickupCharge)), style = MaterialTheme.typography.bodySmall)
                     when (pickup.settlementPayment?.status) {
                         "RECORDED" -> Text("${paymentMethodName(pickup.settlementPayment.paymentMethod)} payment recorded · ${if (pickup.settlementPayment.householdReceivedAt == null) "awaiting household receipt confirmation" else "awaiting operator reconciliation"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        "VERIFIED" -> Text("Payment reconciled by operator", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        "DISPUTED" -> Text("Payment needs operator follow-up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        else -> if (pickup.settlementStatus == "ACCEPTED") Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Record cash or UPI payment") }
+                        "VERIFIED" -> Text(stringResource(R.string.ui_copy_2e78eb6961ed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        "DISPUTED" -> Text(stringResource(R.string.ui_copy_d3227fded149), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        else -> if (pickup.settlementStatus == "ACCEPTED") Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_78a8f977fecf)) }
                     }
                 }
             }
@@ -1889,21 +1885,21 @@ private fun PickupSettlementPaymentDialog(pickup: PickupRequestDto, onDismiss: (
     val valid = parsedAmount != null && parsedAmount > 0 && (pickup.finalAmount == null || parsedAmount <= pickup.finalAmount + 0.01) && (method != "UPI" || reference.isNotBlank())
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Record pickup payment") },
+        title = { Text(stringResource(R.string.ui_copy_1737d7242229)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Record an external cash or UPI payment. An operator will reconcile the record; this does not initiate a transfer.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(amount, { amount = it.filter { character -> character.isDigit() || character == '.' }.take(12) }, label = { Text("Amount in rupees") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.ui_copy_105715a89d94), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(amount, { amount = it.filter { character -> character.isDigit() || character == '.' }.take(12) }, label = { Text(stringResource(R.string.payment_amount)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("CASH" to "Cash", "UPI" to "UPI").forEach { (key, label) -> FilterChip(selected = method == key, onClick = { method = key }, label = { Text(label) }) }
                 }
-                if (method == "UPI") OutlinedTextField(reference, { reference = it.take(200) }, label = { Text("External UPI reference") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("Operator note (optional)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-                if (parsedAmount != null && pickup.finalAmount != null && parsedAmount > pickup.finalAmount + 0.01) Text("Amount cannot exceed ${money(pickup.finalAmount)}.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (method == "UPI") OutlinedTextField(reference, { reference = it.take(200) }, label = { Text(stringResource(R.string.ui_copy_cef40c71ff47)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text(stringResource(R.string.ui_copy_cb6c116d80b8)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                if (parsedAmount != null && pickup.finalAmount != null && parsedAmount > pickup.finalAmount + 0.01) Text(stringResource(R.string.ui_copy_d547f2275b0b, money(pickup.finalAmount)), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(onClick = { onSubmit(PickupSettlementPaymentRequestDto(amount = parsedAmount!!, method = method, reference = reference.trim().ifBlank { null }, notes = notes.trim().ifBlank { null })) }, enabled = valid) { Text("Record payment") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(onClick = { onSubmit(PickupSettlementPaymentRequestDto(amount = parsedAmount!!, method = method, reference = reference.trim().ifBlank { null }, notes = notes.trim().ifBlank { null })) }, enabled = valid) { Text(stringResource(R.string.payment_record)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -1914,12 +1910,12 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
             if (photoError != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(photoError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRetry) { Text("Retry") }
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.future_retry)) }
                 }
             } else if (loading) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text("Loading scrap photos…", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_65602cee4fd9), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1929,7 +1925,7 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TextButton(onClick = onRetry) { Text("Retry") }
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.future_retry)) }
                 }
             }
         } else {
@@ -1944,10 +1940,10 @@ private fun ListingPhotoStrip(photos: List<ByteArray>, expectedCount: Int, photo
             if (photoError != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(photoError, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRetry) { Text("Retry") }
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.future_retry)) }
                 }
             } else {
-                Text("${photos.size} of $expectedCount angle${if (expectedCount == 1) "" else "s"} available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_db44daebec30, photos.size, expectedCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -2006,7 +2002,7 @@ private fun FullScreenListingPhotoDialog(
                 )
             }
             IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = "Close full-screen photo", tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_copy_34f64ffd9ab1), tint = Color.White)
             }
             MaterialText(
                 "Photo ${photoIndex + 1} of $photoCount · Pinch to zoom",
@@ -2073,11 +2069,11 @@ private fun SchedulePickupDialog(
     var selected by remember(firstSlot) { mutableStateOf(firstSlot.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Schedule collection") },
+        title = { Text(stringResource(R.string.ui_copy_46fbf4d17eaa)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Pickups run 7:30 AM–6:30 PM. Choose a time at least $PICKUP_MIN_LEAD_MINUTES minutes from now.", style = MaterialTheme.typography.bodyMedium)
-                if (slots.isEmpty()) Text("No pickup times are available in the next 14 days.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ui_copy_73e4b32b8063, PICKUP_MIN_LEAD_MINUTES), style = MaterialTheme.typography.bodyMedium)
+                if (slots.isEmpty()) Text(stringResource(R.string.ui_copy_91e5717496f5), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 slots.forEach { slot ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         androidx.compose.material3.RadioButton(selected = selected == slot.first, onClick = { selected = slot.first })
@@ -2087,7 +2083,7 @@ private fun SchedulePickupDialog(
             }
         },
         confirmButton = { TextButton(onClick = { onSubmit(selected) }, enabled = selected.isNotBlank()) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -2102,9 +2098,9 @@ private fun ReasonDialog(title: String, confirmLabel: String, onDismiss: () -> U
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(reason, { reason = it.take(500) }, label = { Text("Reason (optional)") }, minLines = 2) },
+        text = { OutlinedTextField(reason, { reason = it.take(500) }, label = { Text(stringResource(R.string.ui_copy_f6826f8fc9b4)) }, minLines = 2) },
         confirmButton = { TextButton(onClick = { onSubmit(reason.trim()) }) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Keep pickup") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_copy_f7c449371849)) } }
     )
 }
 
@@ -2114,15 +2110,15 @@ private fun ReassignDialog(onDismiss: () -> Unit, onSubmit: (String, Boolean) ->
     var noShow by remember { mutableStateOf(true) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Return for reassignment") },
+        title = { Text(stringResource(R.string.ui_copy_9998c4509375)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(reason, { reason = it.take(500) }, label = { Text("Why reassign?") }, minLines = 2)
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(noShow, { noShow = it }); Text("No-show") }
+                OutlinedTextField(reason, { reason = it.take(500) }, label = { Text(stringResource(R.string.ui_copy_552812ff2a96)) }, minLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(noShow, { noShow = it }); Text(stringResource(R.string.ui_copy_75602c52a54b)) }
             }
         },
-        confirmButton = { TextButton(onClick = { if (reason.isNotBlank()) onSubmit(reason.trim(), noShow) }) { Text("Reassign") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
+        confirmButton = { TextButton(onClick = { if (reason.isNotBlank()) onSubmit(reason.trim(), noShow) }) { Text(stringResource(R.string.ui_copy_55843fb075e2)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.perm_not_now)) } }
     )
 }
 
@@ -2142,19 +2138,19 @@ private fun SettlementDecisionDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Check weight and value before accepting.", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.ui_copy_67d24b1a4f48), style = MaterialTheme.typography.bodyMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Checkbox(checked = raiseIssue, onCheckedChange = { raiseIssue = it })
-                    Text("Raise an issue instead")
+                    Text(stringResource(R.string.ui_copy_b3e35833f144))
                 }
                 if (raiseIssue) {
-                    Text("Reason", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.ui_copy_f219cc0614ae), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("WEIGHT_DIFFERENCE", "PRICE_DIFFERENCE", "MATERIAL_MISMATCH", "OTHER").forEach { option ->
                             FilterChip(selected = reason == option, onClick = { reason = option }, label = { Text(option.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) })
                         }
                     }
-                    OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("What should be reviewed?") }, minLines = 2)
+                    OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text(stringResource(R.string.ui_copy_2183134d6c0e)) }, minLines = 2)
                 }
             }
         },
@@ -2163,7 +2159,7 @@ private fun SettlementDecisionDialog(
                 Text(if (raiseIssue) "Submit issue" else acceptLabel)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.perm_not_now)) } }
     )
 }
 
@@ -2195,48 +2191,48 @@ private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListing
             Column(Modifier.fillMaxSize().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Final weighing", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text("Pickup ${pickup.id.takeLast(7)} · household handover verified", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_5593428c6ab6), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.ui_copy_eef4d8744af3, pickup.id.takeLast(7)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close final weighing") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_copy_5feb7763bbb8)) }
                 }
                 HorizontalDivider()
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text("Enter the measured weight and the rate agreed with the household.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    listing?.let { Text("Listed as ${materialName(it.materialCategory)} · approx. ${"%.1f".format(it.estimatedWeight)} kg", style = MaterialTheme.typography.bodyMedium) }
-                    OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Actual weight · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Agreed rate · ₹/kg") }, supportingText = { Text("Confirm the rate with the household before completing.") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Text("Final material", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.ui_copy_9b6e56ce8dad), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    listing?.let { Text(stringResource(R.string.ui_copy_d8d4daa3983b, materialName(it.materialCategory), "%.1f".format(it.estimatedWeight)), style = MaterialTheme.typography.bodyMedium) }
+                    OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.ui_copy_852d87b759bb)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_c7545418054d)) }, supportingText = { Text(stringResource(R.string.ui_copy_ffa763d18edb)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.ui_copy_e2009b04b506), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         materials.forEach { option -> FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 2) }) }
                     }
-                    OutlinedTextField(grade, { grade = it.take(80) }, label = { Text("Grade") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(grade, { grade = it.take(80) }, label = { Text(stringResource(R.string.ui_copy_aecc49c15355)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     if (reasonRequired) {
-                        Text("Why is the final result different? Select a reason to continue.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.ui_copy_7d9a1e45d574), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             reasonOptions.forEach { (code, label) -> FilterChip(selected = reasonCode == code, onClick = { reasonCode = code }, label = { Text(label) }) }
                         }
                     }
                     if ((pickup.pickupCharge ?: 0.0) > 0) Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = waivePickupCharge, onCheckedChange = { waivePickupCharge = it })
-                        Text("Waive the ${money(pickup.pickupCharge)} pickup charge for this order")
+                        Text(stringResource(R.string.ui_copy_59f7c4f53552, money(pickup.pickupCharge)))
                     }
                     if (total > 0) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("Household settlement", style = MaterialTheme.typography.labelLarge)
-                            Text("Material value ${money(total)} − pickup charge ${money(charge)}", style = MaterialTheme.typography.bodyMedium)
-                            Text("Household receives ${money(total - charge)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.ui_copy_a6ddd991eeaf), style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(R.string.ui_copy_2e3e55b0fa5a, money(total), money(charge)), style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.ui_copy_174f79312fae, money(total - charge)), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         }
                     }
-                    if (total > 0 && total <= charge) Text("Pickup charge must be less than the material value. Waive the charge to complete this pickup.", color = MaterialTheme.colorScheme.error)
-                    Text("The household will review the final amount before it is settled.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (total > 0 && total <= charge) Text(stringResource(R.string.ui_copy_ba2429bdadbf), color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.ui_copy_ef4d411a058d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 HorizontalDivider()
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Cancel") }
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.cancel)) }
                     Button(
                         onClick = {
                             val w = weight.toDoubleOrNull()
@@ -2247,7 +2243,7 @@ private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListing
                         },
                         enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && total > charge && (!reasonRequired || reasonCode != null),
                         modifier = Modifier.weight(1.3f).heightIn(min = 52.dp)
-                    ) { Text("Complete pickup") }
+                    ) { Text(stringResource(R.string.ui_copy_2d2dcdbfaa4b)) }
                 }
             }
         }
@@ -2255,7 +2251,7 @@ private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListing
 }
 
 @Composable
-private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${"%.1f".format(item.availableKg)} kg free", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; if (item.grade.isNotBlank() && item.grade != "UNSPECIFIED") Text("Grade: ${item.grade}"); Text("Reserved ${"%.1f".format(item.reservedKg)} · sold ${"%.1f".format(item.soldKg)} kg · cost ${money(item.purchaseCost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(stringResource(R.string.ui_copy_be59d2416bfb, "%.1f".format(item.availableKg)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; if (item.grade.isNotBlank() && item.grade != "UNSPECIFIED") Text(stringResource(R.string.ui_copy_99033ef1e4b7, item.grade)); Text(stringResource(R.string.ui_copy_572644e2221f, "%.1f".format(item.reservedKg), "%.1f".format(item.soldKg), money(item.purchaseCost)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun InventoryTotals(items: List<InventoryBalanceDto>) { val available = items.sumOf { it.availableKg }; val reserved = items.sumOf { it.reservedKg }; Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) { Metric("Available", "%.1f kg".format(available)); Metric("Reserved", "%.1f kg".format(reserved)); Metric("Materials", items.size.toString()) } } }
 @Composable private fun Metric(label: String, value: String) { Column { Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall) } }
 @Composable private fun CapturedLotCard(lot: Lot) {
@@ -2271,29 +2267,29 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
                 Text(lot.materialLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 StatusChip(if (lot.synced) "Saved" else "Pending")
             }
-            Text("${"%.1f".format(lot.weightKg)} kg · ${statusName(lot.status.name)}")
-            Text("$syncLabel · captured record, not a recycler lot.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_ae71e136f5c0, "%.1f".format(lot.weightKg), statusName(lot.status.name)))
+            Text(stringResource(R.string.ui_copy_94a9b6bd4fee, syncLabel), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
-@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit, onPrepareHandover: (String) -> Unit, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); Text("Reserved inventory · ${lot.areaName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text("Cancel lot and release stock") }; if (lot.status == "RESERVED") { Text("Recycler offer accepted. Prepare a signed QR, confirm your side, then let the Recycler scan it within 2 hours.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Button(onClick = { onPrepareHandover(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Prepare handover QR") }; if (!lot.reservedForId.isNullOrBlank()) OutlinedButton(onClick = { onOpenBulkChat(lot.id, lot.reservedForId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Recycler") } } } } }
+@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit, onPrepareHandover: (String) -> Unit, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text(stringResource(R.string.ui_copy_c0d278e12f90, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg))); Text(stringResource(R.string.ui_copy_1547fd202254, lot.areaName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_689b5f9c7355)) }; if (lot.status == "RESERVED") { Text(stringResource(R.string.ui_copy_3ca3617baca2), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Button(onClick = { onPrepareHandover(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_6f8511b380c6)) }; if (!lot.reservedForId.isNullOrBlank()) OutlinedButton(onClick = { onOpenBulkChat(lot.id, lot.reservedForId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_e68ddcadeb21)) } } } } }
 @Composable
 private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject: (String, String) -> Unit = { _, _ -> }, onCounter: (String, Double, String?) -> Unit = { _, _, _ -> }, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) {
     var showReject by remember(offer.id) { mutableStateOf(false) }
     var showCounter by remember(offer.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Recycler offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
+            Text(stringResource(R.string.deal_offered_rate), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_d250ca739d6d, money(offer.offeredRatePerKg), statusName(offer.status)))
             if (offer.status == "ACCEPTED") {
-                OutlinedButton(onClick = { onOpenBulkChat(offer.bulkLotId, offer.recyclerId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Recycler") }
+                OutlinedButton(onClick = { onOpenBulkChat(offer.bulkLotId, offer.recyclerId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_e68ddcadeb21)) }
             }
             if (offer.status == "PENDING") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { onAccept(offer.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Accept") }
-                    OutlinedButton(onClick = { showCounter = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Counter") }
+                    Button(onClick = { onAccept(offer.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.quote_accept)) }
+                    OutlinedButton(onClick = { showCounter = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f4018045cfb4)) }
                 }
-                OutlinedButton(onClick = { showReject = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reject offer") }
+                OutlinedButton(onClick = { showReject = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_4f811190f75e)) }
             }
         }
     }
@@ -2308,15 +2304,15 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
     val parsed = rate.toDoubleOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Counter-offer") },
+        title = { Text(stringResource(R.string.ui_copy_4848554818d3)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                OutlinedTextField(notes, { notes = it.take(500) }, label = { Text("Note (optional)") }, minLines = 2)
+                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_9b0fd7b576ba)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.ui_copy_4e39567064b6)) }, minLines = 2)
             }
         },
-        confirmButton = { TextButton(onClick = { parsed?.takeIf { it > 0 }?.let { onSubmit(it, notes.ifBlank { null }) } }, enabled = parsed?.let { it > 0 } == true) { Text("Send counter") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = { parsed?.takeIf { it > 0 }?.let { onSubmit(it, notes.ifBlank { null }) } }, enabled = parsed?.let { it > 0 } == true) { Text(stringResource(R.string.ui_copy_6c7444259930)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
 @Composable private fun BulkLotDialog(inventory: List<InventoryBalanceDto>, currentArea: String, onDismiss: () -> Unit, onSubmit: (BulkLotCreateDto) -> Unit) {
@@ -2327,24 +2323,24 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
     var rate by remember { mutableStateOf("") }
     var minimumRate by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Create recycler bulk lot") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_332b62cec05e)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Only available inventory can be reserved. This lot is for verified recyclers.")
+            Text(stringResource(R.string.ui_copy_cd0080fd8abd))
             if (options.size > 1) {
-                Text("Material", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.lot_material_label), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     options.take(6).forEach { candidate ->
                         FilterChip(selected = candidate.id == item?.id, onClick = { selectedId = candidate.id }, label = { Text(materialName(candidate.materialCategory)) })
                     }
                 }
             }
-            Text("${materialName(item?.materialCategory ?: "OTHER")} · available ${"%.1f".format(item?.availableKg ?: 0.0)} kg")
-            OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Asking rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(minimumRate, { minimumRate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Minimum acceptable rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text("Notes for recyclers (optional)") }, minLines = 2)
+            Text(stringResource(R.string.ui_copy_9043837aacba, materialName(item?.materialCategory ?: "OTHER"), "%.1f".format(item?.availableKg ?: 0.0)))
+            OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_49b0cf9c4005)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_fdfd1e13dea3)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(minimumRate, { minimumRate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_287ecfcf652b)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text(stringResource(R.string.ui_copy_3b575a691c82)) }, minLines = 2)
         }
-    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); val min = minimumRate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0 && (min == null || (min > 0 && min <= r))) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, min, currentArea.ifBlank { "Current area" }, notes = notes.ifBlank { null })) }, enabled = item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (minimumRate.toDoubleOrNull() == null || minimumRate.toDoubleOrNull()?.let { it > 0 && it <= (rate.toDoubleOrNull() ?: 0.0) } == true)) { Text("List for recyclers") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); val min = minimumRate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0 && (min == null || (min > 0 && min <= r))) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, min, currentArea.ifBlank { "Current area" }, notes = notes.ifBlank { null })) }, enabled = item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (minimumRate.toDoubleOrNull() == null || minimumRate.toDoubleOrNull()?.let { it > 0 && it <= (rate.toDoubleOrNull() ?: 0.0) } == true)) { Text(stringResource(R.string.ui_copy_4023cf765ef2)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -2352,49 +2348,49 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
     TraceBusyFrames(state.busy)
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { RoleHeader("Buy recyclable material", "Browse bulk lots or publish facility demand.", Icons.Filled.Storefront, onRefresh, state.loading) }
-        item { Text("Recycler handovers are arranged with the Kabadiwala; this flow has no fixed shift. The separate household pickup shift is 7:30 AM–6:30 PM India time. Scan the collector's signed QR within 2 hours of preparation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { Button(onClick = onOpenDemand, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Publish demand") } }
+        item { Text(stringResource(R.string.ui_copy_392366d76c17), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Button(onClick = onOpenDemand, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_ea21894118d3)) } }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
-        item { Text("Available collector lots", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_fa3f1b42d9f8), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (!state.initialLoadComplete && state.loading) item { LoadingPanel("Loading recycler marketplace…") }
         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
         items(state.bulkLots, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive) }
         if (state.recyclerLotsNextCursor != null) item { TextButton(onClick = onLoadMoreLots, enabled = "more-recycler-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_lots)) } }
-        item { Text("My offers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_2de7f18bf0a2), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Make an offer on a listed lot.") }
         items(state.offers, key = { it.id }) { RecyclerOfferCard(it, onWithdraw = onWithdrawOffer, onOpenBulkChat = { onOpenBulkChat(it.bulkLotId, state.bulkLots.firstOrNull { lot -> lot.id == it.bulkLotId }?.kabadiwalaId.orEmpty()) }) }
         if (state.recyclerOffersNextCursor != null) item { TextButton(onClick = onLoadMoreOffers, enabled = "more-recycler-offers" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_offers)) } }
-        item { Text("My demand", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_75c051c4d3df), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         items(state.requirements, key = { it.id }) { requirement -> RequirementCard(requirement, onUpdate = onUpdateRequirement) }
         if (state.recyclerRequirementsNextCursor != null) item { TextButton(onClick = onLoadMoreDemand, enabled = "more-recycler-demands" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_demand)) } }
-        item { Text("Pools", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_2fd96da4e4b5), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.pools.isEmpty()) item { EmptyPanel("No pools yet", "Collectors can combine reserved stock for your demand.") }
         items(state.pools, key = { "pool-${it.id}" }) { pool ->
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("${materialName(pool.materialCategory)} · ${"%.1f".format(pool.totalReservedKg)} kg", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${statusName(pool.status)} · ${pool.contributions.size} collector contributions", style = MaterialTheme.typography.bodySmall); Text("The QR handover and per-contribution settlement remain visible to the participating parties.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) } }
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(stringResource(R.string.ui_copy_3786e15cb669, materialName(pool.materialCategory), "%.1f".format(pool.totalReservedKg)), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(stringResource(R.string.ui_copy_4990508ddf1a, statusName(pool.status), pool.contributions.size), style = MaterialTheme.typography.bodySmall); Text(stringResource(R.string.ui_copy_0428be7b0804), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) } }
         }
-        item { Text("Awaiting receipts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item { Text(stringResource(R.string.ui_copy_9c15758d98d2), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (state.initialLoadComplete && state.handovers.isEmpty()) item { EmptyPanel("No handovers yet", "Confirmed QR handovers will appear here.") }
         items(state.handovers, key = { "supply-${it.id}" }) { handover ->
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg · ${statusName(handover.status)}", style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onOpenHandoverScanner, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Scan QR") } } }
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(handover.referenceId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(stringResource(R.string.ui_copy_81d93b7191a3, materialName(handover.materialCategory), "%.1f".format(handover.quotedWeightKg), statusName(handover.status)), style = MaterialTheme.typography.bodyMedium); if (handover.status == "COLLECTOR_CONFIRMED") Button(onClick = onOpenHandoverScanner, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_fd35edb7df56)) } } }
         }
     }
 }
 
-@Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text("${"%.1f".format(lot.quantityKg)} kg · ${money(lot.askingRatePerKg)}/kg asking"); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text("${lot.areaName} · collector lot", Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Make offer") }; if (offer != null) { Text("Your offer: ${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text("Accepted · waiting for QR handover.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
+@Composable private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit) { var showOffer by remember { mutableStateOf(false) }; Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Inventory2, null, tint = MaterialTheme.colorScheme.primary); Text(materialName(lot.materialCategory), Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text(stringResource(R.string.ui_copy_f5540311aef0, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg))); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Text(stringResource(R.string.ui_copy_053ef1155917, lot.areaName), Modifier.padding(start = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (offer == null && lot.status == "LISTED") Button(onClick = { showOffer = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_674e5f553edc)) }; if (offer != null) { Text(stringResource(R.string.ui_copy_236524a7db4b, money(offer.offeredRatePerKg), statusName(offer.status)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold); if (offer.status == "ACCEPTED") Text(stringResource(R.string.ui_copy_3e63b4adde6f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }; if (showOffer) OfferDialog(lot, onDismiss = { showOffer = false }, onSubmit = { onOffer(lot.id, it); showOffer = false }) }
 @Composable
 private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?) -> Unit, onOpenBulkChat: () -> Unit = {}) {
     var showWithdraw by remember(offer.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Your offer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("${money(offer.offeredRatePerKg)}/kg · ${statusName(offer.status)}")
-            if (offer.status == "ACCEPTED") OutlinedButton(onClick = onOpenBulkChat, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Message Kabadiwala") }
-            if (offer.status == "PENDING") OutlinedButton(onClick = { showWithdraw = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Withdraw offer") }
+            Text(stringResource(R.string.ui_copy_b3a2c273ef01), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_d250ca739d6d, money(offer.offeredRatePerKg), statusName(offer.status)))
+            if (offer.status == "ACCEPTED") OutlinedButton(onClick = onOpenBulkChat, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_9b1318f8a1b8)) }
+            if (offer.status == "PENDING") OutlinedButton(onClick = { showWithdraw = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f4c4aa99a043)) }
         }
     }
     if (showWithdraw) ReasonDialog(title = "Withdraw offer", confirmLabel = "Withdraw", onDismiss = { showWithdraw = false }, onSubmit = { onWithdraw(offer.id, it.ifBlank { null }); showWithdraw = false })
 }
-@Composable private fun OfferDialog(lot: BulkLotDto, onDismiss: () -> Unit, onSubmit: (Double) -> Unit) { var rate by remember { mutableStateOf(lot.askingRatePerKg.toString()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Offer on ${materialName(lot.materialCategory)}") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("${"%.1f".format(lot.quantityKg)} kg · asking ${money(lot.askingRatePerKg)}/kg"); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Your offer · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { rate.toDoubleOrNull()?.takeIf { it > 0 }?.let(onSubmit) }, enabled = rate.toDoubleOrNull()?.let { it > 0 } == true) { Text("Send offer") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
+@Composable private fun OfferDialog(lot: BulkLotDto, onDismiss: () -> Unit, onSubmit: (Double) -> Unit) { var rate by remember { mutableStateOf(lot.askingRatePerKg.toString()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_bf9efaf0c05f, materialName(lot.materialCategory))) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(stringResource(R.string.ui_copy_c0d278e12f90, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg))); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_b76ac98c768f)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { rate.toDoubleOrNull()?.takeIf { it > 0 }?.let(onSubmit) }, enabled = rate.toDoubleOrNull()?.let { it > 0 } == true) { Text(stringResource(R.string.ui_copy_af851d7fddc7)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }) }
 @Composable
 fun RecyclerDemandCreateScreen(supportedMaterials: List<String>, isSubmitting: Boolean, error: String?, onBack: () -> Unit, onSubmit: (ProcurementRequirementCreateDto) -> Unit) {
     var material by rememberSaveable { mutableStateOf("PLASTIC") }
@@ -2410,31 +2406,31 @@ fun RecyclerDemandCreateScreen(supportedMaterials: List<String>, isSubmitting: B
     val maxRate = rate.toDoubleOrNull()
     val valid = material in supportedMaterials && q != null && q > 0 && m != null && m > 0 && m <= q && r != null && r > 0 && (rate.isBlank() || maxRate != null && maxRate > 0)
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onBack, enabled = !isSubmitting) { Text("← Back to market") }
-        Text("Publish procurement demand", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Kabadiwalas will see this request in their buyer marketplace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Material · Required", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onBack, enabled = !isSubmitting) { Text(stringResource(R.string.ui_copy_e9a92db0d837)) }
+        Text(stringResource(R.string.ui_copy_f01621d2ab89), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.ui_copy_46630d46e31d), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.ui_copy_991bc3071258), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         OutlinedButton(onClick = { showMaterials = true }, enabled = supportedMaterials.isNotEmpty() && !isSubmitting, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
             Text(if (material in supportedMaterials) materialName(material) else "Choose material")
         }
-        if (supportedMaterials.isEmpty()) Text("Could not load supported materials. Return and try again.", color = MaterialTheme.colorScheme.error)
-        OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(10) }, label = { Text("Needed quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(10) }, label = { Text("Minimum lot · kg") }, supportingText = { Text("Must not exceed the needed quantity") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Procurement radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg (optional)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        if (supportedMaterials.isEmpty()) Text(stringResource(R.string.ui_copy_3fa1f03ef37f), color = MaterialTheme.colorScheme.error)
+        OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(10) }, label = { Text(stringResource(R.string.ui_copy_d663f7cb830e)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(10) }, label = { Text(stringResource(R.string.ui_copy_3c4f2138238a)) }, supportingText = { Text(stringResource(R.string.ui_copy_7857b6bf671d)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_9e9419bb1b40)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_6c4883f1deaa)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Text("${materialName(material)} · ${q?.let { "${"%.1f".format(it)} kg" } ?: "Enter quantity"} · ${r?.let { "within ${"%.0f".format(it)} km" } ?: "Enter radius"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { if (valid) onSubmit(ProcurementRequirementCreateDto(material, m, q, maxRatePerKg = maxRate, procurementRadiusKm = r)) }, enabled = valid && !isSubmitting, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text(if (isSubmitting) "Publishing…" else "Publish demand") }
     }
     if (showMaterials) AlertDialog(
         onDismissRequest = { showMaterials = false },
-        title = { Text("Choose material") },
+        title = { Text(stringResource(R.string.ui_copy_c8f6fdb65d74)) },
         text = { LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(supportedMaterials, key = { it }) { category ->
                 FilterChip(selected = material == category, onClick = { material = category; showMaterials = false }, label = { Text(materialName(category)) }, modifier = Modifier.fillMaxWidth())
             }
         } },
-        confirmButton = { TextButton(onClick = { showMaterials = false }) { Text("Close") } }
+        confirmButton = { TextButton(onClick = { showMaterials = false }) { Text(stringResource(R.string.ui_copy_bbfa773e5a63)) } }
     )
 }
 @Composable private fun RequirementCard(item: ProcurementRequirementDto, onUpdate: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }) {
@@ -2442,9 +2438,9 @@ fun RecyclerDemandCreateScreen(supportedMaterials: List<String>, isSubmitting: B
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(item.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(item.status)) }
-            Text("Need ${"%.0f".format(item.requiredQuantityKg)} kg · min lot ${"%.0f".format(item.minimumLotKg)} kg")
+            Text(stringResource(R.string.ui_copy_7ba5a4bcd530, "%.0f".format(item.requiredQuantityKg), "%.0f".format(item.minimumLotKg)))
             Text("Within ${"%.0f".format(item.procurementRadiusKm)} km${item.maxRatePerKg?.let { " · up to ₹${"%.0f".format(it)}/kg" } ?: ""}", style = MaterialTheme.typography.bodySmall)
-            if (item.status == "OPEN") OutlinedButton(onClick = { showEdit = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Update demand") }
+            if (item.status == "OPEN") OutlinedButton(onClick = { showEdit = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_802650f17d8d)) }
         }
     }
     if (showEdit) RequirementEditDialog(item, onDismiss = { showEdit = false }, onSubmit = { input -> onUpdate(item.id, input); showEdit = false })
@@ -2457,15 +2453,15 @@ private fun RequirementEditDialog(item: ProcurementRequirementDto, onDismiss: ()
     var radius by remember { mutableStateOf(item.procurementRadiusKm.toString()) }
     var rate by remember { mutableStateOf(item.maxRatePerKg?.toString().orEmpty()) }
     val q = quantity.toDoubleOrNull(); val m = minimum.toDoubleOrNull(); val r = radius.toDoubleOrNull(); val rateValue = rate.toDoubleOrNull()
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Update procurement demand") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_9c1f49f175a0)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(materialName(item.materialCategory), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text("Required quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text("Minimum lot · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("Radius · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Maximum rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text(stringResource(R.string.ui_copy_59c3af4e55dd)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(9) }, label = { Text(stringResource(R.string.ui_copy_3c4f2138238a)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.ui_copy_18d8b6308c1e)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_95fe40431b7a)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
         }
-    }, confirmButton = { TextButton(onClick = { if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementUpdateDto(minimumLotKg = m, requiredQuantityKg = q, maxRatePerKg = rateValue, procurementRadiusKm = r)) }, enabled = q?.let { it > 0 } == true && m?.let { it > 0 } == true && r?.let { it > 0 } == true) { Text("Save demand") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { TextButton(onClick = { if (q != null && m != null && r != null && q > 0 && m > 0 && r > 0) onSubmit(ProcurementRequirementUpdateDto(minimumLotKg = m, requiredQuantityKg = q, maxRatePerKg = rateValue, procurementRadiusKm = r)) }, enabled = q?.let { it > 0 } == true && m?.let { it > 0 } == true && r?.let { it > 0 } == true) { Text(stringResource(R.string.ui_copy_c72cc238ad05)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -2503,14 +2499,14 @@ private fun FormalisationDashboard(
         }
         if (selectedToolsTab == "ROUTES") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary); Text("Formal Route Advantage", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                Text("Compare rate, pickup readiness and logistics cost.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.ui_copy_6044e5e342b3), Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                Text(stringResource(R.string.ui_copy_805c884d4202), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(selected = routeMaterial == "CABLE", onClick = { routeMaterial = "CABLE" }, label = { Text("Cable") })
-                    FilterChip(selected = routeMaterial == "PCB", onClick = { routeMaterial = "PCB" }, label = { Text("PCB") })
-                    OutlinedTextField(routeQuantity, { routeQuantity = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text("kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f))
+                    FilterChip(selected = routeMaterial == "CABLE", onClick = { routeMaterial = "CABLE" }, label = { Text(stringResource(R.string.ui_copy_ea1bd070cdc7)) })
+                    FilterChip(selected = routeMaterial == "PCB", onClick = { routeMaterial = "PCB" }, label = { Text(stringResource(R.string.ui_copy_70606d6bfa77)) })
+                    OutlinedTextField(routeQuantity, { routeQuantity = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.ui_copy_1389845b02c0)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f))
                 }
-                Button(onClick = { routeQuantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onRouteEstimate(routeMaterial, it, "UNSPECIFIED") } }, enabled = routeQuantity.toDoubleOrNull()?.let { it > 0 } == true, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Compare verified routes") }
+                Button(onClick = { routeQuantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onRouteEstimate(routeMaterial, it, "UNSPECIFIED") } }, enabled = routeQuantity.toDoubleOrNull()?.let { it > 0 } == true, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_4ff6bb8dcd8a)) }
                 state.routeAdvantage?.let { result ->
                     result.baseline?.let { baseline -> Text("Reference baseline: ₹${"%.0f".format(baseline.marketPrice)}/kg · ${baseline.source ?: "source not stated"} · ${if (baseline.isDemo) "seeded/demo" else "recorded"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     result.items.take(3).forEach { RouteEstimateCard(it) }
@@ -2520,12 +2516,12 @@ private fun FormalisationDashboard(
         }
         if (selectedToolsTab == "SAFETY") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Safety-aware routing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Check handling before moving hazardous or data-bearing material.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_f4fb787f252c), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_copy_118451b37dcf), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("INTACT", "DAMAGED", "PARTIAL").forEach { option -> FilterChip(selected = routeCondition == option, onClick = { routeCondition = option }, label = { Text(statusName(option)) }) }
                 }
-                OutlinedButton(onClick = { onLoadSafetyRouting(routeMaterial, routeCondition) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Check handling route") }
+                OutlinedButton(onClick = { onLoadSafetyRouting(routeMaterial, routeCondition) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_10f74ba3f5fb)) }
                 state.safetyRouting?.let { route ->
                     StatusChip("${statusName(route.hazardLevel)} hazard")
                     Text(route.recommendedRouting, style = MaterialTheme.typography.bodyMedium)
@@ -2535,76 +2531,76 @@ private fun FormalisationDashboard(
         }
         if (selectedToolsTab == "POOLING") Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text("Cooperative pooling", Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                Text("Reserve available stock; thresholds and contributions stay visible.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocalShipping, null, tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.ui_copy_6ede03ad7103), Modifier.padding(start = 9.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                Text(stringResource(R.string.ui_copy_5d6b5bd09396), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 state.poolOpportunities.take(3).forEach { opportunity ->
                     val pool = opportunity.existingPool
                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(materialName(opportunity.requirement.materialCategory), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text("Need ${"%.0f".format(opportunity.requirement.minimumLotKg)} kg · visible cluster ${"%.1f".format(opportunity.clusterAvailableKg)} kg · gap ${"%.1f".format(opportunity.supplyGapKg)} kg", style = MaterialTheme.typography.bodySmall)
-                            if (pool == null) Button(onClick = { onCreatePool(opportunity.requirement.id, currentArea.ifBlank { "Current area" }) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Open pool") }
+                            Text(stringResource(R.string.ui_copy_eab4610e8b0c, "%.0f".format(opportunity.requirement.minimumLotKg), "%.1f".format(opportunity.clusterAvailableKg), "%.1f".format(opportunity.supplyGapKg)), style = MaterialTheme.typography.bodySmall)
+                            if (pool == null) Button(onClick = { onCreatePool(opportunity.requirement.id, currentArea.ifBlank { "Current area" }) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_6d86ac18d4ca)) }
                             else {
-                                Text("Pool ${statusName(pool.status)} · ${"%.1f".format(pool.totalReservedKg)} kg reserved", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.ui_copy_e141828e628c, statusName(pool.status), "%.1f".format(pool.totalReservedKg)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                                 val currentPool = state.pools.firstOrNull { it.id == pool.id }
                                 val canJoin = pool.status in setOf("FORMING", "THRESHOLD_MET") && (currentPool == null || currentPool.contributions.none { it.isMine })
-                                if (canJoin) OutlinedButton(onClick = { showJoin = opportunity }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Join with reserved stock") }
+                                if (canJoin) OutlinedButton(onClick = { showJoin = opportunity }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_c5e68b9544b4)) }
                             }
                         }
                     }
                 }
                 state.pools.take(3).forEach { pool -> PoolActionCard(pool, currentCollectorId, onJoinPool, onLeavePool, onLockPool, onPreparePoolHandover) }
                 if (state.poolSuggestions.isNotEmpty()) {
-                    Text("Demand-triggered suggestions", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ui_copy_485ee2f3f68b), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     state.poolSuggestions.take(3).forEach { suggestion ->
                         Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text("${materialName(suggestion.materialCategory)} · ${"%.0f".format(suggestion.requiredKg)} kg needed", fontWeight = FontWeight.SemiBold)
-                                Text("${"%.0f".format(suggestion.eligibleSupplyKg)} kg eligible supply · ${suggestion.contributorsNeeded} contributors suggested", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.ui_copy_d98dc65fe50a, materialName(suggestion.materialCategory), "%.0f".format(suggestion.requiredKg)), fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.ui_copy_9be4f0d6091d, "%.0f".format(suggestion.eligibleSupplyKg), suggestion.contributorsNeeded), style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
                 }
-                if (state.poolOpportunities.isEmpty() && state.pools.isEmpty()) Text("No open demand. New pools appear after a Recycler publishes demand.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state.poolOpportunities.isEmpty() && state.pools.isEmpty()) Text(stringResource(R.string.ui_copy_617a09fbaca1), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (selectedToolsTab == "POOLING" && state.demandIntelligence.isNotEmpty()) {
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Demand intelligence", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ui_copy_b0bca5f0b39c), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     state.demandIntelligence.take(3).forEach { item ->
                         Text("${jsonText(item, "materialCategory") ?: "Material opportunity"} · ${jsonNumber(item, "eligibleSupplyKg") ?: jsonNumber(item, "requiredQuantityKg") ?: "updated"}", style = MaterialTheme.typography.bodyMedium)
                     }
-                    Text("Platform signal, not a guaranteed sale.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = .78f))
+                    Text(stringResource(R.string.ui_copy_a43083d5904c), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = .78f))
                 }
             }
         }
         if (selectedToolsTab == "RECORDS") state.passport?.let { passport ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text("Collector Growth Passport", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("${passport.formalHandoverCount} handovers · ${"%.1f".format(passport.formalQuantityKg)} kg · ${passport.safetyModulesCompleted} safety modules", style = MaterialTheme.typography.bodyLarge); Text(passport.platformLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall); Text(passport.disclaimer ?: "Platform evidence profile; not official certification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .78f)) }
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Text(stringResource(R.string.ui_copy_42c4016d1fad), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(stringResource(R.string.ui_copy_d7cc4ca9839b, passport.formalHandoverCount, "%.1f".format(passport.formalQuantityKg), passport.safetyModulesCompleted), style = MaterialTheme.typography.bodyLarge); Text(passport.platformLabels.joinToString(" · "), style = MaterialTheme.typography.bodySmall); Text(passport.disclaimer ?: "Platform evidence profile; not official certification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = .78f)) }
             }
         }
         if (selectedToolsTab == "SAFETY") state.safety?.let { safety ->
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Safety gate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); safety.modules.forEach { module -> val acknowledged = safety.progress.any { it.moduleKey == module.key && it.acknowledged }; Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(module.title, fontWeight = FontWeight.SemiBold); Text(module.whatNotToDo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (acknowledged) StatusChip("Acknowledged") else TextButton(onClick = { onAcknowledgeSafety(module.key) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Acknowledge") } } } }
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(stringResource(R.string.ui_copy_e3f988950d15), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); safety.modules.forEach { module -> val acknowledged = safety.progress.any { it.moduleKey == module.key && it.acknowledged }; Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(module.title, fontWeight = FontWeight.SemiBold); Text(module.whatNotToDo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; if (acknowledged) StatusChip("Acknowledged") else TextButton(onClick = { onAcknowledgeSafety(module.key) }, modifier = Modifier.heightIn(min = 44.dp)) { Text(stringResource(R.string.ui_copy_9beb96dac88f)) } } } }
             }
         }
         if (selectedToolsTab == "RECORDS") {
             state.handovers.take(3).forEach { handover -> SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement) }
-            if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text("Showing saved evidence. Changes wait for the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.showingCachedEvidence && state.cachedAtEpochMs > 0) Text(stringResource(R.string.ui_copy_a02eabdb37a0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     showJoin?.let { opportunity -> JoinPoolDialog(opportunity, onDismiss = { showJoin = null }, onSubmit = { quantity, grade, rate -> opportunity.existingPool?.id?.let { onJoinPool(it, quantity, grade, rate) }; showJoin = null }) }
 }
 
-@Composable private fun RouteEstimateCard(item: RouteAdvantageDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(item.recyclerName, Modifier.weight(1f), fontWeight = FontWeight.SemiBold); Text("₹${"%.0f".format(item.estimatedNetValue)} net", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text("₹${"%.0f".format(item.offeredRatePerKg)}/kg · logistics ₹${"%.0f".format(item.logisticsCost)} · ${item.confidence.lowercase()} confidence", style = MaterialTheme.typography.bodySmall); Text(if (item.advantageValue != null) "Advantage ${"₹%.0f".format(item.advantageValue)}" else "Baseline unavailable", style = MaterialTheme.typography.bodySmall); Text(item.whyThisMatch.take(2).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (item.isDemo) Text("Demo reference", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+@Composable private fun RouteEstimateCard(item: RouteAdvantageDto) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(item.recyclerName, Modifier.weight(1f), fontWeight = FontWeight.SemiBold); Text(stringResource(R.string.ui_copy_7b7a5929fa3b, "%.0f".format(item.estimatedNetValue)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }; Text(stringResource(R.string.ui_copy_b92030736331, "%.0f".format(item.offeredRatePerKg), "%.0f".format(item.logisticsCost), item.confidence.lowercase()), style = MaterialTheme.typography.bodySmall); Text(if (item.advantageValue != null) "Advantage ${"₹%.0f".format(item.advantageValue)}" else "Baseline unavailable", style = MaterialTheme.typography.bodySmall); Text(item.whyThisMatch.take(2).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (item.isDemo) Text(stringResource(R.string.ui_copy_623e5656f220), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
 private fun jsonText(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.asString
 private fun jsonNumber(value: JsonObject, key: String): String? = value.get(key)?.takeIf { !it.isJsonNull }?.let { element -> runCatching { "${"%.1f".format(element.asDouble)} kg" }.getOrNull() }
 
-@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("Pool · ${materialName(pool.materialCategory)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text("${"%.1f".format(pool.totalReservedKg)} / ${"%.1f".format(pool.minimumQuantityKg)} kg · ${pool.contributions.size} contributors", style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Lock pool") }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "PICKUP_SCHEDULED")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(if (pool.status == "PICKUP_SCHEDULED") "Refresh handover QR" else "Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Leave") } } } } }
+@Composable private fun PoolActionCard(pool: PooledConsignmentDto, collectorId: String, onJoin: (String, Double, String, Double?) -> Unit, onLeave: (String) -> Unit, onLock: (String) -> Unit, onPrepare: (String) -> Unit) { val mine = pool.contributions.firstOrNull { it.isMine }; Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.ui_copy_269d45a84851, materialName(pool.materialCategory)), Modifier.weight(1f), fontWeight = FontWeight.SemiBold); StatusChip(statusName(pool.status)) }; Text(stringResource(R.string.ui_copy_da9c6e2d32dc, "%.1f".format(pool.totalReservedKg), "%.1f".format(pool.minimumQuantityKg), pool.contributions.size), style = MaterialTheme.typography.bodySmall); Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { if (pool.createdByCollectorId == collectorId && pool.status == "THRESHOLD_MET") OutlinedButton(onClick = { onLock(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_ed38460f5343)) }; if (pool.createdByCollectorId == collectorId && pool.status in setOf("LOCKED", "PICKUP_SCHEDULED")) Button(onClick = { onPrepare(pool.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(if (pool.status == "PICKUP_SCHEDULED") "Refresh handover QR" else "Prepare QR") }; if (mine != null && pool.status in setOf("FORMING", "THRESHOLD_MET")) TextButton(onClick = { onLeave(pool.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_7e3520a97331)) } } } } }
 
-@Composable private fun JoinPoolDialog(opportunity: PoolOpportunityDto, onDismiss: () -> Unit, onSubmit: (Double, String, Double?) -> Unit) { var quantity by remember { mutableStateOf("") }; var rate by remember { mutableStateOf(opportunity.requirement.maxRatePerKg?.toString().orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text("Join ${materialName(opportunity.requirement.materialCategory)} pool") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Reserved until the pooled handover is settled.", style = MaterialTheme.typography.bodySmall); OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Quantity · kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text("Expected rate · ₹/kg") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { quantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(it, opportunity.requirement.preferredGrade ?: "UNSPECIFIED", rate.toDoubleOrNull()) } }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true) { Text("Reserve stock") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) }
+@Composable private fun JoinPoolDialog(opportunity: PoolOpportunityDto, onDismiss: () -> Unit, onSubmit: (Double, String, Double?) -> Unit) { var quantity by remember { mutableStateOf("") }; var rate by remember { mutableStateOf(opportunity.requirement.maxRatePerKg?.toString().orEmpty()) }; AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_0d1f8e9d6403, materialName(opportunity.requirement.materialCategory))) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(stringResource(R.string.ui_copy_9c24a114fceb), style = MaterialTheme.typography.bodySmall); OutlinedTextField(quantity, { quantity = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_49b0cf9c4005)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true); OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_05dd0f9d8eaa)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) } }, confirmButton = { TextButton(onClick = { quantity.toDoubleOrNull()?.takeIf { it > 0 }?.let { onSubmit(it, opportunity.requirement.preferredGrade ?: "UNSPECIFIED", rate.toDoubleOrNull()) } }, enabled = quantity.toDoubleOrNull()?.let { it > 0 } == true) { Text(stringResource(R.string.ui_copy_31f351109b91)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }) }
 
 @Composable
 private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPassportResponseDto?, anomaly: AnomalyResponseDto?, onPrepareBulk: (String) -> Unit, onConfirmCollector: (String) -> Unit, onLoadPassport: (String) -> Unit, onLoadAnomalies: (String) -> Unit, onDecideSettlement: (String, String, String?, String?, String?) -> Unit) {
@@ -2618,26 +2614,26 @@ private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPa
     val qrBitmap = remember(handover.status, handover.qrCodeData, qrExpired) { if (!qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
     Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .45f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Text("Material passport handover", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("${handover.referenceId} · ${materialName(handover.materialCategory)} · ${"%.1f".format(handover.quotedWeightKg)} kg", style = MaterialTheme.typography.bodyLarge)
-            Text("Quoted value ₹${"%.0f".format(handover.quotedValue)} · ${statusName(handover.status)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.ui_copy_c7e82e2b7e50), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.ui_copy_69ec2efba154, handover.referenceId, materialName(handover.materialCategory), "%.1f".format(handover.quotedWeightKg)), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.ui_copy_74fe1047f504, "%.0f".format(handover.quotedValue), statusName(handover.status)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             handover.expiresAt?.let { Text("QR expires: ${IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text("This QR has expired. Prepare a fresh handover QR before the Recycler scans it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text(stringResource(R.string.ui_copy_799eb717ba03), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             qrBitmap?.let { Image(it.asImageBitmap(), "One-time handover QR", Modifier.size(190.dp).align(Alignment.CenterHorizontally)) }
-            if (handover.status == "PREPARED" && !qrExpired) Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Confirm collector side") }
-            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Text("Show this one-time QR to the verified Recycler for scan and receipt.", style = MaterialTheme.typography.bodySmall)
-            if (qrExpired && handover.bulkLotId != null) Button(onClick = { onPrepareBulk(handover.bulkLotId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Prepare fresh QR") }
+            if (handover.status == "PREPARED" && !qrExpired) Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_7be330b874d6)) }
+            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Text(stringResource(R.string.ui_copy_fecc7ddf5e07), style = MaterialTheme.typography.bodySmall)
+            if (qrExpired && handover.bulkLotId != null) Button(onClick = { onPrepareBulk(handover.bulkLotId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_154331c55f35)) }
             if (handover.status == "REVIEW_REQUIRED") {
                 Text("Settlement needs review: ${handover.reviewReason ?: "variance recorded"}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                Button(onClick = { showSettlement = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review settlement") }
+                Button(onClick = { showSettlement = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f2c80879b0e5)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = { onLoadPassport(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Passport") }
-                OutlinedButton(onClick = { onLoadAnomalies(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Risk flags") }
+                OutlinedButton(onClick = { onLoadPassport(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_d5ed1ca0e308)) }
+                OutlinedButton(onClick = { onLoadAnomalies(handover.id) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_024790205e21)) }
             }
             passport?.let { Text("${it.events.size} passport events · ${it.contribution?.quantityKg?.let { kg -> "${"%.1f".format(kg)} kg contributed" } ?: "direct lot handover"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            anomaly?.let { Text("Risk: ${statusName(it.riskLevel)} · ${it.flags.size} deterministic flag(s)", style = MaterialTheme.typography.bodySmall, color = if (it.riskLevel == "HIGH") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (handover.status == "COMPLETED") Text("Receipt completed. The one-time QR is no longer active; inspect the passport timeline for evidence.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            anomaly?.let { Text(stringResource(R.string.ui_copy_a7018b763900, statusName(it.riskLevel), it.flags.size), style = MaterialTheme.typography.bodySmall, color = if (it.riskLevel == "HIGH") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (handover.status == "COMPLETED") Text(stringResource(R.string.ui_copy_a0355a13d447), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (showSettlement) SettlementDecisionDialog(title = "Review formal settlement", acceptLabel = "Accept settlement", onDismiss = { showSettlement = false }, onSubmit = { decision, reason, notes -> showSettlement = false; onDecideSettlement(handover.id, decision, reason, null, notes) })
@@ -2688,7 +2684,7 @@ private fun ErrorPanel(text: String, retry: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = retry, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text("Retry") }
+            TextButton(onClick = retry, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text(stringResource(R.string.future_retry)) }
         }
     }
 }

@@ -83,9 +83,9 @@ fun ProfileScreen(
             if (onSave != null && profile.role != AccountRole.ADMIN) {
                 Button(onClick = { editing = true }, enabled = !saving, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Icon(Icons.Filled.Edit, contentDescription = null)
-                    Text("  Edit account details")
+                    Text(stringResource(R.string.ui_copy_f2568240b5a1))
                 }
-                if (saving) Text("Saving changes…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (saving) Text(stringResource(R.string.ui_copy_804053a9ee9a), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 saveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         }
@@ -115,13 +115,13 @@ private fun ProfileEditorDialog(profile: AccountProfile, saving: Boolean, onDism
     val valid = name.trim().isNotEmpty() && address.trim().isNotEmpty() && (email.isBlank() || email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")))
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit account details") },
+        title = { Text(stringResource(R.string.ui_copy_bb239a57a742)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Your mobile number and account type stay verified and cannot be changed here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_7e03e7ef4319), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(name, { name = it.take(160) }, label = { Text(stringResource(R.string.profile_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(email, { email = it.take(254) }, label = { Text("Security email") }, singleLine = true, supportingText = { Text("Optional recovery and sign-in email") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(address, { address = it.take(240) }, label = { Text("Full address") }, minLines = 2, maxLines = 3, supportingText = { Text("Include your street, block, or house number for pickups.") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(email, { email = it.take(254) }, label = { Text(stringResource(R.string.profile_email)) }, singleLine = true, supportingText = { Text(stringResource(R.string.ui_copy_97fedd8f5275)) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(address, { address = it.take(240) }, label = { Text(stringResource(R.string.ui_copy_9f8ce19bf4d3)) }, minLines = 2, maxLines = 3, supportingText = { Text(stringResource(R.string.ui_copy_9c207a302be2)) }, modifier = Modifier.fillMaxWidth())
             }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.common_back)) } },

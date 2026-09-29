@@ -307,7 +307,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     Icon(Icons.Filled.CameraAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(58.dp))
     Text(stringResource(R.string.lot_photo_title), style = MaterialTheme.typography.headlineMedium)
     Text(stringResource(R.string.lot_photo_detail), style = MaterialTheme.typography.bodyLarge)
-    Text("Create a photo record, then choose recyclers to request quotes. Bulk marketplace lots are created from weighed pickup inventory.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.ui_copy_8be4d313f3e0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isNotEmpty()) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             items(s.photoPaths, key = { it }) { path ->
@@ -317,7 +317,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                 }
             }
         }
-        Text("${s.photoPaths.size} of 6 photos added", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.ui_copy_597749d9b767, s.photoPaths.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     s.photoError?.let { Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error) }
     s.photoWarning?.let { warning ->
@@ -336,7 +336,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
     KcPrimaryButton(if (s.photoPaths.isEmpty()) "Take a photo" else "Add another angle", take, icon = Icons.Filled.CameraAlt, testTag = "lot_take_photo")
     OutlinedButton(onClick = select, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_choose_photo")) { Icon(Icons.Filled.CropSquare, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_choose_photo)) }
     if (useDemoPhoto != null && s.photoPaths.isEmpty()) OutlinedButton(onClick = useDemoPhoto, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_demo_photo")) { Icon(Icons.Filled.Recycling, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.lot_use_demo_photo)) }
-    if (s.photoPaths.isNotEmpty()) OutlinedButton(onClick = vm::confirmPhotos, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_confirm_photo")) { Text("Continue with ${s.photoPaths.size} photo${if (s.photoPaths.size == 1) "" else "s"}") }
+    if (s.photoPaths.isNotEmpty()) OutlinedButton(onClick = vm::confirmPhotos, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("lot_confirm_photo")) { Text(stringResource(R.string.ui_copy_26956c2e8346, s.photoPaths.size)) }
     OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("lot_cancel_to_home")) { Text(stringResource(R.string.lot_cancel)) }
 }
 @Composable private fun MaterialStep(s: LotDraftState, vm: LotManagementViewModel, onSafety: () -> Unit) {
@@ -372,7 +372,7 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
                 }
             }
             when (s.materialDetectionStatus) {
-                MaterialDetectionStatus.LOW_CONFIDENCE -> Text("Check the suggestion and choose the closest material below.", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+                MaterialDetectionStatus.LOW_CONFIDENCE -> Text(stringResource(R.string.ui_copy_acae8faebd6b), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.UNSUPPORTED_IMAGE -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_unsupported_image), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.NETWORK_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_network_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 MaterialDetectionStatus.SERVICE_ERROR -> Text(s.materialDetectionMessage ?: stringResource(R.string.lot_material_service_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -380,9 +380,9 @@ fun LotScreen(state: LotDraftState, vm: LotManagementViewModel, onTakePhoto: () 
             }
             if (s.materialDetectionStatus in setOf(MaterialDetectionStatus.UNSUPPORTED_IMAGE, MaterialDetectionStatus.NETWORK_ERROR, MaterialDetectionStatus.SERVICE_ERROR)) {
                 OutlinedButton(onClick = vm::suggestMaterial, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Try photo detection again")
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.ui_copy_82eaf0734632))
                     Spacer(Modifier.width(8.dp))
-                    Text("Try detection again")
+                    Text(stringResource(R.string.ui_copy_ddab1d36ac2b))
                 }
             }
         }
@@ -413,7 +413,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
                     Text(friendly.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(friendly.examples, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (material.hazardous) Icon(Icons.Filled.Warning, contentDescription = "Handle with care", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                if (material.hazardous) Icon(Icons.Filled.Warning, contentDescription = stringResource(R.string.lot_hazard), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -451,7 +451,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         supportingText = { Text(if (s.weightError) stringResource(R.string.lot_weight_error) else "Enter the exact scale reading.") },
         modifier = Modifier.fillMaxWidth().testTag("lot_weight")
     )
-    Text("Use the number shown on your scale. You can enter grams or kilograms.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.ui_copy_cb3686aaec2a), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     KcPrimaryButton(stringResource(R.string.lot_next), vm::confirmWeight, icon = Icons.Filled.CheckCircle, testTag = "lot_weight_next")
 }
 @Composable private fun LocationStep(s: LotDraftState, vm: LotManagementViewModel, gps: () -> Unit) {
@@ -460,9 +460,9 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
     OutlinedTextField(
         value = s.location,
         onValueChange = vm::setLocation,
-        label = { Text("Full pickup address") },
+        label = { Text(stringResource(R.string.ui_copy_6ceee0a8f70e)) },
         leadingIcon = { Icon(Icons.Filled.EditLocation, null) },
-        supportingText = { Text("Include your street, block, or house number if available.") },
+        supportingText = { Text(stringResource(R.string.ui_copy_5be8967ce8c7)) },
         minLines = 2,
         maxLines = 3,
         modifier = Modifier.fillMaxWidth().testTag("lot_location")
@@ -498,7 +498,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
 }
 @Composable private fun ReviewStep(s: LotDraftState, vm: LotManagementViewModel) {
     Text(stringResource(R.string.lot_review_title), style = MaterialTheme.typography.headlineMedium)
-    Text("Save this photo record, then request quotes from recyclers. To publish a bulk marketplace lot, complete a pickup and list its weighed inventory.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.ui_copy_2fa424d56d60), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (s.photoPaths.isEmpty()) {
         Text(stringResource(R.string.lot_photo_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
@@ -560,7 +560,7 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
-            Text("Your photo record is saved. Open it to request quotes when the server sync finishes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_ac9b2daa97a5), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             KcPrimaryButton("Open record and request quotes", onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
             OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("lot_back_home")) {
                 Text(stringResource(R.string.lot_back_home))
@@ -605,7 +605,7 @@ fun LotDetailScreen(
         if (lot.status == LotStatus.SAVED) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Next: request recycler quotes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ui_copy_09bd24a6b25b), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(if (lot.synced) "Choose verified recyclers and send this photo record for a quote." else "Waiting for this record and its photo to sync. Keep the app online, then return here to request quotes.", style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -654,7 +654,7 @@ fun LotEditScreen(
                 validationError = false
             },
             label = { Text(stringResource(R.string.lot_edit_weight)) },
-            suffix = { Text("kg") },
+            suffix = { Text(stringResource(R.string.ui_copy_1389845b02c0)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             isError = validationError,

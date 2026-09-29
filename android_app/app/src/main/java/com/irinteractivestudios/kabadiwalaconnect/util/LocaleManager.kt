@@ -7,7 +7,7 @@ import android.os.Build
 import java.util.Locale
 
 /**
- * In-app language handling for English plus the 22 official Indian languages.
+ * In-app language handling for English plus 20 Indian language options.
  *
  * Uses a tiny synchronous SharedPreferences file so the saved language can
  * be applied in [attachBaseContext] before any UI is inflated (works fully
@@ -21,11 +21,9 @@ object LocaleManager {
     const val MARATHI = "mr"
     const val ASSAMESE = "as"
     const val BENGALI = "bn"
-    const val BODO = "brx"
     const val DOGRI = "doi"
     const val GUJARATI = "gu"
     const val KANNADA = "kn"
-    const val KASHMIRI = "ks"
     const val KONKANI = "kok"
     const val MAITHILI = "mai"
     const val MALAYALAM = "ml"
@@ -41,11 +39,11 @@ object LocaleManager {
     const val URDU = "ur"
     const val DEFAULT = ENGLISH
 
-    val SUPPORTED = listOf(ENGLISH, ASSAMESE, BENGALI, BODO, DOGRI, GUJARATI, HINDI, KANNADA, KASHMIRI, KONKANI, MAITHILI, MALAYALAM, MANIPURI, MARATHI, NEPALI, ODIA, PUNJABI, SANSKRIT, SANTALI, SINDHI, TAMIL, TELUGU, URDU)
+    val SUPPORTED = listOf(ENGLISH, ASSAMESE, BENGALI, DOGRI, GUJARATI, HINDI, KANNADA, KONKANI, MAITHILI, MALAYALAM, MANIPURI, MARATHI, NEPALI, ODIA, PUNJABI, SANSKRIT, SANTALI, SINDHI, TAMIL, TELUGU, URDU)
 
     val LABELS = mapOf(
-        ENGLISH to "English", ASSAMESE to "অসমীয়া", BENGALI to "বাংলা", BODO to "बड़ो", DOGRI to "डोगरी",
-        GUJARATI to "ગુજરાતી", HINDI to "हिन्दी", KANNADA to "ಕನ್ನಡ", KASHMIRI to "कॉशुर", KONKANI to "कोंकणी",
+        ENGLISH to "English", ASSAMESE to "অসমীয়া", BENGALI to "বাংলা", DOGRI to "डोगरी",
+        GUJARATI to "ગુજરાતી", HINDI to "हिन्दी", KANNADA to "ಕನ್ನಡ", KONKANI to "कोंकणी",
         MAITHILI to "मैथिली", MALAYALAM to "മലയാളം", MANIPURI to "মৈতৈলোন্", MARATHI to "मराठी", NEPALI to "नेपाली",
         ODIA to "ଓଡ଼ିଆ", PUNJABI to "ਪੰਜਾਬੀ", SANSKRIT to "संस्कृतम्", SANTALI to "ᱥᱟᱱᱛᱟᱲᱤ", SINDHI to "सिन्धी",
         TAMIL to "தமிழ்", TELUGU to "తెలుగు", URDU to "اُردُو"
@@ -53,9 +51,9 @@ object LocaleManager {
 
     /** Stable server enum names for the 22 scheduled languages plus English. */
     private val BACKEND_NAMES = mapOf(
-        ENGLISH to "ENGLISH", ASSAMESE to "ASSAMESE", BENGALI to "BENGALI", BODO to "BODO",
+        ENGLISH to "ENGLISH", ASSAMESE to "ASSAMESE", BENGALI to "BENGALI",
         DOGRI to "DOGRI", GUJARATI to "GUJARATI", HINDI to "HINDI", KANNADA to "KANNADA",
-        KASHMIRI to "KASHMIRI", KONKANI to "KONKANI", MAITHILI to "MAITHILI", MALAYALAM to "MALAYALAM",
+        KONKANI to "KONKANI", MAITHILI to "MAITHILI", MALAYALAM to "MALAYALAM",
         MANIPURI to "MANIPURI", MARATHI to "MARATHI", NEPALI to "NEPALI", ODIA to "ODIA",
         PUNJABI to "PUNJABI", SANSKRIT to "SANSKRIT", SANTALI to "SANTALI", SINDHI to "SINDHI",
         TAMIL to "TAMIL", TELUGU to "TELUGU", URDU to "URDU"
@@ -77,7 +75,8 @@ object LocaleManager {
 
     fun toBackendName(tag: String?): String = BACKEND_NAMES[normalizeTag(tag)] ?: "ENGLISH"
 
-    fun fromBackendName(name: String?): String = TAGS_BY_BACKEND_NAME[name?.uppercase(Locale.ROOT)] ?: DEFAULT
+    fun fromBackendName(name: String?): String =
+        TAGS_BY_BACKEND_NAME[name?.trim()?.uppercase(Locale.ROOT)] ?: normalizeTag(name)
 
     fun persistedTag(context: Context): String =
         normalizeTag(prefs(context).getString(KEY_TAG, DEFAULT))
@@ -85,8 +84,11 @@ object LocaleManager {
     /** True only after the user has explicitly chosen a language at least once. */
     fun hasPersistedTag(context: Context): Boolean = prefs(context).contains(KEY_TAG)
 
-    fun persistTag(context: Context, tag: String) {
-        prefs(context).edit().putString(KEY_TAG, normalizeTag(tag)).apply()
+    fun persistTag(context: Context, tag: String): Boolean {
+        // Language selection is followed immediately by Activity recreation.
+        // commit() makes the choice durable before that recreation or an
+        // immediate process kill; apply() may still have a pending disk write.
+        return prefs(context).edit().putString(KEY_TAG, normalizeTag(tag)).commit()
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.offline
 
+import com.irinteractivestudios.kabadiwalaconnect.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,48 +76,48 @@ fun OfflineReadOnlyScreen(
     }
     if (!unlocked) {
         Column(Modifier.fillMaxSize().padding(24.dp).testTag("offline_locked"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Offline access", style = MaterialTheme.typography.headlineMedium)
-            Text("You can view saved account data after unlocking this device. Pickup acceptance, QR, inventory transfer and payments need a connection.")
-            if (canUnlock) Button(onClick = onUnlock, modifier = Modifier.fillMaxWidth()) { Text("Unlock saved data") }
-            else Text("Set a device screen lock and sign in online before using offline access.", color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Sign out and clear saved data") }
+            Text(stringResource(R.string.ui_copy_7a8288b667c2), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.ui_copy_55fee15d0832))
+            if (canUnlock) Button(onClick = onUnlock, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_f35eaad957ca)) }
+            else Text(stringResource(R.string.ui_copy_cea213604e36), color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_ca7e208ae4d3)) }
         }
         return
     }
     val data = saved
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag("offline_saved_data"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text("Saved account data", style = MaterialTheme.typography.headlineMedium)
-            Text("Read-only while offline. Changes and transactions will be available after sign-in is restored.")
+            Text(stringResource(R.string.ui_copy_1f19f088493c), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.ui_copy_e17be86e664d))
             Text(account.businessName ?: account.displayName ?: account.phoneNumber, style = MaterialTheme.typography.titleLarge)
             Text(account.address ?: account.areaName.orEmpty())
-            data?.savedAt?.let { Text("Last saved ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall) }
+            data?.savedAt?.let { Text(stringResource(R.string.ui_copy_1ec450af9262, DateFormat.getDateTimeInstance().format(Date(it))), style = MaterialTheme.typography.bodySmall) }
         }
-        if (data == null) item { Text("Loading saved data…") }
+        if (data == null) item { Text(stringResource(R.string.ui_copy_3a294227b9ff)) }
         if (data != null) {
-            item { Text("Listings and pickups", style = MaterialTheme.typography.titleLarge) }
+            item { Text(stringResource(R.string.ui_copy_87e359ce94d3), style = MaterialTheme.typography.titleLarge) }
             items(data.supply.listings.take(30), key = { "listing-${it.id}" }) { listing ->
-                Text("${listing.materialCategory} · ${listing.estimatedWeight} kg · ${listing.status}")
+                Text(stringResource(R.string.ui_copy_81d93b7191a3, listing.materialCategory, listing.estimatedWeight, listing.status))
             }
             items(data.supply.pickups.take(30), key = { "pickup-${it.id}" }) { pickup ->
                 Text("Pickup · ${pickup.status}${pickup.finalAmount?.let { " · ₹$it" }.orEmpty()}")
             }
-            item { Text("Material and market", style = MaterialTheme.typography.titleLarge) }
+            item { Text(stringResource(R.string.ui_copy_481197311d6f), style = MaterialTheme.typography.titleLarge) }
             items(data.supply.inventory.take(30), key = { "stock-${it.id}" }) { balance ->
-                Text("${balance.materialCategory} · ${balance.availableKg} kg available")
+                Text(stringResource(R.string.ui_copy_1a4e077f78c0, balance.materialCategory, balance.availableKg))
             }
             items(data.supply.bulkLots.take(30), key = { "lot-${it.id}" }) { lot ->
-                Text("${lot.materialCategory} · ${lot.quantityKg} kg · ${lot.status}")
+                Text(stringResource(R.string.ui_copy_81d93b7191a3, lot.materialCategory, lot.quantityKg, lot.status))
             }
             items(data.prices, key = { "price-${it.id}-${it.location}" }) { price ->
-                Text("${price.materialLabel} · ₹${price.ratePerKg}/kg")
+                Text(stringResource(R.string.ui_copy_942b539440f3, price.materialLabel, price.ratePerKg))
             }
-            item { Text("Recent messages and notifications", style = MaterialTheme.typography.titleLarge) }
+            item { Text(stringResource(R.string.ui_copy_267c38602281), style = MaterialTheme.typography.titleLarge) }
             items(data.conversations) { message -> Text(message, maxLines = 2) }
             items(data.notifications, key = { "notification-${it.id}" }) { notification ->
                 Column { Text(notification.title, style = MaterialTheme.typography.titleSmall); Text(notification.body, maxLines = 2) }
             }
-            item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Sign out and clear saved data") } }
+            item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_ca7e208ae4d3)) } }
         }
     }
 }

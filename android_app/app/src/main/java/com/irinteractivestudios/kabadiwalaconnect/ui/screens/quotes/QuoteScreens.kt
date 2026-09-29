@@ -76,9 +76,9 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
     val selectedRecyclers = recyclers.filter { it.id in selectedRecyclerIds }
     if (availableLots.isEmpty() || recyclers.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Request recycler quotes", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.ui_copy_24fbdcef2804), style = MaterialTheme.typography.headlineMedium)
             Text(if (availableLots.isEmpty()) "Save a photo record first. It will appear here once created." else "Loading verified recyclers. Check your connection and try again if this takes too long.")
-            if (recyclers.isEmpty()) OutlinedButton(onClick = onRefreshCatalogs, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Refresh recyclers") }
+            if (recyclers.isEmpty()) OutlinedButton(onClick = onRefreshCatalogs, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_cf60841abe33)) }
         }
         return
     }
@@ -100,7 +100,7 @@ fun QuoteRequestScreen(lots: List<Lot>, recyclers: List<Recycler>, presetLotId: 
             }
         }
         lot?.let { selectedLot -> if (selectedRecyclers.isNotEmpty()) {
-            if (!selectedLot.synced) Text("This record is still syncing. Quote requests can be sent after the server receives it.", color = MaterialTheme.colorScheme.tertiary)
+            if (!selectedLot.synced) Text(stringResource(R.string.ui_copy_512144af746f), color = MaterialTheme.colorScheme.tertiary)
             EvidenceSection(title = stringResource(R.string.quote_summary), status = stringResource(R.string.quote_saved)) {
                 ProofRow(stringResource(R.string.lot_material_label), selectedLot.materialLabel)
                 ProofRow(stringResource(R.string.handover_weight), stringResource(R.string.lot_weight_value, selectedLot.weightKg.toString()))

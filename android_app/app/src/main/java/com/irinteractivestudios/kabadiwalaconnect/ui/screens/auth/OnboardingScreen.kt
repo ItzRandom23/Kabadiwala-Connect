@@ -399,27 +399,27 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     var showLogistics by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     Text(stringResource(R.string.auth_recycler_details_title), style = MaterialTheme.typography.headlineMedium)
-    Text("Facility details", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text("Facility or business name · Required") }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true,
+    Text(stringResource(R.string.ui_copy_dd4781bfff14), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    OutlinedTextField(state.businessName, vm::setBusinessName, label = { Text(stringResource(R.string.ui_copy_2f7a701118c0)) }, leadingIcon = { Icon(Icons.Filled.Business, null) }, singleLine = true,
         isError = state.recyclerDetailsError != null && state.businessName.isBlank(),
-        supportingText = { if (state.recyclerDetailsError != null && state.businessName.isBlank()) Text("Enter your facility name.") },
+        supportingText = { if (state.recyclerDetailsError != null && state.businessName.isBlank()) Text(stringResource(R.string.ui_copy_5e8a8a5924f3)) },
         modifier = Modifier.fillMaxWidth())
     val invalidEmail = state.email.isNotBlank() && !EmailValidator.isValid(state.email)
     OutlinedTextField(state.email, vm::setEmail, label = { Text(stringResource(R.string.auth_email_optional)) }, leadingIcon = { Icon(Icons.Filled.Email, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, isError = invalidEmail, supportingText = { if (invalidEmail) Text(stringResource(R.string.auth_email_optional_error)) }, modifier = Modifier.fillMaxWidth().testTag("auth_email_optional"))
-    OutlinedTextField(state.alternatePhone, { vm.setAlternatePhone(it.filter(Char::isDigit).take(10)) }, label = { Text("Alternate phone · Optional") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
-    Text("Materials accepted · Required", style = MaterialTheme.typography.titleMedium)
+    OutlinedTextField(state.alternatePhone, { vm.setAlternatePhone(it.filter(Char::isDigit).take(10)) }, label = { Text(stringResource(R.string.ui_copy_9b72f0eb02c9)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
+    Text(stringResource(R.string.ui_copy_e169cb4f01f5), style = MaterialTheme.typography.titleMedium)
     Text(if (state.materialsAccepted.isEmpty()) "No materials selected" else state.materialsAccepted.sorted().joinToString(" · ") { it.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase) }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedButton(onClick = { showMaterials = true }, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("recycler_material_picker")) { Text("Choose materials") }
-    if (state.recyclerDetailsError != null && state.materialsAccepted.isEmpty()) Text("Select at least one material.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-    if (state.materialCategoriesError) TextButton(onClick = vm::loadMaterialCategories) { Text("Could not load materials · Retry") }
+    OutlinedButton(onClick = { showMaterials = true }, enabled = state.materialCategories.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("recycler_material_picker")) { Text(stringResource(R.string.ui_copy_737655096e4e)) }
+    if (state.recyclerDetailsError != null && state.materialsAccepted.isEmpty()) Text(stringResource(R.string.ui_copy_aedf6ff85758), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    if (state.materialCategoriesError) TextButton(onClick = vm::loadMaterialCategories) { Text(stringResource(R.string.ui_copy_d6cc507e0fb6)) }
     TextButton(onClick = { showAuthorization = !showAuthorization }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(if (showAuthorization) "Hide authorization details" else "Add authorization details · Optional")
     }
     if (showAuthorization) {
-    OutlinedTextField(state.authorizationNumber, vm::setAuthorizationNumber, label = { Text("Registration / authorization number · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(state.authorizationAuthority, vm::setAuthorizationAuthority, label = { Text("Issuing authority · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(state.authorizationType, vm::setAuthorizationType, label = { Text("Authorization type · Optional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(state.authorizationEvidenceReference, vm::setAuthorizationEvidenceReference, label = { Text("Document reference or URL · Optional") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationNumber, vm::setAuthorizationNumber, label = { Text(stringResource(R.string.ui_copy_08a244e50c82)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationAuthority, vm::setAuthorizationAuthority, label = { Text(stringResource(R.string.ui_copy_7892e8cc6bfe)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationType, vm::setAuthorizationType, label = { Text(stringResource(R.string.ui_copy_ddcd8c31c68f)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.authorizationEvidenceReference, vm::setAuthorizationEvidenceReference, label = { Text(stringResource(R.string.ui_copy_344c8a7ca6a6)) }, minLines = 2, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = {
         val today = java.util.Calendar.getInstance()
         android.app.DatePickerDialog(context, { _, year, month, day -> vm.setAuthorizationValidUntil("%04d-%02d-%02d".format(year, month + 1, day)) }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH)).show()
@@ -431,29 +431,29 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     if (showLogistics) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.auth_pickup_available), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge); Switch(state.pickupAvailable, vm::setPickupAvailable) }
     if (state.pickupAvailable) {
-        Text("Pickup availability", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.ui_copy_927da45f8596), style = MaterialTheme.typography.titleSmall)
         listOf("TODAY" to "Available today", "THIS_WEEK" to "Scheduled this week", "FLEXIBLE" to "Flexible").forEach { (key, label) -> FilterChip(selected = state.pickupAvailability == key, onClick = { vm.setPickupAvailability(key) }, label = { Text(label) }) }
-        OutlinedTextField(state.serviceRadiusKm.takeIf { it > 0 }?.toString().orEmpty(), { vm.setServiceRadius(it.filter(Char::isDigit).take(3).toIntOrNull() ?: 0) }, label = { Text("Maximum pickup distance · km") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
-        Text("Pickup pricing", style = MaterialTheme.typography.titleSmall)
+        OutlinedTextField(state.serviceRadiusKm.takeIf { it > 0 }?.toString().orEmpty(), { vm.setServiceRadius(it.filter(Char::isDigit).take(3).toIntOrNull() ?: 0) }, label = { Text(stringResource(R.string.ui_copy_576bfbc1605e)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+        Text(stringResource(R.string.ui_copy_0b915bf788a9), style = MaterialTheme.typography.titleSmall)
         listOf("INCLUDED" to "Included / free", "FIXED" to "Fixed fee", "PER_KM" to "Cost per km").forEach { (key, label) -> FilterChip(selected = state.pickupPricing == key, onClick = { vm.setPickupPricing(key) }, label = { Text(label) }) }
-        if (state.pickupPricing == "FIXED") OutlinedTextField(state.pickupFeeText, { vm.setPickupFeeText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text("Pickup fee · ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-        if (state.pickupPricing == "PER_KM") OutlinedTextField(state.logisticsCostText, { vm.setLogisticsCostText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text("Cost per km · ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        if (state.pickupPricing == "FIXED") OutlinedTextField(state.pickupFeeText, { vm.setPickupFeeText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text(stringResource(R.string.ui_copy_a2e3af1ea53a)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        if (state.pickupPricing == "PER_KM") OutlinedTextField(state.logisticsCostText, { vm.setLogisticsCostText(it.filter { c -> c.isDigit() || c == '.' }.take(10)) }, label = { Text(stringResource(R.string.ui_copy_41f0c7189725)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
     }
-    OutlinedTextField(state.operatingHours, vm::setOperatingHours, label = { Text("Operating hours · Optional") }, placeholder = { Text("For example, Mon–Sat 10 AM–6 PM") }, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(state.operatingHours, vm::setOperatingHours, label = { Text(stringResource(R.string.ui_copy_54009a0428d9)) }, placeholder = { Text(stringResource(R.string.ui_copy_4ceb274258c6)) }, modifier = Modifier.fillMaxWidth())
     }
     state.recyclerDetailsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     if (showMaterials) {
         var query by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { showMaterials = false }, title = { Text("Materials accepted") }, text = {
+        AlertDialog(onDismissRequest = { showMaterials = false }, title = { Text(stringResource(R.string.auth_materials_accepted)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(query, { query = it }, label = { Text("Search materials") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.ui_copy_b17571020adf)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
                     state.materialCategories.filter { it.contains(query.trim(), ignoreCase = true) }.forEach { category ->
                         FilterChip(selected = category in state.materialsAccepted, onClick = { vm.toggleMaterial(category) }, label = { Text(category.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)) }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
-        }, confirmButton = { TextButton(onClick = { showMaterials = false }) { Text("Done (${state.materialsAccepted.size})") } })
+        }, confirmButton = { TextButton(onClick = { showMaterials = false }) { Text(stringResource(R.string.ui_copy_31a8bb973d73, state.materialsAccepted.size)) } })
     }
 }
 
@@ -495,8 +495,8 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
     OutlinedTextField(
         value = state.address,
         onValueChange = vm::setAddress,
-        label = { Text("Full address") },
-        supportingText = { Text("GPS may fill this in. Add your street, block, or house number if missing.") },
+        label = { Text(stringResource(R.string.ui_copy_9f8ce19bf4d3)) },
+        supportingText = { Text(stringResource(R.string.ui_copy_09947cd3d847)) },
         leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
         minLines = 2,
         maxLines = 3,
@@ -556,7 +556,7 @@ private fun WelcomeBenefit(icon: androidx.compose.ui.graphics.vector.ImageVector
                 color = MaterialTheme.colorScheme.onSurface
             )
         },
-        placeholder = { Text("10-digit mobile number") },
+        placeholder = { Text(stringResource(R.string.auth_phone_label)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
         isError = state.phoneError,

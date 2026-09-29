@@ -131,17 +131,17 @@ fun KcBottomBar(
             val itemColor = animateColorAsState(
                     if (isSelected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
                     animationSpec = tween(140),
-                label = "bottomNavColor"
+                label = stringResource(R.string.ui_copy_b00d763383a3)
             ).value
             val indicatorWidth = animateDpAsState(
                 if (isSelected) 24.dp else 4.dp,
                 animationSpec = tween(140),
-                label = "bottomNavIndicator"
+                label = stringResource(R.string.ui_copy_e2d701ee58f7)
             ).value
             val iconScale = animateFloatAsState(
                 if (isSelected) 1.04f else 1f,
                 animationSpec = tween(140),
-                label = "bottomNavIconScale"
+                label = stringResource(R.string.ui_copy_48b6a9ee1b20)
             ).value
             Column(
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,

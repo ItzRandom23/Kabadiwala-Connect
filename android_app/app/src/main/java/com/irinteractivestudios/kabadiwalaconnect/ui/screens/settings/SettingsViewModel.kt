@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /** Persistence seam for the language setting (SharedPreferences in prod). */
 interface LanguageStore {
     fun load(): String
-    fun save(tag: String)
+    fun save(tag: String): Boolean
 }
 
 interface AppearanceStore {
@@ -28,7 +28,7 @@ class PrefsAppearanceStore(context: Context) : AppearanceStore {
 class PrefsLanguageStore(context: Context) : LanguageStore {
     private val appContext = context.applicationContext
     override fun load(): String = LocaleManager.persistedTag(appContext)
-    override fun save(tag: String) = LocaleManager.persistTag(appContext, tag)
+    override fun save(tag: String): Boolean = LocaleManager.persistTag(appContext, tag)
 }
 
 /**
@@ -48,10 +48,11 @@ class SettingsViewModel(
     private val _appearance = MutableStateFlow(AppearanceManager.normalize(appearanceStore?.load()))
     val appearance: StateFlow<String> = _appearance.asStateFlow()
 
-    fun setLanguage(tag: String) {
+    fun setLanguage(tag: String): Boolean {
         val normalized = LocaleManager.normalizeTag(tag)
-        store.save(normalized)
+        if (!store.save(normalized)) return false
         _language.value = normalized
+        return true
     }
 
     fun setAppearance(mode: String) {

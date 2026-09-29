@@ -130,7 +130,7 @@ fun HomeScreen(
                         Text(stringResource(R.string.home_price_copper), style = MaterialTheme.typography.titleMedium)
                         Text(stringResource(R.string.home_price_updated), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${scenario.copper.ratePerKg.formatted()} / kg", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+                    Text(stringResource(R.string.ui_copy_c8ff97a1dad8, scenario.copper.ratePerKg.formatted()), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
                 }
             }
         }

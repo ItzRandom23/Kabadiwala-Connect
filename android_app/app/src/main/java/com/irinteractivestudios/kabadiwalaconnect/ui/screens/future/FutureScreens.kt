@@ -106,7 +106,7 @@ private fun RewardCard(reward: RewardLedgerDto) {
             Text(program?.description.orEmpty(), style = MaterialTheme.typography.bodyMedium)
             LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth().semantics { contentDescription = progressDescription })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${reward.qualifyingKg.formatOneDecimal()} / ${threshold.formatOneDecimal()} kg")
+                Text(stringResource(R.string.ui_copy_dc8d30cb696c, reward.qualifyingKg.formatOneDecimal(), threshold.formatOneDecimal()))
                 Text(if (reward.status == "EARNED") stringResource(R.string.future_bonus_earned, rupees(reward.rewardAmount)) else stringResource(R.string.future_bonus_in_progress), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
             Text(program?.terms.orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -183,11 +183,11 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
             FeatureSurface {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(refreshError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = onRefresh) { Text("Try again") }
+                    TextButton(onClick = onRefresh) { Text(stringResource(R.string.common_retry)) }
                 }
             }
         } else if (lastSyncedAt != null) item {
-            Text("Last synced ${java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(lastSyncedAt))}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_78fbde73c809, java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(lastSyncedAt))), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (conversations.isEmpty()) item { EmptyFeatureCard(stringResource(R.string.future_no_messages_title), stringResource(R.string.future_no_messages_detail)) }
         items(conversations, key = { it.id }) { conversation ->
@@ -274,7 +274,7 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
                 newMessagesBelow = 0
                 if (messages.isNotEmpty()) scrollScope.launch { listState.animateScrollToItem(messages.lastIndex) }
             }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("$newMessagesBelow new message${if (newMessagesBelow == 1) "" else "s"} below ↓")
+                Text(stringResource(R.string.ui_new_messages_below, newMessagesBelow))
             }
         }
         if (drafting || (!draftSuggestion.isNullOrBlank() && draft.isNotBlank())) {
@@ -284,7 +284,7 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
             Button(onClick = proceed, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.future_confirm_handover)) }
             Spacer(Modifier.height(8.dp))
         }
-        if (conversation.status != "OPEN") Text("This pickup chat is closed. Previous messages remain available to read.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (conversation.status != "OPEN") Text(stringResource(R.string.ui_copy_4f7621daa839), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         else Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = draft, onValueChange = {
                 draft = it.take(1000)

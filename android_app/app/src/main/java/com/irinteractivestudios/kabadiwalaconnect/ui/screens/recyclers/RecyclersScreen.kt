@@ -146,9 +146,9 @@ fun RecyclersScreen(state: UiState<List<Recycler>>, vm: RecyclersViewModel, onOp
                 label = {
                     when {
                         locationBusy -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        locationError -> Text("Location unavailable · Try again")
-                        locationLabel != null -> Text("Near ${locationLabel!!}")
-                        else -> Text("Use my current location")
+                        locationError -> Text(stringResource(R.string.ui_copy_9ebda4a121af))
+                        locationLabel != null -> Text(stringResource(R.string.ui_copy_b7a139a0f267, locationLabel!!))
+                        else -> Text(stringResource(R.string.ui_copy_9aee0641931f))
                     }
                 },
                 leadingIcon = { Icon(Icons.Filled.LocationOn, null) }

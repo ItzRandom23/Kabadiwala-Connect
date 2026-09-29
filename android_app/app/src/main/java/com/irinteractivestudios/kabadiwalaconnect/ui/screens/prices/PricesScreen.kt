@@ -153,7 +153,7 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (showAreaEditor) Text("Search by locality, city or PIN code.", style = MaterialTheme.typography.bodySmall)
+                        if (showAreaEditor) Text(stringResource(R.string.ui_copy_7a1efff2105f), style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(onClick = { showAreaEditor = !showAreaEditor }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(if (showAreaEditor) "Done" else "Change")
@@ -163,14 +163,14 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                 OutlinedTextField(
                     value = locationInput,
                     onValueChange = { locationInput = it.take(160) },
-                    label = { Text("Locality, city, state or PIN code") },
-                    placeholder = { Text("e.g. Kothrud, Pune, Maharashtra") },
+                    label = { Text(stringResource(R.string.ui_copy_1f157484ce2a)) },
+                    placeholder = { Text(stringResource(R.string.ui_copy_1c5f06768ea1)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Search),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { applyLocation(locationInput) }, enabled = locationInput.isNotBlank() && !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Search area") }
+                    Button(onClick = { applyLocation(locationInput) }, enabled = locationInput.isNotBlank() && !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_f4fd898b8fb9)) }
                     OutlinedButton(onClick = {
                         val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         if (hasLocation) scope.launch {
@@ -182,15 +182,15 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
                         } else showLocationRationale = true
                     }, enabled = !locationBusy && !refreshing, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                         if (locationBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.LocationOn, null)
-                        Spacer(Modifier.width(8.dp)); Text("Use current location", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ui_copy_622c745f6090), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                if (locationError) Text("Could not determine an area. Enter your locality, city or PIN code instead.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (locationError) Text(stringResource(R.string.ui_copy_6adc05c18389), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
         if (showAreaEditor && locations.isNotEmpty()) {
-            Text("Areas with configured price data", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.ui_copy_cadda876ed63), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 locations.take(12).forEach { place -> FilterChip(selected = place == location, onClick = { locationInput = place; applyLocation(place) }, label = { Text(place) }) }
             }
@@ -207,10 +207,10 @@ fun PricesScreen(state: UiState<List<Price>>, vm: PricesViewModel, speaker: Pric
     }
     if (showLocationRationale) AlertDialog(
         onDismissRequest = { showLocationRationale = false },
-        title = { Text("Use your current location?") },
-        text = { Text("Location helps choose a local price area. You can continue by entering an area or PIN code instead.") },
-        confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Continue") } },
-        dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text("Enter area") } }
+        title = { Text(stringResource(R.string.ui_copy_c46c55963043)) },
+        text = { Text(stringResource(R.string.ui_copy_738e5c800f2c)) },
+        confirmButton = { Button(onClick = { showLocationRationale = false; locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text(stringResource(R.string.payment_save)) } },
+        dismissButton = { TextButton(onClick = { showLocationRationale = false }) { Text(stringResource(R.string.ui_copy_75364d8b117e)) } }
     )
 }
 
@@ -224,8 +224,8 @@ private fun PriceBoardContent(prices: List<Price>, cached: Boolean, selected: St
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("DEVELOPMENT SAMPLE RATES", style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
-                Text("Sample-labeled values and trends are generated for layout testing. They are not live or verified prices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ui_copy_bf5b1d4383c7), style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
+                Text(stringResource(R.string.ui_copy_7338c0920315), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -280,7 +280,7 @@ private fun PriceBoard(prices: List<Price>, cached: Boolean, selected: String, s
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (isSample) Text("SAMPLE · NOT LIVE", style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
+            if (isSample) Text(stringResource(R.string.ui_copy_03ea1c2d1d93), style = MaterialTheme.typography.labelLarge, color = KcTheme.extended.warning)
             Text(
                 stringResource(R.string.prices_rate_value, current.ratePerKg),
                 style = MaterialTheme.typography.displaySmall,

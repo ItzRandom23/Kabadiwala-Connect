@@ -1,5 +1,6 @@
 package com.irinteractivestudios.kabadiwalaconnect
 
+import com.irinteractivestudios.kabadiwalaconnect.R
 import android.Manifest
 import android.app.Activity
 import android.app.KeyguardManager
@@ -427,8 +428,11 @@ class MainActivity : ComponentActivity() {
                 if (!languageSelected) {
                     InitialLanguageScreen(
                         onLanguageSelected = { tag ->
-                            LocaleManager.persistTag(this@MainActivity, tag)
-                            recreate()
+                            if (LocaleManager.persistTag(this@MainActivity, tag)) {
+                                recreate()
+                            } else {
+                                Toast.makeText(this@MainActivity, "Could not save language. Try again.", Toast.LENGTH_LONG).show()
+                            }
                         }
                     )
                 } else {

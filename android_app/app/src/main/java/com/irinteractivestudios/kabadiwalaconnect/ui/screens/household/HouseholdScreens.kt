@@ -209,7 +209,7 @@ fun HouseholdDealScreen(kabadiwalaId: String, onFindAnother: () -> Unit, modifie
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DemoDataBanner()
             Text(stringResource(R.string.household_pickup_request), style = MaterialTheme.typography.headlineLarge)
-            AnimatedContent(dealState, label = "deal-status") { status ->
+            AnimatedContent(dealState, label = stringResource(R.string.ui_copy_b895b503ada8)) { status ->
                 if (status == DealState.WAITING) WaitingBanner(kabadiwala.name)
                 else AcceptedBanner(kabadiwala)
             }
