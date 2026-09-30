@@ -56,7 +56,6 @@ flowchart TD
 | `backend/` | Express API, authentication, business rules, Prisma schema and tests |
 | `backend/app-update/` | Downloadable beta APKs and update manifest |
 | `docs/` | Workflow notes and historical verification records |
-| `design/` | Brand and interface references |
 | `.github/workflows/` | CI build, test, secret scanning and container checks |
 
 The Android cache and outbox are account-scoped. Session and request-generation checks prevent late responses from replacing a newer account's state. Notifications check recipient identity and role before display.
