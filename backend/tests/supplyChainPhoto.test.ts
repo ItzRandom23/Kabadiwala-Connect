@@ -1,12 +1,14 @@
 import express from 'express';
 import request from 'supertest';
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { JwtService } from '../src/services/jwt.js';
 import { supplyChainRoutes } from '../src/routes/supplyChainRoutes.js';
 
 const config = { JWT_SECRET: 'supply-chain-photo-test-secret', JWT_EXPIRES_IN: '1h' } as any;
 const jwt = new JwtService(config);
+const photoKey = (photo: Buffer) => `household-listings/household-1/listing-1-${createHash('sha256').update(photo).digest('hex')}.jpg`;
 
 function photoApp(overrides: { listing?: any; storage?: any; role?: 'HOUSEHOLD' | 'COLLECTOR'; pickup?: any } = {}) {
   const role = overrides.role ?? 'HOUSEHOLD';
@@ -89,14 +91,14 @@ describe('household listing photo contract', () => {
       .attach('photo', validPhoto, { filename: 'listing.png', contentType: 'image/png' });
 
     expect(accepted.status).toBe(200);
-    expect(storage.putImage).toHaveBeenCalledWith(validPhoto, 'household-listings/household-1/listing-1.jpg');
+    expect(storage.putImage).toHaveBeenCalledWith(validPhoto, photoKey(validPhoto));
     expect(tx.auditEvent.create).toHaveBeenCalled();
     expect(tx.materialPassportEvent.create).toHaveBeenCalled();
     expect(accepted.body.data).toMatchObject({ photoAttached: true, photoCount: 1 });
     expect(accepted.body.data).not.toHaveProperty('photoReference');
   });
 
-  it('accepts multiple angle photos and persists stable indexed references', async () => {
+  it('accepts multiple angle photos and persists stable content references', async () => {
     const storage = {
       putImage: vi.fn(async (_buffer: Buffer, key: string) => ({ key, url: key })),
       getImage: vi.fn(),
@@ -115,15 +117,15 @@ describe('household listing photo contract', () => {
     expect(accepted.status).toBe(200);
     expect(storage.putImage).toHaveBeenCalledTimes(2);
     expect(storage.putImage.mock.calls.map(([, key]) => key)).toEqual([
-      'household-listings/household-1/listing-1.jpg',
-      'household-listings/household-1/listing-1-1.jpg'
+      photoKey(frontPhoto),
+      photoKey(sidePhoto)
     ]);
     expect(tx.householdListing.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: {
-        photoReference: 'household-listings/household-1/listing-1.jpg',
+        photoReference: photoKey(frontPhoto),
         photoReferences: [
-          'household-listings/household-1/listing-1.jpg',
-          'household-listings/household-1/listing-1-1.jpg'
+          photoKey(frontPhoto),
+          photoKey(sidePhoto)
         ],
         status: 'POSTED'
       }
@@ -131,6 +133,24 @@ describe('household listing photo contract', () => {
     expect(tx.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ metadata: expect.objectContaining({ photoCount: 2 }) })
     }));
+  });
+
+  it('validates every photo before writing and never deletes committed retry objects', async () => {
+    const { app, storage, tx } = photoApp();
+    const validPhoto = await sharp({ create: { width: 300, height: 300, channels: 3, background: 'green' } }).png().toBuffer();
+    const rejected = await request(app).post('/api/v1/household/listings/listing-1/photo')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photos', validPhoto, { filename: 'valid.png', contentType: 'image/png' })
+      .attach('photos', Buffer.from('invalid'), { filename: 'invalid.png', contentType: 'image/png' });
+    expect(rejected.status).toBe(400);
+    expect(storage.putImage).not.toHaveBeenCalled();
+    expect(storage.delete).not.toHaveBeenCalled();
+    tx.householdListing.updateMany.mockRejectedValueOnce(new Error('commit acknowledgement lost'));
+    const failed = await request(app).post('/api/v1/household/listings/listing-1/photo')
+      .set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`)
+      .attach('photo', validPhoto, { filename: 'valid.png', contentType: 'image/png' });
+    expect(failed.status).toBe(500);
+    expect(storage.delete).not.toHaveBeenCalled();
   });
 
   it('serves an indexed private photo to the listing owner without exposing the storage key', async () => {
