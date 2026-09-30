@@ -1,39 +1,40 @@
 # Live screen state and action reconciliation
 
-## Cause of stale screens
+Updated 30 September 2026.
 
-Operational destinations previously created a separate `SupplyChainViewModel` for each navigation entry. Completing a pickup on Home updated that entry, while a restored Pickups entry retained its old snapshot. Several mutations also discarded their returned record and waited for an unrelated dashboard fanout before changing the visible row.
+## Root cause
 
-## State ownership
+Separate SupplyChainViewModel instances per navigation entry let Home update while restored Pickups retained an old snapshot. Mutations also discarded returned records and waited for a whole dashboard reload.
 
-- An authenticated feature scope shares Supply Chain, Recycler profile/orders, account profile and chat/inbox ViewModels across related routes.
-- The scope survives activity recreation and releases its ViewModels when the account or role changes, including logout.
-- Room-backed legacy lot, quote, handover and payment screens continue observing their existing repositories.
-- Confirmed supply mutations publish their returned records into the shared StateFlow before background reconciliation. Pending controls acknowledge the tap immediately; financial and competitive outcomes remain server-confirmed.
-- Confirmed supply snapshots are saved into the existing account-scoped Room cache. Safe offline drafts/outbox operations retain their existing pending status.
+## Ownership
 
-## Automatic reconciliation
+- Related authenticated routes share feature ViewModels/StateFlow.
+- Account or role changes, including logout, release the old scope.
+- Async work captures account/session and request generation; late results cannot publish into another session.
+- Confirmed mutations merge returned records before background reconciliation and save account-scoped cache snapshots.
+- Pending controls acknowledge actions and block duplicate taps. Financial, competitive, QR and inventory outcomes remain server-confirmed.
+- Existing Room-backed features retain repository ownership.
 
-- Visible screens refresh on resume and react to account-matched successful mutation and push hints. Rapid hints are coalesced for 200 ms.
-- Operational tabs reuse shared data for ten seconds on navigation. Explicit refresh and mutation/push hints bypass this navigation freshness window.
-- Completed WorkManager operations emit a hint after the local cache/outbox has been updated.
-- Supply mutation success cancels reads started before or during that write, publishes the authoritative record, then starts one reconciliation pass.
-- Independent pickup, inventory, offer, lot and handover reads publish as they complete. Optional tools do not delay those rows.
-- Recycler scanner confirmation publishes its handover to Orders and marketplace state immediately, and updates the existing offline cache.
-- Rewards, schemes, activities and analytics request their own data rather than fetching six unrelated features.
-- Admin section reads use cancellation/generations; payment reads run concurrently and successful returned rows are merged before reconciliation.
+## Automatic refresh
 
-## Regression coverage
+Visible screens refresh on resume and account-checked push/mutation hints, coalesced for 200 ms. Operational navigation reuses data within a ten-second window; explicit refresh and relevant events bypass it.
 
-`LiveScreenStateTest` exercises real Compose/navigation/ViewModels with controlled API responses:
+Mutation refresh selects affected dependency groups. Reads begun before/during a confirmed write are cancelled or rejected. Independent sections publish as they complete. Paging/read-only work must not invalidate its own generation; partial refresh must not reset the age of a whole cached snapshot.
 
-- Complete on Home, navigate to Pickups, and see Completed while refresh requests remain stalled.
-- Publish history while the assigned-pickup endpoint is stalled.
-- Preserve Scheduled after a failed completion.
-- Acknowledge a slow completion immediately and prevent duplicate submission.
-- Reject an older Scheduled response after completion.
-- Reflect scanner confirmation in Recycler Orders without another refresh.
+Activity traversal uses stable account/role cursors. Android drains up to 20 pages per run, checks cancellation/session ownership and persists each cursor after applying its page. Outbox success emits a hint after updating local storage.
 
-Unit tests cover account-scope cleanup, mutation hints, isolated feature reads and offline activity fallback. Existing offer, chat-entry, QR-handover and listing-navigation tests are retained.
+## Scanner, chat and settings
 
-These fixtures establish state behavior, not live-server latency or a physical-device p95 performance result. Real API latency and two-device notification delivery still need measurement against the deployed backend.
+Exact-record QR verification replaces history lookup. Reset cancels verification; confirmation blocks competing reset/scan actions until reconciliation. Confirmed receipt updates Orders/marketplace before navigation.
+
+Chat preserves pending/failed states, deduplicates client message IDs and retains conversation metadata through Room 30. Timestamp normalization supports legacy epoch text. Cached content remains usable with refresh failure/retry feedback.
+
+Availability and pickup-charge saves have separate action identities. Profile updates should not reload the entire role dashboard solely because the account snapshot changed.
+
+## Coverage and limits
+
+Controlled fixtures cover cross-tab completion, independent results, rollback, duplicate taps, stale responses and scanner publication. Unit tests cover account scope, refresh dependencies and cache behavior.
+
+Recorded Android unit results: 169 passed. Full connected acceptance remains incomplete: SafetyLayoutTest failed on an off-screen lazy-list lookup. Existing test coverage is not a claim that every connected test passed.
+
+See [verification](README.md) and [performance measurements](PERFORMANCE_BASELINE.md). Fixtures do not establish live FCM latency or physical-device p95.

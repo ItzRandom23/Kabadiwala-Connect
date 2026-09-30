@@ -55,7 +55,7 @@ flowchart TD
 | `android_app/` | Kotlin, Compose, Material 3, navigation, Room, Retrofit and WorkManager |
 | `backend/` | Express API, authentication, business rules, Prisma schema and tests |
 | `backend/app-update/` | Downloadable beta APKs and update manifest |
-| `docs/` | Workflow notes and historical verification records |
+| `docs/` | Current workflow contracts, performance measurements and verification status |
 | `.github/workflows/` | CI build, test, secret scanning and container checks |
 
 The Android cache and outbox are account-scoped. Session and request-generation checks prevent late responses from replacing a newer account's state. Notifications check recipient identity and role before display.
@@ -142,7 +142,7 @@ node android_app/check-localization.mjs
 
 Database integration tests are opt-in and require isolated fixtures. The performance fixture is deterministic and supports large histories, offers, demands, messages and notifications. Do not seed an application database with synthetic load data.
 
-Recent checks passed **258 backend tests** and **169 Android unit tests**. These are point-in-time results, not a guarantee for every future commit. Emulator acceptance and physical-device performance targets are not fully complete. Historical details live in [`docs/README.md`](docs/README.md); its older counts and screenshots should not be interpreted as current release certification.
+Recorded stabilization checks passed **258 backend tests** and **169 Android unit tests**. These are point-in-time results, not a guarantee for every future commit. The connected Android suite is not fully passing: a SafetyLayoutTest off-screen lazy-list lookup failed. Complete emulator acceptance and physical-device performance targets remain pending. See the [documentation index and verification status](docs/README.md) for current evidence, workflow contracts and deployment requirements.
 
 ## Updating the beta channel
 

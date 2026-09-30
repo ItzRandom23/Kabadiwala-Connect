@@ -1,35 +1,58 @@
 # Performance baseline and measurement gates
 
-## Emulator sample, 28 September 2026
+Updated 30 September 2026. Visible tap feedback and network completion are separate measurements.
 
-Build: `envTestingDebug`, version 0.1.5-beta (69). Device: Pixel 10 Pro AVD, Android 17. The app was installed directly from the local debug APK. `adb shell am start -W` measured Activity launch; this is an Android launch metric, not tap-to-visible-feedback or fully loaded dashboard time.
+## Recorded Android samples
 
-| Scenario | Samples, ms | Median | Approximate p95 |
-| --- | --- | ---: | ---: |
-| Force-stop then launch | 5162, 5802, 5601, 5436, 5590, 5319 | 5513 | 5752 |
-| Home then bring existing task forward | 234, 138, 227, 129, 181, 139 | 160 | 232 |
+| Date/build | Scenario | Result | Interpretation |
+| --- | --- | --- | --- |
+| 28 September, 0.1.5-beta (69), Pixel 10 Pro AVD / Android 17 | Six force-stop launches | 5162, 5802, 5601, 5436, 5590, 5319 ms; median 5513; approximate p95 5752 | adb am start -W activity launch, not loaded dashboard |
+| Same session | Six existing-task resumes | 234, 138, 227, 129, 181, 139 ms; median 160; approximate p95 232 | Not login/tap feedback |
+| 29 September candidate | Two cold starts / one resume | 5642 / 6245 ms cold; 1270 ms resume; total PSS 139246 KB | Spot check after instrumentation |
 
-The six-sample p95 is descriptive only. The emulator was also running instrumentation during this session, and no representative physical device or high-volume backend dataset was available. Do not use these figures to accept the `<100 ms p95` tap-feedback gate or a production startup target.
+Small samples and emulator load prevent a defensible regression or acceptance claim. These historical builds are not current 0.1.12-beta.
 
-## Candidate spot check, 29 September 2026
+## High-volume database verification
 
-Build: current `envTestingDebug` checkout on the same Pixel 10 Pro AVD. Two force-stop launches measured 5642 ms and 6245 ms (`am start -W`); bringing the running task forward after Home measured 1270 ms. `dumpsys meminfo` reported 139246 KB total PSS. These are two cold samples and one task-resume sample only; the emulator had just completed instrumentation tests, so they are not a statistically comparable regression result. No representative-device or high-volume journey performance acceptance was run.
+Scale 1000 generated 1,000 listings, pickups, inventory movements, lots, offers and demands, plus 3,000 messages and notifications in an isolated database.
 
-## Tracing now available
+Feed verification traversed 1,000 offers and 1,500 account notifications without skipped/duplicate IDs. Fifteen activity-page samples recorded approximately p50 796 ms and p95/p99 5641 ms, including a cold sample and remote database latency.
 
-- Android debug `KcUiTiming`: tap/action start, immediate state publication, first subsequent frame, request ID, and server response. It contains operation names and elapsed time, not account data.
-- Android debug `KcScreenTiming`: first frame after a destination route is observed and time since Activity creation. The route is the navigation template.
-- Android debug `KcApiTiming`: Retrofit operation, request ID, elapsed time, status or failure class. No URL parameters, message bodies, or personal data.
-- Backend request middleware: route templates and bounded one-minute p50/p95/p99 latency/failure summaries. It does not log query values or user content.
+These measure the sampled service/database path, not all HTTP endpoints or UI feedback. Other remote journeys still took seconds. Bounded traversal does not establish acceptable app latency.
 
-## Acceptance measurements still required
+## Instrumentation
 
-1. Representative physical devices: cold/warm start; login to dashboard; each bottom tab; detail and back navigation; return-to-screen refetch counts.
-2. Tap-to-visible-feedback p95 for accept pickup, schedule/status, chat send, offer, pricing save, demand publish, and profile save. Target: below 100 ms for local feedback, while server-authoritative outcomes remain pending until confirmed.
-3. Slow network, offline/reconnect, process death, account switching, and long-running sessions. Capture CPU, memory, battery, network bytes, Room growth, WorkManager frequency and ANRs.
-4. Deterministic high-volume histories, inventory, offers, demands, messages and notifications against a disposable MongoDB test deployment; record backend route p50/p95/p99 and query plans before changing indexes.
+- Android debug KcUiTiming: action start, publication, subsequent frame and request correlation.
+- KcScreenTiming: destination-template first frame and Activity timing.
+- KcApiTiming: operation, request ID, elapsed time and status/failure class.
+- Backend: route-template request timing and bounded one-minute p50/p95/p99 summaries.
 
-The guarded fixture is `backend/src/scripts/seedPerformanceData.ts`. It requires a fresh MongoDB database named `kabadiwala_perf_test`, `APP_ENV=testing`, and `PERF_SEED_CONFIRM=kabadiwala_perf_test`. `PERF_SEED_SCALE` defaults to 1000 and produces 1000 listings, pickups, inventory movements, lots, offers and demands, plus 3000 chat messages and notifications. The script refuses a second run so samples remain deterministic. Do not point this fixture at the development or production database.
+No credentials, query values, private addresses or message content should be logged. API_P95_WARN_MS defaults to 1000 ms and requires at least 20 requests per summary window. External production collection/alerting is separate.
 
-The backend emits bounded one-minute route-template p50/p95/p99 summaries and `api_latency_regression` warnings when a route with at least 20 requests exceeds its p95 threshold. `API_P95_WARN_MS` defaults to 1000. Logs contain route templates and request IDs, not addresses, message contents or account identifiers. A deployed log/metrics collector must turn warnings into operational alerts; no external alert destination is configured in this repository.
-5. Compare baseline and candidate builds using the same device, data, account state and test script. A single emulator run cannot distinguish app regression from emulator load.
+## Deterministic fixture
+
+The [seed script](../backend/src/scripts/seedPerformanceData.ts) requires a fresh kabadiwala_perf_test database, APP_ENV=testing, non-production NODE_ENV and PERF_SEED_CONFIRM=kabadiwala_perf_test. It refuses repeated seeding. PERF_SEED_SCALE supports 100–5000; default 1000.
+
+From backend/, after securely supplying a disposable DATABASE_URL in the shell:
+
+```powershell
+$env:APP_ENV = 'testing'
+$env:NODE_ENV = 'development'
+$env:PERF_SEED_CONFIRM = 'kabadiwala_perf_test'
+$env:PERF_SEED_SCALE = '1000'
+npm run db:seed:performance
+```
+
+Never use the application database. The seed reads process environment; do not assume it loads .env. Replica-set support is required for transactional journey tests.
+
+## Outstanding gates
+
+1. Compare builds using identical device, data, account state and script.
+2. Measure cold/warm start, login/dashboard, tabs, details/back and return-screen request counts.
+3. Gate local tap feedback below **100 ms p95**, independently of server confirmation.
+4. Capture HTTP p50/p95/p99, query plans, payload sizes and database round trips.
+5. Exercise slow network, offline/reconnect, process death, account switching and long sessions.
+6. Measure CPU, leaks/PSS, battery, network bytes, Room growth, WorkManager frequency and ANRs.
+7. Complete representative physical-device acceptance.
+
+No physical-device under-100-ms feedback gate is established. See [verification status](README.md).
