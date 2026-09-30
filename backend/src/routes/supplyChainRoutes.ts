@@ -435,7 +435,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         : input.ownerPreparationCompleted
           ? 'OWNER_PREPARATION_COMPLETED'
           : 'OWNER_PREPARATION_PENDING';
-    const result = await withTransactionRetry(() => store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry<{ listing: unknown; replayed: boolean }>(() => store.$transaction(async (tx: any) => {
       if (operationId) {
         const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
         if (replay) {
