@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -162,7 +163,7 @@ fun RecyclerVerificationScreen(
         RecyclerVerificationStatus.UNDER_REVIEW -> R.string.recycler_verification_status_pending
         RecyclerVerificationStatus.SUSPENDED -> R.string.recycler_verification_status_suspended
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             shape = MaterialTheme.shapes.large,
@@ -362,7 +363,7 @@ fun RecyclerMarketplaceScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(R.string.recycler_marketplace_title),
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.weight(1f)
             )
             if (!demoMode) {
@@ -561,20 +562,23 @@ fun RecyclerOrdersScreen(
     liveLoading: Boolean = false,
     liveError: Boolean = false,
     onRefresh: () -> Unit = {},
-    onScan: () -> Unit = {}
+    onScan: () -> Unit = {},
+    paymentBusy: Set<String> = emptySet(),
+    paymentError: String? = null,
+    onRecordPayment: (String, com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyPaymentRequestDto) -> Unit = { _, _ -> }
 ) {
     val layout = rememberKcResponsiveLayout()
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.recycler_orders_title), style = MaterialTheme.typography.headlineLarge)
-                    Text(stringResource(R.string.recycler_orders_subtitle), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.recycler_orders_title), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+                    Text(stringResource(R.string.recycler_orders_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (!demoMode) TextButton(onClick = onRefresh) { Text(stringResource(R.string.future_refresh)) }
             }
         }
-        item { Text(stringResource(R.string.ui_copy_628b9f798996), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        paymentError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
         if (demoMode) {
             item { DemoDataBanner() }
             item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text(stringResource(R.string.ui_copy_1aac17eab604), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text(stringResource(R.string.ui_copy_6bf3d6a002ae), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.ui_copy_444420a8f1a2), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.ui_copy_a3f0118b1910)) } } } }
@@ -586,14 +590,14 @@ fun RecyclerOrdersScreen(
         } else if (liveHandovers.isEmpty()) {
             item { EmptyContent(Modifier.fillMaxWidth().heightIn(min = 300.dp)) }
         } else {
-            items(liveHandovers, key = { it.id }) { handover -> LiveOrderCard(handover, onScan) }
+            items(liveHandovers, key = { it.id }) { handover -> LiveOrderCard(handover, onScan, handover.id in paymentBusy, onRecordPayment) }
         }
     }
 }
 
 @Composable
-private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
-    val status = handover.status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit, paymentBusy: Boolean, onRecordPayment: (String, com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyPaymentRequestDto) -> Unit) {
+    val status = (if (handover.status == "COMPLETED") "Material received" else handover.status).replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
     val expiresAtMs = handover.expiresAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
     var nowEpochMs by remember(handover.id) { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(handover.id, expiresAtMs) {
@@ -612,8 +616,9 @@ private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit) {
             Text(stringResource(R.string.recycler_order_weight, handover.finalAcceptedKg ?: handover.quotedWeightKg), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.ui_copy_942b539440f3, handover.materialCategory.replace('_', ' '), "%.0f".format(handover.finalRatePerKg ?: handover.quotedRatePerKg)), style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.recycler_order_status, status), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            handover.expiresAt?.let { Text("QR expires: ${com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (qrExpired) Text(stringResource(R.string.ui_copy_b7ba58863e37), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            SupplyPaymentSection(handover, recycler = true, busy = paymentBusy, onRecord = onRecordPayment)
+            if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.expiresAt?.let { Text("QR expires: ${com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text(stringResource(R.string.ui_copy_b7ba58863e37), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
         }
     }
@@ -624,8 +629,12 @@ fun RecyclerScanScreen(
     state: RecyclerScanState,
     onVerify: (String) -> Unit,
     onConfirm: (Double, Boolean, String?) -> Unit,
-    onReset: () -> Unit
+    onReset: () -> Unit,
+    onReceiptRecorded: () -> Unit = {}
 ) {
+    LaunchedEffect(state.supplyConfirmed?.id, state.confirmed) {
+        if (state.supplyConfirmed != null || state.confirmed) onReceiptRecorded()
+    }
     var reference by remember { mutableStateOf("") }
     var actualWeight by remember(state.supplyVerified?.id ?: state.verified?.handoverId) {
         mutableStateOf(
@@ -647,9 +656,9 @@ fun RecyclerScanScreen(
         }
     }
     val layout = rememberKcResponsiveLayout()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
         Icon(Icons.Filled.QrCodeScanner, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp))
-        Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.recycler_scan_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.recycler_scan_explanation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
             onClick = {
@@ -726,21 +735,24 @@ fun RecyclerPickupsScreen(
     profile: com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto? = null,
     loading: Boolean = false,
     saving: Boolean = false,
+    savingSection: String? = null,
+    savedSection: String? = null,
     error: String? = null,
     onRefresh: () -> Unit = {},
     onSave: (String) -> Unit = {},
     onSavePricing: (RecyclerProfileUpdateRequestDto) -> Unit = {}
 ) {
     val layout = rememberKcResponsiveLayout()
+    var logisticsSection by rememberSaveable { mutableStateOf("AVAILABILITY") }
     var pickupReady by remember { mutableStateOf(false) }
     var selectedAvailability by remember(availability) { mutableStateOf(availability ?: "FLEXIBLE") }
-    var pickupEnabled by remember(profile) { mutableStateOf(profile?.pickupAvailable ?: false) }
-    var freeKm by remember(profile) { mutableStateOf((profile?.serviceArea?.pickupFreeRadiusKm ?: 0.0).toString()) }
-    var maxKm by remember(profile) { mutableStateOf((profile?.serviceArea?.maxPickupDistanceKm ?: 25.0).toString()) }
-    var pricingMode by remember(profile) { mutableStateOf(if (profile?.pickupIncluded == true) "FREE" else if (profile?.pickupFee != null) "FIXED" else "PER_KM") }
-    var amount by remember(profile) { mutableStateOf((profile?.pickupFee ?: profile?.serviceArea?.logisticsCostPerKm ?: 0.0).toString()) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
-        Text(stringResource(R.string.recycler_pickups_title), style = MaterialTheme.typography.headlineLarge)
+    var pickupEnabled by remember(profile?.pickupAvailable) { mutableStateOf(profile?.pickupAvailable ?: false) }
+    var freeKm by remember(profile?.serviceArea?.pickupFreeRadiusKm) { mutableStateOf((profile?.serviceArea?.pickupFreeRadiusKm ?: 0.0).toString()) }
+    var maxKm by remember(profile?.serviceArea?.maxPickupDistanceKm) { mutableStateOf((profile?.serviceArea?.maxPickupDistanceKm ?: 25.0).toString()) }
+    var pricingMode by remember(profile?.pickupIncluded, profile?.pickupFee) { mutableStateOf(if (profile?.pickupIncluded == true) "FREE" else if (profile?.pickupFee != null) "FIXED" else "PER_KM") }
+    var amount by remember(profile?.pickupFee, profile?.serviceArea?.logisticsCostPerKm) { mutableStateOf((profile?.pickupFee ?: profile?.serviceArea?.logisticsCostPerKm ?: 0.0).toString()) }
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+        Text(stringResource(R.string.recycler_pickups_title), style = MaterialTheme.typography.headlineMedium)
         if (demoMode) {
             DemoDataBanner()
             OperationalSurface {
@@ -753,9 +765,14 @@ fun RecyclerPickupsScreen(
                 }
             }
         } else {
-            Text(stringResource(R.string.recycler_pickups_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = logisticsSection == "AVAILABILITY", onClick = { logisticsSection = "AVAILABILITY" }, label = { Text("Availability") })
+                FilterChip(selected = logisticsSection == "PRICING", onClick = { logisticsSection = "PRICING" }, label = { Text("Pickup charges") })
+            }
+            Text(if (logisticsSection == "AVAILABILITY") "Choose when your facility can receive material." else "Set the distance and cost for facility pickup.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-            error?.let { Text(stringResource(R.string.ui_copy_e20444c30f74), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            if (logisticsSection == "AVAILABILITY") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("TODAY" to "Today", "THIS_WEEK" to "This week", "FLEXIBLE" to "Flexible").forEach { (value, label) ->
                     FilterChip(selected = selectedAvailability == value, onClick = { selectedAvailability = value }, label = { Text(label) })
@@ -770,10 +787,11 @@ fun RecyclerPickupsScreen(
             }
             error?.let { OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.common_retry)) } }
             Button(onClick = { onSave(selectedAvailability) }, enabled = !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                if (saving) CircularProgressIndicator(Modifier.padding(end = 8.dp))
-                Text(if (saving) "Saving…" else "Save availability")
+                if (savingSection == "availability") CircularProgressIndicator(Modifier.padding(end = 8.dp))
+                Text(if (savingSection == "availability") "Saving…" else "Save availability")
             }
-            HorizontalDivider()
+            if (savedSection == "availability") Text("Availability saved", color = KcTheme.extended.success)
+            } else {
             Text(stringResource(R.string.ui_copy_321def52e839), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.ui_copy_85f335fd0fc5), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -793,8 +811,10 @@ fun RecyclerPickupsScreen(
             val charge = amount.toDoubleOrNull()
             val validPricing = !pickupEnabled || max != null && max > 0 && max <= 200 && (pricingMode == "FREE" || charge != null && charge >= 0) && (pricingMode != "PER_KM" || free != null && free >= 0 && free <= max)
             Button(onClick = {
-                onSavePricing(if (!pickupEnabled) RecyclerProfileUpdateRequestDto(pickupAvailable = false) else RecyclerProfileUpdateRequestDto(pickupAvailable = true, pickupAvailability = selectedAvailability, maxPickupDistanceKm = max, pickupFreeRadiusKm = if (pricingMode == "PER_KM") free else 0.0, pickupIncluded = pricingMode == "FREE", pickupFee = if (pricingMode == "FIXED") charge else null, logisticsCostPerKm = if (pricingMode == "PER_KM") charge else null))
-            }, enabled = validPricing && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (saving) "Saving…" else "Save pickup charges") }
+                onSavePricing(if (!pickupEnabled) RecyclerProfileUpdateRequestDto(pickupAvailable = false) else RecyclerProfileUpdateRequestDto(pickupAvailable = true, maxPickupDistanceKm = max, pickupFreeRadiusKm = if (pricingMode == "PER_KM") free else 0.0, pickupIncluded = pricingMode == "FREE", pickupFee = if (pricingMode == "FIXED") charge else null, logisticsCostPerKm = if (pricingMode == "PER_KM") charge else null))
+            }, enabled = validPricing && !saving && !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (savingSection == "pricing") "Saving…" else "Save pickup charges") }
+            if (savedSection == "pricing") Text("Pickup charges saved", color = KcTheme.extended.success)
+            }
         }
     }
 }
@@ -823,8 +843,8 @@ fun RecyclerRatesScreen(
             category.displayMaterial().contains(materialQuery.trim(), ignoreCase = true)
     }
     val valid = values.values.any { it.toDoubleOrNull()?.let { value -> value > 0 } == true }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
-        Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineLarge)
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
+        Text(stringResource(R.string.recycler_rates_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.recycler_rates_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (demoMode) DemoDataBanner()
         if (loading && rates.isEmpty()) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))

@@ -60,6 +60,7 @@ describe('cross-account passport privacy', () => {
       .mockResolvedValueOnce([contribution]);
     const db: any = {
       user: { findFirst: vi.fn().mockResolvedValue({ role: 'COLLECTOR', accountStatus: 'ACTIVE' }) },
+      supplyPayment: { findMany: vi.fn().mockResolvedValue([]) },
       poolContribution: { findMany: findManyContribution },
       supplyHandover: { findMany: vi.fn().mockResolvedValue([handover]) }
     };

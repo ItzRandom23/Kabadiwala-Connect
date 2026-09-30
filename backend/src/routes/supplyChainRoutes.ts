@@ -23,6 +23,18 @@ const listingInput = z.object({ materialCategory: material, estimatedWeight: pos
 const pickupRequest = z.object({ kabadiwalaId: id.optional(), requestedSlot: z.string().datetime().optional() });
 const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
 const activePickupStatuses = ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
+const publicBulkLotSelect = { id: true, kabadiwalaId: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, notes: true, status: true, reservedForId: true, createdAt: true, updatedAt: true };
+
+async function describeBulkOffers(store: any, offers: any[]) {
+  if (!offers.length) return [];
+  const [lots, recyclers] = await Promise.all([
+    store.bulkLot.findMany({ where: { id: { in: [...new Set(offers.map(offer => offer.bulkLotId))] } }, select: publicBulkLotSelect }),
+    store.recycler.findMany({ where: { id: { in: [...new Set(offers.map(offer => offer.recyclerId))] } }, select: { id: true, name: true } })
+  ]);
+  const lotById = new Map(lots.map((lot: any) => [lot.id, lot]));
+  const recyclerById = new Map(recyclers.map((recycler: any) => [recycler.id, recycler.name]));
+  return offers.map(offer => ({ ...offer, bulkLot: lotById.get(offer.bulkLotId) ?? null, recyclerName: recyclerById.get(offer.recyclerId) ?? null }));
+}
 const sourceListingIdsInput = z.array(id).max(100).default([]);
 const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional(), sourceListingIds: sourceListingIdsInput }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
 const settlementDecision = z.object({ decision: z.enum(['ACCEPT', 'RAISE_ISSUE']), reasonCode: z.string().trim().min(2).max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), notes: z.string().trim().max(1000).optional() }).superRefine((value, ctx) => { if (value.decision === 'RAISE_ISSUE' && !value.reasonCode) ctx.addIssue({ code: 'custom', path: ['reasonCode'], message: 'A reason code is required when raising an issue' }); });
@@ -477,7 +489,23 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.get('/household/listings', requireHousehold(jwt, collectors), async (req, res) => {
     const { items, page } = await pagedRows(store.householdListing, { householdId: req.identity!.collectorId }, req.query);
-    res.json({ success: true, data: items.map(householdListingDto), ...(page ? { page } : {}) });
+    // Completion evidence travels with its listing, independently of pickup history pages.
+    const completedIds = items.filter((listing: any) => listing.status === 'COMPLETED').map((listing: any) => listing.id);
+    const receipts = completedIds.length ? await store.pickupRequest.findMany({
+      where: { householdId: req.identity!.collectorId, listingId: { in: completedIds }, status: 'COMPLETED' },
+      orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+      take: completedIds.length,
+      select: { id: true, listingId: true, householdId: true, kabadiwalaId: true, status: true,
+        actualWeight: true, finalCategory: true, ratePerKg: true, grossMaterialAmount: true,
+        pickupCharge: true, finalAmount: true, settlementStatus: true, completedAt: true, updatedAt: true,
+        settlementPayment: { select: { pickupId: true, amount: true, paymentMethod: true,
+          recordedAt: true, householdReceivedAt: true, reference: true, status: true } } }
+    }) : [];
+    const receiptByListing = new Map<string, any>();
+    for (const receipt of receipts) if (!receiptByListing.has(receipt.listingId)) receiptByListing.set(receipt.listingId, receipt);
+    res.json({ success: true, data: items.map((listing: any) => ({ ...householdListingDto(listing),
+      pickups: receiptByListing.has(listing.id) ? [receiptByListing.get(listing.id)] : []
+    })), ...(page ? { page } : {}) });
   });
   router.get('/household/listings/:listingId', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -683,11 +711,30 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         }
         const claimedListing = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: 'POSTED' }, data: { status: 'MATCHED' } });
         if (!claimedListing.count) throw new AppError('CONFLICT', 'This listing is no longer available for a pickup request', 409);
-        const pickup = await tx.pickupRequest.create({ data: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP', requestedSlot, householdQrScannedAt: null } });
+        // A cancelled waiting request still occupies the compound unique key
+        // (listingId, null). Reuse it when the household requests pickup again.
+        const previousWaiting = await tx.pickupRequest.findFirst({ where: { listingId, kabadiwalaId: null } });
+        let pickup;
+        if (previousWaiting) {
+          if (previousWaiting.householdId !== req.identity!.collectorId || !['CANCELLED', 'REJECTED'].includes(previousWaiting.status)) {
+            throw new AppError('CONFLICT', 'A pickup request already exists for this listing', 409, { code: 'PICKUP_ALREADY_EXISTS' });
+          }
+          const reset = await tx.pickupRequest.updateMany({
+            where: { id: previousWaiting.id, householdId: req.identity!.collectorId, kabadiwalaId: null, status: { in: ['CANCELLED', 'REJECTED'] } },
+            data: { status: 'WAITING_FOR_PICKUP', requestedSlot, scheduledSlot: null, acceptedAt: null, availabilityConfirmedAt: null, inTransitAt: null, arrivedAt: null, householdQrScannedAt: null, weighedAt: null, cancelledAt: null, cancelledBy: null, cancellationReason: null, noShow: false, lateCancellation: false, reassignmentReason: null, actualWeight: null, finalCategory: null, grade: null, ratePerKg: null, grossMaterialAmount: null, pickupCharge: null, finalAmount: null, settlementStatus: null, settlementBeforeValue: null, settlementAfterValue: null, settlementReasonCode: null, settlementEvidenceReference: null, householdDecision: null, settlementDecisionAt: null, settlementDisputeNotes: null, completedAt: null }
+          });
+          if (!reset.count) throw new AppError('CONFLICT', 'This pickup request was already updated', 409, { code: 'PICKUP_REQUEST_CONFLICT' });
+          pickup = await tx.pickupRequest.findUniqueOrThrow({ where: { id: previousWaiting.id } });
+        } else {
+          pickup = await tx.pickupRequest.create({ data: { listingId, householdId: req.identity!.collectorId, kabadiwalaId: null, status: 'WAITING_FOR_PICKUP', requestedSlot, householdQrScannedAt: null } });
+        }
         await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_WAITING_FOR_PICKUP', 'PICKUP_REQUEST', pickup.id, { listingId, requestedSlot: requestedSlot?.toISOString() ?? null });
         if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: pickup.id, requestHash: operationHash, response: jsonValue(pickup) } });
         return { pickup, created: true, replayed: false };
-      }));
+      })).catch((error: any) => {
+        if (error?.code === 'P2002') throw new AppError('CONFLICT', 'A pickup request already exists for this listing. Refresh to see its current status.', 409, { code: 'PICKUP_ALREADY_EXISTS' });
+        throw error;
+      });
       if (result.created && !result.replayed) {
         const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true } });
         const users = await store.user.findMany({ where: { role: 'COLLECTOR', accountStatus: 'ACTIVE', collectorProfileId: { not: null } }, select: { collectorProfileId: true } });
@@ -740,7 +787,10 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'PICKUP_REQUESTED', 'PICKUP_REQUEST', pickup.id, { listingId, kabadiwalaId: input.kabadiwalaId, requestedSlot: requestedSlot?.toISOString() ?? null });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'REQUEST_PICKUP', entityId: pickup.id, requestHash: operationHash, response: jsonValue(pickup) } });
       return { pickup, created: !existing, replayed: false };
-    }));
+    })).catch((error: any) => {
+      if (error?.code === 'P2002') throw new AppError('CONFLICT', 'A pickup request already exists for this listing. Refresh to see its current status.', 409, { code: 'PICKUP_ALREADY_EXISTS' });
+      throw error;
+    });
     if (result.created && !result.replayed) {
       await Promise.allSettled([
         emitNotification(store, { accountId: input.kabadiwalaId, type: 'PICKUP_REQUESTED', title: 'New pickup request', body: 'A household selected you for a pickup request. Review and accept it when available.', route: `kabadiwala/pickups/${result.pickup.id}`, dedupeKey: `PICKUP_REQUESTED:${result.pickup.id}:${input.kabadiwalaId}` }),
@@ -874,11 +924,17 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/household/pickups/:pickupId/payment-received', requireHousehold(jwt, collectors), async (req, res) => {
     const pickupId = parse(id, req.params.pickupId);
     const payment = await store.pickupSettlementPayment.findUnique({ where: { pickupId } });
-    if (!payment || payment.householdId !== req.identity!.collectorId || payment.status !== 'RECORDED') throw new AppError('CONFLICT', 'No recorded payment is awaiting your confirmation', 409, { code: 'PICKUP_PAYMENT_NOT_READY' });
+    if (!payment || payment.householdId !== req.identity!.collectorId) throw new AppError('CONFLICT', 'No recorded payment is awaiting your confirmation', 409, { code: 'PICKUP_PAYMENT_NOT_READY' });
+    if (payment.householdReceivedAt) return res.json({ success: true, data: payment, message: 'Payment receipt already confirmed' });
+    if (payment.status !== 'RECORDED') throw new AppError('CONFLICT', 'No recorded payment is awaiting your confirmation', 409, { code: 'PICKUP_PAYMENT_NOT_READY' });
     const pickup = await store.pickupRequest.findFirst({ where: { id: pickupId, householdId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' } });
     if (!pickup || Math.abs(payment.amount - (pickup.finalAmount ?? 0)) > 0.01) throw new AppError('CONFLICT', 'Payment does not match the agreed amount', 409, { code: 'PICKUP_PAYMENT_MISMATCH' });
-    const result = await store.pickupSettlementPayment.updateMany({ where: { id: payment.id, status: 'RECORDED', householdReceivedAt: null }, data: { householdReceivedAt: new Date() } });
-    if (!result.count) throw new AppError('CONFLICT', 'Payment has already been confirmed', 409, { code: 'PICKUP_PAYMENT_ALREADY_CONFIRMED' });
+    const result = await store.pickupSettlementPayment.updateMany({ where: { id: payment.id, householdId: req.identity!.collectorId, status: 'RECORDED', OR: [{ householdReceivedAt: null }, { householdReceivedAt: { isSet: false } }] }, data: { householdReceivedAt: new Date() } });
+    if (!result.count) {
+      const latest = await store.pickupSettlementPayment.findUnique({ where: { pickupId } });
+      if (latest?.householdId === req.identity!.collectorId && latest.householdReceivedAt) return res.json({ success: true, data: latest, message: 'Payment receipt already confirmed' });
+      throw new AppError('CONFLICT', 'Payment changed before receipt could be confirmed. Refresh and try again.', 409, { code: 'PICKUP_PAYMENT_CONFIRMATION_CONFLICT' });
+    }
     await emitNotification(store, { accountId: payment.collectorId, type: 'PICKUP_PAYMENT_RECEIVED', title: 'Household confirmed payment', body: 'The household confirmed receipt of the agreed pickup amount.', route: `kabadiwala/pickups/${pickupId}`, dedupeKey: `PICKUP_PAYMENT_RECEIVED:${payment.id}` });
     res.json({ success: true, data: await store.pickupSettlementPayment.findUniqueOrThrow({ where: { id: payment.id } }) });
   });
@@ -971,9 +1027,11 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const acceptedPickup = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const collector = tx.collector?.findUnique ? await tx.collector.findUnique({ where: { id: req.identity!.collectorId }, select: { areaName: true, latitude: true, longitude: true, pickupMaxDistanceKm: true, pickupFreeRadiusKm: true, pickupFeePerKm: true } }) : null;
       const listing = tx.householdListing?.findUnique ? await tx.householdListing.findUnique({ where: { id: listingId }, select: { areaName: true, latitude: true, longitude: true } }) : null;
-      if (collector && listing && !collectorCanSeeWaitingPickup(collector, listing)) throw new AppError('AUTHORIZATION_ERROR', 'This pickup is outside your configured service distance', 403, { code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
       const distance = distanceKm(collector?.latitude, collector?.longitude, listing?.latitude, listing?.longitude);
       const pickupCharge = distance == null ? 0 : Number((Math.max(0, distance - (collector?.pickupFreeRadiusKm ?? 0)) * (collector?.pickupFeePerKm ?? 0)).toFixed(2));
+      // A household may explicitly assign a collector outside the radius used
+      // to discover unclaimed pickups. Let that collector decide whether to
+      // accept; the service-area guard below applies only to unclaimed work.
       let updated = await tx.pickupRequest.updateMany({ where: { listingId, kabadiwalaId: req.identity!.collectorId, status: 'REQUESTED' }, data: { status: 'ACCEPTED', acceptedAt: new Date(), pickupCharge } });
       if (!updated.count) {
         if (!collectorCanSeeWaitingPickup(collector, listing)) {
@@ -1233,7 +1291,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       const anomaly = Math.abs(input.amount - expectedAmount) > 0.01;
       const claimed = await tx.pickupRequest.updateMany({ where: { id: pickupId, kabadiwalaId: req.identity!.collectorId, status: 'COMPLETED', settlementStatus: 'ACCEPTED' }, data: { settlementStatus: anomaly ? 'DISPUTED' : 'ACCEPTED' } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Pickup settlement changed before payment was recorded', 409, { code: 'PICKUP_SETTLEMENT_CONFLICT' });
-      const payment = await tx.pickupSettlementPayment.create({ data: { sourceKey, requestHash: hash, pickupId, householdId: pickup.householdId, collectorId: req.identity!.collectorId, amount: Number(input.amount.toFixed(2)), paymentMethod: input.method, recordedAt, reference: input.reference ?? null, notes: input.notes ?? null, anomaly, anomalyReason: anomaly ? 'Payment differs from the household-accepted pickup settlement' : null, status: anomaly ? 'DISPUTED' : 'RECORDED' } });
+      const payment = await tx.pickupSettlementPayment.create({ data: { sourceKey, requestHash: hash, pickupId, householdId: pickup.householdId, collectorId: req.identity!.collectorId, amount: Number(input.amount.toFixed(2)), paymentMethod: input.method, recordedAt, householdReceivedAt: null, reference: input.reference ?? null, notes: input.notes ?? null, anomaly, anomalyReason: anomaly ? 'Payment differs from the household-accepted pickup settlement' : null, status: anomaly ? 'DISPUTED' : 'RECORDED' } });
       if (anomaly) await tx.anomalyFlag.create({ data: { entityType: 'PICKUP_REQUEST', entityId: pickupId, ruleCode: 'PICKUP_PAYMENT_AMOUNT_DIFFERENCE', severity: 'MEDIUM', details: { expectedAmount, amount: payment.amount, paymentId: payment.id } } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', anomaly ? 'PICKUP_PAYMENT_DISPUTED' : 'PICKUP_PAYMENT_RECORDED', 'PICKUP_REQUEST', pickupId, { paymentId: payment.id, expectedAmount, amount: payment.amount, method: payment.paymentMethod });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'RECORD_PICKUP_SETTLEMENT_PAYMENT', entityId: payment.id, requestHash: hash, response: jsonValue(payment) } });
@@ -1334,16 +1392,16 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.get('/kabadiwala/bulk-offers', requireAuth(jwt, collectors), async (req, res) => {
     const lots = await store.bulkLot.findMany({ where: { kabadiwalaId: req.identity!.collectorId }, select: { id: true } });
     const { items, page } = await pagedRows(store.bulkOffer, { bulkLotId: { in: lots.map((lot: { id: string }) => lot.id) } }, req.query);
-    res.json({ success: true, data: items, ...(page ? { page } : {}) });
+    res.json({ success: true, data: await describeBulkOffers(store, items), ...(page ? { page } : {}) });
   });
 
   router.get('/recycler/bulk-lots', requireRecycler(jwt, db), async (req, res) => {
-    const { items, page } = await pagedRows(store.bulkLot, { status: 'LISTED' }, req.query, { id: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, notes: true, status: true, createdAt: true, updatedAt: true });
+    const { items, page } = await pagedRows(store.bulkLot, { OR: [{ status: 'LISTED' }, { status: 'RESERVED', reservedForId: req.identity!.collectorId }] }, req.query, publicBulkLotSelect);
     res.json({ success: true, data: items, ...(page ? { page } : {}) });
   });
   router.get('/recycler/bulk-lots/:lotId', requireRecycler(jwt, db), async (req, res) => {
     const lotId = parse(id, req.params.lotId);
-    const lot = await store.bulkLot.findFirst({ where: { id: lotId, status: { in: ['LISTED', 'RESERVED'] } }, select: { id: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, latitude: true, longitude: true, notes: true, status: true, createdAt: true, updatedAt: true } });
+    const lot = await store.bulkLot.findFirst({ where: { id: lotId, OR: [{ status: 'LISTED' }, { status: 'RESERVED', reservedForId: req.identity!.collectorId }] }, select: publicBulkLotSelect });
     if (!lot) throw new AppError('NOT_FOUND', 'Bulk lot not found', 404, { code: 'BULK_LOT_NOT_FOUND' });
     res.json({ success: true, data: lot });
   });
@@ -1351,27 +1409,37 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const lotId = parse(id, req.params.lotId); const offeredRatePerKg = parse(z.object({ offeredRatePerKg: positive.max(1000000) }), req.body).offeredRatePerKg;
     const lot = await store.bulkLot.findFirst({ where: { id: lotId, status: 'LISTED' } });
     if (!lot) throw new AppError('NOT_FOUND', 'Available bulk lot not found', 404);
-    const recycler = await store.recycler.findFirst({ where: { id: req.identity!.collectorId, authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { gt: new Date() } }], materials: { some: { category: lot.materialCategory } } }, include: { materials: true } });
+    const recycler = await store.recycler.findFirst({ where: { id: req.identity!.collectorId, authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { isSet: false } }, { authorizationValidUntil: { gt: new Date() } }], materials: { some: { category: lot.materialCategory } } }, include: { materials: true } });
     const capability = recycler?.materials.find((row: any) => row.category === lot.materialCategory);
     if (!recycler || !capability || (capability.minAcceptableWeight != null && lot.quantityKg < capability.minAcceptableWeight) || (capability.maxAcceptableWeight != null && lot.quantityKg > capability.maxAcceptableWeight) || (capability.acceptedGrades?.length && !capability.acceptedGrades.includes('UNSPECIFIED') && !capability.acceptedGrades.includes(lot.grade))) throw new AppError('CONFLICT', 'This Recycler is not currently eligible for the lot grade or quantity', 409, { code: 'RECYCLER_LOT_INELIGIBLE' });
-    const offer = await store.$transaction(async (tx: any) => {
+    const offer = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const current = await tx.bulkLot.findFirst({ where: { id: lotId, status: 'LISTED' } });
       if (!current) throw new AppError('CONFLICT', 'Bulk lot is no longer available for offers', 409, { code: 'BULK_LOT_NOT_AVAILABLE' });
+      if (current.minimumRatePerKg != null && offeredRatePerKg < current.minimumRatePerKg) throw new AppError('VALIDATION_ERROR', `Offer must be at least ₹${current.minimumRatePerKg} per kg`, 422, { code: 'BULK_OFFER_BELOW_MINIMUM', minimumRatePerKg: current.minimumRatePerKg });
+      const previous = await tx.bulkOffer.findUnique({ where: { bulkLotId_recyclerId: { bulkLotId: lotId, recyclerId: req.identity!.collectorId } } });
+      if (previous && !['PENDING', 'CANCELLED', 'REJECTED'].includes(previous.status)) throw new AppError('CONFLICT', 'An accepted offer cannot be edited or submitted again', 409, { code: 'BULK_OFFER_NOT_EDITABLE' });
+      // Serialize rate revisions with acceptance on the same lot document.
+      const available = await tx.bulkLot.updateMany({ where: { id: lotId, status: 'LISTED' }, data: { updatedAt: new Date() } });
+      if (!available.count) throw new AppError('CONFLICT', 'Bulk lot is no longer available for offers', 409, { code: 'BULK_LOT_NOT_AVAILABLE' });
       const created = await tx.bulkOffer.upsert({ where: { bulkLotId_recyclerId: { bulkLotId: lotId, recyclerId: req.identity!.collectorId } }, update: { offeredRatePerKg, status: 'PENDING' }, create: { bulkLotId: lotId, recyclerId: req.identity!.collectorId, offeredRatePerKg } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'RECYCLER', 'BULK_OFFER_SUBMITTED', 'BULK_OFFER', created.id, { bulkLotId: lotId, offeredRatePerKg });
       return created;
-    });
+    }));
+    await emitNotification(store, { accountId: lot.kabadiwalaId, type: 'BULK_OFFER_SUBMITTED', title: 'Recycler offer received', body: `An offer of ₹${offeredRatePerKg} per kg is ready to review on your lot.`, route: 'kabadiwala/lots', dedupeKey: `BULK_OFFER_SUBMITTED:${offer.id}:${offer.updatedAt?.toISOString() ?? offeredRatePerKg}`, channels: ['PUSH'] });
     res.status(201).json({ success: true, data: offer });
   });
   router.get('/recycler/offers', requireRecycler(jwt, db), async (req, res) => {
     const { items, page } = await pagedRows(store.bulkOffer, { recyclerId: req.identity!.collectorId }, req.query);
-    res.json({ success: true, data: items, ...(page ? { page } : {}) });
+    res.json({ success: true, data: await describeBulkOffers(store, items), ...(page ? { page } : {}) });
   });
   router.post('/recycler/offers/:offerId/withdraw', requireRecycler(jwt, db), async (req, res) => {
     const offerId = parse(id, req.params.offerId);
     const updated = await store.bulkOffer.updateMany({ where: { id: offerId, recyclerId: req.identity!.collectorId, status: 'PENDING' }, data: { status: 'CANCELLED' } });
     if (!updated.count) throw new AppError('CONFLICT', 'Offer is not withdrawable', 409, { code: 'OFFER_NOT_WITHDRAWABLE' });
-    res.json({ success: true, data: await store.bulkOffer.findUnique({ where: { id: offerId } }) });
+    const offer = await store.bulkOffer.findUniqueOrThrow({ where: { id: offerId } });
+    const lot = await store.bulkLot.findUnique({ where: { id: offer.bulkLotId } });
+    if (lot) await emitNotification(store, { accountId: lot.kabadiwalaId, type: 'BULK_OFFER_WITHDRAWN', title: 'Recycler offer withdrawn', body: 'The Recycler withdrew its offer. Your listed lot remains available for new offers.', route: 'kabadiwala/lots', dedupeKey: `BULK_OFFER_WITHDRAWN:${offer.id}:${offer.updatedAt?.toISOString() ?? ''}`, channels: ['PUSH'] });
+    res.json({ success: true, data: offer });
   });
   router.post('/kabadiwala/bulk-offers/:offerId/reject', requireAuth(jwt, collectors), async (req, res) => {
     const offerId = parse(id, req.params.offerId);
@@ -1380,6 +1448,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!offer || !lot) throw new AppError('CONFLICT', 'Offer is not rejectable', 409, { code: 'OFFER_NOT_REJECTABLE' });
     const updated = await store.bulkOffer.updateMany({ where: { id: offerId, status: 'PENDING' }, data: { status: 'REJECTED' } });
     if (!updated.count) throw new AppError('CONFLICT', 'Offer was already updated', 409);
+    await emitNotification(store, { accountId: offer.recyclerId, type: 'BULK_OFFER_REJECTED', title: 'Kabadiwala declined your offer', body: 'You can revise your offer while the lot is still listed.', route: 'recycler/marketplace', dedupeKey: `BULK_OFFER_REJECTED:${offerId}:${offer.updatedAt?.toISOString() ?? ''}`, channels: ['PUSH'] });
     res.json({ success: true, data: await store.bulkOffer.findUnique({ where: { id: offerId } }) });
   });
   router.post('/kabadiwala/bulk-offers/:offerId/counter', requireAuth(jwt, collectors), async (req, res) => {
@@ -1388,6 +1457,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const offer = await store.bulkOffer.findFirst({ where: { id: offerId, status: 'PENDING' } });
     const lot = offer ? await store.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } }) : null;
     if (!offer || !lot) throw new AppError('CONFLICT', 'Offer is not counterable', 409, { code: 'OFFER_NOT_COUNTERABLE' });
+    if (lot.minimumRatePerKg != null && offeredRatePerKg < lot.minimumRatePerKg) throw new AppError('VALIDATION_ERROR', `Counter-offer must be at least ₹${lot.minimumRatePerKg} per kg`, 422, { code: 'BULK_OFFER_BELOW_MINIMUM' });
     const updatedCount = await store.bulkOffer.updateMany({ where: { id: offerId, status: 'PENDING' }, data: { offeredRatePerKg } });
     if (!updatedCount.count) throw new AppError('CONFLICT', 'Offer was already updated', 409, { code: 'OFFER_ALREADY_UPDATED' });
     const updated = await store.bulkOffer.findUniqueOrThrow({ where: { id: offerId } });
@@ -1395,7 +1465,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   });
   router.post('/kabadiwala/bulk-offers/:offerId/accept', requireAuth(jwt, collectors), async (req, res) => {
     const offerId = parse(id, req.params.offerId);
-    await store.$transaction(async (tx: any) => {
+    const acceptedOffer = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const offer = await tx.bulkOffer.findUnique({ where: { id: offerId } });
       if (!offer || offer.status !== 'PENDING') throw new AppError('CONFLICT', 'Offer is not actionable', 409);
       const lot = await tx.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } });
@@ -1411,7 +1481,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (!claimedOffer.count) throw new AppError('CONFLICT', 'Offer was already updated', 409, { code: 'OFFER_ALREADY_UPDATED' });
       await tx.bulkOffer.updateMany({ where: { bulkLotId: lot.id, id: { not: offerId }, status: 'PENDING' }, data: { status: 'REJECTED' } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'BULK_OFFER_ACCEPTED', 'BULK_OFFER', offer.id, { bulkLotId: lot.id, recyclerId: offer.recyclerId, offeredRatePerKg: offer.offeredRatePerKg });
-    });
+      return offer;
+    }));
+    await emitNotification(store, { accountId: acceptedOffer.recyclerId, type: 'BULK_OFFER_ACCEPTED', title: 'Kabadiwala accepted your offer', body: 'Your lot is reserved. Coordinate collection and scan the signed handover QR.', route: 'recycler/marketplace', dedupeKey: `BULK_OFFER_ACCEPTED:${acceptedOffer.id}`, channels: ['PUSH'] });
     res.json({ success: true });
   });
   router.post('/recycler/bulk-lots/:lotId/receive', requireRecycler(jwt, db), async (req, res) => {

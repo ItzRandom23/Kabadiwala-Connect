@@ -68,7 +68,8 @@ function poolHandoverForCollector(handover: any, collectorId: string, contributi
     preparedAt: handover.preparedAt,
     expiresAt: handover.expiresAt,
     reviewReason: isOwner ? handover.reviewReason : null,
-    reviewEvidence: isOwner ? handover.reviewEvidence : null
+    reviewEvidence: isOwner ? handover.reviewEvidence : null,
+    payments: (handover.payments ?? []).filter((payment: any) => payment.collectorId === collectorId)
   };
 }
 
@@ -283,6 +284,8 @@ async function resolveFormalAnomaly(tx: Store, flag: any, action: FormalResoluti
       assertInventoryInvariant(after);
       await recordInventoryMovement(tx, before, after, 'SALE', accepted, 'SUPPLY_HANDOVER', handover.id, { bulkLotId: lot.id, reason: 'ADMIN_ANOMALY_RESOLUTION' });
       await tx.bulkLot.update({ where: { id: lot.id }, data: { status: 'SOLD' } });
+      await tx.bulkOffer.updateMany({ where: { bulkLotId: lot.id, status: 'ACCEPTED' }, data: { status: 'COMPLETED' } });
+      if (tx.conversation?.updateMany) await tx.conversation.updateMany({ where: { lotId: lot.id }, data: { status: 'CLOSED' } });
     }
   }
   await tx.settlementBreakdown.updateMany({ where: { handoverId: handover.id }, data: { acceptedWeightKg: accepted, finalRatePerKg: rate, finalValue, finalRejectedKg: Math.max(0, handover.quotedWeightKg - accepted), status: 'COMPLETED', reasonCode: `ADMIN_${action}`, changedBy: adminId, collectorDecision: 'ACCEPT' } });
@@ -772,14 +775,16 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       orderBy: { createdAt: 'desc' },
       take: 100
     });
-    res.json({ success: true, data: handovers.map((handover: any) => handover.poolId
+    const payments = handovers.length ? await store.supplyPayment.findMany({ where: { supplyHandoverId: { in: handovers.map((h: any) => h.id) }, collectorId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) : [];
+    res.json({ success: true, data: handovers.map((h: any) => ({ ...h, payments: payments.filter((p: any) => p.supplyHandoverId === h.id) })).map((handover: any) => handover.poolId
       ? poolHandoverForCollector(handover, req.identity!.collectorId, contributionByHandover.get(handover.id) ?? null)
       : handover) });
   });
 
   router.get('/recycler/supply-handovers', requireRecycler(jwt, db), async (req, res) => {
-    const handovers = await store.supplyHandover.findMany({ where: { recyclerId: req.identity!.collectorId, status: { in: ['PREPARED', 'COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED'] } }, orderBy: { createdAt: 'desc' }, take: 100 });
-    res.json({ success: true, data: handovers });
+    const handovers = await store.supplyHandover.findMany({ where: { recyclerId: req.identity!.collectorId, status: { in: ['PREPARED', 'COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED', 'COMPLETED'] } }, orderBy: { createdAt: 'desc' }, take: 100 });
+    const payments = handovers.length ? await store.supplyPayment.findMany({ where: { supplyHandoverId: { in: handovers.map((h: any) => h.id) }, recyclerId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) : [];
+    res.json({ success: true, data: handovers.map((h: any) => ({ ...h, payments: payments.filter((p: any) => p.supplyHandoverId === h.id) })) });
   });
 
   router.post('/recycler/handovers/confirm', requireRecycler(jwt, db), async (req, res) => {
@@ -869,14 +874,21 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
           assertInventoryInvariant(afterBalance);
           await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedKg, 'SUPPLY_HANDOVER', handover.id, { bulkLotId: lot.id });
           await tx.bulkLot.update({ where: { id: lot.id }, data: { status: 'SOLD' } });
+      await tx.bulkOffer.updateMany({ where: { bulkLotId: lot.id, status: 'ACCEPTED' }, data: { status: 'COMPLETED' } });
+      if (tx.conversation?.updateMany) await tx.conversation.updateMany({ where: { lotId: lot.id }, data: { status: 'CLOSED' } });
         }
       }
       await audit(tx, req.identity!.collectorId, 'RECYCLER', requiresReview ? 'HANDOVER_REVIEW_REQUIRED' : 'HANDOVER_COMPLETED', 'SUPPLY_HANDOVER', handover.id, { actualWeightKg: actual, acceptedWeightKg: accepted, finalRatePerKg: rate, reasonCode: input.reasonCode ?? null });
       const finalHandover = await tx.supplyHandover.findUniqueOrThrow({ where: { id: handover.id } });
+      const recipients = handover.poolId
+        ? [...new Set([handover.collectorId, ...(await tx.poolContribution.findMany({ where: { poolId: handover.poolId, handoverId: handover.id }, select: { collectorId: true } })).map((c: any) => c.collectorId)])]
+        : [handover.collectorId];
+      for (const accountId of recipients) await emitNotification(tx, { accountId: String(accountId), type: requiresReview ? 'SUPPLY_HANDOVER_REVIEW_REQUIRED' : 'SUPPLY_HANDOVER_RECEIVED', title: requiresReview ? 'Recycler receipt needs review' : 'Recycler received your material', body: requiresReview ? 'Review the final weight and amount before settling.' : 'Material receipt is recorded. Payment must still be recorded and confirmed separately.', route: 'kabadiwala/lots', dedupeKey: `SUPPLY_HANDOVER_RECEIPT:${handover.id}:${accountId}` });
       if (idempotency) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId: idempotency, action: 'RECYCLER_CONFIRM_HANDOVER', entityId: handover.id, requestHash: reconciliationHash, response: jsonValue(finalHandover) } });
       return finalHandover;
     });
-    if (!requiresReview) await retryableTransaction(() => store.$transaction(async (tx: Store) => { const pool = handover.poolId ? await tx.poolContribution.findMany({ where: { poolId: handover.poolId }, select: { collectorId: true }, distinct: ['collectorId'] }) : []; for (const row of pool) await refreshPassport(tx, row.collectorId); await refreshPassport(tx, handover.collectorId); }), 'The collector evidence profile');
+    // Confirmed material transfer must not wait for derived track-record statistics.
+    if (!requiresReview) void retryableTransaction(() => store.$transaction(async (tx: Store) => { const pool = handover.poolId ? await tx.poolContribution.findMany({ where: { poolId: handover.poolId }, select: { collectorId: true }, distinct: ['collectorId'] }) : []; for (const row of pool) await refreshPassport(tx, row.collectorId); await refreshPassport(tx, handover.collectorId); }), 'The collector evidence profile').catch(() => console.warn(JSON.stringify({ event: 'collector_track_record_refresh_failed' })));
     res.json({ success: true, data: result, message: requiresReview ? 'Handover needs collector review because settlement changed.' : 'Handover completed and traceability updated.' });
   });
 
@@ -971,11 +983,15 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         await audit(tx, req.identity!.collectorId, 'RECYCLER', 'SUPPLY_PAYMENT_RECORDED', 'SUPPLY_PAYMENT', created.id, { handoverId, collectorId, amount: created.amount, expectedAmount, method: created.paymentMethod, anomaly });
         return created;
       });
+      await emitNotification(store, { accountId: collectorId, type: 'SUPPLY_PAYMENT_RECORDED', title: 'Recycler recorded your payment', body: 'Check the amount and confirm only after you receive the money.', route: 'kabadiwala/lots', dedupeKey: `SUPPLY_PAYMENT_RECORDED:${payment.id}` });
       return res.status(201).json({ success: true, data: payment, message: 'Formal payment recorded' });
     } catch (error: any) {
       if (error?.code === 'P2002') {
         const concurrent = await store.supplyPayment.findUnique({ where: { sourceKey } });
-        if (concurrent) return res.json({ success: true, data: concurrent, message: 'Payment already recorded' });
+        if (concurrent) {
+          if (concurrent.requestHash && concurrent.requestHash !== hash) throw new AppError('CONFLICT', 'A different payment is already recorded for this settlement', 409, { code: 'PAYMENT_PAYLOAD_MISMATCH' });
+          return res.json({ success: true, data: concurrent, message: 'Payment already recorded' });
+        }
       }
       throw error;
     }
@@ -1020,7 +1036,11 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const contribution = handover?.poolId ? await store.poolContribution.findFirst({ where: { poolId: handover.poolId, handoverId, collectorId: req.identity!.collectorId } }) : null;
     if (!handover || (handover.collectorId !== req.identity!.collectorId && !contribution)) throw new AppError('NOT_FOUND', 'Handover payment not found', 404, { code: 'HANDOVER_NOT_FOUND' });
     const payment = await store.supplyPayment.findFirst({ where: { supplyHandoverId: handoverId, collectorId: req.identity!.collectorId, status: 'RECORDED' } });
-    if (!payment) throw new AppError('CONFLICT', 'No recorded payment is awaiting confirmation', 409, { code: 'PAYMENT_NOT_ACTIONABLE' });
+    if (!payment) {
+      const prior = await store.supplyPayment.findFirst({ where: { supplyHandoverId: handoverId, collectorId: req.identity!.collectorId, status: input.decision === 'ACCEPT' ? 'VERIFIED' : 'DISPUTED' } });
+      if (prior?.confirmedAt && (input.decision === 'ACCEPT' || prior.anomalyReason === input.reasonCode)) return res.json({ success: true, data: prior, message: 'Payment decision already recorded' });
+      throw new AppError('CONFLICT', 'No recorded payment is awaiting confirmation', 409, { code: 'PAYMENT_NOT_ACTIONABLE' });
+    }
     const result = await store.$transaction(async (tx: Store) => {
       const updated = await tx.supplyPayment.updateMany({ where: { id: payment.id, collectorId: req.identity!.collectorId, status: 'RECORDED' }, data: { status: input.decision === 'ACCEPT' ? 'VERIFIED' : 'DISPUTED', confirmedAt: new Date(), anomaly: input.decision === 'RAISE_ISSUE' ? true : payment.anomaly, anomalyReason: input.decision === 'RAISE_ISSUE' ? (input.reasonCode ?? 'PAYMENT_DISPUTE') : payment.anomalyReason } });
       if (!updated.count) throw new AppError('CONFLICT', 'Payment was already confirmed', 409, { code: 'PAYMENT_ALREADY_CONFIRMED' });
@@ -1028,6 +1048,7 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       await audit(tx, req.identity!.collectorId, 'COLLECTOR', input.decision === 'ACCEPT' ? 'SUPPLY_PAYMENT_CONFIRMED' : 'SUPPLY_PAYMENT_DISPUTED', 'SUPPLY_PAYMENT', payment.id, { handoverId, reasonCode: input.reasonCode ?? null, evidenceReference: input.evidenceReference ?? null, notes: input.notes ?? null });
       return tx.supplyPayment.findUniqueOrThrow({ where: { id: payment.id } });
     });
+    await emitNotification(store, { accountId: payment.recyclerId, type: input.decision === 'ACCEPT' ? 'SUPPLY_PAYMENT_CONFIRMED' : 'SUPPLY_PAYMENT_DISPUTED', title: input.decision === 'ACCEPT' ? 'Kabadiwala confirmed payment receipt' : 'Kabadiwala reported a payment issue', body: 'Open Orders to review the payment status.', route: 'recycler/orders', dedupeKey: `SUPPLY_PAYMENT_DECISION:${payment.id}:${input.decision}` });
     res.json({ success: true, data: result });
   });
 
@@ -1077,6 +1098,8 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
           assertInventoryInvariant(afterBalance);
           await recordInventoryMovement(tx, beforeBalance, afterBalance, 'SALE', acceptedKg, 'SUPPLY_HANDOVER', handoverId, { bulkLotId: lot.id });
           await tx.bulkLot.update({ where: { id: lot.id }, data: { status: 'SOLD' } });
+      await tx.bulkOffer.updateMany({ where: { bulkLotId: lot.id, status: 'ACCEPTED' }, data: { status: 'COMPLETED' } });
+      if (tx.conversation?.updateMany) await tx.conversation.updateMany({ where: { lotId: lot.id }, data: { status: 'CLOSED' } });
         }
         await tx.supplyHandover.update({ where: { id: handoverId }, data: { status: 'COMPLETED' } });
         await refreshPassport(tx, req.identity!.collectorId);

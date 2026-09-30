@@ -25,7 +25,8 @@ object RetrofitProvider {
         tokenRefresher: ((failedAccessToken: String?) -> String?)? = null,
         onAuthenticationFailure: ((failedToken: String?) -> Unit)? = null,
         sessionGenerationProvider: (() -> Long)? = null,
-        requestSessionGenerationProvider: (() -> Long)? = sessionGenerationProvider
+        requestSessionGenerationProvider: (() -> Long)? = sessionGenerationProvider,
+        accountIdProvider: () -> String? = { null }
     ): ApiService {
         val authInterceptor = Interceptor { chain ->
             val original = chain.request()
@@ -59,8 +60,15 @@ object RetrofitProvider {
                 val request = original.newBuilder().header("X-Request-ID", requestId).build()
                 val operation = original.tag(Invocation::class.java)?.method()?.name ?: "unknown"
                 val started = SystemClock.elapsedRealtimeNanos()
+                val requestOwner = accountIdProvider()
+                val requestGeneration = requestSessionGenerationProvider?.invoke()
                 try {
                     val response = chain.proceed(request)
+                    if (response.isSuccessful && requestOwner == accountIdProvider() &&
+                        sessionRetryAllowed(requestGeneration, sessionGenerationProvider?.invoke()) &&
+                        DataChangeEvents.invalidatesData(request.method, request.url.encodedPath)) {
+                        DataChangeEvents.publish(requestOwner, request.url.encodedPath)
+                    }
                     if (BuildConfig.DEBUG) Log.d("KcApiTiming", "requestId=$requestId operation=$operation durationMs=${(SystemClock.elapsedRealtimeNanos() - started) / 1_000_000} status=${response.code}")
                     response
                 } catch (error: IOException) {

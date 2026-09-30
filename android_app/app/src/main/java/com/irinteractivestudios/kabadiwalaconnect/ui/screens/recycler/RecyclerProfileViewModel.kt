@@ -25,6 +25,8 @@ data class RecyclerProfileState(
     val profile: RecyclerDto? = null,
     val error: String? = null,
     val saved: Boolean = false,
+    val savingSection: String? = null,
+    val savedSection: String? = null,
     val materialCategories: List<String> = emptyList(),
     val materialCategoriesError: Boolean = false
 )
@@ -45,7 +47,7 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
         val generation = ++refreshGeneration
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null, saved = false)
+            _state.value = _state.value.copy(loading = _state.value.profile == null, error = null)
             try {
                 val profile = api.getRecyclerProfile().requireData()
                 val categories = if (_state.value.materialCategories.isEmpty()) {
@@ -75,11 +77,11 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
         if (rates.isEmpty() || _state.value.saving) return
         stopRefreshBeforeSave()
         val owner = accountId()
+        _state.value = _state.value.copy(saving = true, savingSection = "rates", savedSection = null, error = null, saved = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerRates(RecyclerRatesUpdateRequestDto(rates)).requireData() }
-                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Rates could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, savedSection = "rates", profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, error = userFacingError(error, "Rates could not be saved")) }
         }
     }
 
@@ -87,11 +89,11 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
         if (_state.value.saving) return
         stopRefreshBeforeSave()
         val owner = accountId()
+        _state.value = _state.value.copy(saving = true, savingSection = "availability", savedSection = null, error = null, saved = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerProfile(RecyclerProfileUpdateRequestDto(pickupAvailability = value)).requireData() }
-                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Availability could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, savedSection = "availability", profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, error = userFacingError(error, "Availability could not be saved")) }
         }
     }
 
@@ -99,11 +101,11 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
         if (_state.value.saving) return
         stopRefreshBeforeSave()
         val owner = accountId()
+        _state.value = _state.value.copy(saving = true, savingSection = "pricing", savedSection = null, error = null, saved = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.updateRecyclerProfile(input).requireData() }
-                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
-                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, error = userFacingError(error, "Pickup charges could not be saved")) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, savedSection = "pricing", profile = it, saved = true) }
+                .onFailure { error -> if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, error = userFacingError(error, "Pickup charges could not be saved")) }
         }
     }
 
@@ -111,10 +113,10 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
         if (_state.value.saving) return
         stopRefreshBeforeSave()
         val owner = accountId()
+        _state.value = _state.value.copy(saving = true, savingSection = "verification", savedSection = null, error = null, saved = false)
         viewModelScope.launch {
-            _state.value = _state.value.copy(saving = true, error = null, saved = false)
             runCatching { api.submitRecyclerVerificationRequest(request).requireData() }
-                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, profile = it, saved = true) }
+                .onSuccess { if (accountId() == owner) _state.value = _state.value.copy(saving = false, savingSection = null, savedSection = "verification", profile = it, saved = true) }
                 .onFailure { error ->
                     if (accountId() != owner) return@onFailure
                     val remote = error as? RemoteApiException
@@ -123,7 +125,7 @@ class RecyclerProfileViewModel(private val api: ApiService, private val accountI
                     } else {
                         userFacingError(error, "Verification request could not be submitted")
                     }
-                    _state.value = _state.value.copy(saving = false, error = message)
+                    _state.value = _state.value.copy(saving = false, savingSection = null, error = message)
                 }
         }
     }

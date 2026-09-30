@@ -6,7 +6,7 @@ import { futureRoutes } from '../src/routes/futureRoutes.js';
 import { errorHandler } from '../src/middleware/errors.js';
 
 function fixture() {
-  const lot = { id: 'bulk-1', kabadiwalaId: 'collector-1', reservedForId: 'recycler-1' };
+  const lot = { id: 'bulk-1', kabadiwalaId: 'collector-1', reservedForId: 'recycler-1', status: 'RESERVED' };
   const offer = { id: 'offer-1', bulkLotId: lot.id, recyclerId: 'recycler-1', status: 'ACCEPTED' };
   const conversation = { id: 'trade-chat-1', lotId: lot.id, collectorId: lot.kabadiwalaId, recyclerId: offer.recyclerId, status: 'OPEN', lastMessageAt: null };
   let message: Record<string, unknown> | null = null;
@@ -17,7 +17,7 @@ function fixture() {
       findFirst: vi.fn(async ({ where }: any) => where.id === 'recycler-1' ? { id: 'recycler-1' } : null)
     },
     user: { findFirst: vi.fn(async ({ where }: any) => ({ role: where.recyclerProfileId ? 'RECYCLER' : 'COLLECTOR', accountStatus: 'ACTIVE' })) },
-    bulkLot: { findFirst: vi.fn(async ({ where }: any) => where.id === lot.id && where.reservedForId === lot.reservedForId && (!where.kabadiwalaId || where.kabadiwalaId === lot.kabadiwalaId) ? lot : null) },
+    bulkLot: { findUnique: vi.fn(async ({ where }: any) => where.id === lot.id ? lot : null), findMany: vi.fn(async () => ['SOLD', 'CANCELLED'].includes(lot.status) ? [lot] : []), findFirst: vi.fn(async ({ where }: any) => where.id === lot.id && where.reservedForId === lot.reservedForId && (!where.kabadiwalaId || where.kabadiwalaId === lot.kabadiwalaId) ? lot : null) },
     bulkOffer: { findFirst: vi.fn(async ({ where }: any) => where.bulkLotId === lot.id && where.recyclerId === offer.recyclerId && offer.status === where.status ? offer : null) },
     conversation: {
       findUnique: vi.fn(async ({ where }: any) => where.id === conversation.id ? conversation : null),
@@ -42,7 +42,7 @@ function fixture() {
   app.use(express.json());
   app.use('/future', futureRoutes(jwt, db));
   app.use(errorHandler);
-  return { app, db, jwt, offer, conversation };
+  return { app, db, jwt, offer, conversation, lot };
 }
 
 describe('accepted bulk trade chat', () => {
@@ -87,4 +87,18 @@ describe('accepted bulk trade chat', () => {
     expect(outsider.status).toBe(404);
     expect(db.conversation.upsert).not.toHaveBeenCalled();
   });
+  it('blocks both participants from reopening or sending in a sold trade but preserves read access', async () => {
+    const { app, db, jwt, conversation, lot } = fixture();
+    lot.status = 'SOLD';
+    for (const token of [jwt.generateToken('collector-1'), jwt.generateRecyclerToken('recycler-1')]) {
+      const auth = { Authorization: `Bearer ${token}` };
+      expect((await request(app).post('/future/conversations').set(auth).send({ bulkLotId: lot.id, recyclerId: 'recycler-1' })).status).toBe(409);
+      expect((await request(app).post(`/future/conversations/${conversation.id}/messages`).set(auth).send({ clientMessageId: 'after-sale-message', body: 'Message after completion' })).status).toBe(409);
+      const inbox = await request(app).get('/future/conversations').set(auth);
+      expect(inbox.body.data[0].status).toBe('CLOSED');
+      expect((await request(app).get(`/future/conversations/${conversation.id}/messages`).set(auth)).status).toBe(200);
+    }
+    expect(db.chatMessage.create).not.toHaveBeenCalled();
+  });
+
 });

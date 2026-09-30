@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,34 +69,47 @@ class AdminConsoleViewModel(
         )
     )
     val state: StateFlow<AdminConsoleState> = _state.asStateFlow()
+    private var refreshJob: Job? = null
+    private var refreshGeneration = 0L
+    private var refreshSection: AdminSection? = null
+    private var detailJob: Job? = null
+    private var detailGeneration = 0L
 
     fun selectSection(section: AdminSection) {
         if (section !in availableSections) return
+        clearSelection()
         _state.update { it.copy(section = section, items = emptyList(), selected = null, error = null, message = null) }
         if (section != AdminSection.TOOLS) refresh()
     }
 
     fun refresh() {
         val section = _state.value.section
-        if (section == AdminSection.TOOLS || section !in availableSections) return
-        viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, message = null) }
+        if (section == AdminSection.TOOLS || section !in availableSections || _state.value.actionBusy) return
+        if (refreshJob?.isActive == true && refreshSection == section) return
+        refreshJob?.cancel()
+        refreshSection = section
+        val generation = ++refreshGeneration
+        refreshJob = viewModelScope.launch {
+            _state.update { it.copy(loading = true, error = null) }
             runCatching {
                 when (section) {
                     AdminSection.RECYCLERS -> api.adminRecyclerQueue().requireData()
                     AdminSection.DISPUTES -> api.adminDisputes("OPEN").requireData()
                     AdminSection.PAYMENTS -> {
-                        val recorded = api.adminPayments("PENDING").requireData()
-                        val pickupPayments = api.adminHouseholdPickupPayments("RECORDED").requireData()
-                        recorded + pickupPayments
+                        coroutineScope {
+                            val recorded = async { api.adminPayments("PENDING").requireData() }
+                            val pickupPayments = async { api.adminHouseholdPickupPayments("RECORDED").requireData() }
+                            recorded.await() + pickupPayments.await()
+                        }
                     }
                     AdminSection.ANOMALIES -> api.adminFormalAnomalies("OPEN").requireData()
                     AdminSection.TOOLS -> emptyList()
                 }
             }.onSuccess { data ->
-                _state.update { it.copy(loading = false, items = data) }
+                if (generation == refreshGeneration && section == _state.value.section) _state.update { it.copy(loading = false, items = data) }
             }.onFailure { error ->
-                _state.update { it.copy(loading = false, error = userFacingError(error, "Could not load operator data")) }
+                if (error is CancellationException) throw error
+                if (generation == refreshGeneration && section == _state.value.section) _state.update { it.copy(loading = false, error = userFacingError(error, "Could not load operator data")) }
             }
         }
     }
@@ -100,13 +117,22 @@ class AdminConsoleViewModel(
     fun select(item: JsonObject) {
         if (_state.value.section != AdminSection.RECYCLERS) { _state.update { it.copy(selected = item) }; return }
         val id = item.get("id")?.takeUnless { it.isJsonNull }?.asString ?: return
-        viewModelScope.launch {
+        detailJob?.cancel()
+        val generation = ++detailGeneration
+        detailJob = viewModelScope.launch {
             runCatching { api.adminRecyclerDetail(id).requireData() }
-                .onSuccess { detail -> _state.update { it.copy(selected = detail) } }
-                .onFailure { error -> _state.update { it.copy(error = userFacingError(error, "Could not load facility details")) } }
+                .onSuccess { detail -> if (generation == detailGeneration && _state.value.section == AdminSection.RECYCLERS) _state.update { it.copy(selected = detail) } }
+                .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    if (generation == detailGeneration) _state.update { it.copy(error = userFacingError(error, "Could not load facility details")) }
+                }
         }
     }
-    fun clearSelection() { _state.update { it.copy(selected = null) } }
+    fun clearSelection() {
+        detailGeneration++
+        detailJob?.cancel()
+        _state.update { it.copy(selected = null) }
+    }
 
     fun authorizeRecycler(
         recyclerId: String,
@@ -217,14 +243,27 @@ class AdminConsoleViewModel(
             return
         }
         if (_state.value.actionBusy) return
+        refreshGeneration++
+        refreshJob?.cancel()
+        refreshJob = null
+        _state.update { it.copy(actionBusy = true, loading = false, error = null, message = null) }
         viewModelScope.launch {
-            _state.update { it.copy(actionBusy = true, error = null, message = null) }
             runCatching { block() }
-                .onSuccess {
-                    _state.update { it.copy(actionBusy = false, message = "Operation completed") }
+                .onSuccess { result ->
+                    val changed = result as? JsonObject
+                    val changedId = changed?.get("id")?.takeUnless { it.isJsonNull }?.asString
+                    _state.update { current -> current.copy(actionBusy = false, selected = null, message = "Operation completed",
+                        items = current.items.map { row ->
+                            if (changedId != null && row.get("id")?.asString == changedId) row.deepCopy().apply {
+                                changed.entrySet().forEach { (key, value) -> add(key, value) }
+                            } else row
+                        }) }
                     refresh()
                 }
-                .onFailure { error -> _state.update { it.copy(actionBusy = false, error = userFacingError(error, "Operation failed")) } }
+                .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    _state.update { it.copy(actionBusy = false, error = userFacingError(error, "Operation failed")) }
+                }
         }
     }
 

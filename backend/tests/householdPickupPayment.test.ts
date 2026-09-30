@@ -8,9 +8,13 @@ import { errorHandler } from '../src/middleware/errors.js';
 const config = { JWT_SECRET: 'a-secure-test-secret', JWT_EXPIRES_IN: '1h' } as never;
 
 describe('operator-reconciled household pickup payments', () => {
-  it('lets the household confirm the recorded agreed amount', async () => {
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const payment = { id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', amount: 250, status: 'RECORDED' };
+  it.each(['missing', 'null'])('lets the household confirm a payment with a %s receipt timestamp', async (timestamp) => {
+    const payment = { id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', amount: 250, status: 'RECORDED', ...(timestamp === 'null' ? { householdReceivedAt: null } : {}) };
+    // Model Mongo's distinction: a null equality does not match a missing
+    // optional field. An isSet:false alternative is needed for older records.
+    const updateMany = vi.fn(async ({ where }: any) => ({ count: where.OR?.some((condition: any) =>
+      timestamp === 'missing' ? condition.householdReceivedAt?.isSet === false : condition.householdReceivedAt === null
+    ) ? 1 : 0 }));
     const db = {
       user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
       pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue(payment), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...payment, householdReceivedAt: new Date() }), updateMany },
@@ -23,7 +27,58 @@ describe('operator-reconciled household pickup payments', () => {
     app.use(errorHandler);
     const response = await request(app).post('/api/v1/household/pickups/pickup-1/payment-received').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
     expect(response.status).toBe(200);
-    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ householdReceivedAt: null }) }));
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ householdId: 'household-1', OR: [{ householdReceivedAt: null }, { householdReceivedAt: { isSet: false } }] }) }));
+  });
+  it.each(['RECORDED', 'VERIFIED'])('returns an existing receipt on a retry after payment is %s without changing its timestamp', async (status) => {
+    const payment = { id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', status, householdReceivedAt: new Date('2026-09-29T12:00:00Z') };
+    const updateMany = vi.fn();
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
+      pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue(payment), updateMany }
+    } as any;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', supplyChainRoutes(jwt, { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never, db));
+    app.use(errorHandler);
+    const response = await request(app).post('/api/v1/household/pickups/pickup-1/payment-received').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+    expect(response.status).toBe(200);
+    expect(response.body.data.householdReceivedAt).toBe(payment.householdReceivedAt.toISOString());
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+  it.each([true, false])('handles a lost confirmation race without falsely reporting confirmation (confirmed=%s)', async (confirmed) => {
+    const payment = { id: 'payment-1', pickupId: 'pickup-1', householdId: 'household-1', collectorId: 'collector-1', amount: 250, status: 'RECORDED' };
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
+      pickupSettlementPayment: {
+        findUnique: vi.fn().mockResolvedValueOnce(payment).mockResolvedValueOnce({ ...payment, ...(confirmed ? { householdReceivedAt: new Date() } : { status: 'DISPUTED' }) }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 })
+      },
+      pickupRequest: { findFirst: vi.fn().mockResolvedValue({ finalAmount: 250 }) }
+    } as any;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', supplyChainRoutes(jwt, { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never, db));
+    app.use(errorHandler);
+    const response = await request(app).post('/api/v1/household/pickups/pickup-1/payment-received').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+    expect(response.status).toBe(confirmed ? 200 : 409);
+    if (!confirmed) expect(response.body.error.details.code).toBe('PICKUP_PAYMENT_CONFIRMATION_CONFLICT');
+  });
+  it('does not let another household confirm or read an existing receipt', async () => {
+    const updateMany = vi.fn();
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }) },
+      pickupSettlementPayment: { findUnique: vi.fn().mockResolvedValue({ householdId: 'other-household', householdReceivedAt: new Date(), status: 'RECORDED' }), updateMany }
+    } as any;
+    const jwt = new JwtService(config);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v1', supplyChainRoutes(jwt, { findById: vi.fn().mockResolvedValue({ accountStatus: 'ACTIVE' }) } as never, db));
+    app.use(errorHandler);
+    const response = await request(app).post('/api/v1/household/pickups/pickup-1/payment-received').set('Authorization', `Bearer ${jwt.generateHouseholdToken('household-1')}`);
+    expect(response.status).toBe(409);
+    expect(updateMany).not.toHaveBeenCalled();
   });
   it('records an external UPI payment as pending operator reconciliation', async () => {
     const paymentCreate = vi.fn().mockResolvedValue({ id: 'payment-1', pickupId: 'pickup-1', amount: 250, paymentMethod: 'UPI', status: 'RECORDED' });
@@ -55,7 +110,7 @@ describe('operator-reconciled household pickup payments', () => {
       .send({ amount: 250, method: 'UPI', reference: 'upi-reference-1' });
 
     expect(response.status).toBe(201);
-    expect(paymentCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentMethod: 'UPI', reference: 'upi-reference-1', status: 'RECORDED' }) }));
+    expect(paymentCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentMethod: 'UPI', reference: 'upi-reference-1', status: 'RECORDED', householdReceivedAt: null }) }));
     expect(pickupUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { settlementStatus: 'ACCEPTED' } }));
   });
 

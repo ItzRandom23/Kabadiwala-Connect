@@ -23,15 +23,15 @@
     <string name="recycler_marketplace_refresh_error">Couldn’t refresh. Saved work is safe.</string>
     <string name="recycler_offer_saved">Offer saved · syncs when online.</string>
     <string name="recycler_offer_sent">Offer sent · collector will see it after sync.</string>
-    <string name="recycler_passport_matched">Material passport matched</string>
+    <string name="recycler_passport_matched">Handover verified</string>
     <string name="recycler_receipt_saved">Receipt saved locally · it will retry online.</string>
     <string name="recycler_pickup_ready">Pickup ready · collector will see it after sync.</string>
     <string name="recycler_pickups_detail">Set when your facility can receive a handover.</string>
     <string name="recycler_availability_visible">Collectors see this before requesting a quote.</string>
     <string name="recycler_rates_detail">Saved rates are shared with matched collectors.</string>
     <string name="recycler_rates_load_error">Couldn’t load current rates. Try again.</string>
-    <string name="recycler_orders_title">Active orders</string>
-    <string name="recycler_orders_subtitle">Accepted lots and handover confirmation.</string>
+    <string name="recycler_orders_title">Orders &amp; payments</string>
+    <string name="recycler_orders_subtitle">Track material receipts and payments.</string>
     <string name="recycler_order_reference">Handover %1$s</string>
     <string name="recycler_order_weight">Measured weight · %.1f kg</string>
     <string name="recycler_order_status">Status · %1$s</string>
@@ -264,7 +264,7 @@
     <string name="recyclers_authorized">Authorization evidence reviewed by platform</string>
     <string name="recyclers_distance_km">%1$s km away</string>
     <string name="recycler_search">Search name or area</string><string name="recycler_radius">Radius</string><string name="recycler_km">%1$d km</string><string name="recycler_material">Material</string><string name="recycler_pickup_only">Pickup available only</string><string name="recycler_sort">Sort:</string><string name="recycler_nearby">Nearby</string><string name="recycler_rate">Rate</string><string name="recycler_cached">Cached recyclers — offline</string><string name="recycler_rate_value">₹%1$.0f / kg</string><string name="recycler_pickup_yes">Pickup available</string><string name="recycler_pickup_no">Drop-off only</string><string name="recycler_match">Match %1$d%%</string><string name="recycler_detail_authorization">Authorization and rates</string><string name="recycler_not_verified">Authorization not verified</string><string name="recycler_materials">Materials: %1$s</string><string name="recycler_hours">Hours: %1$s</string><string name="recycler_handover">Typical handover: %1$d hours</string><string name="recycler_map_placeholder">Map location: %1$.3f, %2$.3f</string><string name="recycler_call">Call</string><string name="recycler_map">Map</string><string name="recycler_contact_note">Contact: %1$s</string>
-    <string name="recycler_trust_passport">Trust passport</string><string name="recycler_verified_by">Evidence source: %1$s</string><string name="recycler_valid_until">Submitted validity date: %1$s</string><string name="recycler_rating">Rating %1$.1f · %2$d reviews</string><string name="recycler_completed_handovers">%1$d completed platform handovers</string><string name="recycler_trust_explainer">Based on submitted profile evidence and completed platform records. This is not government certification.</string>
+    <string name="recycler_trust_passport">Facility track record</string><string name="recycler_verified_by">Evidence source: %1$s</string><string name="recycler_valid_until">Submitted validity date: %1$s</string><string name="recycler_rating">Rating %1$.1f · %2$d reviews</string><string name="recycler_completed_handovers">%1$d completed platform handovers</string><string name="recycler_trust_explainer">Based on submitted profile evidence and completed platform records. This is not government certification.</string>
 
     <string name="quote_request_button">Request quote</string><string name="quote_request_title">Request a quote</string><string name="quote_request_detail">Choose a lot and recycler. It syncs when connected.</string><string name="quote_choose_lot">Choose lot</string><string name="quote_choose_recycler">Choose recycler</string><string name="quote_summary">Request summary</string><string name="quote_lot_summary">%1$s • %2$.1f kg</string><string name="quote_recycler_summary">Recycler: %1$s</string><string name="quote_estimated">Estimated value: ₹%1$.0f</string><string name="quote_user_price">Your requested price: ₹%1$.0f</string><string name="quote_confirmation">Submit this quote request?</string><string name="quote_submit">Submit request</string><string name="quote_saved">Saved locally</string><string name="quote_compare_title">Compare quotes</string><string name="quote_delivery_state">Request state: %1$s</string><string name="quote_best">Best offer</string><string name="quote_price">₹%1$.0f / kg</string><string name="quote_total">Total: ₹%1$.0f</string><string name="quote_market_compare">Market basis: ₹%1$.0f / kg</string><string name="quote_distance">Distance: %1$.1f km</string><string name="quote_validity">Valid for 24 hours</string><string name="quote_status">Status: %1$s</string><string name="quote_accept">Accept</string><string name="quote_reject">Reject</string>
     <string name="deal_sheet_title">No-surprise deal sheet</string><string name="deal_market_reference">Market reference</string><string name="deal_offered_rate">Recycler offer</string><string name="deal_weight">Expected weight</string><string name="deal_expected_total">Expected total</string><string name="deal_transport">Transport impact</string><string name="deal_not_included">Not included</string><string name="deal_not_available">Not available</string><string name="deal_final_values">Final recorded values</string><string name="deal_final_weight">Final weight</string><string name="deal_final_amount">Final amount</string><string name="deal_explainer">Reference prices guide; final measured values decide payment.</string>
@@ -1248,7 +1248,7 @@
     <string name="ui_copy_617a09fbaca1">No open demand. New pools appear after a Recycler publishes demand.</string>
     <string name="ui_copy_b0bca5f0b39c">Demand intelligence</string>
     <string name="ui_copy_a43083d5904c">Platform signal, not a guaranteed sale.</string>
-    <string name="ui_copy_42c4016d1fad">Collector Growth Passport</string>
+    <string name="ui_copy_42c4016d1fad">Collector track record</string>
     <string name="ui_copy_e3f988950d15">Safety gate</string>
     <string name="ui_copy_9beb96dac88f">Acknowledge</string>
     <string name="ui_copy_a02eabdb37a0">Showing saved evidence. Changes wait for the server.</string>
@@ -1258,15 +1258,15 @@
     <string name="ui_copy_9c24a114fceb">Reserved until the pooled handover is settled.</string>
     <string name="ui_copy_05dd0f9d8eaa">Expected rate · ₹/kg</string>
     <string name="ui_copy_31f351109b91">Reserve stock</string>
-    <string name="ui_copy_c7e82e2b7e50">Material passport handover</string>
+    <string name="ui_copy_c7e82e2b7e50">Recycler handover</string>
     <string name="ui_copy_799eb717ba03">This QR has expired. Prepare a fresh handover QR before the Recycler scans it.</string>
     <string name="ui_copy_7be330b874d6">Confirm collector side</string>
     <string name="ui_copy_fecc7ddf5e07">Show this one-time QR to the verified Recycler for scan and receipt.</string>
     <string name="ui_copy_154331c55f35">Prepare fresh QR</string>
     <string name="ui_copy_f2c80879b0e5">Review settlement</string>
-    <string name="ui_copy_d5ed1ca0e308">Passport</string>
-    <string name="ui_copy_024790205e21">Risk flags</string>
-    <string name="ui_copy_a0355a13d447">Receipt completed. The one-time QR is no longer active; inspect the passport timeline for evidence.</string>
+    <string name="ui_copy_d5ed1ca0e308">Handover history</string>
+    <string name="ui_copy_024790205e21">Review issues</string>
+    <string name="ui_copy_a0355a13d447">Material receipt recorded. Confirm payment separately after receiving the money.</string>
     <string name="ui_copy_b00d763383a3">bottomNavColor</string>
     <string name="ui_copy_e2d701ee58f7">bottomNavIndicator</string>
     <string name="ui_copy_48b6a9ee1b20">bottomNavIconScale</string>
@@ -1361,4 +1361,9 @@
     <string name="ui_copy_14d1fa260b92">Approximately %1$s km away</string>
     <string name="ui_copy_b4c5c8f56a08">%1$s completed pickups · %2$s kg collected</string>
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s verified</string>
+    <string name="pickup_final_sale_amount">Final sale amount · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">Final purchase amount · %1$s</string>
+    <string name="pickup_final_amount_unavailable">Final sale amount unavailable. Refresh to load the receipt.</string>
+    <string name="pickup_view_scrap_photo">View scrap photo</string>
+    <string name="pickup_hide_scrap_photo">Hide scrap photo</string>
 </resources>

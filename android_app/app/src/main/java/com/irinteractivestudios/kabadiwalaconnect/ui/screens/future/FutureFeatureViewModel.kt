@@ -203,6 +203,56 @@ class FutureFeatureViewModel(
         }
     }
 
+    fun refreshRewards() = refreshFeature("rewards") { owner ->
+        val items = api.getRewards().requireData()
+        if (accountId() != owner) return@refreshFeature
+        _state.value = _state.value.copy(rewards = items)
+    }
+    fun refreshSchemes() = refreshFeature("schemes") { owner ->
+        val items = api.getGovernmentSchemes().requireData()
+        if (accountId() != owner) return@refreshFeature
+        _state.value = _state.value.copy(schemes = items)
+        cache?.saveSchemes(items)
+    }
+    fun refreshActivities() = refreshFeature("activities") { owner ->
+        val items = api.getDiyActivities().requireData()
+        if (accountId() != owner) return@refreshFeature
+        _state.value = _state.value.copy(activities = items)
+        cache?.saveActivities(items)
+    }
+    fun refreshAnalytics() = refreshFeature("analytics") { owner ->
+        val result = api.getDisputeAnalytics().requireData()
+        if (accountId() != owner) return@refreshFeature
+        _state.value = _state.value.copy(analytics = result)
+    }
+
+    private fun refreshFeature(feature: String, block: suspend (String) -> Unit) {
+        val owner = accountId() ?: return
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
+            try {
+                if (feature == "schemes" && _state.value.schemes.isEmpty()) {
+                    val cached = cache?.schemes().orEmpty()
+                    if (accountId() == owner) _state.value = _state.value.copy(schemes = cached)
+                }
+                if (feature == "activities" && _state.value.activities.isEmpty()) {
+                    val cached = cache?.activities().orEmpty().ifEmpty { offlineActivities }
+                    if (accountId() == owner) _state.value = _state.value.copy(activities = cached)
+                }
+                // The feature request is isolated from unrelated schemes,
+                // conversations and notifications. Cancellation propagates through Retrofit.
+                block(owner)
+                if (accountId() == owner) _state.value = _state.value.copy(loading = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (accountId() == owner) _state.value = _state.value.copy(loading = false,
+                    error = userFacingError(error, "Could not refresh $feature. Cached data is shown."))
+            }
+        }
+    }
+
     private data class RequestResult<T>(val value: T?, val failed: Boolean)
 
     private suspend fun <T> request(fallback: T, block: suspend () -> T): RequestResult<T> = try {

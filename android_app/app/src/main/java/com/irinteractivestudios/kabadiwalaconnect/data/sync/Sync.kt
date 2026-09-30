@@ -199,6 +199,7 @@ class SyncWorker(
                 QueueResult.APPLIED -> {
                     clearQueuedIdempotencyKey(app, item)
                     queue.remove(item.uid, accountId)
+                    if (sessionStillCurrent()) com.irinteractivestudios.kabadiwalaconnect.data.remote.DataChangeEvents.publish(accountId, "/sync/applied")
                 }
                 QueueResult.RETRY -> { queue.incrementAttempts(item.uid, accountId, retryAt(item.attempts)); return Result.retry() }
                 QueueResult.REJECTED -> {
@@ -283,6 +284,7 @@ class SyncWorker(
                             "PAYMENT" -> app.container.database.paymentDao().markSyncedForAccount(operation.entityId, accountId)
                         }
                         queue.remove(item.uid, accountId)
+                        if (sessionStillCurrent()) com.irinteractivestudios.kabadiwalaconnect.data.remote.DataChangeEvents.publish(accountId, "/sync/applied")
                     } else {
                         // A server rejection or conflict needs user review. Keep
                         // the row in Sync Center until its explicit retry resets it.

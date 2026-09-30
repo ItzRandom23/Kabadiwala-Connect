@@ -529,6 +529,8 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const trades = identity.role === 'COLLECTOR' || identity.role === 'RECYCLER'
       ? await db.conversation.findMany({ where: identity.role === 'COLLECTOR' ? { collectorId: identity.collectorId } : { recyclerId: identity.collectorId } })
       : [];
+    const terminalLots = trades.length ? await db.bulkLot.findMany({ where: { id: { in: trades.map(chat => chat.lotId) }, status: { in: ['SOLD', 'CANCELLED'] } }, select: { id: true } }) : [];
+    const closedLotIds = new Set(terminalLots.map(lot => lot.id));
     const pickupChats = identity.role === 'HOUSEHOLD' || identity.role === 'COLLECTOR'
       ? await db.pickupConversation.findMany({ where: identity.role === 'HOUSEHOLD' ? { householdId: identity.collectorId } : { kabadiwalaId: identity.collectorId } })
       : [];
@@ -543,7 +545,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     ]);
     const unreadByConversation = new Map([...tradeUnread, ...pickupUnread].map(row => [row.conversationId, row._count._all]));
     const conversations = [
-      ...trades.map(conversation => ({ ...conversation, type: 'TRADE', pickupRequestId: null, unreadCount: unreadByConversation.get(conversation.id) ?? 0 })),
+      ...trades.map(conversation => ({ ...conversation, status: closedLotIds.has(conversation.lotId) ? 'CLOSED' : conversation.status, type: 'TRADE', pickupRequestId: null, unreadCount: unreadByConversation.get(conversation.id) ?? 0 })),
       ...pickupChats.map(conversation => ({ ...pickupConversationDto(conversation, listingByPickup.get(conversation.pickupRequestId) ?? ''), unreadCount: unreadByConversation.get(conversation.id) ?? 0 }))
     ].sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
     return res.json({ success: true, data: conversations, message: 'Conversations retrieved' });
@@ -563,6 +565,7 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     if (parsed.data.bulkLotId) {
       const bulkLot = await db.bulkLot.findFirst({ where: { id: lotId, reservedForId: recyclerId, ...(collectorId ? { kabadiwalaId: collectorId } : {}) } });
       if (!bulkLot) throw new AppError('NOT_FOUND', 'Accepted bulk lot not found', 404);
+      if (['SOLD', 'CANCELLED'].includes(bulkLot.status)) throw new AppError('CONFLICT', 'This completed trade is read-only', 409);
       collectorId = bulkLot.kabadiwalaId;
       const acceptedOffer = await db.bulkOffer.findFirst({ where: { bulkLotId: lotId, recyclerId, status: 'ACCEPTED' }, select: { id: true } });
       if (!acceptedOffer) throw new AppError('CONFLICT', 'An accepted offer is required before messaging', 409);
@@ -640,6 +643,10 @@ export const futureRoutes = (jwt: JwtService, db: PrismaClient) => {
     const context = await assertConversationParticipant(db, req.params.conversationId, identity);
     const conversation = context.conversation;
     if (conversation.status !== 'OPEN') throw new AppError('CONFLICT', 'This conversation is closed', 409);
+    if (context.kind === 'TRADE') {
+      const bulkLot = await db.bulkLot.findUnique({ where: { id: context.conversation.lotId }, select: { status: true } });
+      if (bulkLot && ['SOLD', 'CANCELLED'].includes(bulkLot.status)) throw new AppError('CONFLICT', 'This completed trade is read-only', 409);
+    }
     if (context.kind === 'PICKUP') {
       const pickup = await db.pickupRequest.findUnique({ where: { id: (conversation as { pickupRequestId: string }).pickupRequestId }, select: { status: true } });
       if (!pickup || pickup.status === 'COMPLETED' || pickup.status === 'CANCELLED') throw new AppError('CONFLICT', 'This pickup chat is closed', 409);

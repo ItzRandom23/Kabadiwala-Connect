@@ -127,15 +127,15 @@ interface ApiService {
     @GET("recycler/offers")
     suspend fun getRecyclerBulkOffers(@Query("limit") limit: Int? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<List<BulkOfferDto>>>
     @POST("recycler/offers/{offerId}/withdraw")
-    suspend fun withdrawRecyclerOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
+    suspend fun withdrawRecyclerOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<BulkOfferDto>>
     @GET("kabadiwala/procurement-requirements")
     suspend fun getProcurementRequirements(): Response<ApiEnvelope<List<ProcurementRequirementDto>>>
     @POST("kabadiwala/bulk-offers/{offerId}/accept")
     suspend fun acceptBulkOffer(@Path("offerId") offerId: String): Response<ApiEnvelope<JsonObject>>
     @POST("kabadiwala/bulk-offers/{offerId}/reject")
-    suspend fun rejectBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<JsonObject>>
+    suspend fun rejectBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferDecisionDto = BulkOfferDecisionDto()): Response<ApiEnvelope<BulkOfferDto>>
     @POST("kabadiwala/bulk-offers/{offerId}/counter")
-    suspend fun counterBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferCounterDto): Response<ApiEnvelope<JsonObject>>
+    suspend fun counterBulkOffer(@Path("offerId") offerId: String, @Body body: BulkOfferCounterDto): Response<ApiEnvelope<BulkOfferDto>>
     @POST("recycler/bulk-lots/{lotId}/receive")
     suspend fun receiveBulkLot(@Path("lotId") lotId: String): Response<ApiEnvelope<JsonObject>>
     @POST("recycler/procurement-requirements")
@@ -186,6 +186,11 @@ interface ApiService {
     suspend fun confirmSupplyHandover(@Body body: SupplyHandoverConfirmRequestDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<SupplyHandoverDto>>
     @POST("kabadiwala/handovers/{handoverId}/settlement")
     suspend fun decideSupplySettlement(@Path("handoverId") handoverId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<SupplyHandoverDto>>
+    @POST("recycler/handovers/{handoverId}/payment")
+    suspend fun recordSupplyPayment(@Path("handoverId") handoverId: String, @Body body: SupplyPaymentRequestDto): Response<ApiEnvelope<SupplyPaymentDto>>
+    @POST("kabadiwala/handovers/{handoverId}/payment-confirm")
+    suspend fun confirmSupplyPayment(@Path("handoverId") handoverId: String, @Body body: SettlementDecisionDto): Response<ApiEnvelope<SupplyPaymentDto>>
+
     @GET("kabadiwala/handovers/{handoverId}/passport")
     suspend fun getMaterialPassport(@Path("handoverId") handoverId: String): Response<ApiEnvelope<MaterialPassportResponseDto>>
     @GET("kabadiwala/handovers/{handoverId}/anomalies")
@@ -509,7 +514,7 @@ fun <T> Response<ApiEnvelope<T>>.requireSuccess() {
     if (!isSuccessful) {
         val raw = errorBody()?.string().orEmpty()
         val apiError = runCatching { Gson().fromJson(raw, ApiErrorEnvelope::class.java)?.error }.getOrNull()
-        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull())
+        throw RemoteApiException(apiError?.code ?: "HTTP_${code()}", apiError?.message ?: "The request could not be completed", code(), headers()["Retry-After"]?.toLongOrNull(), apiError?.details?.get("code")?.asString)
     }
     if (envelope?.success != true) {
         throw RemoteApiException("EMPTY_RESPONSE", envelope?.message ?: "The server did not confirm the update", code())

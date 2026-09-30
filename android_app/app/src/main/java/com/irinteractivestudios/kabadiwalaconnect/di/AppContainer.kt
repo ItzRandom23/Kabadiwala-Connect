@@ -122,7 +122,8 @@ class AppContainer(context: Context) {
             tokenProvider = { secureStorage.get(SecureStorage.AUTH_TOKEN) },
             tokenRefresher = { failedToken -> runBlocking { authenticationRepository.refreshAccessToken(force = true, failedAccessToken = failedToken) } },
             onAuthenticationFailure = { failedToken -> expireAccountSessionIfCurrentToken(failedToken) },
-            sessionGenerationProvider = { authenticatedSessionGeneration() }
+            sessionGenerationProvider = { authenticatedSessionGeneration() },
+            accountIdProvider = { currentAccount()?.profileId }
         )
     }
 
@@ -220,7 +221,8 @@ class AppContainer(context: Context) {
                 if (isCurrent()) expireAccountSessionIfCurrentToken(failedToken)
             },
             sessionGenerationProvider = { authenticatedSessionGeneration() },
-            requestSessionGenerationProvider = { generation }
+            requestSessionGenerationProvider = { generation },
+            accountIdProvider = { accountId.takeIf { isCurrent() } }
         )
     }
 
@@ -658,6 +660,7 @@ class AppContainer(context: Context) {
         val accountId = stamp.accountId
         if (response.notifications.isNotEmpty() && accountId != null) {
             FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications, accountId)
+            com.irinteractivestudios.kabadiwalaconnect.data.remote.DataChangeEvents.publish(accountId, "/activity/changes")
         }
         response.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.ACTIVITY_CURSOR, it) }
         // Collector catalogue reconciliation already protects unsynced local
@@ -784,6 +787,7 @@ class AppContainer(context: Context) {
      * next account on a shared phone or be uploaded under the next token.
      */
     suspend fun clearAccount() {
+        com.irinteractivestudios.kabadiwalaconnect.data.remote.ConfirmedHandoverEvents.clear()
         revokeAuthenticatedBackgroundWork()
         (appContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)?.cancelAll()
         sessionCoordinator.beginRestoration()

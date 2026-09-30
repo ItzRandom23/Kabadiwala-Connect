@@ -212,7 +212,14 @@ describe('waiting pickup lifecycle', () => {
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('AUTHORIZATION_ERROR');
     expect(response.body.error.details).toMatchObject({ code: 'PICKUP_OUTSIDE_SERVICE_AREA' });
-    expect(tx.pickupRequest.updateMany).not.toHaveBeenCalled();
+    // Explicit household assignments may be accepted outside discovery range.
+    // A guessed ID must never reach the unclaimed-pickup mutation.
+    expect(tx.pickupRequest.updateMany).toHaveBeenCalledOnce();
+    expect(tx.pickupRequest.updateMany).toHaveBeenCalledWith({
+      where: { listingId: 'guessed-listing', kabadiwalaId: 'collector-2', status: 'REQUESTED' },
+      data: { status: 'ACCEPTED', acceptedAt: expect.any(Date), pickupCharge: 0 }
+    });
+    expect(tx.householdListing.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns a taken-order conflict when another collector claimed the waiting pickup first', async () => {
