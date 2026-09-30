@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.admin
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import com.irinteractivestudios.kabadiwalaconnect.R
 import androidx.compose.ui.res.stringResource
@@ -81,7 +82,7 @@ fun AdminConsoleScreen(
         }
         if (state.error != null) {
             Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                Text(state.error, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(12.dp))
+                Text(localizedUserFacingError(state.error), color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(12.dp))
             }
         }
         if (state.message != null) {

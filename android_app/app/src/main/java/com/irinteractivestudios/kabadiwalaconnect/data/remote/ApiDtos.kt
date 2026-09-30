@@ -164,7 +164,7 @@ data class BulkLotDto(val id: String = "", val kabadiwalaId: String = "", val ma
 data class BulkOfferCreateDto(val offeredRatePerKg: Double)
 data class BulkOfferCounterDto(val offeredRatePerKg: Double, val notes: String? = null)
 data class BulkOfferDecisionDto(val reason: String? = null)
-data class BulkOfferDto(val id: String = "", val bulkLotId: String = "", val recyclerId: String = "", val offeredRatePerKg: Double = 0.0, val status: String = "PENDING", val createdAt: String? = null, val updatedAt: String? = null, val bulkLot: BulkLotDto? = null, val recyclerName: String? = null)
+data class BulkOfferDto(val id: String = "", val bulkLotId: String = "", val recyclerId: String = "", val offeredRatePerKg: Double = 0.0, val status: String = "PENDING", val createdAt: String? = null, val updatedAt: String? = null, val bulkLot: BulkLotDto? = null, val recyclerName: String? = null, val counterRatePerKg: Double? = null)
 data class ProcurementRequirementCreateDto(val materialCategory: String, val minimumLotKg: Double, val requiredQuantityKg: Double, val preferredGrade: String? = null, val maxRatePerKg: Double? = null, val procurementRadiusKm: Double, val deadline: String? = null)
 data class ProcurementRequirementUpdateDto(val materialCategory: String? = null, val minimumLotKg: Double? = null, val requiredQuantityKg: Double? = null, val preferredGrade: String? = null, val maxRatePerKg: Double? = null, val procurementRadiusKm: Double? = null, val deadline: String? = null, val status: String? = null)
 data class ProcurementRequirementDto(val id: String = "", val recyclerId: String = "", val materialCategory: String = "OTHER", val minimumLotKg: Double = 0.0, val requiredQuantityKg: Double = 0.0, val preferredGrade: String? = null, val maxRatePerKg: Double? = null, val procurementRadiusKm: Double = 0.0, val deadline: String? = null, val status: String = "OPEN", val createdAt: String? = null, val updatedAt: String? = null)
@@ -346,19 +346,26 @@ data class ActivityChangeSetDto(
     val lotIds: List<String> = emptyList(),
     val quoteIds: List<String> = emptyList(),
     val handoverIds: List<String> = emptyList(),
-    val paymentIds: List<String> = emptyList()
+    val paymentIds: List<String> = emptyList(),
+    val listingIds: List<String> = emptyList(),
+    val pickupIds: List<String> = emptyList(),
+    val bulkLotIds: List<String> = emptyList(),
+    val offerIds: List<String> = emptyList(),
+    val demandIds: List<String> = emptyList()
 )
 data class ActivityChangesDto(
     val serverTime: String? = null,
     val notifications: List<NotificationDto> = emptyList(),
-    val changed: ActivityChangeSetDto = ActivityChangeSetDto()
+    val changed: ActivityChangeSetDto = ActivityChangeSetDto(),
+    val nextCursor: String? = null,
+    val hasMore: Boolean = false
 )
 
 data class SyncOperationDto(val operationId: String, val operationType: String, val entityType: String, val entityId: String, val payload: JsonObject, val clientCreatedAt: String? = null)
 data class SyncBatchRequestDto(val operations: List<SyncOperationDto>)
 data class SyncOperationResultDto(val operationId: String, val status: String, val entityType: String? = null, val entityId: String? = null, val errorCode: String? = null)
 data class SyncBatchResponseDto(val results: List<SyncOperationResultDto> = emptyList())
-data class SyncChangesDto(val serverTime: String? = null, val changes: SyncChangeSetDto = SyncChangeSetDto())
+data class SyncChangesDto(val serverTime: String? = null, val changes: SyncChangeSetDto = SyncChangeSetDto(), val nextCursor: String? = null, val hasMore: Boolean = false)
 data class SyncChangeSetDto(val lots: List<LotDto> = emptyList(), val payments: List<PaymentDto> = emptyList(), val handovers: List<HandoverDto> = emptyList())
 
 data class PreferencesDto(

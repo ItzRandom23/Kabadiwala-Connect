@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s ಪರಿಶೀಲಿಸಲಾಗಿದೆ</string>
 
     <string name="ui_new_messages_below">ಕೆಳಗಿನ ಹೊಸ ಸಂದೇಶಗಳು: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">ಅಂತಿಮ ಮೊತ್ತ · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">ಅಂತಿಮ ಮೊತ್ತ · %1$s</string>
+    <string name="pickup_final_amount_unavailable">ಅಂತಿಮ ಮೊತ್ತ · ಲಭ್ಯವಿಲ್ಲ. ರಿಫ್ರೆಶ್ ಮಾಡಿ</string>
+    <string name="pickup_view_scrap_photo">ಸ್ಕ್ರ್ಯಾಪ್ ಫೋಟೋಗಳನ್ನು ವೀಕ್ಷಿಸಿ</string>
+    <string name="pickup_hide_scrap_photo">Close</string>
+    <string name="nearby_area_resolution_failed">ನಮಗೆ ವಿಶ್ವಾಸಾರ್ಹ ಸ್ಥಳವನ್ನು ಪಡೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಬದಲಿಗೆ ನಿಮ್ಮ ಪ್ರದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ. ನನ್ನ ಸ್ಥಳವನ್ನು ಬಳಸಿ</string>
+    <string name="nearby_apply_radius_hint">ಹುಡುಕಾಟ ಪ್ರದೇಶ · ನನ್ನ ಸ್ಥಳವನ್ನು ಬಳಸಿ · ತ್ರಿಜ್ಯ</string>
 </resources>

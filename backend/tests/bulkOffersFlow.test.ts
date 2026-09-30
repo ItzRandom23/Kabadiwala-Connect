@@ -71,6 +71,30 @@ function fixture() {
 }
 
 describe('Kabadiwala to Recycler bulk offer journey', () => {
+  it('requires Recycler consent after a counter without changing the original offer price', async () => {
+    const { app, submit, collector, offers, db } = fixture();
+    const first = await submit(100);
+    const id = first.body.data.id;
+    const counter = await request(app).post(`/api/v1/kabadiwala/bulk-offers/${id}/counter`).set('Authorization', collector()).send({ offeredRatePerKg: 130 });
+    expect(counter.status).toBe(200);
+    expect(offers[0]).toMatchObject({ offeredRatePerKg: 100, counterRatePerKg: 130, status: 'PENDING' });
+    const accept = await request(app).post(`/api/v1/kabadiwala/bulk-offers/${id}/accept`).set('Authorization', collector());
+    expect(accept.status).toBe(409);
+    expect(accept.body.error.details.code).toBe('BULK_COUNTER_AWAITING_RECYCLER');
+    expect(db.notificationEvent.create.mock.calls.map(([arg]: any[]) => arg.data)).toContainEqual(expect.objectContaining({ type: 'BULK_OFFER_COUNTERED', accountId: 'recycler-1' }));
+    expect((await submit(130)).body.data).toMatchObject({ offeredRatePerKg: 130, counterRatePerKg: null });
+    expect((await request(app).post(`/api/v1/kabadiwala/bulk-offers/${id}/accept`).set('Authorization', collector())).status).toBe(200);
+  });
+  it('does not counter below minimum or after the lot claim fails', async () => {
+    const { app, submit, collector, offers, db } = fixture();
+    const first = await submit(100);
+    const path = `/api/v1/kabadiwala/bulk-offers/${first.body.data.id}/counter`;
+    expect((await request(app).post(path).set('Authorization', collector()).send({ offeredRatePerKg: 99 })).status).toBe(422);
+    db.bulkLot.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect((await request(app).post(path).set('Authorization', collector()).send({ offeredRatePerKg: 130 })).status).toBe(409);
+    expect(offers[0]).toMatchObject({ offeredRatePerKg: 100 });
+    expect(offers[0].counterRatePerKg).toBeUndefined();
+  });
   it('rejects an offer below the minimum before storing or notifying', async () => {
     const { submit, db } = fixture();
     const response = await submit(99.99);

@@ -182,6 +182,8 @@ interface ApiService {
     suspend fun getKabadiwalaHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
     @GET("recycler/supply-handovers")
     suspend fun getSupplyHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
+    @POST("recycler/handovers/verify")
+    suspend fun verifySupplyHandover(@Body body: VerifyHandoverRequestDto): Response<ApiEnvelope<SupplyHandoverDto>>
     @POST("recycler/handovers/confirm")
     suspend fun confirmSupplyHandover(@Body body: SupplyHandoverConfirmRequestDto, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<SupplyHandoverDto>>
     @POST("kabadiwala/handovers/{handoverId}/settlement")
@@ -390,13 +392,13 @@ interface ApiService {
     suspend fun unregisterNotificationDevice(@Body body: NotificationDeviceRequestDto): Response<ApiEnvelope<NotificationDeviceUnregisterDto>>
 
     @GET("activity/changes")
-    suspend fun getActivityChanges(@Query("since") since: String? = null): Response<ApiEnvelope<ActivityChangesDto>>
+    suspend fun getActivityChanges(@Query("since") since: String? = null, @Query("cursor") cursor: String? = null): Response<ApiEnvelope<ActivityChangesDto>>
 
     @POST("sync")
     suspend fun sync(@Body body: SyncBatchRequestDto): Response<ApiEnvelope<SyncBatchResponseDto>>
 
     @GET("sync/changes")
-    suspend fun getChanges(@Query("since") since: String?): Response<ApiEnvelope<SyncChangesDto>>
+    suspend fun getChanges(@Query("since") since: String? = null, @Query("cursor") cursor: String? = null, @Query("limit") limit: Int = 100): Response<ApiEnvelope<SyncChangesDto>>
 
     @GET("future/preferences")
     suspend fun getPreferences(): Response<ApiEnvelope<PreferencesDto>>

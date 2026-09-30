@@ -227,7 +227,7 @@ export async function nearbyCollectorPage(store: any, input: { latitude?: number
       { $lte: ['$distanceKm', input.radiusKm] },
       { $lte: ['$distanceKm', { $ifNull: ['$pickupMaxDistanceKm', 25] }] }
     ] } } });
-    if (pattern) pipeline.push({ $unionWith: { coll: 'Collector', pipeline: [areaCandidate, { $addFields: { distanceKm: null } }] } });
+    // Area-only profiles cannot qualify for a radius without a known distance.
   } else {
     pipeline.push(areaCandidate, { $addFields: { distanceKm: null } });
   }
@@ -324,22 +324,25 @@ function hasListingPhoto(listing: any): boolean {
 
 async function validateAndStorePhotos(storage: StorageService, files: Array<{ buffer?: Buffer; mimetype?: string }>, keyPrefix: string) {
   if (!files.length) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
-  const stored: string[] = [];
-  try {
-    for (const [index, file] of files.entries()) {
+  const validated: Array<{ buffer: Buffer; key: string }> = [];
+  // Validate the complete batch before touching storage. A later invalid angle
+  // must not overwrite (or remove) an earlier, already committed listing photo.
+  for (const file of files) {
       if (!file.buffer || !file.mimetype) throw new AppError('VALIDATION_ERROR', 'Photo is required', 400, { code: 'PHOTO_REQUIRED' });
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError('VALIDATION_ERROR', 'Unsupported image type', 400, { code: 'INVALID_PHOTO' });
       let metadata;
       try { metadata = await sharp(file.buffer).metadata(); } catch { throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' }); }
       if (!metadata.width || !metadata.height || metadata.width < 300 || metadata.height < 300) throw new AppError('VALIDATION_ERROR', 'Photo must be at least 300 x 300 pixels', 400, { code: 'INVALID_PHOTO' });
-      const key = `${keyPrefix}${index ? `-${index}` : ''}.jpg`;
-      stored.push((await storage.putImage(file.buffer, key)).key);
-    }
-    return stored;
-  } catch (error) {
-    await Promise.all(stored.map(key => storage.delete(key).catch(() => undefined)));
-    throw error;
+      // Metadata alone can accept a truncated image whose pixel decode fails.
+      try { await sharp(file.buffer).rotate().resize(1280, 720, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 65 }).toBuffer(); }
+      catch { throw new AppError('VALIDATION_ERROR', 'Invalid image', 400, { code: 'INVALID_PHOTO' }); }
+      validated.push({ buffer: file.buffer, key: `${keyPrefix}-${createHash('sha256').update(file.buffer).digest('hex')}.jpg` });
   }
+  const stored: string[] = [];
+  for (const file of validated) stored.push((await storage.putImage(file.buffer, file.key)).key);
+  // Content-addressed keys can already belong to an earlier successful retry.
+  // Retain them on failure: request-local cleanup cannot prove non-ownership.
+  return stored;
 }
 
 /** The closed-loop marketplace. Every endpoint is role-gated here, rather than
@@ -432,7 +435,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         : input.ownerPreparationCompleted
           ? 'OWNER_PREPARATION_COMPLETED'
           : 'OWNER_PREPARATION_PENDING';
-    const result = await store.$transaction(async (tx: any) => {
+    const result = await withTransactionRetry(() => store.$transaction(async (tx: any) => {
       if (operationId) {
         const replay = await tx.idempotencyRecord.findUnique({ where: { actorId_operationId: { actorId: req.identity!.collectorId, operationId } } });
         if (replay) {
@@ -447,7 +450,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       await auditSupplyEvent(tx, req.identity!.collectorId, 'HOUSEHOLD', 'HOUSEHOLD_LISTING_DRAFTED', 'HOUSEHOLD_LISTING', created.id, { materialCategory: created.materialCategory, estimatedWeight: created.estimatedWeight, areaName: created.areaName, dataBearingDevice: created.dataBearingDevice, dataDestructionRequested: created.dataDestructionRequested });
       if (operationId) await tx.idempotencyRecord.create({ data: { actorId: req.identity!.collectorId, operationId, action: 'CREATE_HOUSEHOLD_LISTING', entityId: created.id, requestHash: operationHash, response: jsonValue(created) } });
       return { listing: created, replayed: false };
-    });
+    }));
     res.status(result.replayed ? 200 : 201).json({ success: true, data: householdListingDto(result.listing), ...(result.replayed ? { message: 'Listing already created' } : {}) });
   });
   router.post('/household/listings/:listingId/photo', requireHousehold(jwt, collectors), listingPhotoUpload.fields([{ name: 'photos', maxCount: 6 }, { name: 'photo', maxCount: 1 }]), async (req, res) => {
@@ -456,10 +459,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const files = uploadedPhotos(req);
     const listing = await store.householdListing.findFirst({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } } });
     if (!listing) throw new AppError('CONFLICT', 'Only an open listing can accept a photo', 409, { code: 'LISTING_NOT_EDITABLE' });
-    // Stable indexed keys make retries converge on the same objects instead of
-    // creating unreferenced uploads for every network retry.
+    // Immutable content keys make retries converge without overwriting the
+    // photos referenced by a previous committed version of this listing.
     const keys = await validateAndStorePhotos(storage, files, `household-listings/${req.identity!.collectorId}/${listingId}`);
-    try {
       const updated = await store.$transaction(async (tx: any) => {
         const changed = await tx.householdListing.updateMany({ where: { id: listingId, householdId: req.identity!.collectorId, status: { in: ['DRAFT', 'POSTED'] } }, data: { photoReference: keys[0], photoReferences: keys, status: 'POSTED' } });
         if (!changed.count) throw new AppError('CONFLICT', 'Listing changed while uploading photo', 409, { code: 'LISTING_UPDATE_CONFLICT' });
@@ -469,10 +471,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         return row;
       });
       res.json({ success: true, data: householdListingDto(updated) });
-    } catch (error) {
-      await Promise.all(keys.map(key => storage.delete(key).catch(() => undefined)));
-      throw error;
-    }
+    // Do not delete uploaded keys on an ambiguous transaction failure. A prior
+    // retry or a committed response lost in transit may already reference them.
   });
   router.get('/household/listings/:listingId/photo', requireHousehold(jwt, collectors), async (req, res) => {
     const listingId = parse(id, req.params.listingId);
@@ -566,12 +566,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const matching = profiles.map((profile: any) => ({ profile, distance: distanceKm(locationQuery.latitude, locationQuery.longitude, profile.latitude, profile.longitude) }))
       .filter(({ profile, distance }: any) => {
         if (locationQuery.latitude !== undefined) {
-          // Some Kabadiwalas register with a service area but without GPS.
-          // Keep them discoverable through that explicit area when the
-          // household also supplied an area label, while still applying the
-          // radius strictly whenever the Kabadiwala has coordinates.
           if (distance != null) return distance <= locationQuery.radiusKm && distance <= (profile.pickupMaxDistanceKm ?? 25);
-          return Boolean(areaQuery && areaNamesMatch(String(profile.areaName ?? ''), areaQuery));
+          return false;
         }
         return areaNamesMatch(String(profile.areaName ?? ''), areaQuery);
       })
@@ -1421,7 +1417,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       // Serialize rate revisions with acceptance on the same lot document.
       const available = await tx.bulkLot.updateMany({ where: { id: lotId, status: 'LISTED' }, data: { updatedAt: new Date() } });
       if (!available.count) throw new AppError('CONFLICT', 'Bulk lot is no longer available for offers', 409, { code: 'BULK_LOT_NOT_AVAILABLE' });
-      const created = await tx.bulkOffer.upsert({ where: { bulkLotId_recyclerId: { bulkLotId: lotId, recyclerId: req.identity!.collectorId } }, update: { offeredRatePerKg, status: 'PENDING' }, create: { bulkLotId: lotId, recyclerId: req.identity!.collectorId, offeredRatePerKg } });
+      const created = await tx.bulkOffer.upsert({ where: { bulkLotId_recyclerId: { bulkLotId: lotId, recyclerId: req.identity!.collectorId } }, update: { offeredRatePerKg, counterRatePerKg: null, status: 'PENDING' }, create: { bulkLotId: lotId, recyclerId: req.identity!.collectorId, offeredRatePerKg } });
       await auditSupplyEvent(tx, req.identity!.collectorId, 'RECYCLER', 'BULK_OFFER_SUBMITTED', 'BULK_OFFER', created.id, { bulkLotId: lotId, offeredRatePerKg });
       return created;
     }));
@@ -1454,13 +1450,20 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
   router.post('/kabadiwala/bulk-offers/:offerId/counter', requireAuth(jwt, collectors), async (req, res) => {
     const offerId = parse(id, req.params.offerId);
     const offeredRatePerKg = parse(z.object({ offeredRatePerKg: positive.max(1000000) }), req.body).offeredRatePerKg;
-    const offer = await store.bulkOffer.findFirst({ where: { id: offerId, status: 'PENDING' } });
-    const lot = offer ? await store.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } }) : null;
-    if (!offer || !lot) throw new AppError('CONFLICT', 'Offer is not counterable', 409, { code: 'OFFER_NOT_COUNTERABLE' });
-    if (lot.minimumRatePerKg != null && offeredRatePerKg < lot.minimumRatePerKg) throw new AppError('VALIDATION_ERROR', `Counter-offer must be at least ₹${lot.minimumRatePerKg} per kg`, 422, { code: 'BULK_OFFER_BELOW_MINIMUM' });
-    const updatedCount = await store.bulkOffer.updateMany({ where: { id: offerId, status: 'PENDING' }, data: { offeredRatePerKg } });
-    if (!updatedCount.count) throw new AppError('CONFLICT', 'Offer was already updated', 409, { code: 'OFFER_ALREADY_UPDATED' });
-    const updated = await store.bulkOffer.findUniqueOrThrow({ where: { id: offerId } });
+    const updated = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
+      const offer = await tx.bulkOffer.findFirst({ where: { id: offerId, status: 'PENDING' } });
+      const lot = offer ? await tx.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } }) : null;
+      if (!offer || !lot) throw new AppError('CONFLICT', 'Offer is not counterable', 409, { code: 'OFFER_NOT_COUNTERABLE' });
+      if (lot.minimumRatePerKg != null && offeredRatePerKg < lot.minimumRatePerKg) throw new AppError('VALIDATION_ERROR', `Counter-offer must be at least ₹${lot.minimumRatePerKg} per kg`, 422, { code: 'BULK_OFFER_BELOW_MINIMUM' });
+      const available = await tx.bulkLot.updateMany({ where: { id: lot.id, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' }, data: { updatedAt: new Date() } });
+      if (!available.count) throw new AppError('CONFLICT', 'Bulk lot is no longer available', 409, { code: 'BULK_LOT_NOT_AVAILABLE' });
+      const changed = await tx.bulkOffer.updateMany({ where: { id: offerId, status: 'PENDING' }, data: { counterRatePerKg: offeredRatePerKg } });
+      if (!changed.count) throw new AppError('CONFLICT', 'Offer was already updated', 409, { code: 'OFFER_ALREADY_UPDATED' });
+      const row = await tx.bulkOffer.findUniqueOrThrow({ where: { id: offerId } });
+      await auditSupplyEvent(tx, req.identity!.collectorId, 'COLLECTOR', 'BULK_OFFER_COUNTERED', 'BULK_OFFER', offerId, { bulkLotId: lot.id, counterRatePerKg: offeredRatePerKg });
+      return row;
+    }));
+    await emitNotification(store, { accountId: updated.recyclerId, type: 'BULK_OFFER_COUNTERED', title: 'Kabadiwala sent a counter-offer', body: `Review the proposed ₹${offeredRatePerKg} per kg and revise your offer to respond.`, route: 'recycler/marketplace', dedupeKey: `BULK_OFFER_COUNTERED:${offerId}:${updated.updatedAt?.toISOString() ?? offeredRatePerKg}`, channels: ['PUSH'] });
     res.json({ success: true, data: updated });
   });
   router.post('/kabadiwala/bulk-offers/:offerId/accept', requireAuth(jwt, collectors), async (req, res) => {
@@ -1468,6 +1471,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     const acceptedOffer = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const offer = await tx.bulkOffer.findUnique({ where: { id: offerId } });
       if (!offer || offer.status !== 'PENDING') throw new AppError('CONFLICT', 'Offer is not actionable', 409);
+      if (offer.counterRatePerKg != null) throw new AppError('CONFLICT', 'The Recycler must respond to your counter-offer before acceptance', 409, { code: 'BULK_COUNTER_AWAITING_RECYCLER' });
       const lot = await tx.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } });
       if (!lot) throw new AppError('NOT_FOUND', 'Listed bulk lot not found', 404);
       const recycler = await tx.recycler.findUnique({ where: { id: offer.recyclerId }, select: { authorizationStatus: true, authorizationValidUntil: true } });

@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.lots
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import android.Manifest
 import android.content.Context
@@ -678,7 +679,7 @@ fun LotEditScreen(
             modifier = Modifier.fillMaxWidth().testTag("lot_edit_notes")
         )
         if (validationError) Text(stringResource(R.string.lot_edit_validation_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        errorMessage?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onCancel, enabled = !saving, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.lot_edit_cancel)) }
             KcPrimaryButton(

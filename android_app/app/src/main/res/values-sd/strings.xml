@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s تصديق ٿيل</string>
 
     <string name="ui_new_messages_below">نوان نياپا ھيٺ ڏنل: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">آخري رقم · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">آخري رقم · %1$s</string>
+    <string name="pickup_final_amount_unavailable">آخري رقم · دستياب ناهي. تازو ڪريو</string>
+    <string name="pickup_view_scrap_photo">اسڪريپ فوٽوز ڏسو</string>
+    <string name="pickup_hide_scrap_photo">بند ڪريو</string>
+    <string name="nearby_area_resolution_failed">اسان هڪ قابل اعتماد هنڌ حاصل نه ڪري سگهيا آهيون. مھرباني ڪري پنھنجو علائقو لکو. منهنجو مقام استعمال ڪريو</string>
+    <string name="nearby_apply_radius_hint">ڳولا واري علائقي · منهنجو مقام استعمال ڪريو · ريڊيس</string>
 </resources>

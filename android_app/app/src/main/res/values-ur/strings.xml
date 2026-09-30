@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s تصدیق شدہ</string>
 
     <string name="ui_new_messages_below">نئے پیغامات ذیل میں: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">آخری رقم · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">آخری رقم · %1$s</string>
+    <string name="pickup_final_amount_unavailable">آخری رقم · دستیاب نہیں۔. ریفریش کریں۔</string>
+    <string name="pickup_view_scrap_photo">سکریپ فوٹو دیکھیں</string>
+    <string name="pickup_hide_scrap_photo">بند کریں</string>
+    <string name="nearby_area_resolution_failed">ہم قابل اعتماد مقام حاصل نہیں کر سکے۔ براہ کرم اس کے بجائے اپنا علاقہ ٹائپ کریں۔ میرا مقام استعمال کریں۔</string>
+    <string name="nearby_apply_radius_hint">تلاش کا علاقہ · میرا مقام استعمال کریں۔ · رداس</string>
 </resources>

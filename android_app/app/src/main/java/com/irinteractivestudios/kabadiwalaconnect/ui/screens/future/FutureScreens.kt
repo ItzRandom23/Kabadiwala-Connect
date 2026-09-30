@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.future
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.BorderStroke
@@ -182,7 +183,7 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
         if (refreshError != null) item {
             FeatureSurface {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(refreshError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    Text(localizedUserFacingError(refreshError), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = onRefresh) { Text(stringResource(R.string.common_retry)) }
                 }
             }
@@ -215,7 +216,7 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
 }
 
 @Composable
-fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, hasOlderMessages: Boolean = false, loadingOlderMessages: Boolean = false, onLoadOlder: () -> Unit = {}, modifier: Modifier = Modifier) {
+fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDto>, sending: Boolean, onSend: (String) -> Unit, currentAccountId: String = conversation.collectorId, onRetryMessage: (String) -> Unit = {}, draftSuggestion: String? = null, drafting: Boolean = false, onDraftReply: () -> Unit = {}, onDraftCleared: () -> Unit = {}, onProceedToHandover: (() -> Unit)? = null, hasOlderMessages: Boolean = false, loadingOlderMessages: Boolean = false, onLoadOlder: () -> Unit = {}, modifier: Modifier = Modifier, refreshError: String? = null, loadingMessages: Boolean = false) {
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scrollScope = rememberCoroutineScope()
@@ -238,6 +239,8 @@ fun ChatDetailScreen(conversation: ConversationDto, messages: List<ChatMessageDt
     Column(modifier.fillMaxSize().imePadding().padding(horizontal = 14.dp, vertical = 10.dp)) {
         Text(if (conversation.type == "PICKUP") "Pickup conversation" else if (conversation.collectorId == currentAccountId) "Recycler conversation" else "Kabadiwala conversation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.future_chat_privacy), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        refreshError?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        if (loadingMessages && messages.isEmpty()) Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(14.dp))
         if (hasOlderMessages) TextButton(onClick = onLoadOlder, enabled = !loadingOlderMessages, modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {
             Text(stringResource(if (loadingOlderMessages) R.string.common_loading else R.string.chat_load_older))
@@ -428,7 +431,7 @@ private fun BreakdownCard(title: String, values: Map<String, Int>) {
 private fun EmptyFeatureCard(title: String, detail: String) { FeatureSurface { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) } } }
 
 @Composable
-private fun ErrorFeatureCard(message: String, onRetry: () -> Unit) { FeatureSurface(containerColor = MaterialTheme.colorScheme.errorContainer, border = null) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f)); Button(onClick = onRetry) { Text(stringResource(R.string.future_retry)) } } } }
+private fun ErrorFeatureCard(message: String, onRetry: () -> Unit) { FeatureSurface(containerColor = MaterialTheme.colorScheme.errorContainer, border = null) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text(localizedUserFacingError(message), Modifier.weight(1f)); Button(onClick = onRetry) { Text(stringResource(R.string.future_retry)) } } } }
 
 @Composable
 private fun FeatureSurface(

@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s ᱯᱩᱥᱴᱟᱹᱣ ᱟᱠᱟᱱ</string>
 
     <string name="ui_new_messages_below">ᱞᱟᱛᱟᱨ ᱨᱮ ᱱᱟᱶᱟ ᱥᱟᱱᱫᱮᱥ: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">ᱢᱩᱪᱟᱹᱫ ᱴᱟᱠᱟ · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">ᱢᱩᱪᱟᱹᱫ ᱴᱟᱠᱟ · %1$s</string>
+    <string name="pickup_final_amount_unavailable">ᱢᱩᱪᱟᱹᱫ ᱴᱟᱠᱟ · ᱵᱟᱝ ᱧᱟᱢᱚᱜ ᱠᱟᱱᱟ. ᱛᱟᱹᱯᱤᱥ ᱢᱮ</string>
+    <string name="pickup_view_scrap_photo">ᱥᱠᱨᱮᱯ ᱯᱷᱳᱴᱳ ᱧᱮᱞ ᱢᱮ</string>
+    <string name="pickup_hide_scrap_photo">ᱵᱚᱱᱫᱚ</string>
+    <string name="nearby_area_resolution_failed">ᱟᱞᱮ ᱫᱚ ᱯᱟᱹᱛᱭᱟᱹᱣᱟᱱ ᱴᱷᱟᱶ ᱵᱟᱞᱮ ᱧᱟᱢ ᱞᱮᱫᱟ᱾ ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱟᱢᱟᱜ ᱴᱚᱴᱷᱟ ᱴᱟᱭᱤᱯ ᱢᱮ᱾ ᱤᱧᱟᱜ ᱴᱷᱟᱶ</string>
+    <string name="nearby_apply_radius_hint">ᱥᱮᱸᱫᱽᱨᱟ ᱴᱚᱴᱷᱟ · ᱤᱧᱟᱜ ᱴᱷᱟᱶ · ᱨᱮᱰᱤᱭᱟᱥ</string>
 </resources>

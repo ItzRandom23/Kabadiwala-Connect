@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s verified</string>
 
     <string name="ui_new_messages_below">हेठ दित्ते गेदे नमें संदेश: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">अंतिम राशि · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">अंतिम राशि · %1$s</string>
+    <string name="pickup_final_amount_unavailable">अंतिम राशि · उपलब्ध नेईं ऐ. ताज़ा करो</string>
+    <string name="pickup_view_scrap_photo">स्क्रैप फोटो दिक्खो</string>
+    <string name="pickup_hide_scrap_photo">बंद करो</string>
+    <string name="nearby_area_resolution_failed">असेंगी कोई भरोसेमंद थाह् र नेई थ्होई सकेआ। कृपया इसदे बजाय अपना इलाका टाइप करो। मेरी लोकेशन दा इस्तेमाल करो</string>
+    <string name="nearby_apply_radius_hint">खोज क्षेत्र · मेरी लोकेशन दा इस्तेमाल करो · त्रिज्या</string>
 </resources>

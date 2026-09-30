@@ -181,6 +181,8 @@ class SupplyChainViewModel(
     private var observedAuthenticatedAccountId: String? = null
     private var supplyRefreshGeneration = 0L
     private var supplyRefreshJob: Job? = null
+    private var activeSupplyRefreshGroups: Set<SupplyReadGroup> = emptySet()
+    private var pendingSupplyRefreshGroups: Set<SupplyReadGroup> = emptySet()
     private var lastRefreshStartedAt = 0L
     private var materialDetectionJob: Job? = null
     private var householdPriceEstimateJob: Job? = null
@@ -339,6 +341,8 @@ class SupplyChainViewModel(
         supplyRefreshGeneration++
         supplyRefreshJob?.cancel()
         materialDetectionJob?.cancel()
+        activeSupplyRefreshGroups = emptySet()
+        pendingSupplyRefreshGroups = emptySet()
         householdPriceEstimateJob?.cancel()
         materialDetectionJob = null
         householdPriceEstimateJob = null
@@ -595,7 +599,7 @@ class SupplyChainViewModel(
             _state.value = _state.value.copy(kabadiwalaAreaQuery = "", kabadiwalaLatitude = null, kabadiwalaLongitude = null, kabadiwalas = emptyList(), kabadiwalaNextCursor = null, kabadiwalaRequiresLocation = true, kabadiwalaHasMore = false)
             return
         }
-        _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalaNextCursor = null, kabadiwalaLoading = true, error = null)
+        _state.value = _state.value.copy(kabadiwalaAreaQuery = query, kabadiwalaLatitude = location?.latitude, kabadiwalaLongitude = location?.longitude, kabadiwalaRadiusKm = radiusKm, kabadiwalas = emptyList(), kabadiwalaNextCursor = null, kabadiwalaHasMore = false, kabadiwalaLoading = true, error = null)
         directorySearchJob = viewModelScope.launch {
             runCatching { api.getHouseholdKabadiwalas(location?.latitude, location?.longitude, radiusKm, query.ifBlank { null }, 1).requireData().toKabadiwalaDirectoryDto() }
                 .onSuccess { directory ->
@@ -636,12 +640,18 @@ class SupplyChainViewModel(
         val next = when (_state.value.kabadiwalaRadiusKm) { 5 -> 10; 10 -> 25; 25 -> 50; 50 -> 100; 100 -> 200; else -> 200 }
         if (next != _state.value.kabadiwalaRadiusKm) searchHouseholdKabadiwalas(_state.value.kabadiwalaAreaQuery, next, _state.value.kabadiwalaLatitude?.let { CurrentLocation(it, _state.value.kabadiwalaLongitude ?: return, _state.value.kabadiwalaAreaQuery) })
     }
-    fun refreshKabadiwala() {
+    fun refreshKabadiwala() = refreshKabadiwalaGroups(SupplyReadGroup.entries.toSet())
+
+    private fun refreshKabadiwalaGroups(groups: Set<SupplyReadGroup>) {
         if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
         resetForAccountChange()
         // Mutations invalidate the old generation in action(). Screen/push
         // hints should share an existing read instead of repeatedly cancelling it.
-        if (supplyRefreshJob?.isActive == true) return
+        if (supplyRefreshJob?.isActive == true) {
+            pendingSupplyRefreshGroups = pendingSupplyRefreshGroups + (groups - activeSupplyRefreshGroups)
+            return
+        }
+        activeSupplyRefreshGroups = groups
         load { current -> coroutineScope {
         val savedSupply = withContext(Dispatchers.IO) { supplySnapshotStore?.load(accountId(), "COLLECTOR") }
         if (current() && savedSupply != null && _state.value.pickups.isEmpty() && _state.value.inventory.isEmpty()) {
@@ -650,37 +660,40 @@ class SupplyChainViewModel(
         val cached = withContext(Dispatchers.IO) { cache?.load(accountId()) }
         if (current() && !_state.value.initialLoadComplete) cached?.let(::applyCached)
         var partialFailure = false
-        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
+        suspend fun <T> optional(group: SupplyReadGroup, fallback: T, block: suspend () -> T): T {
+            if (group !in groups) return fallback
+            return try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
+        }
         val previous = _state.value
         // Start independent requests together. The former serial chain made
         // every dashboard visit wait for the sum of fourteen network latencies.
         val assignedRequest = async {
-            optional(previous.pickups.filter { it.status !in terminalCollectorPickupStatuses && it.kabadiwalaId != null }) {
+            optional(SupplyReadGroup.PICKUPS, previous.pickups.filter { it.status !in terminalCollectorPickupStatuses && it.kabadiwalaId != null }) {
                 val response = api.getKabadiwalaPickups(limit = 50, scope = "assigned")
                 val rows = response.requireData()
                 if (current()) _state.value = _state.value.copy(collectorAssignedNextCursor = response.body()?.page?.nextCursor)
                 rows
-            }.also { if (current()) publishPickupSection(it, "assigned") }
+            }.also { if (current() && SupplyReadGroup.PICKUPS in groups) publishPickupSection(it, "assigned") }
         }
-        val waitingRequest = async { optional(previous.pickups.filter { it.status == "WAITING_FOR_PICKUP" && it.kabadiwalaId == null }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "waiting"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorWaitingNextCursor = response.body()?.page?.nextCursor); rows } .also { if (current()) publishPickupSection(it, "waiting") } }
-        val historyRequest = async { optional(previous.pickups.filter { it.status in terminalCollectorPickupStatuses }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "history"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorHistoryNextCursor = response.body()?.page?.nextCursor); rows } .also { if (current()) publishPickupSection(it, "history") } }
-        val inventoryRequest = async { optional(previous.inventory) { api.getKabadiwalaInventory().requireData() }.also { if (current()) _state.value = _state.value.copy(inventory = it) } }
-        val movementsRequest = async { optional(previous.inventoryMovements) { api.getInventoryMovements(limit = 100).requireData() } .also { if (current()) _state.value = _state.value.copy(inventoryMovements = it) } }
-        val requirementsRequest = async { optional(previous.requirements) { api.getProcurementRequirements().requireData() } .also { if (current()) _state.value = _state.value.copy(requirements = it) } }
-        val offersRequest = async { optional(previous.offers) { val response = api.getKabadiwalaBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorOffersNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(offers = it) } }
-        val bulkLotsRequest = async { optional(previous.bulkLots) { val response = api.getKabadiwalaBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorLotsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(bulkLots = it) } }
-        val opportunitiesRequest = async { optional(previous.poolOpportunities) { api.getPoolOpportunities().requireData() } .also { if (current()) _state.value = _state.value.copy(poolOpportunities = it) } }
-        val suggestionsRequest = async { optional(previous.poolSuggestions) { api.getPoolSuggestions().requireData() } .also { if (current()) _state.value = _state.value.copy(poolSuggestions = it) } }
-        val intelligenceRequest = async { optional(previous.demandIntelligence) { api.getDemandIntelligence().requireData() } .also { if (current()) _state.value = _state.value.copy(demandIntelligence = it) } }
-        val poolsRequest = async { optional(previous.pools) { api.getKabadiwalaPools().requireData() } .also { if (current()) _state.value = _state.value.copy(pools = it) } }
-        val handoversRequest = async { optional(previous.handovers) { api.getKabadiwalaHandovers().requireData() } .also { if (current()) _state.value = _state.value.copy(handovers = it) } }
-        val passportRequest = async { optional(previous.passport) { api.getCollectorPassport().requireData() } .also { if (current()) _state.value = _state.value.copy(passport = it) } }
-        val safetyRequest = async { optional(previous.safety) { api.getSafety().requireData() } .also { if (current()) _state.value = _state.value.copy(safety = it) } }
-        val pickups = (assignedRequest.await() + waitingRequest.await() + historyRequest.await()).distinctBy { it.id }
-        val listings = optional(previous.listings) {
+        val waitingRequest = async { optional(SupplyReadGroup.PICKUPS, previous.pickups.filter { it.status == "WAITING_FOR_PICKUP" && it.kabadiwalaId == null }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "waiting"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorWaitingNextCursor = response.body()?.page?.nextCursor); rows } .also { if (current() && SupplyReadGroup.PICKUPS in groups) publishPickupSection(it, "waiting") } }
+        val historyRequest = async { optional(SupplyReadGroup.PICKUPS, previous.pickups.filter { it.status in terminalCollectorPickupStatuses }) { val response = api.getKabadiwalaPickups(limit = 50, scope = "history"); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorHistoryNextCursor = response.body()?.page?.nextCursor); rows } .also { if (current() && SupplyReadGroup.PICKUPS in groups) publishPickupSection(it, "history") } }
+        val inventoryRequest = async { optional(SupplyReadGroup.INVENTORY, previous.inventory) { api.getKabadiwalaInventory().requireData() }.also { if (current() && SupplyReadGroup.INVENTORY in groups) _state.value = _state.value.copy(inventory = it) } }
+        val movementsRequest = async { optional(SupplyReadGroup.INVENTORY, previous.inventoryMovements) { api.getInventoryMovements(limit = 100).requireData() } .also { if (current() && SupplyReadGroup.INVENTORY in groups) _state.value = _state.value.copy(inventoryMovements = it) } }
+        val requirementsRequest = async { optional(SupplyReadGroup.MARKET, previous.requirements) { api.getProcurementRequirements().requireData() } .also { if (current() && SupplyReadGroup.MARKET in groups) _state.value = _state.value.copy(requirements = it) } }
+        val offersRequest = async { optional(SupplyReadGroup.TRADES, previous.offers) { val response = api.getKabadiwalaBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorOffersNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current() && SupplyReadGroup.TRADES in groups) _state.value = _state.value.copy(offers = it) } }
+        val bulkLotsRequest = async { optional(SupplyReadGroup.TRADES, previous.bulkLots) { val response = api.getKabadiwalaBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(collectorLotsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current() && SupplyReadGroup.TRADES in groups) _state.value = _state.value.copy(bulkLots = it) } }
+        val opportunitiesRequest = async { optional(SupplyReadGroup.POOLS, previous.poolOpportunities) { api.getPoolOpportunities().requireData() } .also { if (current() && SupplyReadGroup.POOLS in groups) _state.value = _state.value.copy(poolOpportunities = it) } }
+        val suggestionsRequest = async { optional(SupplyReadGroup.POOLS, previous.poolSuggestions) { api.getPoolSuggestions().requireData() } .also { if (current() && SupplyReadGroup.POOLS in groups) _state.value = _state.value.copy(poolSuggestions = it) } }
+        val intelligenceRequest = async { optional(SupplyReadGroup.MARKET, previous.demandIntelligence) { api.getDemandIntelligence().requireData() } .also { if (current() && SupplyReadGroup.MARKET in groups) _state.value = _state.value.copy(demandIntelligence = it) } }
+        val poolsRequest = async { optional(SupplyReadGroup.POOLS, previous.pools) { api.getKabadiwalaPools().requireData() } .also { if (current() && SupplyReadGroup.POOLS in groups) _state.value = _state.value.copy(pools = it) } }
+        val handoversRequest = async { optional(SupplyReadGroup.HANDOVERS, previous.handovers) { api.getKabadiwalaHandovers().requireData() } .also { if (current() && SupplyReadGroup.HANDOVERS in groups) _state.value = _state.value.copy(handovers = it) } }
+        val passportRequest = async { optional(SupplyReadGroup.PASSPORT, previous.passport) { api.getCollectorPassport().requireData() } .also { if (current() && SupplyReadGroup.PASSPORT in groups) _state.value = _state.value.copy(passport = it) } }
+        val safetyRequest = async { optional(SupplyReadGroup.SAFETY, previous.safety) { api.getSafety().requireData() } .also { if (current() && SupplyReadGroup.SAFETY in groups) _state.value = _state.value.copy(safety = it) } }
+        val pickups = if (SupplyReadGroup.PICKUPS in groups) (assignedRequest.await() + waitingRequest.await() + historyRequest.await()).distinctBy { it.id } else previous.pickups
+        val listings = optional(SupplyReadGroup.PICKUPS, previous.listings) {
             pickups.chunked(50).map { page -> async { api.getKabadiwalaListings(page.joinToString(",") { it.id }).requireData() } }.awaitAll().flatten()
         }
-        if (current()) _state.value = _state.value.copy(listings = listings)
+        if (current() && SupplyReadGroup.PICKUPS in groups) _state.value = _state.value.copy(listings = listings)
         val inventory = inventoryRequest.await()
         val inventoryMovements = movementsRequest.await()
         val requirements = requirementsRequest.await()
@@ -694,10 +707,11 @@ class SupplyChainViewModel(
         val passport = passportRequest.await()
         val safety = safetyRequest.await()
         if (!current()) return@coroutineScope
-        _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, listings = listings, pickups = pickups, inventory = inventory, inventoryMovements = inventoryMovements, bulkLots = bulkLots, offers = offers, requirements = requirements, poolOpportunities = opportunities, poolSuggestions = suggestions, demandIntelligence = demandIntelligence, pools = pools, handovers = handovers, passport = passport, safety = safety, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
+        _state.value = _state.value.copy(loading = false, initialLoadComplete = (groups == SupplyReadGroup.entries.toSet() && !partialFailure) || previous.initialLoadComplete, listings = if (SupplyReadGroup.PICKUPS in groups) listings else _state.value.listings, pickups = if (SupplyReadGroup.PICKUPS in groups) pickups else _state.value.pickups, inventory = if (SupplyReadGroup.INVENTORY in groups) inventory else _state.value.inventory, inventoryMovements = if (SupplyReadGroup.INVENTORY in groups) inventoryMovements else _state.value.inventoryMovements, bulkLots = if (SupplyReadGroup.TRADES in groups) bulkLots else _state.value.bulkLots, offers = if (SupplyReadGroup.TRADES in groups) offers else _state.value.offers, requirements = if (SupplyReadGroup.MARKET in groups) requirements else _state.value.requirements, poolOpportunities = if (SupplyReadGroup.POOLS in groups) opportunities else _state.value.poolOpportunities, poolSuggestions = if (SupplyReadGroup.POOLS in groups) suggestions else _state.value.poolSuggestions, demandIntelligence = if (SupplyReadGroup.MARKET in groups) demandIntelligence else _state.value.demandIntelligence, pools = if (SupplyReadGroup.POOLS in groups) pools else _state.value.pools, handovers = if (SupplyReadGroup.HANDOVERS in groups) handovers else _state.value.handovers, passport = if (SupplyReadGroup.PASSPORT in groups) passport else _state.value.passport, safety = if (SupplyReadGroup.SAFETY in groups) safety else _state.value.safety, showingCachedEvidence = partialFailure || (groups != SupplyReadGroup.entries.toSet() && previous.showingCachedEvidence), cachedAtEpochMs = if (partialFailure || groups != SupplyReadGroup.entries.toSet()) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
         if (!partialFailure) {
             saveCache()
-            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "COLLECTOR", SupplySnapshot(listings = listings, pickups = pickups, inventory = inventory, bulkLots = bulkLots, offers = offers)) }
+            val visible = _state.value
+            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "COLLECTOR", SupplySnapshot(listings = visible.listings, pickups = visible.pickups, inventory = visible.inventory, bulkLots = visible.bulkLots, offers = visible.offers)) }
         }
         } }
     }
@@ -784,10 +798,16 @@ class SupplyChainViewModel(
         }
     }
 
-    fun refreshRecycler() {
+    fun refreshRecycler() = refreshRecyclerGroups(SupplyReadGroup.entries.toSet())
+
+    private fun refreshRecyclerGroups(groups: Set<SupplyReadGroup>) {
         if (!allowed(AccountRole.RECYCLER) || !protectedSessionReady()) return
         resetForAccountChange()
-        if (supplyRefreshJob?.isActive == true) return
+        if (supplyRefreshJob?.isActive == true) {
+            pendingSupplyRefreshGroups = pendingSupplyRefreshGroups + (groups - activeSupplyRefreshGroups)
+            return
+        }
+        activeSupplyRefreshGroups = groups
         load { current -> coroutineScope {
         val savedSupply = withContext(Dispatchers.IO) { supplySnapshotStore?.load(accountId(), "RECYCLER") }
         if (current() && savedSupply != null && _state.value.bulkLots.isEmpty() && _state.value.offers.isEmpty()) {
@@ -796,23 +816,27 @@ class SupplyChainViewModel(
         val cached = withContext(Dispatchers.IO) { cache?.load(accountId()) }
         if (current() && !_state.value.initialLoadComplete) cached?.let(::applyCached)
         var partialFailure = false
-        suspend fun <T> optional(fallback: T, block: suspend () -> T): T = try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
+        suspend fun <T> optional(group: SupplyReadGroup, fallback: T, block: suspend () -> T): T {
+            if (group !in groups) return fallback
+            return try { block() } catch (error: Exception) { if (error is CancellationException) throw error; partialFailure = true; fallback }
+        }
         val previous = _state.value
-        val lotsRequest = async { optional(previous.bulkLots) { val response = api.getRecyclerBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerLotsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(bulkLots = it) } }
-        val offersRequest = async { optional(previous.offers) { val response = api.getRecyclerBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerOffersNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(offers = it) } }
-        val requirementsRequest = async { optional(previous.requirements) { val response = api.getRecyclerProcurementRequirements(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerRequirementsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current()) _state.value = _state.value.copy(requirements = it) } }
-        val poolsRequest = async { optional(previous.pools) { api.getRecyclerPools().requireData() } .also { if (current()) _state.value = _state.value.copy(pools = it) } }
-        val handoversRequest = async { optional(previous.handovers) { api.getSupplyHandovers().requireData() } .also { if (current()) _state.value = _state.value.copy(handovers = it) } }
+        val lotsRequest = async { optional(SupplyReadGroup.TRADES, previous.bulkLots) { val response = api.getRecyclerBulkLots(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerLotsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current() && SupplyReadGroup.TRADES in groups) _state.value = _state.value.copy(bulkLots = it) } }
+        val offersRequest = async { optional(SupplyReadGroup.TRADES, previous.offers) { val response = api.getRecyclerBulkOffers(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerOffersNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current() && SupplyReadGroup.TRADES in groups) _state.value = _state.value.copy(offers = it) } }
+        val requirementsRequest = async { optional(SupplyReadGroup.MARKET, previous.requirements) { val response = api.getRecyclerProcurementRequirements(limit = 50); val rows = response.requireData(); if (current()) _state.value = _state.value.copy(recyclerRequirementsNextCursor = response.body()?.page?.nextCursor); rows }.also { if (current() && SupplyReadGroup.MARKET in groups) _state.value = _state.value.copy(requirements = it) } }
+        val poolsRequest = async { optional(SupplyReadGroup.POOLS, previous.pools) { api.getRecyclerPools().requireData() } .also { if (current() && SupplyReadGroup.POOLS in groups) _state.value = _state.value.copy(pools = it) } }
+        val handoversRequest = async { optional(SupplyReadGroup.HANDOVERS, previous.handovers) { api.getSupplyHandovers().requireData() } .also { if (current() && SupplyReadGroup.HANDOVERS in groups) _state.value = _state.value.copy(handovers = it) } }
         val lots = lotsRequest.await()
         val offers = offersRequest.await()
         val requirements = requirementsRequest.await()
         val pools = poolsRequest.await()
         val handovers = handoversRequest.await()
         if (!current()) return@coroutineScope
-        _state.value = _state.value.copy(loading = false, initialLoadComplete = !partialFailure || previous.initialLoadComplete, bulkLots = lots, offers = offers, requirements = requirements, pools = pools, handovers = handovers, showingCachedEvidence = partialFailure, cachedAtEpochMs = if (partialFailure) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
+        _state.value = _state.value.copy(loading = false, initialLoadComplete = (groups == SupplyReadGroup.entries.toSet() && !partialFailure) || previous.initialLoadComplete, bulkLots = if (SupplyReadGroup.TRADES in groups) lots else _state.value.bulkLots, offers = if (SupplyReadGroup.TRADES in groups) offers else _state.value.offers, requirements = if (SupplyReadGroup.MARKET in groups) requirements else _state.value.requirements, pools = if (SupplyReadGroup.POOLS in groups) pools else _state.value.pools, handovers = if (SupplyReadGroup.HANDOVERS in groups) handovers else _state.value.handovers, showingCachedEvidence = partialFailure || (groups != SupplyReadGroup.entries.toSet() && previous.showingCachedEvidence), cachedAtEpochMs = if (partialFailure || groups != SupplyReadGroup.entries.toSet()) previous.cachedAtEpochMs else System.currentTimeMillis(), error = if (partialFailure) "Could not load all current data. Check your connection and retry." else null)
         if (!partialFailure) {
             saveCache()
-            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "RECYCLER", SupplySnapshot(bulkLots = lots, offers = offers, requirements = requirements)) }
+            val visible = _state.value
+            withContext(Dispatchers.IO) { supplySnapshotStore?.save(accountId(), "RECYCLER", SupplySnapshot(bulkLots = visible.bulkLots, offers = visible.offers, requirements = visible.requirements)) }
         }
         } }
     }
@@ -877,6 +901,18 @@ class SupplyChainViewModel(
                 throw error
             } catch (error: Exception) {
                 if (isCurrent()) _state.value = _state.value.copy(loading = false, error = friendly(error))
+            } finally {
+                if (isCurrent()) {
+                    val trailing = pendingSupplyRefreshGroups
+                    pendingSupplyRefreshGroups = emptySet()
+                    activeSupplyRefreshGroups = emptySet()
+                    supplyRefreshJob = null
+                    if (trailing.isNotEmpty()) when (roleProvider()) {
+                        AccountRole.COLLECTOR -> refreshKabadiwalaGroups(trailing)
+                        AccountRole.RECYCLER -> refreshRecyclerGroups(trailing)
+                        else -> Unit
+                    }
+                }
             }
         }
     }
@@ -891,14 +927,16 @@ class SupplyChainViewModel(
         }
         resetForAccountChange()
         if (key in _state.value.busy) return
+        val effectiveRole = requiredRole ?: roleProvider()
+        val refreshGroups = effectiveRole?.let { supplyRefreshDependencies(key, it) }.orEmpty()
         UiActionTrace.begin(key)
-        if (requiredRole == AccountRole.HOUSEHOLD) {
+        if (refreshGroups.isNotEmpty() && effectiveRole == AccountRole.HOUSEHOLD) {
             householdRefreshGeneration++
             householdRefreshJob?.cancel()
             householdRefreshJob = null
             pendingHouseholdRefresh = null
         }
-        if (requiredRole == AccountRole.COLLECTOR || requiredRole == AccountRole.RECYCLER) {
+        if (refreshGroups.isNotEmpty() && (effectiveRole == AccountRole.COLLECTOR || effectiveRole == AccountRole.RECYCLER)) {
             // A read started before this action must not repaint the old server
             // snapshot over its pending or newly confirmed local state.
             supplyRefreshGeneration++
@@ -940,7 +978,7 @@ class SupplyChainViewModel(
                 actionJobs.remove(key)
                 if (accountId() == requestAccount) {
                     _state.value = _state.value.copy(busy = _state.value.busy - key)
-                    if (succeeded && protectedSessionReady() && requiredRole != null && key != "route-advantage" && key != "safety-routing" && !key.startsWith("receive-")) {
+                    if (succeeded && protectedSessionReady() && effectiveRole != null && refreshGroups.isNotEmpty()) {
                         // A push/resume refresh may have started while this write
                         // was in flight. Discard it before reconciling the result.
                         householdRefreshGeneration++
@@ -950,10 +988,10 @@ class SupplyChainViewModel(
                         supplyRefreshGeneration++
                         supplyRefreshJob?.cancel()
                         supplyRefreshJob = null
-                        when (requiredRole) {
+                        when (effectiveRole) {
                             AccountRole.HOUSEHOLD -> refreshHousehold()
-                            AccountRole.COLLECTOR -> refreshKabadiwala()
-                            AccountRole.RECYCLER -> refreshRecycler()
+                            AccountRole.COLLECTOR -> refreshKabadiwalaGroups(refreshGroups)
+                            AccountRole.RECYCLER -> refreshRecyclerGroups(refreshGroups)
                             AccountRole.ADMIN -> Unit
                         }
                     }

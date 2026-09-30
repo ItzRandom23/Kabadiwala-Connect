@@ -1387,6 +1387,7 @@ model BulkOffer {
   bulkLotId     String
   recyclerId    String
   offeredRatePerKg Float
+  counterRatePerKg Float?
   status        BulkOfferStatus @default(PENDING)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt

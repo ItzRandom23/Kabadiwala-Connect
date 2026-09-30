@@ -1,6 +1,7 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { assertLotTransition } from './lotStateMachine.js';
+import { withTransactionRetry } from '../utils/transactionRetry.js';
 
 export class PaymentService {
   constructor(private db: PrismaClient) {}
@@ -14,25 +15,32 @@ export class PaymentService {
     if (!p) throw new AppError('NOT_FOUND', 'Payment not found', 404, { code: 'PAYMENT_NOT_FOUND' });
     return p;
   }
-  async record(cid: string, p: any) {
-    if (typeof p.id === 'string' && p.id.trim()) {
-      const existing = await this.db.payment.findFirst({ where: { id: p.id.trim(), collectorId: cid } });
-      if (existing) return existing;
-    }
-    const lot = await this.db.lot.findFirst({ where: { id: p.lotId, collectorId: cid }, include: { handovers: true, quotes: true } });
-    if (!lot) throw new AppError('NOT_FOUND', 'Lot not found', 404, { code: 'LOT_NOT_FOUND' });
-    if (!['HANDED_OVER', 'PAID'].includes(lot.status) || !lot.handovers.some(h => ['CONFIRMED_BY_RECYCLER', 'COMPLETED'].includes(h.status))) throw new AppError('CONFLICT', 'Confirmed handover required', 409, { code: 'HANDOVER_NOT_CONFIRMED' });
-    if (lot.status === 'PAID' || await this.db.payment.findFirst({ where: { lotId: lot.id } })) throw new AppError('CONFLICT', 'Payment already exists', 409, { code: 'PAYMENT_ALREADY_EXISTS' });
+  async record(cid: string, p: any, transaction?: Prisma.TransactionClient) {
+    if (typeof p.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.date) || (p.time !== undefined && (typeof p.time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(p.time)))) throw new AppError('VALIDATION_ERROR', 'Invalid payment date', 422, { code: 'PAYMENT_DATE_INVALID' });
     const when = new Date(p.date + 'T' + (p.time || '00:00') + ':00+05:30');
-    if (Number.isNaN(when.getTime()) || when > new Date()) throw new AppError('VALIDATION_ERROR', 'Invalid payment date', 422, { code: 'PAYMENT_DATE_INVALID' });
+    if (Number.isNaN(when.getTime()) || when > new Date() || new Date(when.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10) !== p.date) throw new AppError('VALIDATION_ERROR', 'Invalid payment date', 422, { code: 'PAYMENT_DATE_INVALID' });
     if (!Number.isFinite(p.amount) || p.amount <= 0 || p.amount >= 1000000) throw new AppError('VALIDATION_ERROR', 'Invalid payment amount', 422, { code: 'PAYMENT_AMOUNT_INVALID' });
-    const quote = lot.quotes.find(q => q.status === 'ACCEPTED');
-    const anomaly = !!quote && (p.amount > quote.totalQuotedPrice * 1.5 || p.amount < quote.totalQuotedPrice * .5);
-    assertLotTransition(lot.status, 'PAID');
-    return this.db.$transaction(async tx => {
-      const claimed = await tx.lot.updateMany({ where: { id: lot.id, status: 'HANDED_OVER' }, data: { status: 'PAID' } });
+    if (!['CASH', 'BANK_TRANSFER', 'DIGITAL_WALLET'].includes(p.method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method', 422, { code: 'PAYMENT_METHOD_INVALID' });
+    const amount = Number(p.amount.toFixed(2));
+    if (amount <= 0) throw new AppError('VALIDATION_ERROR', 'Invalid payment amount', 422, { code: 'PAYMENT_AMOUNT_INVALID' });
+    const write = async (tx: Prisma.TransactionClient) => {
+      if (typeof p.id === 'string' && p.id.trim()) {
+        const existing = await tx.payment.findFirst({ where: { id: p.id.trim(), collectorId: cid } });
+        if (existing) {
+          if (existing.lotId !== p.lotId || existing.amount !== amount || existing.paymentMethod !== p.method || existing.recordedAt.getTime() !== when.getTime() || (existing.notes ?? null) !== (p.notes ?? null)) throw new AppError('CONFLICT', 'Payment id was already used for different payment details', 409, { code: 'PAYMENT_ID_PAYLOAD_MISMATCH' });
+          return existing;
+        }
+      }
+      const lot = await tx.lot.findFirst({ where: { id: p.lotId, collectorId: cid }, include: { handovers: true, quotes: true } });
+      if (!lot) throw new AppError('NOT_FOUND', 'Lot not found', 404, { code: 'LOT_NOT_FOUND' });
+      if (!['HANDED_OVER', 'PAID'].includes(lot.status) || !lot.handovers.some(h => ['CONFIRMED_BY_RECYCLER', 'COMPLETED'].includes(h.status))) throw new AppError('CONFLICT', 'Confirmed handover required', 409, { code: 'HANDOVER_NOT_CONFIRMED' });
+      if (lot.status === 'PAID' || await tx.payment.findFirst({ where: { lotId: lot.id } })) throw new AppError('CONFLICT', 'Payment already exists', 409, { code: 'PAYMENT_ALREADY_EXISTS' });
+      const quote = lot.quotes.find(q => q.status === 'ACCEPTED');
+      const anomaly = !!quote && (amount > quote.totalQuotedPrice * 1.5 || amount < quote.totalQuotedPrice * .5);
+      assertLotTransition(lot.status, 'PAID');
+      const claimed = await tx.lot.updateMany({ where: { id: lot.id, collectorId: cid, status: 'HANDED_OVER' }, data: { status: 'PAID' } });
       if (!claimed.count) throw new AppError('CONFLICT', 'Payment already exists', 409, { code: 'PAYMENT_ALREADY_EXISTS' });
-      const x = await tx.payment.create({ data: { ...(typeof p.id === 'string' && p.id.trim() ? { id: p.id.trim() } : {}), lotId: lot.id, collectorId: cid, amount: Number(p.amount.toFixed(2)), paymentMethod: p.method, recordedAt: when, notes: p.notes, anomaly, anomalyReason: anomaly ? 'Payment differs materially from accepted quote' : null } });
+      const x = await tx.payment.create({ data: { ...(typeof p.id === 'string' && p.id.trim() ? { id: p.id.trim() } : {}), lotId: lot.id, collectorId: cid, amount, paymentMethod: p.method, recordedAt: when, notes: p.notes, anomaly, anomalyReason: anomaly ? 'Payment differs materially from accepted quote' : null } });
       // A recorded payment completes the physical handover. Payment keeps
       // its own RECORDED/VERIFIED state for reconciliation, while the
       // handover becomes eligible for rewards and verified reviews.
@@ -41,9 +49,23 @@ export class PaymentService {
       if (handover.status === 'CONFIRMED_BY_RECYCLER') await tx.handover.update({ where: { id: handover.id }, data: { status: 'COMPLETED' } });
       await tx.paymentAudit.create({ data: { paymentId: x.id, actorId: cid, actorRole: 'COLLECTOR', event: 'PAYMENT_RECORDED', newValues: { amount: x.amount, method: x.paymentMethod } } });
       return x;
-    });
+    };
+    return transaction ? write(transaction) : withTransactionRetry(() => this.db.$transaction(write));
   }
-  async list(cid: string) { return this.db.payment.findMany({ where: { collectorId: cid }, orderBy: { recordedAt: 'desc' } }); }
+  async list(cid: string) { return (await this.page(cid)).items; }
+  async page(cid: string | null, query: { limit?: unknown; cursor?: unknown; status?: unknown } = {}) {
+    const limit = query.limit == null ? 100 : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AppError('VALIDATION_ERROR', 'Invalid payment page size', 422, { code: 'INVALID_PAYMENT_LIMIT' });
+    const cursor = query.cursor == null ? null : String(query.cursor);
+    if (cursor && !/^[A-Za-z0-9_-]{1,120}$/.test(cursor)) throw new AppError('VALIDATION_ERROR', 'Invalid payment cursor', 422, { code: 'INVALID_CURSOR' });
+    const statuses = ['RECORDED', 'VERIFIED', 'DISPUTED', 'REVERSED'];
+    if (query.status != null && !statuses.includes(String(query.status))) throw new AppError('VALIDATION_ERROR', 'Invalid payment status', 422);
+    const where = { ...(cid ? { collectorId: cid } : {}), ...(query.status ? { status: String(query.status) as any } : {}) };
+    if (cursor && !await this.db.payment.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) throw new AppError('VALIDATION_ERROR', 'Invalid payment cursor', 422, { code: 'INVALID_CURSOR' });
+    const rows = await this.db.payment.findMany({ where, orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }], take: limit + 1, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+    const items = rows.slice(0, limit);
+    return { items, page: { nextCursor: rows.length > limit ? items[items.length - 1].id : null } };
+  }
   async get(id: string, cid: string) { return this.owned(id, cid); }
   async edit(id: string, cid: string, p: any) {
     const old = await this.owned(id, cid);
@@ -72,13 +94,7 @@ export class PaymentService {
       return tx.paymentDispute.create({ data: { paymentId: id, reportedBy: cid, type: p.reason, description: p.description } });
     });
   }
-  async ledger(cid: string) {
-    const payments = await this.list(cid);
-    const supplyPaymentStore = (this.db as any).supplyPayment;
-    const supplyPayments = supplyPaymentStore ? await supplyPaymentStore.findMany({ where: { collectorId: cid }, orderBy: { recordedAt: 'desc' } }) : [];
-    const settled = payments.filter(p => p.status !== 'DISPUTED' && p.status !== 'REVERSED');
-    const formalSettled = supplyPayments.filter((p: any) => p.status !== 'DISPUTED' && p.status !== 'REVERSED');
-    const total = settled.reduce((s, p) => s + p.amount, 0) + formalSettled.reduce((s: number, p: any) => s + p.amount, 0);
+  async ledger(cid: string, query: { limit?: unknown; cursor?: unknown; formalCursor?: unknown } = {}) {
     // Ledger months are business months in India, independent of the host
     // machine's timezone (which is commonly UTC in production).
     const indiaParts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric' }).formatToParts(new Date());
@@ -87,11 +103,30 @@ export class PaymentService {
     const offsetMs = 5.5 * 60 * 60 * 1000;
     const monthStart = new Date(Date.UTC(year, month, 1) - offsetMs);
     const nextMonthStart = new Date(Date.UTC(year, month + 1, 1) - offsetMs);
-    const thisMonth = settled.filter(p => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s, p) => s + p.amount, 0) + formalSettled.filter((p: any) => p.recordedAt >= monthStart && p.recordedAt < nextMonthStart).reduce((s: number, p: any) => s + p.amount, 0);
-    const allSettledCount = settled.length + formalSettled.length;
+    const limit = query.limit == null ? 100 : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AppError('VALIDATION_ERROR', 'Invalid ledger page size', 422, { code: 'INVALID_PAYMENT_LIMIT' });
+    const formalCursor = query.formalCursor == null ? null : String(query.formalCursor);
+    if (formalCursor && (!/^[A-Za-z0-9_-]{1,120}$/.test(formalCursor) || !await this.db.supplyPayment.findFirst({ where: { id: formalCursor, collectorId: cid }, select: { id: true } }))) throw new AppError('VALIDATION_ERROR', 'Invalid formal payment cursor', 422, { code: 'INVALID_CURSOR' });
+    const settledWhere = { collectorId: cid, status: { notIn: ['DISPUTED', 'REVERSED'] as any[] } };
+    const monthWhere = { ...settledWhere, recordedAt: { gte: monthStart, lt: nextMonthStart } };
+    const [legacyPage, formalRows, legacyTotal, formalTotal, legacyMonth, formalMonth, pendingTotal] = await Promise.all([
+      this.page(cid, { limit, cursor: query.cursor }),
+      this.db.supplyPayment.findMany({ where: { collectorId: cid }, orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }], take: limit + 1, ...(formalCursor ? { cursor: { id: formalCursor }, skip: 1 } : {}) }),
+      this.db.payment.aggregate({ where: settledWhere, _sum: { amount: true }, _count: { _all: true } }),
+      this.db.supplyPayment.aggregate({ where: settledWhere, _sum: { amount: true }, _count: { _all: true } }),
+      this.db.payment.aggregate({ where: monthWhere, _sum: { amount: true } }),
+      this.db.supplyPayment.aggregate({ where: monthWhere, _sum: { amount: true } }),
+      this.db.supplyPayment.aggregate({ where: { collectorId: cid, status: 'RECORDED' }, _sum: { amount: true } })
+    ]);
+    const payments = legacyPage.items;
+    const supplyPayments = formalRows.slice(0, limit);
+    const total = (legacyTotal._sum.amount ?? 0) + (formalTotal._sum.amount ?? 0);
+    const thisMonth = (legacyMonth._sum.amount ?? 0) + (formalMonth._sum.amount ?? 0);
+    const allSettledCount = legacyTotal._count._all + formalTotal._count._all;
+    const pending = Number((pendingTotal._sum.amount ?? 0).toFixed(2));
     const summary = {
       totalEarnings: Number(total.toFixed(2)),
-      pendingAmount: 0,
+      pendingAmount: pending,
       thisMonthEarnings: Number(thisMonth.toFixed(2)),
       averageLotValue: allSettledCount ? Number((total / allSettledCount).toFixed(2)) : 0
     };
@@ -99,15 +134,16 @@ export class PaymentService {
     // while exposing the flat contract consumed by the Android ledger cache.
     return {
       total: summary.totalEarnings,
-      pending: Number(supplyPayments.filter((p: any) => p.status === 'RECORDED').reduce((s: number, p: any) => s + p.amount, 0).toFixed(2)),
+      pending,
       currentMonth: summary.thisMonthEarnings,
       averagePerLot: summary.averageLotValue,
       payments,
       formalPayments: supplyPayments,
       summary,
-      transactions: [...payments.map((payment: any) => ({ ...payment, sourceType: 'LEGACY_LOT' })), ...supplyPayments.map((payment: any) => ({ ...payment, sourceType: 'FORMAL_HANDOVER' }))]
+      transactions: [...payments.map((payment: any) => ({ ...payment, sourceType: 'LEGACY_LOT' })), ...supplyPayments.map((payment: any) => ({ ...payment, sourceType: 'FORMAL_HANDOVER' }))].sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || String(right.id).localeCompare(String(left.id))),
+      historyPage: { payments: legacyPage.page, formalPayments: { nextCursor: formalRows.length > limit ? supplyPayments[supplyPayments.length - 1].id : null } }
     };
   }
-  async adminList() { return this.db.payment.findMany({ orderBy: { createdAt: 'desc' } }); }
+  async adminList() { return (await this.page(null)).items; }
   async verify(id: string, admin: string) { const p = await this.db.payment.findUnique({ where: { id } }); if (!p) throw new AppError('NOT_FOUND', 'Payment not found', 404, { code: 'PAYMENT_NOT_FOUND' }); if (p.status !== 'RECORDED') throw new AppError('CONFLICT', 'Only an undisputed recorded payment can be verified', 409, { code: 'PAYMENT_NOT_VERIFIABLE' }); return this.db.$transaction(async tx => { const claimed = await tx.payment.updateMany({ where: { id, status: 'RECORDED' }, data: { status: 'VERIFIED', confirmedAt: new Date() } }); if (!claimed.count) throw new AppError('CONFLICT', 'Payment changed while being verified', 409, { code: 'PAYMENT_NOT_VERIFIABLE' }); const x = await tx.payment.findUniqueOrThrow({ where: { id } }); await tx.paymentAudit.create({ data: { paymentId: id, actorId: admin, actorRole: 'ADMIN', event: 'PAYMENT_VERIFIED' } }); return x; }); }
 }

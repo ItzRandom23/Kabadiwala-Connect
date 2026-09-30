@@ -1,0 +1,1509 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 30,
+    "identityHash": "273fff7eb35c456694831224cc87d71b",
+    "entities": [
+      {
+        "tableName": "sync_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uid` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `operation` TEXT NOT NULL, `payloadJson` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `lastErrorCode` TEXT, `nextAttemptAtEpochMs` INTEGER NOT NULL, `accountId` TEXT, `idempotencyKey` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "uid",
+            "columnName": "uid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operation",
+            "columnName": "operation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastErrorCode",
+            "columnName": "lastErrorCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "nextAttemptAtEpochMs",
+            "columnName": "nextAttemptAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotencyKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "uid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_queue_nextAttemptAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "nextAttemptAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_queue_nextAttemptAtEpochMs` ON `${TABLE_NAME}` (`nextAttemptAtEpochMs`)"
+          },
+          {
+            "name": "index_sync_queue_accountId_nextAttemptAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "nextAttemptAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_queue_accountId_nextAttemptAtEpochMs` ON `${TABLE_NAME}` (`accountId`, `nextAttemptAtEpochMs`)"
+          },
+          {
+            "name": "index_sync_queue_accountId_operation_idempotencyKey",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "operation",
+              "idempotencyKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_queue_accountId_operation_idempotencyKey` ON `${TABLE_NAME}` (`accountId`, `operation`, `idempotencyKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "collector_profile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`collectorId` TEXT NOT NULL, `phoneNumber` TEXT NOT NULL, `preferredLanguage` TEXT NOT NULL, `primaryLocation` TEXT NOT NULL, `locationSource` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `lastLoginEpochMs` INTEGER NOT NULL, `latitude` REAL, `longitude` REAL, PRIMARY KEY(`collectorId`))",
+        "fields": [
+          {
+            "fieldPath": "collectorId",
+            "columnName": "collectorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phoneNumber",
+            "columnName": "phoneNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "preferredLanguage",
+            "columnName": "preferredLanguage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryLocation",
+            "columnName": "primaryLocation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationSource",
+            "columnName": "locationSource",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastLoginEpochMs",
+            "columnName": "lastLoginEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "collectorId"
+          ]
+        }
+      },
+      {
+        "tableName": "lots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `collectorId` TEXT NOT NULL, `materialLabel` TEXT NOT NULL, `condition` TEXT NOT NULL, `weightKg` REAL NOT NULL, `localPhotoPath` TEXT, `serverPhotoUrl` TEXT, `estimatedValueRupees` REAL, `quoteRupees` REAL, `finalValueRupees` REAL, `location` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, `status` TEXT NOT NULL, `notes` TEXT NOT NULL, `synced` INTEGER NOT NULL, `materialSubcategory` TEXT, `sourceType` TEXT, `wasteRegime` TEXT NOT NULL, `originalWeight` REAL, `originalWeightUnit` TEXT, `imageProvenance` TEXT, `imageQualityStatus` TEXT NOT NULL, `locationPrecision` TEXT, `serverUpdatedAtEpochMs` INTEGER, `version` INTEGER NOT NULL, `locationLatitude` REAL, `locationLongitude` REAL, `localPhotoPathsJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorId",
+            "columnName": "collectorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialLabel",
+            "columnName": "materialLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "condition",
+            "columnName": "condition",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weightKg",
+            "columnName": "weightKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPhotoPath",
+            "columnName": "localPhotoPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverPhotoUrl",
+            "columnName": "serverPhotoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "estimatedValueRupees",
+            "columnName": "estimatedValueRupees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "quoteRupees",
+            "columnName": "quoteRupees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "finalValueRupees",
+            "columnName": "finalValueRupees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "synced",
+            "columnName": "synced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialSubcategory",
+            "columnName": "materialSubcategory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "sourceType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "wasteRegime",
+            "columnName": "wasteRegime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalWeight",
+            "columnName": "originalWeight",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "originalWeightUnit",
+            "columnName": "originalWeightUnit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageProvenance",
+            "columnName": "imageProvenance",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageQualityStatus",
+            "columnName": "imageQualityStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationPrecision",
+            "columnName": "locationPrecision",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverUpdatedAtEpochMs",
+            "columnName": "serverUpdatedAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationLatitude",
+            "columnName": "locationLatitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "locationLongitude",
+            "columnName": "locationLongitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "localPhotoPathsJson",
+            "columnName": "localPhotoPathsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "prices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `location` TEXT NOT NULL, `materialLabel` TEXT NOT NULL, `ratePerKg` REAL NOT NULL, `minRatePerKg` REAL NOT NULL, `maxRatePerKg` REAL NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, `trend` TEXT NOT NULL, `historyCsv` TEXT NOT NULL, `unit` TEXT NOT NULL, `source` TEXT NOT NULL, `qualityStatus` TEXT NOT NULL, `disclaimer` TEXT, `trendPercentage` REAL NOT NULL, `complianceRegime` TEXT, PRIMARY KEY(`id`, `location`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialLabel",
+            "columnName": "materialLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratePerKg",
+            "columnName": "ratePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minRatePerKg",
+            "columnName": "minRatePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxRatePerKg",
+            "columnName": "maxRatePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trend",
+            "columnName": "trend",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historyCsv",
+            "columnName": "historyCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qualityStatus",
+            "columnName": "qualityStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "disclaimer",
+            "columnName": "disclaimer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trendPercentage",
+            "columnName": "trendPercentage",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "complianceRegime",
+            "columnName": "complianceRegime",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id",
+            "location"
+          ]
+        }
+      },
+      {
+        "tableName": "recyclers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `authorized` INTEGER NOT NULL, `distanceKm` REAL, `area` TEXT NOT NULL, `facility` TEXT NOT NULL, `address` TEXT NOT NULL, `acceptedMaterialsCsv` TEXT NOT NULL, `offeredRatePerKg` REAL NOT NULL, `pickupAvailable` INTEGER NOT NULL, `operatingHours` TEXT NOT NULL, `typicalHandoverHours` INTEGER NOT NULL, `contactPhone` TEXT NOT NULL, `latitude` REAL, `longitude` REAL, `authorizationAuthority` TEXT, `authorizationValidUntilEpochMs` INTEGER, `rating` REAL, `reviewCount` INTEGER NOT NULL, `completedHandovers` INTEGER, `lastUpdatedEpochMs` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorized",
+            "columnName": "authorized",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceKm",
+            "columnName": "distanceKm",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "facility",
+            "columnName": "facility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "address",
+            "columnName": "address",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedMaterialsCsv",
+            "columnName": "acceptedMaterialsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offeredRatePerKg",
+            "columnName": "offeredRatePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pickupAvailable",
+            "columnName": "pickupAvailable",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operatingHours",
+            "columnName": "operatingHours",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "typicalHandoverHours",
+            "columnName": "typicalHandoverHours",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactPhone",
+            "columnName": "contactPhone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "authorizationAuthority",
+            "columnName": "authorizationAuthority",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "authorizationValidUntilEpochMs",
+            "columnName": "authorizationValidUntilEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "rating",
+            "columnName": "rating",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "reviewCount",
+            "columnName": "reviewCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedHandovers",
+            "columnName": "completedHandovers",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastUpdatedEpochMs",
+            "columnName": "lastUpdatedEpochMs",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "quotes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `recyclerId` TEXT NOT NULL, `lotId` TEXT NOT NULL, `amountRupees` REAL NOT NULL, `recyclerName` TEXT NOT NULL, `pricePerKg` REAL NOT NULL, `marketRatePerKg` REAL NOT NULL, `distanceKm` REAL NOT NULL, `pickupAvailable` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `expiresAtEpochMs` INTEGER NOT NULL, `status` TEXT NOT NULL, `deliveryState` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerId",
+            "columnName": "recyclerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lotId",
+            "columnName": "lotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountRupees",
+            "columnName": "amountRupees",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerName",
+            "columnName": "recyclerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pricePerKg",
+            "columnName": "pricePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "marketRatePerKg",
+            "columnName": "marketRatePerKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceKm",
+            "columnName": "distanceKm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pickupAvailable",
+            "columnName": "pickupAvailable",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtEpochMs",
+            "columnName": "expiresAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryState",
+            "columnName": "deliveryState",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "handovers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `lotId` TEXT NOT NULL, `recyclerId` TEXT NOT NULL, `collectorId` TEXT NOT NULL, `recyclerName` TEXT NOT NULL, `materialLabel` TEXT NOT NULL, `weightKg` REAL NOT NULL, `quotedPriceRupees` REAL NOT NULL, `collectionLocation` TEXT NOT NULL, `handoverLocation` TEXT NOT NULL, `handoverLocationType` TEXT NOT NULL, `timestampEpochMs` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `quoteId` TEXT NOT NULL, `status` TEXT NOT NULL, `synced` INTEGER NOT NULL, `actualWeightKg` REAL, `materialConfirmed` INTEGER NOT NULL, `collectorConfirmed` INTEGER NOT NULL, `scalePhotoPath` TEXT, `evidenceUpdatedAtEpochMs` INTEGER, `qrCodeData` TEXT, `referenceId` TEXT, `expiresAtEpochMs` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lotId",
+            "columnName": "lotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerId",
+            "columnName": "recyclerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorId",
+            "columnName": "collectorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerName",
+            "columnName": "recyclerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialLabel",
+            "columnName": "materialLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weightKg",
+            "columnName": "weightKg",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quotedPriceRupees",
+            "columnName": "quotedPriceRupees",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectionLocation",
+            "columnName": "collectionLocation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "handoverLocation",
+            "columnName": "handoverLocation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "handoverLocationType",
+            "columnName": "handoverLocationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampEpochMs",
+            "columnName": "timestampEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quoteId",
+            "columnName": "quoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "synced",
+            "columnName": "synced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualWeightKg",
+            "columnName": "actualWeightKg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "materialConfirmed",
+            "columnName": "materialConfirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorConfirmed",
+            "columnName": "collectorConfirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scalePhotoPath",
+            "columnName": "scalePhotoPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "evidenceUpdatedAtEpochMs",
+            "columnName": "evidenceUpdatedAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "qrCodeData",
+            "columnName": "qrCodeData",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "referenceId",
+            "columnName": "referenceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "expiresAtEpochMs",
+            "columnName": "expiresAtEpochMs",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "payments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `lotId` TEXT NOT NULL, `handoverId` TEXT, `amountRupees` REAL NOT NULL, `method` TEXT NOT NULL, `paidAtEpochMs` INTEGER NOT NULL, `notes` TEXT NOT NULL, `syncState` TEXT NOT NULL, `recordState` TEXT NOT NULL, `accountId` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lotId",
+            "columnName": "lotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "handoverId",
+            "columnName": "handoverId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "amountRupees",
+            "columnName": "amountRupees",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "method",
+            "columnName": "method",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paidAtEpochMs",
+            "columnName": "paidAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "syncState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordState",
+            "columnName": "recordState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_payments_accountId_paidAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "paidAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_payments_accountId_paidAtEpochMs` ON `${TABLE_NAME}` (`accountId`, `paidAtEpochMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "disputes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `handoverId` TEXT NOT NULL, `lotId` TEXT NOT NULL, `collectorId` TEXT NOT NULL, `recyclerId` TEXT NOT NULL, `type` TEXT NOT NULL, `description` TEXT NOT NULL, `claimedWeightKg` REAL, `actualWeightKg` REAL, `status` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `synced` INTEGER NOT NULL, `remoteId` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "handoverId",
+            "columnName": "handoverId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lotId",
+            "columnName": "lotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorId",
+            "columnName": "collectorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerId",
+            "columnName": "recyclerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "claimedWeightKg",
+            "columnName": "claimedWeightKg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "actualWeightKg",
+            "columnName": "actualWeightKg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "synced",
+            "columnName": "synced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_disputes_handoverId",
+            "unique": false,
+            "columnNames": [
+              "handoverId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_disputes_handoverId` ON `${TABLE_NAME}` (`handoverId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "future_schemes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `slug` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `documentsCsv` TEXT NOT NULL, `sourceUrl` TEXT NOT NULL, `lastVerifiedAt` TEXT NOT NULL, `cachedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slug",
+            "columnName": "slug",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "documentsCsv",
+            "columnName": "documentsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceUrl",
+            "columnName": "sourceUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastVerifiedAt",
+            "columnName": "lastVerifiedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAtEpochMs",
+            "columnName": "cachedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "future_activities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `slug` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `materialsCsv` TEXT NOT NULL, `stepsCsv` TEXT NOT NULL, `warningsCsv` TEXT NOT NULL, `difficulty` TEXT NOT NULL, `minutes` INTEGER NOT NULL, `cachedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slug",
+            "columnName": "slug",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialsCsv",
+            "columnName": "materialsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepsCsv",
+            "columnName": "stepsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warningsCsv",
+            "columnName": "warningsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "difficulty",
+            "columnName": "difficulty",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minutes",
+            "columnName": "minutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAtEpochMs",
+            "columnName": "cachedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "future_conversations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `lotId` TEXT NOT NULL, `quoteId` TEXT, `collectorId` TEXT NOT NULL, `recyclerId` TEXT NOT NULL, `status` TEXT NOT NULL, `lastMessageAt` TEXT, `type` TEXT NOT NULL DEFAULT 'TRADE', `pickupRequestId` TEXT, `unreadCount` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lotId",
+            "columnName": "lotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quoteId",
+            "columnName": "quoteId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "collectorId",
+            "columnName": "collectorId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recyclerId",
+            "columnName": "recyclerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastMessageAt",
+            "columnName": "lastMessageAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'TRADE'"
+          },
+          {
+            "fieldPath": "pickupRequestId",
+            "columnName": "pickupRequestId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "unreadCount",
+            "columnName": "unreadCount",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_future_conversations_collectorId",
+            "unique": false,
+            "columnNames": [
+              "collectorId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_future_conversations_collectorId` ON `${TABLE_NAME}` (`collectorId`)"
+          },
+          {
+            "name": "index_future_conversations_recyclerId",
+            "unique": false,
+            "columnNames": [
+              "recyclerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_future_conversations_recyclerId` ON `${TABLE_NAME}` (`recyclerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "future_messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderId` TEXT NOT NULL, `senderRole` TEXT NOT NULL, `clientMessageId` TEXT NOT NULL, `body` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` TEXT, `readAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderId",
+            "columnName": "senderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderRole",
+            "columnName": "senderRole",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientMessageId",
+            "columnName": "clientMessageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "readAt",
+            "columnName": "readAt",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "future_notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `accountId` TEXT NOT NULL, `type` TEXT NOT NULL, `title` TEXT NOT NULL, `body` TEXT NOT NULL, `route` TEXT, `readAt` TEXT, `createdAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "route",
+            "columnName": "route",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "readAt",
+            "columnName": "readAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_future_notifications_accountId_createdAt",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_future_notifications_accountId_createdAt` ON `${TABLE_NAME}` (`accountId`, `createdAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pending_photo_uploads",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`listingId` TEXT NOT NULL, `accountId` TEXT NOT NULL, `localPath` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `localPathsJson` TEXT, PRIMARY KEY(`listingId`))",
+        "fields": [
+          {
+            "fieldPath": "listingId",
+            "columnName": "listingId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPath",
+            "columnName": "localPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPathsJson",
+            "columnName": "localPathsJson",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "listingId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_photo_uploads_accountId",
+            "unique": false,
+            "columnNames": [
+              "accountId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_photo_uploads_accountId` ON `${TABLE_NAME}` (`accountId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "household_listings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `accountId` TEXT NOT NULL, `payloadJson` TEXT NOT NULL, `synced` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "synced",
+            "columnName": "synced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_household_listings_accountId",
+            "unique": false,
+            "columnNames": [
+              "accountId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_household_listings_accountId` ON `${TABLE_NAME}` (`accountId`)"
+          },
+          {
+            "name": "index_household_listings_accountId_synced",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "synced"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_household_listings_accountId_synced` ON `${TABLE_NAME}` (`accountId`, `synced`)"
+          }
+        ]
+      },
+      {
+        "tableName": "supply_snapshots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`accountId` TEXT NOT NULL, `role` TEXT NOT NULL, `payloadJson` TEXT NOT NULL, `savedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`accountId`, `role`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAtEpochMs",
+            "columnName": "savedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "accountId",
+            "role"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '273fff7eb35c456694831224cc87d71b')"
+    ]
+  }
+}

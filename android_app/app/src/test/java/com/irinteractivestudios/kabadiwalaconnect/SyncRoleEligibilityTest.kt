@@ -20,9 +20,11 @@ class SyncRoleEligibilityTest {
         val collector = syncOperationsForRole(AccountRole.COLLECTOR)
         val recycler = syncOperationsForRole(AccountRole.RECYCLER)
 
-        assertFalse("SEND_CHAT_MESSAGE" in household)
+        assertTrue("SEND_CHAT_MESSAGE" in household)
         assertTrue("SEND_CHAT_MESSAGE" in collector)
         assertTrue("SEND_CHAT_MESSAGE" in recycler)
+        assertFalse("ACCEPT_QUOTE" in collector)
+        assertFalse("MARK_HANDOVER" in collector)
         assertTrue("REQUEST_HOUSEHOLD_PICKUP" in household)
         assertFalse("REQUEST_HOUSEHOLD_PICKUP" in collector)
         assertFalse("CONFIRM_SUPPLY_HANDOVER" in recycler)

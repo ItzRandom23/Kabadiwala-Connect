@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.handovers
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -147,6 +148,8 @@ fun HandoverDocumentScreen(
 fun DisputeCenterScreen(
     handover: Handover,
     disputes: List<Dispute>,
+    pending: Boolean = false,
+    error: String? = null,
     onSubmit: (DisputeType, String) -> Unit
 ) {
     var type by remember { mutableStateOf(DisputeType.WEIGHT_DISCREPANCY) }
@@ -158,6 +161,7 @@ fun DisputeCenterScreen(
     ) {
         item { Text(stringResource(R.string.dispute_title), style = MaterialTheme.typography.headlineMedium) }
         item { Text(stringResource(R.string.dispute_detail), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        error?.let { item { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error) } }
         item {
             EvidenceSection(title = handover.materialLabel, status = stringResource(if (handover.status == HandoverStatus.HANDED_OVER) R.string.handover_status_done else R.string.handover_status_saved)) {
                 ProofRow(stringResource(R.string.handover_weight), "%.1f kg".format(handover.weightKg))
@@ -196,7 +200,7 @@ fun DisputeCenterScreen(
         item {
             Button(
                 onClick = { onSubmit(type, description.trim()) },
-                enabled = description.trim().length >= 10 && !hasOpenReport,
+                enabled = description.trim().length >= 10 && !hasOpenReport && !pending,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
             ) { Text(stringResource(R.string.dispute_submit)) }
         }

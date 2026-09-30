@@ -42,9 +42,13 @@ data class FutureFeatureState(
     val schemes: List<GovernmentSchemeDto> = emptyList(),
     val activities: List<DiyActivityDto> = emptyList(),
     val conversations: List<ConversationDto> = emptyList(),
+    val conversationsLoading: Boolean = false,
     val conversationsLastSyncedAt: Long? = null,
     val conversationsRefreshError: String? = null,
     val messages: Map<String, List<ChatMessageDto>> = emptyMap(),
+    val messagesLoading: Set<String> = emptySet(),
+    val messagesRefreshErrors: Map<String, String> = emptyMap(),
+    val messagesLastSyncedAt: Map<String, Long> = emptyMap(),
     val messagesNextCursor: Map<String, String> = emptyMap(),
     val loadingOlderMessages: Set<String> = emptySet(),
     val analytics: DisputeAnalyticsDto? = null,
@@ -67,6 +71,7 @@ class FutureFeatureViewModel(
     private val _state = MutableStateFlow(FutureFeatureState())
     val state: StateFlow<FutureFeatureState> = _state.asStateFlow()
     private var pollingJob: Job? = null
+    private var polledConversationId: String? = null
     private var conversationsJob: Job? = null
     private var refreshJob: Job? = null
     private var notificationJob: Job? = null
@@ -77,6 +82,7 @@ class FutureFeatureViewModel(
     private val exhaustedChatHistory = mutableSetOf<String>()
     private val messageRequestGenerations = mutableMapOf<String, Long>()
     private var chatOwner: String? = null
+    private val messageJobs = mutableMapOf<String, Job>()
 
     private suspend fun withPendingNotificationReads(owner: String, items: List<NotificationDto>): List<NotificationDto> {
         val queued = syncQueue?.observeForAccount(owner)?.first().orEmpty().filter { it.lastErrorCode == null || it.attempts < 3 }
@@ -339,7 +345,7 @@ class FutureFeatureViewModel(
     }
 
     fun loadConversations() {
-        val owner = accountId()
+        val owner = accountId()?.takeIf(String::isNotBlank) ?: return
         if (conversationsOwner != owner) {
             conversationsJob?.cancel()
             conversationsOwner = owner
@@ -350,6 +356,8 @@ class FutureFeatureViewModel(
             return
         }
         conversationsJob = viewModelScope.launch {
+            _state.value = _state.value.copy(conversationsLoading = true)
+            try {
             val cached = cache?.conversations(owner).orEmpty()
             if (accountId() == owner && _state.value.conversations.isEmpty() && cached.isNotEmpty()) _state.value = _state.value.copy(conversations = cached)
             do {
@@ -366,25 +374,31 @@ class FutureFeatureViewModel(
                     if (accountId() == owner) _state.value = _state.value.copy(conversationsRefreshError = userFacingError(error, "Could not refresh messages. Saved conversations are shown."))
                 }
             } while (conversationsRefreshQueued && accountId() == owner)
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(conversationsLoading = false)
+            }
         }
     }
 
     fun loadMessages(conversationId: String) {
-        viewModelScope.launch { fetchMessages(conversationId) }
+        messageJobs[conversationId]?.cancel()
+        messageJobs[conversationId] = viewModelScope.launch { fetchMessages(conversationId) }
     }
 
     private suspend fun fetchMessages(conversationId: String) {
-        val owner = accountId()
+        val owner = accountId()?.takeIf(String::isNotBlank) ?: return
         if (chatOwner != owner) {
             chatOwner = owner
             exhaustedChatHistory.clear()
             messageRequestGenerations.clear()
-            _state.value = _state.value.copy(messages = emptyMap(), messagesNextCursor = emptyMap(), sending = false)
+            _state.value = _state.value.copy(messages = emptyMap(), messagesNextCursor = emptyMap(), messagesLoading = emptySet(), messagesRefreshErrors = emptyMap(), messagesLastSyncedAt = emptyMap(), sending = false)
         }
         val generation = (messageRequestGenerations[conversationId] ?: 0L) + 1L
         messageRequestGenerations[conversationId] = generation
         val current = { accountId() == owner && messageRequestGenerations[conversationId] == generation }
-        val cached = cache?.messages(conversationId, accountId()).orEmpty()
+        _state.value = _state.value.copy(messagesLoading = _state.value.messagesLoading + conversationId)
+        try {
+        val cached = cache?.messages(conversationId, owner).orEmpty()
         if (current() && _state.value.messages[conversationId].isNullOrEmpty() && cached.isNotEmpty()) {
             _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to cached))
         }
@@ -394,6 +408,8 @@ class FutureFeatureViewModel(
             if (!current()) return
             cache?.saveMessages(items)
             if (!current()) return
+            _state.value = _state.value.copy(messagesRefreshErrors = _state.value.messagesRefreshErrors - conversationId,
+                messagesLastSyncedAt = _state.value.messagesLastSyncedAt + (conversationId to System.currentTimeMillis()))
             val next = response.body()?.page?.nextCursor
             if (conversationId !in exhaustedChatHistory && conversationId !in _state.value.messagesNextCursor && next != null) {
                 _state.value = _state.value.copy(messagesNextCursor = _state.value.messagesNextCursor + (conversationId to next))
@@ -401,24 +417,31 @@ class FutureFeatureViewModel(
             items
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (current()) _state.value = _state.value.copy(messagesRefreshErrors = _state.value.messagesRefreshErrors +
+                (conversationId to userFacingError(error, "Could not refresh this conversation. Saved messages are shown.")))
             cached
         }
             .mergePending(_state.value.messages[conversationId].orEmpty() + cached)
         if (current()) _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to result))
+        } finally {
+            if (current()) _state.value = _state.value.copy(messagesLoading = _state.value.messagesLoading - conversationId)
+        }
     }
 
     fun loadOlderMessages(conversationId: String) {
         val cursor = _state.value.messagesNextCursor[conversationId] ?: return
         if (conversationId in _state.value.loadingOlderMessages) return
         val owner = accountId() ?: return
+        val generation = messageRequestGenerations[conversationId]
         viewModelScope.launch {
             _state.value = _state.value.copy(loadingOlderMessages = _state.value.loadingOlderMessages + conversationId)
             try {
                 val response = api.getMessages(conversationId, cursor = cursor)
                 val older = response.requireData()
-                if (accountId() != owner || _state.value.messagesNextCursor[conversationId] != cursor) return@launch
+                if (accountId() != owner || messageRequestGenerations[conversationId] != generation || _state.value.messagesNextCursor[conversationId] != cursor) return@launch
                 cache?.saveMessages(older)
+                if (accountId() != owner || messageRequestGenerations[conversationId] != generation || _state.value.messagesNextCursor[conversationId] != cursor) return@launch
                 val merged = older.mergePending(_state.value.messages[conversationId].orEmpty())
                 val next = response.body()?.page?.nextCursor
                 if (next == null) exhaustedChatHistory += conversationId
@@ -438,10 +461,11 @@ class FutureFeatureViewModel(
     }
 
     fun startPolling(conversationId: String) {
-        pollingJob?.cancel()
+        stopPolling()
+        polledConversationId = conversationId
         pollingJob = viewModelScope.launch {
             while (true) {
-                fetchMessages(conversationId)
+                loadMessages(conversationId)
                 // Push wakes active chats; this is a fallback for missed push
                 // and development builds without an FCM provider.
                 delay(15_000)
@@ -452,6 +476,8 @@ class FutureFeatureViewModel(
     fun stopPolling() {
         pollingJob?.cancel()
         pollingJob = null
+        polledConversationId?.let { messageJobs.remove(it)?.cancel() }
+        polledConversationId = null
     }
 
     fun sendMessage(conversationId: String, body: String) {
@@ -467,13 +493,19 @@ class FutureFeatureViewModel(
 
     fun draftReply(conversationId: String, instruction: String? = null) {
         if (_state.value.draftingConversationId != null) return
+        val owner = accountId()?.takeIf(String::isNotBlank) ?: return
         viewModelScope.launch {
             _state.value = _state.value.copy(draftingConversationId = conversationId, error = null)
-            val draft = runCatching {
-                api.draftChatReply(conversationId, ChatDraftRequestDto(language = java.util.Locale.getDefault().displayLanguage, instruction = instruction)).requireData()
-            }.getOrNull()
-            if (draft != null && draft.text.isNotBlank()) _state.value = _state.value.copy(drafts = _state.value.drafts + (conversationId to draft.text))
-            _state.value = _state.value.copy(draftingConversationId = null)
+            try {
+                val draft = api.draftChatReply(conversationId, ChatDraftRequestDto(language = java.util.Locale.getDefault().displayLanguage, instruction = instruction)).requireData()
+                if (accountId() == owner && draft.text.isNotBlank()) _state.value = _state.value.copy(drafts = _state.value.drafts + (conversationId to draft.text))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (accountId() == owner) _state.value = _state.value.copy(error = userFacingError(error, "Could not create a reply suggestion. Try again."))
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(draftingConversationId = null)
+            }
         }
     }
 
@@ -488,6 +520,7 @@ class FutureFeatureViewModel(
         viewModelScope.launch {
             if (accountId() != owner) return@launch
             _state.value = _state.value.copy(sending = true, error = null)
+            try {
             val pending = ChatMessageDto(
                 id = "local-$clientId",
                 conversationId = conversationId,
@@ -496,9 +529,10 @@ class FutureFeatureViewModel(
                 clientMessageId = clientId,
                 body = trimmed,
                 status = "SENDING",
-                createdAt = System.currentTimeMillis().toString()
+                createdAt = java.time.Instant.now().toString()
             )
             upsertLocalMessage(conversationId, pending)
+            if (accountId() != owner) return@launch
             val sendFailure = try {
                 val message = api.sendMessage(conversationId, SendMessageRequestDto(clientId, trimmed)).requireData()
                 if (accountId() != owner) return@launch
@@ -533,16 +567,27 @@ class FutureFeatureViewModel(
                 if (queued) requestSync()
                 else _state.value = _state.value.copy(error = userFacingError(sendFailure, "Message could not be sent. Retry it when ready."))
             }
-            _state.value = _state.value.copy(sending = false)
+            } finally {
+                if (accountId() == owner) _state.value = _state.value.copy(sending = false)
+            }
         }
     }
 
-    private fun upsertLocalMessage(conversationId: String, message: ChatMessageDto) {
+    private suspend fun upsertLocalMessage(conversationId: String, message: ChatMessageDto) {
+        val owner = accountId()
         val current = _state.value.messages[conversationId].orEmpty()
         val updated = current.filterNot { it.clientMessageId == message.clientMessageId } + message
-        val ordered = updated.sortedBy { it.createdAt.orEmpty() }
+        val ordered = updated.sortedWith(chatMessageOrder)
         _state.value = _state.value.copy(messages = _state.value.messages + (conversationId to ordered))
-        viewModelScope.launch { cache?.saveMessages(listOf(message)) }
+        // Keep pending persistence ordered with acknowledgement deletion. A
+        // detached cache write could otherwise resurrect the pending row.
+        try {
+            cache?.saveMessages(listOf(message))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (accountId() == owner) _state.value = _state.value.copy(error = userFacingError(error, "Could not save this message on your phone."))
+        }
     }
 
     private suspend fun cachedConversations(): List<ConversationDto> = cache?.conversations(accountId()).orEmpty()
@@ -569,8 +614,13 @@ class FutureFeatureViewModel(
     }
 }
 
-private fun List<ChatMessageDto>.mergePending(cached: List<ChatMessageDto>): List<ChatMessageDto> {
+internal fun List<ChatMessageDto>.mergePending(cached: List<ChatMessageDto>): List<ChatMessageDto> {
     return (this + cached)
         .distinctBy { it.clientMessageId.ifBlank { it.id } }
-        .sortedBy { it.createdAt.orEmpty() }
+        .sortedWith(chatMessageOrder)
 }
+
+internal fun chatTimestamp(value: String?): Long = value?.toLongOrNull()
+    ?: runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(0L)
+
+private val chatMessageOrder = compareBy<ChatMessageDto> { chatTimestamp(it.createdAt) }.thenBy { it.id }

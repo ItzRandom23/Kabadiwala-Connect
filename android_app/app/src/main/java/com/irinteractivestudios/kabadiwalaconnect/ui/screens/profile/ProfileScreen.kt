@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.profile
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -86,7 +87,7 @@ fun ProfileScreen(
                     Text(stringResource(R.string.ui_copy_f2568240b5a1))
                 }
                 if (saving) Text(stringResource(R.string.ui_copy_804053a9ee9a), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                saveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                saveError?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         }
         if (onOpenSettings != null) {

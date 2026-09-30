@@ -31,15 +31,34 @@ class SupplySnapshotMigrationTest {
         val setup = schema.getJSONArray("setupQueries")
         for (i in 0 until setup.length()) sqlite.execSQL(setup.getString(i))
         sqlite.execSQL("INSERT INTO future_notifications (id, accountId, type, title, body, route, readAt, createdAt) VALUES ('old-notification', 'account-1', 'CHAT_MESSAGE', 'Message', 'Existing message', NULL, NULL, '2026-01-01T00:00:00Z')")
+        sqlite.execSQL("INSERT INTO future_conversations (id, lotId, quoteId, collectorId, recyclerId, status, lastMessageAt) VALUES ('old-chat', 'lot-1', NULL, 'collector-1', 'account-1', 'OPEN', NULL)")
         sqlite.execSQL("INSERT INTO sync_queue (operation, payloadJson, createdAtEpochMs, attempts, lastErrorCode, nextAttemptAtEpochMs, accountId) VALUES ('REQUEST_HOUSEHOLD_PICKUP', '{\"listingId\":\"listing-1\",\"idempotencyKey\":\"key-1\"}', 1, 0, NULL, 0, 'account-1')")
         sqlite.execSQL("INSERT INTO sync_queue (operation, payloadJson, createdAtEpochMs, attempts, lastErrorCode, nextAttemptAtEpochMs, accountId) VALUES ('SEND_CHAT_MESSAGE', '{\"clientMessageId\":\"message-key-1\",\"body\":\"saved\"}', 2, 0, NULL, 0, 'account-1')")
         sqlite.version = 27
         sqlite.close()
 
         val room = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabase.MIGRATION_27_28, AppDatabase.MIGRATION_28_29)
+            .addMigrations(AppDatabase.MIGRATION_27_28, AppDatabase.MIGRATION_28_29, AppDatabase.MIGRATION_29_30)
             .build()
         try {
+            room.openHelper.writableDatabase.query("SELECT type, pickupRequestId, unreadCount FROM future_conversations WHERE id = 'old-chat'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("TRADE", it.getString(0))
+                assertTrue(it.isNull(1))
+                assertEquals(0, it.getInt(2))
+            }
+            kotlinx.coroutines.runBlocking {
+                val cache = com.irinteractivestudios.kabadiwalaconnect.data.local.FutureCacheStore(room.futureCacheDao())
+                cache.saveConversations(listOf(com.irinteractivestudios.kabadiwalaconnect.data.remote.ConversationDto(
+                    id = "pickup-chat", collectorId = "collector-1", recyclerId = "household-1",
+                    type = "PICKUP", pickupRequestId = "pickup-1", unreadCount = 3
+                )))
+                val restored = cache.conversations("household-1").single()
+                assertEquals("PICKUP", restored.type)
+                assertEquals("pickup-1", restored.pickupRequestId)
+                assertEquals(3, restored.unreadCount)
+                assertTrue(cache.conversations("unrelated-account").isEmpty())
+            }
             room.openHelper.writableDatabase.query("SELECT COUNT(*) FROM future_notifications WHERE id = 'old-notification'").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(1, it.getInt(0))

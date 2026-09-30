@@ -2,12 +2,17 @@ services:
   database:
     image: mongo:8.0
     restart: unless-stopped
+    # Prisma transactions require a replica set. The key is generated only
+    # inside this disposable container and is never stored in the checkout.
+    entrypoint: ["bash", "-c", "head -c 512 /dev/urandom | base64 > /tmp/mongodb-key; chmod 400 /tmp/mongodb-key; chown 999:999 /tmp/mongodb-key; exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /tmp/mongodb-key"]
+    ports:
+      - "127.0.0.1:27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: testing-user
       MONGO_INITDB_ROOT_PASSWORD: testing-password
       MONGO_INITDB_DATABASE: kabadiwala_testing
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --username testing-user --password testing-password --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      test: ["CMD-SHELL", "mongosh --quiet --username testing-user --password testing-password --authenticationDatabase admin --eval 'try { rs.status() } catch (e) { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"database:27017\"}]}) }; if (!db.hello().isWritablePrimary) quit(1)' "]
       interval: 5s
       timeout: 5s
       retries: 20

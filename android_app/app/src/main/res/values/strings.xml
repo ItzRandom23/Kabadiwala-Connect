@@ -1366,4 +1366,6 @@
     <string name="pickup_final_amount_unavailable">Final sale amount unavailable. Refresh to load the receipt.</string>
     <string name="pickup_view_scrap_photo">View scrap photo</string>
     <string name="pickup_hide_scrap_photo">Hide scrap photo</string>
+    <string name="nearby_area_resolution_failed">Couldn’t locate this area. Use current location or enter a more specific address to apply the radius.</string>
+    <string name="nearby_apply_radius_hint">Search this area or use current location to find partners within the selected radius.</string>
 </resources>

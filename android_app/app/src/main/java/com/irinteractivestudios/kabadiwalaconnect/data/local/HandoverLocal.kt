@@ -7,7 +7,7 @@ import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverEvidenceRequestDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.imageMimeType
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto
-import com.irinteractivestudios.kabadiwalaconnect.data.remote.RemoteApiException
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.isRetryableTransportFailure
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.requireData
 import com.irinteractivestudios.kabadiwalaconnect.data.repository.HandoverRepository
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.*
@@ -19,7 +19,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.io.IOException
 import java.io.File
 import com.google.gson.JsonObject
 import kotlin.random.Random
@@ -65,7 +64,7 @@ data class HandoverEntity(
     @Query("UPDATE handovers SET status = 'HANDED_OVER' WHERE id = :id") suspend fun markHandedOver(id: String): Int
     @Query("UPDATE handovers SET status = 'HANDED_OVER' WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId)") suspend fun markHandedOverForAccount(id: String, accountId: String): Int
     @Query("UPDATE handovers SET actualWeightKg = :actualWeightKg, materialConfirmed = :materialConfirmed, collectorConfirmed = :collectorConfirmed, scalePhotoPath = :scalePhotoPath, evidenceUpdatedAtEpochMs = :updatedAt WHERE id = :id") suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?, updatedAt: Long): Int
-    @Query("UPDATE handovers SET actualWeightKg = :actualWeightKg, materialConfirmed = :materialConfirmed, collectorConfirmed = :collectorConfirmed, scalePhotoPath = :scalePhotoPath, evidenceUpdatedAtEpochMs = :updatedAt WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId)") suspend fun updateEvidenceForAccount(id: String, accountId: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?, updatedAt: Long): Int
+    @Query("UPDATE handovers SET actualWeightKg = :actualWeightKg, materialConfirmed = :materialConfirmed, collectorConfirmed = :collectorConfirmed, scalePhotoPath = :scalePhotoPath, evidenceUpdatedAtEpochMs = :updatedAt, synced = 0 WHERE id = :id AND (collectorId = :accountId OR recyclerId = :accountId)") suspend fun updateEvidenceForAccount(id: String, accountId: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?, updatedAt: Long): Int
     @Query("DELETE FROM handovers") suspend fun clearAll()
 }
 class RoomHandoverRepository(
@@ -92,7 +91,8 @@ class RoomHandoverRepository(
 class RemoteHandoverRepository(
     private val dao: HandoverDao,
     private val api: ApiService,
-    private val accountId: () -> String? = { null }
+    private val accountId: () -> String? = { null },
+    private val sessionGenerationProvider: () -> Long = { 0L }
 ) : HandoverRepository {
     override fun observeAll() = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(it) }?.map { rows -> rows.map(HandoverEntity::toDomain) }
         ?: flowOf(emptyList())
@@ -108,6 +108,7 @@ class RemoteHandoverRepository(
         timestampEpochMs: Long
     ): Handover {
         check(accountId()?.takeIf { it.isNotBlank() } == collectorId) { "Authenticated account required for handover changes" }
+        val generation = sessionGenerationProvider()
         val dto = api.createHandover(
             CreateHandoverRequestDto(
                 lotId = lot.id,
@@ -116,16 +117,23 @@ class RemoteHandoverRepository(
                 timestamp = timestampEpochMs.toIsoTimestamp()
             )
         ).requireData()
+        checkCurrent(collectorId, generation)
         val item = dto.toDomain(lot, quote, collectorId, locationType, location)
         check(!item.qrCodeData.isNullOrBlank()) { "Server handover did not include signed QR data" }
         dao.insert(item.toEntity())
+        checkCurrent(collectorId, generation)
         return item
     }
 
     override suspend fun markHandedOver(id: String): Boolean {
+        val owner = accountId()?.takeIf(String::isNotBlank) ?: return false
+        val generation = sessionGenerationProvider()
         val local = scopedObservation(id).firstOrNullValue() ?: return false
+        checkCurrent(owner, generation)
         val dto = api.markHandover(id).requireData()
+        checkCurrent(owner, generation)
         dao.insert(dto.toDomain(local.toDomain()).toEntity())
+        checkCurrent(owner, generation)
         return true
     }
 
@@ -136,7 +144,10 @@ class RemoteHandoverRepository(
         collectorConfirmed: Boolean,
         scalePhotoPath: String?
     ): Boolean {
+        val owner = accountId()?.takeIf(String::isNotBlank) ?: return false
+        val generation = sessionGenerationProvider()
         val local = scopedObservation(id).firstOrNullValue() ?: return false
+        checkCurrent(owner, generation)
         var dto = api.updateHandoverEvidence(
             id,
             HandoverEvidenceRequestDto(
@@ -148,6 +159,7 @@ class RemoteHandoverRepository(
                 collectorConfirmed = collectorConfirmed
             )
         ).requireData()
+        checkCurrent(owner, generation)
         // The JSON evidence mutation and the binary upload are separate so a
         // large photo can retry independently without losing the measured
         // weight/material confirmation. The server stores only a private key.
@@ -158,6 +170,7 @@ class RemoteHandoverRepository(
                     id,
                     MultipartBody.Part.createFormData("photo", file.name, file.asRequestBody(file.imageMimeType().toMediaTypeOrNull()))
                 ).requireData()
+                checkCurrent(owner, generation)
             }
         }
         val updated = dto.toDomain(local.toDomain()).copy(
@@ -165,7 +178,12 @@ class RemoteHandoverRepository(
             evidenceUpdatedAtEpochMs = System.currentTimeMillis()
         )
         dao.insert(updated.toEntity())
+        checkCurrent(owner, generation)
         return true
+    }
+
+    private fun checkCurrent(owner: String, generation: Long) {
+        if (accountId() != owner || sessionGenerationProvider() != generation) throw kotlinx.coroutines.CancellationException("Handover session changed")
     }
 
     private fun scopedObservation(id: String) = accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForAccount(id, it) } ?: flowOf(null)
@@ -193,24 +211,16 @@ class OfflineFirstHandoverRepository(
         handover
     }
 
-    override suspend fun markHandedOver(id: String): Boolean {
-        val cached = local.observe(id).firstOrNullValue()
-        return try {
-        remote.markHandedOver(id)
-    } catch (error: Exception) {
-        if (!error.isRetryableTransportFailure()) throw error
-        val updated = local.markHandedOver(id)
-        if (updated) enqueue("MARK_HANDOVER", JsonObject().apply { addProperty("id", id); addProperty("collectorId", cached?.collectorId.orEmpty()) }, cached?.collectorId)
-        updated
-    }
-    }
+    // Physical confirmation must not become "handed over" merely because
+    // connectivity failed. Reconcile or retry against the online server.
+    override suspend fun markHandedOver(id: String): Boolean = remote.markHandedOver(id)
 
     override suspend fun updateEvidence(id: String, actualWeightKg: Double, materialConfirmed: Boolean, collectorConfirmed: Boolean, scalePhotoPath: String?): Boolean {
         val cached = local.observe(id).firstOrNullValue()
         return try {
         remote.updateEvidence(id, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath)
     } catch (error: Exception) {
-        if (!error.isRetryableTransportFailure()) throw error
+        if (collectorConfirmed || !error.isRetryableTransportFailure()) throw error
         val updated = local.updateEvidence(id, actualWeightKg, materialConfirmed, collectorConfirmed, scalePhotoPath)
         if (updated) enqueue("UPDATE_HANDOVER_EVIDENCE", JsonObject().apply {
             addProperty("id", id); addProperty("actualWeight", actualWeightKg); addProperty("materialMatch", materialConfirmed); addProperty("collectorConfirmed", collectorConfirmed)
@@ -224,12 +234,6 @@ class OfflineFirstHandoverRepository(
         queue.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId))
         requestSync()
     }
-}
-
-private fun Throwable.isRetryableTransportFailure(): Boolean = when (this) {
-    is IOException -> true
-    is RemoteApiException -> httpCode == 408 || httpCode == 429 || (httpCode ?: 0) >= 500
-    else -> false
 }
 
 private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.firstOrNullValue(): T? =

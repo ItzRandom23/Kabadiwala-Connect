@@ -134,13 +134,13 @@ class AppContainer(context: Context) {
     val recyclerRepository: RecyclerRepository by lazy { RoomRecyclerRepository(database.recyclerDao()) }
     val quoteRepository: QuoteRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomQuoteRepository(database.quoteDao()) { currentAccount()?.profileId }
-        else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao(), { syncScheduler.requestSync() }) { currentAccount()?.profileId }
+        else RemoteQuoteRepository(database.quoteDao(), apiService, database.syncQueueDao(), { syncScheduler.requestSync() }, { currentAccount()?.profileId }, ::authenticatedSessionGeneration)
     }
     val handoverRepository: HandoverRepository by lazy {
         if (BuildConfig.DEBUG && BuildConfig.API_BASE_URL.contains(".invalid")) RoomHandoverRepository(database.handoverDao()) { currentAccount()?.profileId }
         else OfflineFirstHandoverRepository(
             RoomHandoverRepository(database.handoverDao()) { currentAccount()?.profileId },
-            RemoteHandoverRepository(database.handoverDao(), apiService) { currentAccount()?.profileId },
+            RemoteHandoverRepository(database.handoverDao(), apiService, { currentAccount()?.profileId }, ::authenticatedSessionGeneration),
             database.syncQueueDao()
         ) { syncScheduler.requestSync() }
     }
@@ -655,19 +655,35 @@ class AppContainer(context: Context) {
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
         val account = currentAccount()?.takeIf { it.role in setOf(AccountRole.COLLECTOR, AccountRole.HOUSEHOLD, AccountRole.RECYCLER) } ?: return false
         val stamp = AuthenticatedSessionStamp(authenticatedSessionGeneration(), account.profileId)
-        val response = apiService.getActivityChanges(secureStorage.get(SecureStorage.ACTIVITY_CURSOR)).requireData()
+        var hasMore: Boolean
+        var pages = 0
+        var activityChanged = false
+        do {
+        val savedCursor = secureStorage.get(SecureStorage.ACTIVITY_CURSOR)
+        val legacyCursor = savedCursor?.takeIf { it.contains('T') && it.endsWith('Z') }
+        val response = apiService.getActivityChanges(since = legacyCursor, cursor = savedCursor?.takeUnless { it == legacyCursor }).requireData()
         if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId)) return false
         val accountId = stamp.accountId
         if (response.notifications.isNotEmpty() && accountId != null) {
             FutureCacheStore(database.futureCacheDao()).appendNotifications(response.notifications, accountId)
-            com.irinteractivestudios.kabadiwalaconnect.data.remote.DataChangeEvents.publish(accountId, "/activity/changes")
+            activityChanged = true
         }
-        response.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.ACTIVITY_CURSOR, it) }
+        if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId)) return false
+        val changed = response.changed
+        if (accountId != null && (changed.lotIds + changed.quoteIds + changed.handoverIds + changed.paymentIds + changed.listingIds + changed.pickupIds + changed.bulkLotIds + changed.offerIds + changed.demandIds).isNotEmpty()) {
+            activityChanged = true
+        }
+        (response.nextCursor ?: response.serverTime)?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.ACTIVITY_CURSOR, it) }
+        hasMore = response.hasMore
+        pages++
+        } while (hasMore && pages < 20 && stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId))
+        if (!stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId)) return false
+        if (activityChanged) com.irinteractivestudios.kabadiwalaconnect.data.remote.DataChangeEvents.publish(account.profileId, "/activity/changes")
         // Collector catalogue reconciliation already protects unsynced local
         // rows. Refreshing it here means a remote quote/handover notification
         // is reflected the next time the affected screen is opened.
-        if (response.notifications.isNotEmpty() && accountId != null && currentAccount()?.role == AccountRole.COLLECTOR) {
-            runCatching { reconcileChanges() }
+        if (activityChanged && currentAccount()?.role == AccountRole.COLLECTOR) {
+            try { reconcileChanges() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { /* Next foreground refresh retries. */ }
         }
         return true
         } finally {
@@ -697,8 +713,12 @@ class AppContainer(context: Context) {
         fun sessionStillCurrent() = stamp.matches(authenticatedSessionGeneration(), currentAccount()?.profileId) &&
             isAuthenticatedSessionCurrent(stamp.generation, accountId)
         if (!sessionStillCurrent()) return false
+        var hasMore: Boolean
+        var pages = 0
+        do {
         val cursor = secureStorage.get(SecureStorage.SYNC_CURSOR)
-        val payload = requestApi.getChanges(cursor).requireData()
+        val legacyCursor = cursor?.takeIf { it.contains('T') && it.endsWith('Z') }
+        val payload = requestApi.getChanges(since = legacyCursor, cursor = cursor?.takeUnless { it == legacyCursor }).requireData()
         if (!sessionStillCurrent()) return false
         database.withTransaction {
             payload.changes.lots.forEach { remote ->
@@ -777,7 +797,10 @@ class AppContainer(context: Context) {
             }
         }
         if (!sessionStillCurrent()) return false
-        payload.serverTime?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.SYNC_CURSOR, it) }
+        (payload.nextCursor ?: payload.serverTime)?.takeIf { it.isNotBlank() }?.let { secureStorage.put(SecureStorage.SYNC_CURSOR, it) }
+        hasMore = payload.hasMore
+        pages++
+        } while (hasMore && pages < 20 && sessionStillCurrent())
         return true
     }
 

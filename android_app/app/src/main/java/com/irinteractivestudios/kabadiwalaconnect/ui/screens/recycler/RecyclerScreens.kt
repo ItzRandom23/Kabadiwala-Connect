@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
@@ -204,7 +205,7 @@ fun RecyclerVerificationScreen(
         if (canSubmit) {
             Text(stringResource(R.string.recycler_verification_controlled_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        error?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 
         if (status == RecyclerVerificationStatus.VERIFIED) {
             Button(onClick = onOpenMarketplace, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
@@ -578,7 +579,7 @@ fun RecyclerOrdersScreen(
                 if (!demoMode) TextButton(onClick = onRefresh) { Text(stringResource(R.string.future_refresh)) }
             }
         }
-        paymentError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+        paymentError?.let { item { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error) } }
         if (demoMode) {
             item { DemoDataBanner() }
             item { OperationalSurface { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Verified, null, tint = KcTheme.extended.success); Text(stringResource(R.string.ui_copy_1aac17eab604), Modifier.padding(start = 10.dp), style = MaterialTheme.typography.titleMedium) }; Text(stringResource(R.string.ui_copy_6bf3d6a002ae), style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.ui_copy_444420a8f1a2), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.ui_copy_a3f0118b1910)) } } } }
@@ -644,15 +645,17 @@ fun RecyclerScanScreen(
                 ?: ""
         )
     }
-    var materialMatch by remember(state.verified?.handoverId) { mutableStateOf(true) }
-    var notes by remember(state.verified?.handoverId) { mutableStateOf("") }
+    var materialMatch by remember(state.supplyVerified?.id ?: state.verified?.handoverId) { mutableStateOf(true) }
+    var notes by remember(state.supplyVerified?.id ?: state.verified?.handoverId) { mutableStateOf("") }
     var scannerLaunchError by rememberSaveable { mutableStateOf(false) }
     val scannerPrompt = stringResource(R.string.recycler_scan_title)
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.takeIf(String::isNotBlank)?.let { value ->
             scannerLaunchError = false
-            reference = value
-            onVerify(value)
+            if (!state.confirming) {
+                reference = value
+                onVerify(value)
+            }
         }
     }
     val layout = rememberKcResponsiveLayout()
@@ -672,10 +675,11 @@ fun RecyclerScanScreen(
                     )
                 }.onFailure { scannerLaunchError = true }
             },
+            enabled = !state.checking && !state.confirming,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
         ) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_scan_camera)) }
-        OutlinedTextField(reference, { reference = it }, label = { Text(stringResource(R.string.recycler_scan_reference)) }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onVerify(reference) }, enabled = reference.isNotBlank() && !state.checking, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+        OutlinedTextField(reference, { reference = it }, enabled = !state.confirming, label = { Text(stringResource(R.string.recycler_scan_reference)) }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { onVerify(reference) }, enabled = reference.isNotBlank() && !state.checking && !state.confirming, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
             if (state.checking) CircularProgressIndicator(Modifier.padding(end = 8.dp))
             Text(stringResource(R.string.recycler_scan_validate))
         }
@@ -689,8 +693,8 @@ fun RecyclerScanScreen(
                     Text(if (state.supplyFromCache) "Matched from saved passport · server confirmation is pending." else "Signed QR matched to the current server record.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(actualWeight, { actualWeight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.handover_final_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(materialMatch, { materialMatch = it }); Text(stringResource(R.string.handover_material_confirmed)) }
-                    OutlinedTextField(notes, { notes = it.take(500) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
-                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 && it <= 100000 } == true && !state.confirming && !state.supplyQueued && state.supplyConfirmed == null, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    OutlinedTextField(notes, { notes = it.take(120) }, label = { Text(stringResource(R.string.recycler_scan_notes)) }, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { actualWeight.toDoubleOrNull()?.let { onConfirm(it, materialMatch, notes) } }, enabled = actualWeight.toDoubleOrNull()?.let { it > 0 && it <= 100000 } == true && (notes.isBlank() || notes.trim().length >= 2) && !state.confirming && !state.supplyQueued && state.supplyConfirmed == null, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                         if (state.confirming) CircularProgressIndicator(Modifier.padding(end = 8.dp))
                         Text(if (state.supplyQueued) "Saved on device — waiting to sync" else if (state.supplyConfirmed != null) "Receipt recorded" else "Confirm received material")
                     }
@@ -721,7 +725,7 @@ fun RecyclerScanScreen(
                 }
             }
         }
-        TextButton(onClick = { reference = ""; onReset() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_scan_clear)) }
+        TextButton(onClick = { reference = ""; onReset() }, enabled = !state.confirming, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_scan_clear)) }
     }
 }
 
@@ -771,7 +775,7 @@ fun RecyclerPickupsScreen(
             }
             Text(if (logisticsSection == "AVAILABILITY") "Choose when your facility can receive material." else "Set the distance and cost for facility pickup.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            error?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             if (logisticsSection == "AVAILABILITY") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("TODAY" to "Today", "THIS_WEEK" to "This week", "FLEXIBLE" to "Flexible").forEach { (value, label) ->

@@ -1274,4 +1274,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s सत्यापित</string>
 
     <string name="ui_new_messages_below">खालील नवीन संदेश: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">अंतिम रक्कम · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">अंतिम रक्कम · %1$s</string>
+    <string name="pickup_final_amount_unavailable">अंतिम रक्कम · उपलब्ध नाही. रिफ्रेश</string>
+    <string name="pickup_view_scrap_photo">स्क्रॅप फोटो पहा</string>
+    <string name="pickup_hide_scrap_photo">Close</string>
+    <string name="nearby_area_resolution_failed">विश्वसनीय स्थान मिळू शकले नाही. कृपया तुमचा परिसर लिहा. माझे ठिकाण वापरा</string>
+    <string name="nearby_apply_radius_hint">शोध क्षेत्र · माझे ठिकाण वापरा · अंतर</string>
 </resources>

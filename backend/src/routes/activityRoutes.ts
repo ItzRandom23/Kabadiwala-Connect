@@ -13,6 +13,8 @@ export const activityRoutes = (jwt: JwtService, db: PrismaClient) => {
       const raw = typeof req.query.since === 'string' ? req.query.since : undefined;
       const since = raw ? new Date(raw) : undefined;
       if (since && !Number.isFinite(since.getTime())) throw new AppError('VALIDATION_ERROR', 'Invalid activity cursor', 400, { code: 'INVALID_ACTIVITY_CURSOR' });
-      res.json({ success: true, data: await service.changes(req.identity as any, since), message: 'Activity changes retrieved' });
+      const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+      if (cursor && since) throw new AppError('VALIDATION_ERROR', 'Use cursor or since, not both', 400);
+      res.json({ success: true, data: await service.changes(req.identity as any, since, cursor), message: 'Activity changes retrieved' });
     });
 };

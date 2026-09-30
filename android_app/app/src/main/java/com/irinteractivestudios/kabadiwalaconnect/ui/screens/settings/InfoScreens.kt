@@ -3,6 +3,9 @@ package com.irinteractivestudios.kabadiwalaconnect.ui.screens.settings
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
@@ -26,6 +29,7 @@ private val tips = listOf(
 )
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun SafetyScreen(modifier: Modifier = Modifier) {
     var filter by remember { mutableStateOf<Int?>(null) }
     var bookmarked by remember { mutableStateOf(setOf<Int>()) }
@@ -35,9 +39,9 @@ fun SafetyScreen(modifier: Modifier = Modifier) {
     val visible = if (filter == null) tips else tips.filter { it.title == filter }
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text(stringResource(R.string.safety_title), style = MaterialTheme.typography.headlineLarge); Text(stringResource(R.string.safety_directory_detail), style = MaterialTheme.typography.bodyLarge) }
-        item { Text(stringResource(R.string.safety_filter), style = MaterialTheme.typography.titleMedium); Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { FilterChip(filter == null, { filter = null }, label = { Text(stringResource(R.string.safety_all)) }); tips.forEach { tip -> FilterChip(filter == tip.title, { filter = tip.title }, label = { Text(stringResource(tip.title)) }) } } }
+        item { Text(stringResource(R.string.safety_filter), style = MaterialTheme.typography.titleMedium); FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { FilterChip(filter == null, { filter = null }, label = { Text(stringResource(R.string.safety_all)) }); tips.forEach { tip -> FilterChip(filter == tip.title, { filter = tip.title }, label = { Text(stringResource(tip.title)) }) } } }
         item { SectionCard(title = stringResource(R.string.safety_tip_day)) { Text(stringResource(R.string.safety_tip_day_text), style = MaterialTheme.typography.bodyLarge) } }
-        items(visible.size) { index -> val tip = visible[index]; SafetyCard(tip, tip.title in bookmarked, { bookmarked = if (tip.title in bookmarked) bookmarked - tip.title else bookmarked + tip.title }, tts) }
+        items(visible, key = { it.title }) { tip -> SafetyCard(tip, tip.title in bookmarked, { bookmarked = if (tip.title in bookmarked) bookmarked - tip.title else bookmarked + tip.title }, tts) }
     }
 }
 
@@ -57,4 +61,4 @@ private fun SafetyCard(tip: SafetyTip, saved: Boolean, bookmark: () -> Unit, tts
 }
 
 @Composable
-fun HelpScreen(modifier: Modifier = Modifier) { Column(modifier.fillMaxSize().padding(16.dp)) { Text(stringResource(R.string.help_title), style = MaterialTheme.typography.headlineLarge); Spacer(Modifier.height(16.dp)); SectionCard(title = stringResource(R.string.help_title)) { Text(stringResource(R.string.help_message), style = MaterialTheme.typography.bodyLarge) } } }
+fun HelpScreen(modifier: Modifier = Modifier) { Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { Text(stringResource(R.string.help_title), style = MaterialTheme.typography.headlineLarge); Spacer(Modifier.height(16.dp)); SectionCard(title = stringResource(R.string.help_title)) { Text(stringResource(R.string.help_message), style = MaterialTheme.typography.bodyLarge) } } }

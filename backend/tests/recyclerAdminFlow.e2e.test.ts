@@ -1,4 +1,5 @@
 import { randomBytes, scryptSync, randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
@@ -9,22 +10,49 @@ import { CollectorRepository } from '../src/repositories/collectorRepository.js'
 import { CollectorService } from '../src/services/collectorService.js';
 import { RecyclerService } from '../src/services/recyclerService.js';
 import { EmailAuthService } from '../src/services/emailAuthService.js';
+import { transactionOptions } from '../src/config/transactionPolicy.js';
+import { LocalStorageService } from '../src/services/storage.js';
 
 const databaseUrl = process.env.RECYCLER_E2E_DATABASE_URL;
 const isolated = databaseUrl && new URL(databaseUrl).pathname.startsWith('/kc_recycler_audit_');
 
 describe.skipIf(!isolated)('Recycler → Admin → Recycler database flow', () => {
   if (!isolated) return;
-  const db = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
+  const db = new PrismaClient({ datasources: { db: { url: databaseUrl! } }, transactionOptions });
   const config = loadConfig({ ...process.env, DATABASE_URL: databaseUrl!, APP_ENV: 'testing', NODE_ENV: 'test', OTP_PROVIDER: 'development', STORAGE_PROVIDER: 'local', RATE_LIMIT_STORE: 'memory' });
   const jwt = new JwtService(config);
   const collectorRepository = new CollectorRepository(db);
   const recyclerService = new RecyclerService(db);
   const app = createApp(config, db, jwt, new CollectorService(collectorRepository), {} as never, collectorRepository,
     undefined, undefined, recyclerService, undefined, undefined, undefined, undefined,
-    new EmailAuthService(db, jwt));
+    new EmailAuthService(db, jwt), new LocalStorageService({ ...config, LOCAL_UPLOAD_DIR: `uploads-stabilization/${randomUUID()}` }));
 
   afterAll(async () => { await db.$disconnect(); });
+
+  it('replays a listing and photo upload exactly once after lost acknowledgements', async () => {
+    const key = randomUUID();
+    const signup = await request(app).post('/api/v1/auth/signup').send({ email: `offline-${key}@example.test`, password: 'OfflineAudit!2026', role: 'HOUSEHOLD', preferredLanguage: 'ENGLISH', areaName: 'Delhi' });
+    expect(signup.status).toBe(201);
+    const token = signup.body.data.token;
+    const owner = signup.body.data.user.profileId;
+    const body = { materialCategory: 'PCB', estimatedWeight: 2, condition: 'INTACT', areaName: 'Delhi' };
+    const create = () => request(app).post('/api/v1/household/listings').auth(token, { type: 'bearer' }).set('Idempotency-Key', key).send(body);
+    const first = await create();
+    const retry = await create();
+    expect(first.status).toBe(201);
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.id).toBe(first.body.data.id);
+    expect(await db.householdListing.count({ where: { householdId: owner } })).toBe(1);
+    const photo = await sharp({ create: { width: 320, height: 320, channels: 3, background: '#225522' } }).jpeg().toBuffer();
+    const upload = () => request(app).post(`/api/v1/household/listings/${first.body.data.id}/photo`).auth(token, { type: 'bearer' }).attach('photo', photo, { filename: 'offline.jpg', contentType: 'image/jpeg' });
+    expect((await upload()).status).toBe(200);
+    expect((await upload()).status).toBe(200);
+    const stored = await db.householdListing.findUniqueOrThrow({ where: { id: first.body.data.id } });
+    expect(stored.status).toBe('POSTED');
+    expect(stored.photoReferences).toHaveLength(1);
+    const mismatch = await request(app).post('/api/v1/household/listings').auth(token, { type: 'bearer' }).set('Idempotency-Key', key).send({ ...body, estimatedWeight: 3 });
+    expect(mismatch.status).toBe(409);
+  }, 120000);
 
   it('preserves submitted data and supports review, rejection, resubmission, verification, and profile edit', async () => {
     const unique = randomUUID().slice(0, 8);

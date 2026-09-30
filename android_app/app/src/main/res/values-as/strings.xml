@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s পৰীক্ষা কৰা হৈছে</string>
 
     <string name="ui_new_messages_below">তলৰ নতুন বাৰ্তাসমূহ: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">চূড়ান্ত ধনৰাশি · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">চূড়ান্ত ধনৰাশি · %1$s</string>
+    <string name="pickup_final_amount_unavailable">চূড়ান্ত ধনৰাশি · উপলব্ধ নহয়. সতেজ কৰক</string>
+    <string name="pickup_view_scrap_photo">স্ক্ৰেপ ফটোসমূহ চাওক</string>
+    <string name="pickup_hide_scrap_photo">বন্ধ কৰক</string>
+    <string name="nearby_area_resolution_failed">আমি নিৰ্ভৰযোগ্য স্থান পাব নোৱাৰিলোঁ৷ ইয়াৰ পৰিৱৰ্তে আপোনাৰ অঞ্চলটো টাইপ কৰক। মোৰ স্থান ব্যৱহাৰ কৰক</string>
+    <string name="nearby_apply_radius_hint">সন্ধান এলেকা · মোৰ স্থান ব্যৱহাৰ কৰক · ব্যাসাৰ্ধ</string>
 </resources>

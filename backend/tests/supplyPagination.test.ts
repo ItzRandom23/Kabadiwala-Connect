@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { listingsForCollectorPickupIds, nearbyCollectorPage, pagedCollectorPickups, pagedRows } from '../src/routes/supplyChainRoutes.js';
 
 describe('nearby collector database paging', () => {
-  it('filters coordinates before paging and keeps an area fallback for profiles without GPS', async () => {
+  it('filters coordinates before paging without mixing unmeasured area matches into a radius search', async () => {
     let pipeline: any[] = [];
     const store = { collector: { aggregateRaw: async (query: any) => {
       pipeline = query.pipeline;
@@ -12,7 +12,7 @@ describe('nearby collector database paging', () => {
     expect(result.total).toBe(23);
     expect(result.profiles.map((profile: any) => profile.id)).toEqual(['collector-21']);
     expect(pipeline[0].$match.latitude).toMatchObject({ $gte: expect.any(Number), $lte: expect.any(Number) });
-    expect(pipeline.some(stage => stage.$unionWith?.coll === 'Collector')).toBe(true);
+    expect(pipeline.some(stage => stage.$unionWith?.coll === 'Collector')).toBe(false);
     expect(pipeline.at(-1).$facet.items[0]).toEqual({ $skip: 20 });
     expect(pipeline.at(-1).$facet.items[1]).toEqual({ $limit: 21 });
     expect(pipeline.some(stage => stage.$lookup?.from === 'User')).toBe(true);

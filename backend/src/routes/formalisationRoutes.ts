@@ -11,6 +11,7 @@ import { evaluateSettlementVariance, riskLevelForFlags } from '../services/settl
 import { emitNotification } from '../services/notificationService.js';
 import { isTransientTransactionConflict, withTransactionRetry } from '../utils/transactionRetry.js';
 import { claimSourceListings, releaseSourceListings } from '../services/sourceListingAllocationService.js';
+import { poolHandoverForCollector } from '../services/participantPrivacy.js';
 
 const material = z.enum(['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER']);
 const positive = z.number().finite().positive();
@@ -38,40 +39,6 @@ function operationKey(req: any) {
 }
 
 const jsonValue = (value: unknown) => JSON.parse(JSON.stringify(value));
-
-function poolHandoverForCollector(handover: any, collectorId: string, contribution: any | null) {
-  const isOwner = handover.collectorId === collectorId;
-  const ownContribution = contribution?.collectorId === collectorId ? contribution : null;
-  const quotedWeightKg = isOwner ? handover.quotedWeightKg : (ownContribution?.quantityKg ?? 0);
-  const quotedRatePerKg = isOwner ? handover.quotedRatePerKg : (ownContribution?.expectedRatePerKg ?? 0);
-  const finalAcceptedKg = isOwner ? handover.finalAcceptedKg : (ownContribution?.finalAcceptedKg ?? null);
-  const finalValue = isOwner ? handover.finalValue : (ownContribution?.finalPayout ?? null);
-  return {
-    id: handover.id,
-    bulkLotId: handover.bulkLotId,
-    poolId: handover.poolId,
-    collectorId: isOwner ? handover.collectorId : '',
-    recyclerId: handover.recyclerId,
-    referenceId: handover.referenceId,
-    qrCodeData: isOwner ? handover.qrCodeData : null,
-    materialCategory: handover.materialCategory,
-    quotedWeightKg,
-    quotedRatePerKg,
-    quotedValue: isOwner ? handover.quotedValue : Number((quotedWeightKg * quotedRatePerKg).toFixed(2)),
-    finalAcceptedKg,
-    finalRejectedKg: isOwner ? handover.finalRejectedKg : null,
-    finalRatePerKg: isOwner ? handover.finalRatePerKg : (finalAcceptedKg && finalValue != null ? Number((finalValue / finalAcceptedKg).toFixed(2)) : null),
-    finalValue,
-    status: handover.status,
-    collectorConfirmedAt: handover.collectorConfirmedAt,
-    recyclerConfirmedAt: handover.recyclerConfirmedAt,
-    preparedAt: handover.preparedAt,
-    expiresAt: handover.expiresAt,
-    reviewReason: isOwner ? handover.reviewReason : null,
-    reviewEvidence: isOwner ? handover.reviewEvidence : null,
-    payments: (handover.payments ?? []).filter((payment: any) => payment.collectorId === collectorId)
-  };
-}
 
 async function retryableTransaction<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
   try {
@@ -785,6 +752,17 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     const handovers = await store.supplyHandover.findMany({ where: { recyclerId: req.identity!.collectorId, status: { in: ['PREPARED', 'COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED', 'COMPLETED'] } }, orderBy: { createdAt: 'desc' }, take: 100 });
     const payments = handovers.length ? await store.supplyPayment.findMany({ where: { supplyHandoverId: { in: handovers.map((h: any) => h.id) }, recyclerId: req.identity!.collectorId }, orderBy: { createdAt: 'desc' } }) : [];
     res.json({ success: true, data: handovers.map((h: any) => ({ ...h, payments: payments.filter((p: any) => p.supplyHandoverId === h.id) })) });
+  });
+
+  router.post('/recycler/handovers/verify', requireRecycler(jwt, db), async (req, res) => {
+    const input = parse(z.object({ qrCodeData: z.string().trim().min(40).max(5000) }), req.body);
+    const payload = verifySupplyHandoverQr(input.qrCodeData, signingSecret);
+    const handover = await store.supplyHandover.findUnique({ where: { referenceId: payload.referenceId } });
+    if (!handover || handover.recyclerId !== req.identity!.collectorId || payload.recyclerId !== handover.recyclerId) throw new AppError('NOT_FOUND', 'Handover is not available for this Recycler', 404, { code: 'HANDOVER_NOT_FOUND' });
+    if (handover.qrCodeData !== input.qrCodeData || createHash('sha256').update(String(payload.nonce)).digest('hex') !== handover.qrNonceHash) throw new AppError('CONFLICT', 'This handover QR is not the current server record', 409, { code: 'HANDOVER_QR_MISMATCH' });
+    if (handover.expiresAt <= new Date() && handover.status !== 'COMPLETED') throw new AppError('CONFLICT', 'Handover QR has expired', 409, { code: 'HANDOVER_EXPIRED' });
+    if (!['COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(handover.status)) throw new AppError('CONFLICT', 'Collector must confirm the handover first', 409, { code: 'HANDOVER_NOT_CONFIRMABLE' });
+    res.json({ success: true, data: handover });
   });
 
   router.post('/recycler/handovers/confirm', requireRecycler(jwt, db), async (req, res) => {

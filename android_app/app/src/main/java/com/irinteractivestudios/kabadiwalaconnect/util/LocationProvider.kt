@@ -35,6 +35,32 @@ fun interface LocationProvider {
 class AndroidLocationProvider(context: Context) : LocationProvider {
     private val appContext = context.applicationContext
 
+    /** Resolve a typed area to the centre used by distance filtering. */
+    suspend fun resolveArea(query: String): CurrentLocation? = withTimeoutOrNull(10_000) {
+        if (query.isBlank() || !Geocoder.isPresent()) return@withTimeoutOrNull null
+        val geocoder = Geocoder(appContext, Locale.getDefault())
+        val address = if (Build.VERSION.SDK_INT >= 33) {
+            suspendCancellableCoroutine<Address?> { continuation ->
+                geocoder.getFromLocationName(query, 1, object : Geocoder.GeocodeListener {
+                    override fun onGeocode(addresses: MutableList<Address>) {
+                        if (continuation.isActive) continuation.resume(addresses.firstOrNull())
+                    }
+                    override fun onError(errorMessage: String?) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                })
+            }
+        } else {
+            withContext(Dispatchers.IO) {
+                @Suppress("DEPRECATION")
+                geocoder.getFromLocationName(query, 1)?.firstOrNull()
+            }
+        }
+        address?.takeIf { it.hasLatitude() && it.hasLongitude() }?.let {
+            CurrentLocation(it.latitude, it.longitude, query.trim())
+        }
+    }
+
     override suspend fun current(): CurrentLocation? {
         val location = withContext(Dispatchers.Main.immediate) { requestFreshLocation() } ?: return null
 

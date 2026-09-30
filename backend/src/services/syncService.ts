@@ -7,6 +7,7 @@ import { evaluateSettlementVariance } from './settlementRules.js';
 import { claimSourceListings, releaseSourceListings } from './sourceListingAllocationService.js';
 import { AppError } from '../utils/errors.js';
 import { withTransactionRetry } from '../utils/transactionRetry.js';
+import { poolHandoverForCollector } from './participantPrivacy.js';
 
 type SyncResult = { operationId: string; status: string; entityType?: string; entityId?: string; errorCode?: string };
 type SyncRole = 'COLLECTOR' | 'RECYCLER';
@@ -401,7 +402,11 @@ export class SyncService {
     const results: SyncResult[] = [];
     for (const op of ops) {
       const hash = crypto.createHash('sha256').update(JSON.stringify({ operationType: op.operationType, entityType: op.entityType, entityId: op.entityId, payload: op.payload ?? {} })).digest('hex');
-      const prior = await this.db.syncOperation.findUnique({ where: { operationId_collectorId: { operationId: op.operationId, collectorId: cid } } });
+      let prior = await this.db.syncOperation.findUnique({ where: { operationId_collectorId: { operationId: op.operationId, collectorId: cid } } });
+      if (prior?.status === 'REJECTED' && prior.requestHash === hash && ['P1001', 'P1002', 'P1008', 'P1017', 'P2024', 'P2034', 'TRANSACTION_BUSY', 'SYNC_RETRY_REQUIRED'].includes(prior.errorCode ?? '')) {
+        await this.db.syncOperation.deleteMany({ where: { operationId: op.operationId, collectorId: cid, status: 'REJECTED', requestHash: hash, errorCode: prior.errorCode } });
+        prior = null;
+      }
       if (prior) {
         if (prior.requestHash !== hash) {
           results.push({ operationId: op.operationId, status: 'CONFLICT', entityType: prior.entityType, entityId: prior.entityId, errorCode: 'SYNC_PAYLOAD_MISMATCH' });
@@ -456,29 +461,39 @@ export class SyncService {
           if (!['INTACT', 'DAMAGED', 'PARTIAL'].includes(p.condition)) throw new AppError('VALIDATION_ERROR', 'Invalid lot condition', 422, { code: 'INVALID_LOT_CONDITION' });
           if (p.collectionLocation && (p.collectionLocation.latitude != null && (p.collectionLocation.latitude < -90 || p.collectionLocation.latitude > 90) || p.collectionLocation.longitude != null && (p.collectionLocation.longitude < -180 || p.collectionLocation.longitude > 180))) throw new AppError('VALIDATION_ERROR', 'Invalid lot location', 422, { code: 'INVALID_LOCATION' });
           const wasteRegime = ['E_WASTE', 'BATTERY_WASTE', 'OTHER'].includes(p.wasteRegime) ? p.wasteRegime : (p.materialCategory === 'BATTERY' ? 'BATTERY_WASTE' : 'E_WASTE');
-          const lot = await this.db.lot.create({ data: { id: op.entityId, collectorId: cid, materialCategory: p.materialCategory, materialSubcategory: p.materialSubcategory, sourceType: p.sourceType, wasteRegime, condition: p.condition, weight, weightUnit: 'KILOGRAM', originalWeight: p.originalWeight ?? p.weight, originalWeightUnit: p.originalWeightUnit ?? p.weightUnit ?? 'KILOGRAM', imageProvenance: p.imageProvenance, collectionLatitude: p.collectionLocation?.latitude, collectionLongitude: p.collectionLocation?.longitude, collectionAreaName: p.collectionLocation?.areaName, collectionLocationPrecision: p.collectionLocation?.precision, notes: p.notes, quotedPrice: p.quotedPrice, status: 'CREATED' } });
-          await this.save(cid, op, hash, 'APPLIED');
+          const lot = await withTransactionRetry(() => this.db.$transaction(async tx => {
+            const lot = await tx.lot.create({ data: { id: op.entityId, collectorId: cid, materialCategory: p.materialCategory, materialSubcategory: p.materialSubcategory, sourceType: p.sourceType, wasteRegime, condition: p.condition, weight, weightUnit: 'KILOGRAM', originalWeight: p.originalWeight ?? p.weight, originalWeightUnit: p.originalWeightUnit ?? p.weightUnit ?? 'KILOGRAM', imageProvenance: p.imageProvenance, collectionLatitude: p.collectionLocation?.latitude, collectionLongitude: p.collectionLocation?.longitude, collectionAreaName: p.collectionLocation?.areaName, collectionLocationPrecision: p.collectionLocation?.precision, notes: p.notes, quotedPrice: p.quotedPrice, status: 'CREATED' } });
+            await this.save(cid, op, hash, 'APPLIED', undefined, tx);
+            return lot;
+          }));
           results.push({ operationId: op.operationId, status: 'APPLIED', entityType: 'LOT', entityId: lot.id });
         } else if (op.operationType === 'UPDATE' && op.entityType === 'LOT') {
           if (role !== 'COLLECTOR') throw new AppError('AUTHORIZATION_ERROR', 'Only a Kabadiwala can sync legacy lots', 403, { code: 'LEGACY_SYNC_ROLE_REQUIRED' });
           const p = op.payload;
           const weight = canonicalWeight(p.weight, p.weightUnit ?? 'KILOGRAM');
           if (!['INTACT', 'DAMAGED', 'PARTIAL'].includes(p.condition)) throw new AppError('VALIDATION_ERROR', 'Invalid lot condition', 422, { code: 'INVALID_LOT_CONDITION' });
-          const out = await this.db.lot.updateMany({ where: { id: op.entityId, collectorId: cid, status: 'CREATED', version: p.clientVersion }, data: { weight, condition: p.condition, notes: p.notes, version: { increment: 1 } } });
-          if (!out.count) {
-            await this.save(cid, op, hash, 'CONFLICT', 'LOT_UPDATE_CONFLICT');
-            results.push({ operationId: op.operationId, status: 'CONFLICT', entityType: 'LOT', entityId: op.entityId, errorCode: 'LOT_UPDATE_CONFLICT' });
-            continue;
-          }
-          await this.save(cid, op, hash, 'APPLIED');
-          results.push({ operationId: op.operationId, status: 'APPLIED', entityType: 'LOT', entityId: op.entityId });
+          const updated = await withTransactionRetry(() => this.db.$transaction(async tx => {
+            const replay = await tx.syncOperation.findUnique({ where: { operationId_collectorId: { operationId: op.operationId, collectorId: cid } } });
+            if (replay) {
+              if (replay.requestHash !== hash) throw new AppError('CONFLICT', 'Sync payload changed', 409, { code: 'SYNC_PAYLOAD_MISMATCH' });
+              return replay.status;
+            }
+            const out = await tx.lot.updateMany({ where: { id: op.entityId, collectorId: cid, status: 'CREATED', version: p.clientVersion }, data: { weight, condition: p.condition, notes: p.notes, version: { increment: 1 } } });
+            const status = out.count ? 'APPLIED' : 'CONFLICT';
+            await this.save(cid, op, hash, status, out.count ? undefined : 'LOT_UPDATE_CONFLICT', tx);
+            return status;
+          }));
+          results.push({ operationId: op.operationId, status: updated, entityType: 'LOT', entityId: op.entityId, ...(updated === 'CONFLICT' ? { errorCode: 'LOT_UPDATE_CONFLICT' } : {}) });
         } else if (op.operationType === 'CREATE' && op.entityType === 'PAYMENT') {
           if (role !== 'COLLECTOR') throw new AppError('AUTHORIZATION_ERROR', 'Only a Kabadiwala can sync legacy payments', 403, { code: 'LEGACY_SYNC_ROLE_REQUIRED' });
           // The local payment id is the idempotency key. Reusing it on retry
           // prevents a successful payment from being recorded twice when the
           // network drops between the database write and sync acknowledgement.
-          const payment = await this.payments.record(cid, { ...op.payload, id: op.entityId });
-          await this.save(cid, op, hash, 'APPLIED');
+          const payment = await withTransactionRetry(() => this.db.$transaction(async tx => {
+            const value = await this.payments.record(cid, { ...op.payload, id: op.entityId }, tx);
+            await this.save(cid, op, hash, 'APPLIED', undefined, tx);
+            return value;
+          }));
           results.push({ operationId: op.operationId, status: 'APPLIED', entityType: 'PAYMENT', entityId: payment.id });
         } else if (op.operationType === 'UPDATE' && op.entityType === 'SUPPLY_HANDOVER' && op.payload?.action === 'COLLECTOR_CONFIRM') {
           if (role !== 'COLLECTOR') throw new AppError('AUTHORIZATION_ERROR', 'Only the contributing Kabadiwala can confirm a formal handover', 403, { code: 'COLLECTOR_CONFIRM_ROLE_REQUIRED' });
@@ -508,6 +523,10 @@ export class SyncService {
           results.push({ operationId: op.operationId, status: 'INVALID', entityType: op.entityType, entityId: op.entityId, errorCode: 'UNSUPPORTED_SYNC_OPERATION' });
         }
       } catch (e: any) {
+        // Infrastructure failures must leave the outbox replayable. Previous
+        // successful operations are protected by their durable ledger entries.
+        if (!(e instanceof AppError) && e?.code !== 'P2002') throw new AppError('SERVICE_UNAVAILABLE', 'Synchronization is temporarily unavailable. Retry the same operation.', 503, { code: 'SYNC_RETRY_REQUIRED', retryAfterSeconds: 1 });
+        if (e instanceof AppError && e.status >= 500) throw e;
         // A concurrent retry can win the lot insert before its sync ledger
         // row is committed. Treat the existing owned lot as an applied
         // operation instead of surfacing a false rejection.
@@ -532,7 +551,14 @@ export class SyncService {
     } catch (error: any) {
       // Unique operation ids are expected under retries. Return the winner's
       // row so callers remain idempotent instead of turning a retry into 500.
-      if (error?.code === 'P2002') return database.syncOperation.findUnique({ where: { operationId_collectorId: { operationId: op.operationId, collectorId: cid } } });
+      if (error?.code === 'P2002') {
+        const winner = await database.syncOperation.findUnique({ where: { operationId_collectorId: { operationId: op.operationId, collectorId: cid } } });
+        if (!winner) throw error;
+        if (winner.requestHash !== hash || winner.status !== status) {
+          throw new AppError('CONFLICT', 'Sync operation was already processed with a different payload or outcome', 409, { code: 'SYNC_PAYLOAD_MISMATCH' });
+        }
+        return winner;
+      }
       throw error;
     }
   }
@@ -545,29 +571,37 @@ export class SyncService {
     return since ? { AND: [owner, { [field]: { gte: since } }] } : owner;
   }
 
-  async changes(cid: string, since?: Date, role: SyncRole = 'COLLECTOR', cursor?: string) {
+  async changes(cid: string, since?: Date, role: SyncRole = 'COLLECTOR', cursor?: string, paged = false) {
+    const bounded = paged || !!cursor;
+    let hasMore = false;
+    const page = async (query: Promise<any[]>): Promise<any[]> => {
+      const rows = await query;
+      if (!bounded) return rows;
+      if (rows.length > 100) hasMore = true;
+      return rows.slice(0, 100);
+    };
     const isCollector = role === 'COLLECTOR';
     const decoded = cursor ? decodeSyncCursor(cursor) : undefined;
     const position = (key: string) => decoded?.positions[key];
     const [lots, payments, handovers, pickups, inventory, movements, bulkLots, contributions, pools] = await Promise.all([
-      isCollector ? this.db.lot.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('lots'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.payment.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('payments'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.handover.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('handovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.pickupRequest.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('pickups'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.inventoryBalance.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('inventory'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.inventoryMovement.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'createdAt', position('inventoryMovements'), since), orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.bulkLot.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('bulkLots'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.poolContribution.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('poolContributions'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      isCollector ? this.db.pooledConsignment.findMany({ where: this.changeWhere({ createdByCollectorId: cid }, 'updatedAt', position('pools'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : this.db.pooledConsignment.findMany({ where: this.changeWhere({ recyclerId: cid }, 'updatedAt', position('pools'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] })
+      isCollector ? page(this.db.lot.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('lots'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.payment.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('payments'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.handover.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('handovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.pickupRequest.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('pickups'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.inventoryBalance.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('inventory'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.inventoryMovement.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'createdAt', position('inventoryMovements'), since), orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.bulkLot.findMany({ where: this.changeWhere({ kabadiwalaId: cid }, 'updatedAt', position('bulkLots'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.poolContribution.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('poolContributions'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      isCollector ? page(this.db.pooledConsignment.findMany({ where: this.changeWhere({ createdByCollectorId: cid }, 'updatedAt', position('pools'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : page(this.db.pooledConsignment.findMany({ where: this.changeWhere({ recyclerId: cid }, 'updatedAt', position('pools'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined }))
     ]);
     const contributionIds = (contributions as any[]).map((row: any) => row.id);
     const collectorContributionScope = isCollector
-      ? await this.db.poolContribution.findMany({ where: { collectorId: cid }, select: { id: true, handoverId: true } })
+      ? await this.db.poolContribution.findMany({ where: { collectorId: cid }, select: { id: true, collectorId: true, handoverId: true, quantityKg: true, expectedRatePerKg: true, finalAcceptedKg: true, finalPayout: true } })
       : [];
     const handoverIds = [...new Set([...(contributions as any[]).map((row: any) => row.handoverId), ...(collectorContributionScope as any[]).map((row: any) => row.handoverId)].filter(Boolean))];
     const formalHandovers = isCollector
-      ? await this.db.supplyHandover.findMany({ where: this.changeWhere({ OR: [{ collectorId: cid }, ...(handoverIds.length ? [{ id: { in: handoverIds } }] : [])] }, 'updatedAt', position('formalHandovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] })
-      : await this.db.supplyHandover.findMany({ where: this.changeWhere({ recyclerId: cid }, 'updatedAt', position('formalHandovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] });
+      ? await page(this.db.supplyHandover.findMany({ where: this.changeWhere({ OR: [{ collectorId: cid }, ...(handoverIds.length ? [{ id: { in: handoverIds } }] : [])] }, 'updatedAt', position('formalHandovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined }))
+      : await page(this.db.supplyHandover.findMany({ where: this.changeWhere({ recyclerId: cid }, 'updatedAt', position('formalHandovers'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined }));
     const recyclerPoolScope = !isCollector
       ? await this.db.pooledConsignment.findMany({ where: { recyclerId: cid }, select: { id: true } })
       : [];
@@ -577,28 +611,34 @@ export class SyncService {
       : recyclerPoolIds.length ? await this.db.poolContribution.findMany({ where: { poolId: { in: recyclerPoolIds } }, select: { id: true, handoverId: true } }) : [];
     const rawVisibleContributions = isCollector
       ? contributions
-      : recyclerPoolIds.length ? await this.db.poolContribution.findMany({ where: this.changeWhere({ poolId: { in: recyclerPoolIds } }, 'updatedAt', position('poolContributions'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [];
+      : recyclerPoolIds.length ? await page(this.db.poolContribution.findMany({ where: this.changeWhere({ poolId: { in: recyclerPoolIds } }, 'updatedAt', position('poolContributions'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [];
     const visibleContributions = isCollector
       ? rawVisibleContributions
       : (rawVisibleContributions as any[]).map((row: any) => ({ id: row.id, poolId: row.poolId, materialCategory: row.materialCategory, grade: row.grade, quantityKg: row.quantityKg, expectedRatePerKg: row.expectedRatePerKg, expectedPayout: row.expectedPayout, finalAcceptedKg: row.finalAcceptedKg, finalPayout: row.finalPayout, status: row.status, handoverId: row.handoverId, createdAt: row.createdAt, updatedAt: row.updatedAt }));
     const allContributionIds = [...new Set([...(contributionIds as string[]), ...(visibleContributions as any[]).map((row: any) => row.id), ...(contributionScope as any[]).map((row: any) => row.id)])];
     const allHandoverIds = [...new Set([...formalHandovers.map((row: any) => row.id), ...(contributionScope as any[]).map((row: any) => row.handoverId), ...handoverIds].filter(Boolean))];
     const [formalPayments, pickupSettlementPayments, poolSettlements, settlementBreakdowns, formalAnomalies, formalEvents] = await Promise.all([
-      this.db.supplyPayment.findMany({ where: this.changeWhere({ [isCollector ? 'collectorId' : 'recyclerId']: cid }, 'updatedAt', position('formalPayments'), since), include: { reversals: true }, orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }),
-      isCollector ? this.db.pickupSettlementPayment.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('pickupSettlementPayments'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      allContributionIds.length ? this.db.poolSettlement.findMany({ where: this.changeWhere({ contributionId: { in: allContributionIds } }, 'updatedAt', position('poolSettlements'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      allHandoverIds.length ? this.db.settlementBreakdown.findMany({ where: this.changeWhere({ handoverId: { in: allHandoverIds } }, 'updatedAt', position('settlementBreakdowns'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] }) : [],
-      (allHandoverIds.length || allContributionIds.length) ? this.db.anomalyFlag.findMany({ where: this.changeWhere({ OR: [...allHandoverIds.map((id: string) => ({ entityType: 'SUPPLY_HANDOVER', entityId: id })), ...allContributionIds.map((id: string) => ({ entityType: 'POOL_CONTRIBUTION', entityId: id }))] }, 'createdAt', position('formalAnomalies'), since), orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }) : [],
-      this.db.materialPassportEvent.findMany({ where: this.changeWhere({ OR: [{ actorId: cid }, ...allHandoverIds.map((id: string) => ({ entityType: 'SUPPLY_HANDOVER', entityId: id })), ...allContributionIds.map((id: string) => ({ entityType: 'POOL_CONTRIBUTION', entityId: id }))] }, 'occurredAt', position('formalEvents'), since), orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] })
+      page(this.db.supplyPayment.findMany({ where: this.changeWhere({ [isCollector ? 'collectorId' : 'recyclerId']: cid }, 'updatedAt', position('formalPayments'), since), include: { reversals: true }, orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })),
+      isCollector ? page(this.db.pickupSettlementPayment.findMany({ where: this.changeWhere({ collectorId: cid }, 'updatedAt', position('pickupSettlementPayments'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      allContributionIds.length ? page(this.db.poolSettlement.findMany({ where: this.changeWhere({ contributionId: { in: allContributionIds } }, 'updatedAt', position('poolSettlements'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      allHandoverIds.length ? page(this.db.settlementBreakdown.findMany({ where: this.changeWhere({ handoverId: { in: allHandoverIds } }, 'updatedAt', position('settlementBreakdowns'), since), orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      (allHandoverIds.length || allContributionIds.length) ? page(this.db.anomalyFlag.findMany({ where: this.changeWhere({ OR: [...allHandoverIds.map((id: string) => ({ entityType: 'SUPPLY_HANDOVER', entityId: id })), ...allContributionIds.map((id: string) => ({ entityType: 'POOL_CONTRIBUTION', entityId: id }))] }, 'createdAt', position('formalAnomalies'), since), orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined })) : [],
+      page(this.db.materialPassportEvent.findMany({ where: this.changeWhere({ OR: [{ actorId: cid }, ...allHandoverIds.map((id: string) => ({ entityType: 'SUPPLY_HANDOVER', entityId: id })), ...allContributionIds.map((id: string) => ({ entityType: 'POOL_CONTRIBUTION', entityId: id }))] }, 'occurredAt', position('formalEvents'), since), orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] , take: bounded ? 101 : undefined }))
     ]);
+    const ownContributionByHandover = new Map(collectorContributionScope.map((row: any) => [row.handoverId, row]));
+    // Privacy scope cannot depend on this delta page: a shared handover may
+    // be unchanged while a later settlement or passport event has changed.
+    const ownedShared = isCollector && handoverIds.length ? await this.db.supplyHandover.findMany({ where: { id: { in: handoverIds }, collectorId: cid }, select: { id: true, collectorId: true } }) : [];
+    const ownedIds = new Set(ownedShared.filter((row: any) => row.collectorId === cid).map((row: any) => row.id));
+    const privatePooledIds = new Set(isCollector ? handoverIds.filter(id => !ownedIds.has(id)) : []);
     const visibleFormalHandovers = isCollector
-      ? formalHandovers
+      ? formalHandovers.map((row: any) => row.poolId ? poolHandoverForCollector(row, cid, ownContributionByHandover.get(row.id) ?? null) : row)
       : (formalHandovers as any[]).map(({ collectorId: _collectorId, sourceListingIds: _sourceListingIds, ...row }) => row);
     const visibleFormalPayments = isCollector
       ? formalPayments
       : (formalPayments as any[]).map(({ collectorId: _collectorId, contributionId: _contributionId, ...row }) => row);
     const visibleFormalEvents = isCollector
-      ? formalEvents
+      ? formalEvents.filter((row: any) => !privatePooledIds.has(row.entityId) || row.actorId === cid).map((row: any) => privatePooledIds.has(row.entityId) ? { ...row, metadata: null } : row)
       : (formalEvents as any[]).map(({ actorId: _actorId, ...row }) => row);
     const nextPositions = { ...(decoded?.positions ?? {}) };
     const advance = (key: string, rows: any[], field: string) => {
@@ -610,6 +650,6 @@ export class SyncService {
       }
     };
     advance('lots', lots as any[], 'updatedAt'); advance('payments', payments as any[], 'updatedAt'); advance('handovers', handovers as any[], 'updatedAt'); advance('pickups', pickups as any[], 'updatedAt'); advance('inventory', inventory as any[], 'updatedAt'); advance('inventoryMovements', movements as any[], 'createdAt'); advance('bulkLots', bulkLots as any[], 'updatedAt'); advance('poolContributions', visibleContributions as any[], 'updatedAt'); advance('pools', pools as any[], 'updatedAt'); advance('formalHandovers', formalHandovers as any[], 'updatedAt'); advance('formalPayments', formalPayments as any[], 'updatedAt'); advance('pickupSettlementPayments', pickupSettlementPayments as any[], 'updatedAt'); advance('poolSettlements', poolSettlements as any[], 'updatedAt'); advance('settlementBreakdowns', settlementBreakdowns as any[], 'updatedAt'); advance('formalAnomalies', formalAnomalies as any[], 'createdAt'); advance('formalEvents', formalEvents as any[], 'occurredAt');
-    return { serverTime: new Date().toISOString(), nextCursor: encodeSyncCursor(nextPositions), changes: { lots, payments, handovers, pickups, inventory, inventoryMovements: movements, bulkLots, poolContributions: visibleContributions, pools, formalHandovers: visibleFormalHandovers, formalPayments: visibleFormalPayments, pickupSettlementPayments, poolSettlements, settlementBreakdowns, formalAnomalies, formalEvents: visibleFormalEvents } };
+    return { serverTime: new Date().toISOString(), nextCursor: encodeSyncCursor(nextPositions), hasMore, changes: { lots, payments, handovers, pickups, inventory, inventoryMovements: movements, bulkLots, poolContributions: visibleContributions, pools, formalHandovers: visibleFormalHandovers, formalPayments: visibleFormalPayments, pickupSettlementPayments, poolSettlements, settlementBreakdowns: settlementBreakdowns.filter((row: any) => !privatePooledIds.has(row.handoverId)), formalAnomalies: formalAnomalies.filter((row: any) => !privatePooledIds.has(row.entityId)), formalEvents: visibleFormalEvents } };
   }
 }

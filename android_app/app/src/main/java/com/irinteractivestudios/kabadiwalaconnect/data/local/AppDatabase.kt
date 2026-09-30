@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [SyncQueueItemEntity::class, CollectorProfileEntity::class, LotEntity::class, PriceEntity::class, RecyclerEntity::class, QuoteEntity::class, HandoverEntity::class, PaymentEntity::class, DisputeEntity::class, SchemeCacheEntity::class, ActivityCacheEntity::class, ConversationCacheEntity::class, MessageCacheEntity::class, NotificationCacheEntity::class, PendingPhotoUploadEntity::class, HouseholdListingCacheEntity::class, SupplySnapshotEntity::class],
-    version = 29,
+    version = 30,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DB_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30)
                     .build().also { instance = it }
             }
 
@@ -250,6 +250,16 @@ abstract class AppDatabase : RoomDatabase() {
                 }
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_queue_accountId_nextAttemptAtEpochMs ON sync_queue(accountId, nextAttemptAtEpochMs)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_queue_accountId_operation_idempotencyKey ON sync_queue(accountId, operation, idempotencyKey)")
+            }
+        }
+
+        val MIGRATION_29_30 = object : androidx.room.migration.Migration(29, 30) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE future_conversations ADD COLUMN type TEXT NOT NULL DEFAULT 'TRADE'")
+                db.execSQL("ALTER TABLE future_conversations ADD COLUMN pickupRequestId TEXT")
+                db.execSQL("ALTER TABLE future_conversations ADD COLUMN unreadCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_future_conversations_collectorId ON future_conversations(collectorId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_future_conversations_recyclerId ON future_conversations(recyclerId)")
             }
         }
 

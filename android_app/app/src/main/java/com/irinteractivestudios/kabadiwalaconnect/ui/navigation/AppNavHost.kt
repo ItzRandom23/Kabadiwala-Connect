@@ -42,6 +42,10 @@ import androidx.navigation.compose.composable
 import com.irinteractivestudios.kabadiwalaconnect.di.KcViewModelFactory
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.BuildConfig
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.isRetryableTransportFailure
+import com.irinteractivestudios.kabadiwalaconnect.util.userFacingError
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
+import kotlinx.coroutines.CancellationException
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsScreen
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.earnings.EarningsViewModel
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.home.HomeScreen
@@ -825,13 +829,21 @@ fun AppNavHost(
             val handover by factory.handoverRepository.observe(id).collectAsStateWithLifecycle(initialValue = null)
             val disputes by factory.disputeRepository.observeForHandover(id).collectAsStateWithLifecycle(initialValue = emptyList())
             val scope = rememberCoroutineScope()
+            var disputePending by remember(id, featureAccount) { mutableStateOf(false) }
+            var disputeError by remember(id, featureAccount) { mutableStateOf<String?>(null) }
+            val disputeClientId = rememberSaveable(id, featureAccount) { "DSP-${java.util.UUID.randomUUID()}" }
             handover?.let { item ->
-                DisputeCenterScreen(item, disputes) { type, description ->
+                DisputeCenterScreen(item, disputes, pending = disputePending, error = disputeError) { type, description ->
+                    if (disputePending) return@DisputeCenterScreen
+                    val owner = factory.currentAccount?.profileId ?: return@DisputeCenterScreen
+                    disputePending = true
+                    disputeError = null
                     scope.launch {
-                        val localId = "DSP-${System.currentTimeMillis()}-${java.util.UUID.randomUUID().toString().take(6).uppercase()}"
+                        try {
+                        if (factory.currentAccount?.profileId != owner) return@launch
+                        val localId = disputeClientId
                         val local = Dispute(localId, item.id, item.lotId, item.collectorId, item.recyclerId, type, description, item.weightKg, item.actualWeightKg, DisputeStatus.SAVED_LOCALLY, System.currentTimeMillis(), false, null)
-                        factory.disputeRepository.save(local)
-                        runCatching {
+                        try {
                             val body = JsonObject().apply {
                                 addProperty("clientDisputeId", localId)
                                 addProperty("type", type.name)
@@ -839,8 +851,14 @@ fun AppNavHost(
                                 addProperty("claimedWeight", item.weightKg)
                                 item.actualWeightKg?.let { addProperty("actualValue", it) }
                             }
-                            factory.apiService.disputeHandover(id, body).requireData().id.let { remoteId -> factory.disputeRepository.markSynced(localId, remoteId) }
-                        }.onFailure {
+                            val remoteId = factory.apiService.disputeHandover(id, body).requireData().id
+                            if (factory.currentAccount?.profileId != owner) return@launch
+                            factory.disputeRepository.save(local)
+                            factory.disputeRepository.markSynced(localId, remoteId)
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (failure: Exception) {
+                            if (factory.currentAccount?.profileId != owner) return@launch
+                            if (!failure.isRetryableTransportFailure()) throw failure
                             val payload = JsonObject().apply {
                                 addProperty("id", localId)
                                 addProperty("handoverId", id)
@@ -849,10 +867,18 @@ fun AppNavHost(
                                 addProperty("claimedWeight", item.weightKg)
                                 item.actualWeightKg?.let { addProperty("actualValue", it) }
                             }
-                            factory.syncQueue.enqueue(com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity(operation = "CREATE_DISPUTE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = factory.currentAccount?.profileId))
+                            factory.syncQueue.enqueueOnce(com.irinteractivestudios.kabadiwalaconnect.data.local.SyncQueueItemEntity(operation = "CREATE_DISPUTE", payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner, idempotencyKey = localId))
+                            if (factory.currentAccount?.profileId != owner) return@launch
+                            factory.disputeRepository.save(local)
                             factory.requestSync()
                         }
-                        navController.popBackStack()
+                        if (factory.currentAccount?.profileId == owner) navController.popBackStack()
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (failure: Exception) {
+                            if (factory.currentAccount?.profileId == owner) disputeError = userFacingError(failure, "The dispute could not be submitted. Try again.")
+                        } finally {
+                            if (factory.currentAccount?.profileId == owner) disputePending = false
+                        }
                     }
                 }
             }
@@ -1144,6 +1170,8 @@ fun AppNavHost(
                 ChatDetailScreen(
                     conversation = it,
                     messages = state.messages[id].orEmpty(),
+                    refreshError = state.messagesRefreshErrors[id] ?: state.error,
+                    loadingMessages = id in state.messagesLoading,
                     hasOlderMessages = state.messagesNextCursor[id] != null,
                     loadingOlderMessages = id in state.loadingOlderMessages,
                     onLoadOlder = { vm.loadOlderMessages(id) },
@@ -1159,6 +1187,13 @@ fun AppNavHost(
                             { navController.navigate(Destinations.handoverCreate(conversation.lotId, quoteId)) }
                         }
                     )
+                } ?: Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    androidx.compose.material3.Text(stringResource(R.string.future_no_messages_title))
+                    if (state.conversationsLoading) androidx.compose.material3.CircularProgressIndicator()
+                    else {
+                        androidx.compose.material3.Text(state.conversationsRefreshError?.let { localizedUserFacingError(it) } ?: stringResource(R.string.future_no_messages_detail))
+                        androidx.compose.material3.Button(onClick = vm::loadConversations) { androidx.compose.material3.Text(stringResource(R.string.future_retry)) }
+                    }
                 }
             }
         }
@@ -1290,9 +1325,10 @@ fun AppNavHost(
         composable(Destinations.RECYCLER_SCAN) {
             if (demoMode) DemoRecyclerScanScreen()
             else {
-                val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = viewModel(factory = factory)
+                val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset, onReceiptRecorded = {
+                    vm.reset()
                     navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
                         popUpTo(Destinations.RECYCLER_SCAN) { inclusive = true }
                         launchSingleTop = true

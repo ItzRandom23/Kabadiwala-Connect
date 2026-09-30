@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import type { JwtService } from './jwt.js';
@@ -25,15 +25,17 @@ export type EmailAccountInput = {
 };
 
 const normalizedEmail = (value: string) => value.trim().toLowerCase();
-const passwordDigest = (password: string, salt: Buffer) => scryptSync(password, salt, 64).toString('hex');
-const hashPassword = (password: string) => {
+const passwordDigest = (password: string, salt: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
+  scrypt(password, salt, 64, (error, derivedKey) => error ? reject(error) : resolve(derivedKey));
+});
+const hashPassword = async (password: string) => {
   const salt = randomBytes(16);
-  return `${salt.toString('hex')}:${passwordDigest(password, salt)}`;
+  return `${salt.toString('hex')}:${(await passwordDigest(password, salt)).toString('hex')}`;
 };
-const verifyPassword = (password: string, stored: string) => {
+const verifyPassword = async (password: string, stored: string) => {
   const [saltHex, expectedHex] = stored.split(':');
-  if (!saltHex || !expectedHex) return false;
-  const actual = Buffer.from(passwordDigest(password, Buffer.from(saltHex, 'hex')), 'hex');
+  if (!/^[a-f0-9]{32}$/i.test(saltHex ?? '') || !/^[a-f0-9]{128}$/i.test(expectedHex ?? '') || stored.split(':').length !== 2) return false;
+  const actual = await passwordDigest(password, Buffer.from(saltHex, 'hex'));
   const expected = Buffer.from(expectedHex, 'hex');
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 };
@@ -67,6 +69,7 @@ export class EmailAuthService {
     await this.limiter?.check(email, ip, 'signup');
     const existing = await this.db.user.findFirst({ where: { email } });
     if (existing) throw new AppError('CONFLICT', 'An account already exists for this email', 409, { code: 'EMAIL_IN_USE' });
+    const passwordHash = await hashPassword(input.password);
 
     let created: { user: any; profile: any };
     try {
@@ -75,7 +78,7 @@ export class EmailAuthService {
         const profile = await tx.collector.create({
           data: { phone: null, email, preferredLanguage: input.preferredLanguage, areaName: input.areaName?.trim() ?? '', address: input.address?.trim() || null, latitude: input.latitude, longitude: input.longitude }
         });
-        const user = await tx.user.create({ data: { email, passwordHash: hashPassword(input.password), role: input.role, preferredLanguage: input.preferredLanguage, collectorProfileId: profile.id } });
+        const user = await tx.user.create({ data: { email, passwordHash, role: input.role, preferredLanguage: input.preferredLanguage, collectorProfileId: profile.id } });
         return { user, profile };
       }
       const profile = await tx.recycler.create({
@@ -105,7 +108,7 @@ export class EmailAuthService {
       const accepted = [...new Set((input.materialsAccepted ?? []).map(value => value.trim().toUpperCase()).filter(value => ['CRT', 'LCD_PANEL', 'PCB', 'CABLE', 'COPPER', 'BATTERY', 'MOTOR', 'MAGNET', 'PLASTIC', 'OTHER'].includes(value)))];
       if (!accepted.length) throw new AppError('VALIDATION_ERROR', 'At least one supported material is required for recycler registration', 422, { code: 'INVALID_RECYCLER_MATERIALS' });
       for (const category of accepted) await tx.recyclerMaterial.create({ data: { recyclerId: profile.id, category: category as any, subcategories: [], acceptedGrades: ['UNSPECIFIED'], minAcceptableWeight: 0.1, maxAcceptableWeight: 500 } });
-      const user = await tx.user.create({ data: { email, passwordHash: hashPassword(input.password), role: input.role, preferredLanguage: input.preferredLanguage, recyclerProfileId: profile.id } });
+      const user = await tx.user.create({ data: { email, passwordHash, role: input.role, preferredLanguage: input.preferredLanguage, recyclerProfileId: profile.id } });
       return { user, profile };
       });
     } catch (error) {
@@ -126,7 +129,7 @@ export class EmailAuthService {
     const email = normalizedEmail(emailInput);
     await this.limiter?.check(email, ip, 'login');
     const user = await this.db.user.findFirst({ where: { email } });
-    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) { await this.audit('EMAIL_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent); throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' }); }
+    if (!user || !user.passwordHash || !await verifyPassword(password, user.passwordHash)) { await this.audit('EMAIL_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent); throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' }); }
     if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
     if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
     const profile = user.role === 'RECYCLER'
@@ -141,7 +144,7 @@ export class EmailAuthService {
     const email = normalizedEmail(emailInput);
     await this.limiter?.check(email, ip, 'login');
     const admin = await this.db.adminAccount.findUnique({ where: { email } });
-    if (!admin || !admin.passwordHash || !verifyPassword(password, admin.passwordHash)) {
+    if (!admin || !admin.passwordHash || !await verifyPassword(password, admin.passwordHash)) {
       await this.audit('ADMIN_LOGIN', 'INVALID_CREDENTIALS', ip, userAgent);
       throw new AppError('AUTHENTICATION_ERROR', 'Email or password is incorrect', 401, { code: 'INVALID_CREDENTIALS' });
     }

@@ -1,8 +1,8 @@
 {
-  "versionCode": 73,
-  "versionName": "0.1.9-beta",
-  "apkUrl": "kabadiwala-connect-0.1.9-beta-debug.apk",
-  "sha256": "F6C1DE5CF7BA52FDAA91EFC650C323C82089E535E0A71AB8F514EB0FA5455722",
-  "sizeBytes": 31686528,
-  "releaseNotes": "Expanded localized app copy across 20 supported Indian languages and improved language resource coverage."
+  "versionCode": 75,
+  "versionName": "0.1.11-beta",
+  "apkUrl": "kabadiwala-connect-0.1.11-beta-debug.apk",
+  "sha256": "7B12F1775E515D72D844C7C268129472832A9C02FA103C2304719FE5A42B7140",
+  "sizeBytes": 31835261,
+  "releaseNotes": "Improved account isolation, offline reliability, chat and screen refreshes, QR verification, and transaction handling."
 }

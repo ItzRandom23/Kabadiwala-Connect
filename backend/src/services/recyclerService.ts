@@ -491,7 +491,7 @@ export class RecyclerService {
     reason?: string,
     details?: { verificationSource?: string; validUntil?: Date }
   ) {
-    return this.db.$transaction(async transaction => {
+    await withTransactionRetry(() => this.db.$transaction(async transaction => {
       const previous = await transaction.recycler.findUnique({ where: { id } });
       if (!previous) {
         throw new AppError('NOT_FOUND', 'Recycler not found', 404, { code: 'RECYCLER_NOT_FOUND' });
@@ -501,7 +501,7 @@ export class RecyclerService {
         throw new AppError('VALIDATION_ERROR', 'Submitted authorization evidence and a verification method are required', 422, { code: 'VERIFICATION_EVIDENCE_REQUIRED' });
       }
       if (status === 'REJECTED' && !reason?.trim()) throw new AppError('VALIDATION_ERROR', 'A rejection reason is required', 422);
-      const recycler = await transaction.recycler.update({
+      await transaction.recycler.update({
         where: { id },
         data: {
           authorizationStatus: status,
@@ -510,7 +510,7 @@ export class RecyclerService {
           ...(status === 'VERIFIED' ? { verifiedAt: new Date(), verifiedBy: actorId } : {}),
           ...(status !== 'VERIFIED' ? { verifiedAt: null, verifiedBy: null } : {})
         },
-        include: this.include
+        select: { id: true }
       });
       await transaction.recyclerAuthorizationAudit.create({
         data: {
@@ -521,7 +521,10 @@ export class RecyclerService {
           reason
         }
       });
-      return this.ownerView(recycler);
-    });
+    }));
+    // Material/rate/history joins are presentation reads. Keep them outside
+    // the authorization+audit transaction so remote DB latency does not hold
+    // the security-sensitive write lock while constructing the response.
+    return this.selfProfile(id);
   }
 }

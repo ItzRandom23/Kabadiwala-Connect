@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s சரிபார்க்கப்பட்டது</string>
 
     <string name="ui_new_messages_below">கீழே உள்ள புதிய செய்திகள்: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">இறுதித் தொகை · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">இறுதித் தொகை · %1$s</string>
+    <string name="pickup_final_amount_unavailable">இறுதித் தொகை · கிடைக்கவில்லை. புதுப்பிக்கவும்</string>
+    <string name="pickup_view_scrap_photo">ஸ்கிராப் புகைப்படங்களைக் காண்க</string>
+    <string name="pickup_hide_scrap_photo">Close</string>
+    <string name="nearby_area_resolution_failed">நம்பகமான இடத்தைப் பெற முடியவில்லை. அதற்கு பதிலாக உங்கள் பகுதியை தட்டச்சு செய்யவும். எனது இருப்பிடத்தைப் பயன்படுத்தவும்</string>
+    <string name="nearby_apply_radius_hint">தேடல் பகுதி · எனது இருப்பிடத்தைப் பயன்படுத்தவும் · ஆரம்</string>
 </resources>

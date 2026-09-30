@@ -1,6 +1,7 @@
 // Prisma's generated client is CommonJS. Import its default namespace so this
 // continues to work when this backend is executed as native ESM on Node 22.
 import prismaPackage from '@prisma/client';
+import { transactionOptions } from './transactionPolicy.js';
 
 const { PrismaClient } = prismaPackage;
-export const prisma = new PrismaClient();
+export const prisma = new PrismaClient({ transactionOptions });

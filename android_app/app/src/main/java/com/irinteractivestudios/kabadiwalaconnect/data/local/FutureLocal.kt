@@ -40,7 +40,7 @@ data class ActivityCacheEntity(
     val cachedAtEpochMs: Long
 )
 
-@Entity(tableName = "future_conversations")
+@Entity(tableName = "future_conversations", indices = [Index("collectorId"), Index("recyclerId")])
 data class ConversationCacheEntity(
     @androidx.room.PrimaryKey val id: String,
     val lotId: String,
@@ -48,7 +48,10 @@ data class ConversationCacheEntity(
     val collectorId: String,
     val recyclerId: String,
     val status: String,
-    val lastMessageAt: String?
+    val lastMessageAt: String?,
+    @androidx.room.ColumnInfo(defaultValue = "'TRADE'") val type: String = "TRADE",
+    val pickupRequestId: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val unreadCount: Int = 0
 )
 
 @Entity(tableName = "future_messages", primaryKeys = ["id"])
@@ -97,6 +100,8 @@ interface FutureCacheDao {
 
     @Query("SELECT * FROM future_conversations ORDER BY lastMessageAt DESC")
     suspend fun conversations(): List<ConversationCacheEntity>
+    @Query("SELECT * FROM future_conversations WHERE collectorId = :accountId OR recyclerId = :accountId ORDER BY lastMessageAt DESC")
+    suspend fun conversationsForAccount(accountId: String): List<ConversationCacheEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveConversations(items: List<ConversationCacheEntity>)
     @Query("DELETE FROM future_conversations WHERE status != 'OPEN' AND id NOT IN (SELECT id FROM future_conversations WHERE status != 'OPEN' ORDER BY lastMessageAt DESC, id DESC LIMIT 500)")
@@ -159,10 +164,10 @@ class FutureCacheStore(private val dao: FutureCacheDao) {
     suspend fun saveSchemes(items: List<GovernmentSchemeDto>) { dao.clearSchemes(); dao.saveSchemes(items.map { SchemeCacheEntity(it.id, it.slug, it.title, it.description, it.requiredDocuments.joinToString("\u001f"), it.sourceUrl, it.lastVerifiedAt.orEmpty(), System.currentTimeMillis()) }) }
     suspend fun activities(): List<DiyActivityDto> = dao.activities().map { DiyActivityDto(it.id, it.slug, it.title, it.description, it.materialsCsv.csv(), it.stepsCsv.csv(), it.warningsCsv.csv(), it.difficulty, it.minutes) }
     suspend fun saveActivities(items: List<DiyActivityDto>) { dao.clearActivities(); dao.saveActivities(items.map { ActivityCacheEntity(it.id, it.slug, it.title, it.description, it.materials.joinToString("\u001f"), it.steps.joinToString("\u001f"), it.safetyWarnings.joinToString("\u001f"), it.difficulty, it.minutes, System.currentTimeMillis()) }) }
-    suspend fun conversations(accountId: String? = null): List<ConversationDto> = accountId?.takeIf { it.isNotBlank() }?.let { active -> dao.conversations().filter { it.collectorId == active || it.recyclerId == active } }
+    suspend fun conversations(accountId: String? = null): List<ConversationDto> = accountId?.takeIf { it.isNotBlank() }?.let { active -> dao.conversationsForAccount(active) }
         .orEmpty()
-        .map { ConversationDto(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }
-    suspend fun saveConversations(items: List<ConversationDto>) { dao.saveConversationsBounded(items.map { ConversationCacheEntity(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt) }) }
+        .map { ConversationDto(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt, it.type, it.pickupRequestId, it.unreadCount) }
+    suspend fun saveConversations(items: List<ConversationDto>) { dao.saveConversationsBounded(items.map { ConversationCacheEntity(it.id, it.lotId, it.quoteId, it.collectorId, it.recyclerId, it.status, it.lastMessageAt, it.type, it.pickupRequestId, it.unreadCount) }) }
     suspend fun messages(conversationId: String, accountId: String? = null): List<ChatMessageDto> = (accountId?.takeIf { it.isNotBlank() }?.let { dao.messagesForAccount(conversationId, it) } ?: emptyList()).map { ChatMessageDto(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }
     suspend fun saveMessages(items: List<ChatMessageDto>) { dao.saveMessagesBounded(items.map { MessageCacheEntity(it.id, it.conversationId, it.senderId, it.senderRole, it.clientMessageId, it.body, it.status, it.createdAt, it.readAt) }) }
     suspend fun deleteMessage(id: String) { dao.deleteMessage(id) }

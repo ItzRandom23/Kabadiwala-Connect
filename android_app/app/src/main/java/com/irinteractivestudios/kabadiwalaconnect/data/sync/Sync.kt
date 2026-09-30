@@ -126,6 +126,16 @@ class SyncWorker(
         // rows owned by the currently authenticated account; legacy rows with
         // no owner remain visible as unresolved instead of crossing accounts.
         val eligibleOperations = syncOperationsForRole(currentRole)
+        if (currentRole == AccountRole.COLLECTOR) {
+            // A competitive acceptance must be confirmed while online. Keep
+            // legacy queued attempts visible without replaying a stale choice.
+            (queue.findByOperationForAccount(accountId, "ACCEPT_QUOTE") +
+                queue.findByOperationForAccount(accountId, "MARK_HANDOVER") +
+                queue.findByOperationForAccount(accountId, "UPDATE_HANDOVER_EVIDENCE").filter { item ->
+                    runCatching { JsonParser.parseString(item.payloadJson).asJsonObject.get("collectorConfirmed")?.asBoolean }.getOrDefault(false) == true
+                }).filter { it.lastErrorCode != "ONLINE_CONFIRMATION_REQUIRED" }
+                .forEach { queue.markFailed(it.uid, accountId, "ONLINE_CONFIRMATION_REQUIRED", Long.MAX_VALUE) }
+        }
         if (currentRole == AccountRole.RECYCLER) {
             // Earlier builds queued inventory-changing receipt confirmations.
             // Preserve their rows for inspection, but require a fresh online
@@ -381,10 +391,6 @@ class SyncWorker(
                     api.requestQuote(QuoteRequestDto(payload.string("lotId"), payload.string("recyclerId"))).requireData()
                     app.container.database.quoteDao().deleteForAccount(payload.string("id"), accountId)
                 }
-                "ACCEPT_QUOTE" -> {
-                    val quote = api.acceptQuote(payload.string("id")).requireData()
-                    app.container.database.quoteDao().updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, accountId)
-                }
                 "REJECT_QUOTE" -> {
                     val quote = api.rejectQuote(payload.string("id")).requireData()
                     app.container.database.quoteDao().updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, accountId)
@@ -400,12 +406,6 @@ class SyncWorker(
                         handoverLocation = HandoverLocationDto(payload.string("locationType"), address = payload.string("location")),
                         timestamp = payload.long("timestampEpochMs").toIsoTimestamp()
                     )).requireData()
-                    app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
-                }
-                "MARK_HANDOVER" -> {
-                    val id = payload.string("id")
-                    val fallback = app.container.database.handoverDao().getForAccount(id, accountId)?.toDomain() ?: return QueueResult.REJECTED
-                    val dto = api.markHandover(id).requireData()
                     app.container.database.handoverDao().insert(dto.toDomain(fallback).toEntity())
                 }
                 "UPDATE_HANDOVER_EVIDENCE" -> {
@@ -460,9 +460,13 @@ class SyncWorker(
         }
     }
 
-    private suspend fun findHouseholdListing(api: ApiService, listingId: String) = runCatching {
+    private suspend fun findHouseholdListing(api: ApiService, listingId: String) = try {
         api.getHouseholdListing(listingId).requireData()
-    }.getOrNull()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
 
     private fun clearQueuedIdempotencyKey(app: KabadiwalaApp, item: SyncQueueItemEntity) {
         val payload = runCatching { JsonParser.parseString(item.payloadJson).asJsonObject }.getOrNull() ?: return
@@ -470,17 +474,19 @@ class SyncWorker(
         IdempotencyKeyStore(app.applicationContext) { item.accountId }.clear(operation)
     }
 
-    private suspend fun alreadyApplied(api: ApiService, item: SyncQueueItemEntity, payload: JsonObject): Boolean = runCatching {
+    private suspend fun alreadyApplied(api: ApiService, item: SyncQueueItemEntity, payload: JsonObject): Boolean = try {
         when (item.operation) {
-            "ACCEPT_QUOTE" -> api.getQuote(payload.string("id")).requireData().status == "ACCEPTED"
             "REJECT_QUOTE" -> api.getQuote(payload.string("id")).requireData().status == "REJECTED"
-            "MARK_HANDOVER" -> api.getHandover(payload.string("id")).requireData().collectorConfirmedAt != null
             "UPDATE_HANDOVER_EVIDENCE" -> api.getHandover(payload.string("id")).requireData().actualWeight == payload.double("actualWeight")
             "CANCEL_LOT" -> api.getLot(payload.string("id")).requireData().status == "CANCELLED"
             "REQUEST_HOUSEHOLD_PICKUP" -> api.getHouseholdListing(payload.string("listingId")).requireData().pickups.any { (payload.get("kabadiwalaId")?.asString == null || it.kabadiwalaId == payload.get("kabadiwalaId")?.asString) && it.status !in setOf("CANCELLED", "REASSIGNMENT_REQUIRED") }
             else -> false
         }
-    }.getOrDefault(false)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        false
+    }
 
     private fun com.irinteractivestudios.kabadiwalaconnect.data.remote.HouseholdListingDto.hasAttachedPhotos(): Boolean =
         photoAttached == true || (photoCount ?: 0) > 0 || photoReferences.isNotEmpty() || !photoReference.isNullOrBlank()
@@ -507,6 +513,8 @@ class SyncWorker(
                 response.code() == 408 || response.code() == 429 || response.code() >= 500 -> PhotoUploadResult.RETRY
                 else -> PhotoUploadResult.PERMANENT_FAILURE
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             if (error.isRetryableTransportFailure()) PhotoUploadResult.RETRY else PhotoUploadResult.PERMANENT_FAILURE
         }
@@ -536,8 +544,8 @@ class SyncWorker(
 internal fun syncOperationsForRole(role: AccountRole?): Set<String> {
     val notificationOperations = setOf("MARK_NOTIFICATION_READ", "MARK_ALL_NOTIFICATIONS_READ")
     return when (role) {
-        AccountRole.HOUSEHOLD -> notificationOperations + setOf("CREATE_HOUSEHOLD_LISTING", "REQUEST_HOUSEHOLD_PICKUP")
-        AccountRole.COLLECTOR -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CREATE_LOT", "UPDATE_LOT", "RECORD_PAYMENT", "REQUEST_QUOTE", "ACCEPT_QUOTE", "REJECT_QUOTE", "CANCEL_LOT", "CREATE_HANDOVER", "MARK_HANDOVER", "UPDATE_HANDOVER_EVIDENCE", "CREATE_DISPUTE")
+        AccountRole.HOUSEHOLD -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CREATE_HOUSEHOLD_LISTING", "REQUEST_HOUSEHOLD_PICKUP")
+        AccountRole.COLLECTOR -> notificationOperations + setOf("SEND_CHAT_MESSAGE", "CREATE_LOT", "UPDATE_LOT", "RECORD_PAYMENT", "REQUEST_QUOTE", "REJECT_QUOTE", "CANCEL_LOT", "CREATE_HANDOVER", "UPDATE_HANDOVER_EVIDENCE", "CREATE_DISPUTE")
         AccountRole.RECYCLER -> notificationOperations + setOf("SEND_CHAT_MESSAGE")
         else -> emptySet()
     }

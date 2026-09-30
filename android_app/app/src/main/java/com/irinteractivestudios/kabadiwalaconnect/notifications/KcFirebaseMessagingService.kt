@@ -26,6 +26,7 @@ class KcFirebaseMessagingService : FirebaseMessagingService() {
         val container = (application as? KabadiwalaApp)?.container ?: return
         val recipient = message.data["recipientAccountId"]?.takeIf { it.isNotBlank() } ?: return
         if (!mayDisplayPush(recipient, container.currentAccount()?.profileId, container.hasValidSession())) return
+        if (!pushTypeMatchesRole(message.data["type"], container.currentAccount()?.role)) return
         PushRefreshEvents.publish(PushRefreshEvent(recipient, message.data["type"], message.data["route"]))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

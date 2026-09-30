@@ -17,6 +17,31 @@ function householdApp(db: any) {
 }
 
 describe('household Kabadiwala directory', () => {
+  it('enforces the radius even for matching city labels and excludes profiles without a measurable distance', async () => {
+    const profiles = [
+      { id: 'within', areaName: 'Delhi', latitude: 4.9 / 111.195, longitude: 0 },
+      { id: 'just-outside', areaName: 'Delhi', latitude: 5.1 / 111.195, longitude: 0 },
+      { id: 'twenty-km', areaName: 'Delhi', latitude: 20 / 111.195, longitude: 0 },
+      { id: 'no-gps', areaName: 'Delhi', latitude: null, longitude: null }
+    ];
+    const db = {
+      user: { findFirst: vi.fn().mockResolvedValue({ role: 'HOUSEHOLD', accountStatus: 'ACTIVE' }), findMany: vi.fn().mockResolvedValue(profiles.map(p => ({ collectorProfileId: p.id }))) },
+      collector: { findMany: vi.fn().mockResolvedValue(profiles) },
+      pickupRequest: { findMany: vi.fn().mockResolvedValue([]) }
+    } as any;
+    const { app, token } = householdApp(db);
+    const search = (radius: number) => request(app).get(`/api/v1/household/kabadiwalas?latitude=0&longitude=0&area=Delhi&radiusKm=${radius}`).set('Authorization', `Bearer ${token}`);
+    const narrow = await search(5);
+    expect(narrow.status).toBe(200);
+    expect(narrow.body.data.items.map((p: any) => p.id)).toEqual(['within']);
+    const wide = await search(25);
+    expect(wide.status).toBe(200);
+    expect(wide.body.data.items.map((p: any) => p.id)).toEqual(['within', 'just-outside', 'twenty-km']);
+    const areaOnly = await request(app).get('/api/v1/household/kabadiwalas?area=Delhi').set('Authorization', `Bearer ${token}`);
+    expect(areaOnly.status).toBe(200);
+    expect(areaOnly.body.data.items.map((p: any) => p.id)).toContain('no-gps');
+    expect(areaOnly.body.data.locationFilter.radiusKm).toBeNull();
+  });
   it('returns paginated rounded distance and public aggregates without exact coordinates', async () => {
     const findManyProfiles = vi.fn().mockResolvedValue([
       { id: 'collector-near', displayName: 'Asha', areaName: 'Kothrud, Pune', latitude: 0.01, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: null },

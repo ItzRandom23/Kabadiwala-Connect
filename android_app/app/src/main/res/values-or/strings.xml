@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s ·%2$s ଯାଞ୍ଚ ହୋଇଥିବା</string>
 
     <string name="ui_new_messages_below">ନିମ୍ନରେ ନୂତନ ସନ୍ଦେଶ: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">ଅନ୍ତିମ ପରିମାଣ · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">ଅନ୍ତିମ ପରିମାଣ · %1$s</string>
+    <string name="pickup_final_amount_unavailable">ଅନ୍ତିମ ପରିମାଣ · ଉପଲବ୍ଧ ନାହିଁ |. ସତେଜ କରନ୍ତୁ |</string>
+    <string name="pickup_view_scrap_photo">ସ୍କ୍ରାପ୍ ଫଟୋ ଦେଖନ୍ତୁ</string>
+    <string name="pickup_hide_scrap_photo">Close</string>
+    <string name="nearby_area_resolution_failed">ଆମେ ଏକ ନିର୍ଭରଯୋଗ୍ୟ ସ୍ଥାନ ପାଇପାରୁ ନାହିଁ | ଦୟାକରି ଏହା ବଦଳରେ ଆପଣଙ୍କର କ୍ଷେତ୍ର ଟାଇପ୍ କରନ୍ତୁ | ମୋ ଅବସ୍ଥାନ ବ୍ୟବହାର କରନ୍ତୁ |</string>
+    <string name="nearby_apply_radius_hint">ସନ୍ଧାନ କ୍ଷେତ୍ର · ମୋ ଅବସ୍ଥାନ ବ୍ୟବହାର କରନ୍ତୁ | · ରେଡିଓ</string>
 </resources>

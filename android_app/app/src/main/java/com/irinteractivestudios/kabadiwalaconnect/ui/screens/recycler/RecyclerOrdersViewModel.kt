@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -129,47 +130,60 @@ class RecyclerScanViewModel(
     private val api: ApiService,
     private val cache: FormalisationCacheStore? = null,
     private val accountIdProvider: () -> String? = { null },
-    private val idempotencyKeys: IdempotencyKeyStore? = null
+    private val idempotencyKeys: IdempotencyKeyStore? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecyclerScanState())
     val state: StateFlow<RecyclerScanState> = _state.asStateFlow()
     private val verifyGate = SingleFlightGate()
     private val confirmGate = SingleFlightGate()
+    private var verifyJob: Job? = null
+    private var scanGeneration = 0L
 
     fun verify(qrCodeData: String) {
-        if (qrCodeData.isBlank() || !verifyGate.tryEnter()) return
+        if (qrCodeData.isBlank() || _state.value.confirming || !verifyGate.tryEnter()) return
         val owner = accountIdProvider()
+        if (owner.isNullOrBlank()) { verifyGate.exit(); return }
+        val generation = ++scanGeneration
         _state.value = RecyclerScanState(checking = true)
-        viewModelScope.launch {
+        verifyJob = viewModelScope.launch {
+            fun current() = generation == scanGeneration && accountIdProvider() == owner
             try {
                 val value = qrCodeData.trim()
                 if (value.startsWith("kc-supply-handover-v1.")) {
-                    val cachedItems = withContext(Dispatchers.IO) { cache?.load(owner)?.handovers.orEmpty() }
-                    val items = runCatching { api.getSupplyHandovers().requireData() }.getOrElse { cachedItems }
-                    if (accountIdProvider() != owner) return@launch
-                    val match = items.firstOrNull { it.qrCodeData == value }
-                    if (match != null) _state.value = RecyclerScanState(supplyVerified = match, supplyFromCache = items === cachedItems && cachedItems.isNotEmpty())
-                    else _state.value = RecyclerScanState(error = true)
+                    val match = api.verifySupplyHandover(VerifyHandoverRequestDto(value)).requireData()
+                    if (current()) _state.value = RecyclerScanState(supplyVerified = match)
                 } else {
-                    runCatching { api.verifyHandover(VerifyHandoverRequestDto(value)).requireData() }
-                        .onSuccess { result -> if (accountIdProvider() == owner) _state.value = RecyclerScanState(verified = result) }
-                        .onFailure { if (accountIdProvider() == owner) _state.value = RecyclerScanState(error = true) }
+                    val result = api.verifyHandover(VerifyHandoverRequestDto(value)).requireData()
+                    if (current()) _state.value = RecyclerScanState(verified = result)
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (current()) _state.value = RecyclerScanState(error = true)
             } finally {
-                verifyGate.exit()
+                if (generation == scanGeneration) verifyGate.exit()
             }
         }
     }
 
     fun confirm(actualWeight: Double, materialMatch: Boolean, notes: String?) {
-        if (actualWeight <= 0 || !confirmGate.tryEnter()) return
+        if (!actualWeight.isFinite() || actualWeight <= 0 || _state.value.checking ||
+            _state.value.supplyConfirmed != null || _state.value.confirmed || !confirmGate.tryEnter()) return
         val owner = accountIdProvider()
+        if (owner.isNullOrBlank()) { confirmGate.exit(); return }
         val supply = _state.value.supplyVerified
         if (supply != null) {
+            val reviewNotes = notes?.trim()?.takeIf(String::isNotEmpty)
+            if (actualWeight > 100000 || (reviewNotes != null && reviewNotes.length !in 2..120)) {
+                confirmGate.exit()
+                _state.value = _state.value.copy(error = true)
+                return
+            }
             _state.value = _state.value.copy(confirming = true, error = false)
             viewModelScope.launch {
                 try {
-                    val request = SupplyHandoverConfirmRequestDto(supply.qrCodeData.orEmpty(), actualWeightKg = actualWeight, acceptedWeightKg = actualWeight, materialMatch = materialMatch, reasonCode = notes?.trim()?.takeIf(String::isNotEmpty))
+                    val request = SupplyHandoverConfirmRequestDto(supply.qrCodeData.orEmpty(), actualWeightKg = actualWeight, acceptedWeightKg = actualWeight, materialMatch = materialMatch, reasonCode = reviewNotes)
                     val operation = "recycler-handover-${supply.id}"
                     val key = idempotencyKeys?.getOrCreate(operation) ?: operation
                     runCatching { api.confirmSupplyHandover(request, key).requireData() }
@@ -178,17 +192,25 @@ class RecyclerScanViewModel(
                             idempotencyKeys?.clear(operation)
                             _state.value = _state.value.copy(confirming = false, supplyConfirmed = result, supplyVerified = result, supplyQueued = false)
                             ConfirmedHandoverEvents.publish(owner, result)
-                            withContext(Dispatchers.IO) {
+                            withContext(ioDispatcher) {
                                 if (accountIdProvider() == owner) {
                                     val prior = cache?.load(owner) ?: FormalisationSnapshot()
                                     cache?.save(owner, prior.copy(handovers = listOf(result) + prior.handovers.filterNot { it.id == result.id }))
                                 }
                             }
                         }
-                        .onFailure { if (accountIdProvider() == owner) _state.value = _state.value.copy(confirming = false, supplyQueued = false, error = true) }
+                        .onFailure { failure ->
+                            if (failure is CancellationException) throw failure
+                            if (accountIdProvider() == owner) _state.value = _state.value.copy(confirming = false, supplyQueued = false, error = true)
+                        }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // A cache failure must not discard an acknowledged server receipt.
+                    if (accountIdProvider() == owner) _state.value = _state.value.copy(confirming = false, error = true)
                 } finally {
                     confirmGate.exit()
-                    }
+                }
             }
             return
         }
@@ -204,7 +226,8 @@ class RecyclerScanViewModel(
                 }.onSuccess { result ->
                     if (accountIdProvider() != owner) return@onSuccess
                     _state.value = _state.value.copy(confirming = false, confirmed = true, confirmation = result)
-                }.onFailure {
+                }.onFailure { failure ->
+                    if (failure is CancellationException) throw failure
                     if (accountIdProvider() == owner) _state.value = _state.value.copy(confirming = false, error = true)
                 }
             } finally {
@@ -213,5 +236,14 @@ class RecyclerScanViewModel(
         }
     }
 
-    fun reset() { verifyGate.exit(); confirmGate.exit(); _state.value = RecyclerScanState() }
+    fun reset() {
+        // A material receipt may already be committed on the server. Keep its
+        // acknowledgement visible until the request completes.
+        if (_state.value.confirming) return
+        scanGeneration++
+        verifyJob?.cancel()
+        verifyJob = null
+        verifyGate.exit()
+        _state.value = RecyclerScanState()
+    }
 }

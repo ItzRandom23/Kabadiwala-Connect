@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s सत्यापीत केला</string>
 
     <string name="ui_new_messages_below">सकयल दिल्ले नवे संदेश: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">निमाणी रक्कम · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">निमाणी रक्कम · %1$s</string>
+    <string name="pickup_final_amount_unavailable">निमाणी रक्कम · उपलब्ध ना. ताजें करचें</string>
+    <string name="pickup_view_scrap_photo">स्क्रेप फोटो पळयात</string>
+    <string name="pickup_hide_scrap_photo">बंद करचें</string>
+    <string name="nearby_area_resolution_failed">आमकां विस्वासांत घेवपासारकें थळ मेळूंक शकलें ना. उपकार करून ताचे बदला तुमचो वाठार टाइप करचो. म्हजें स्थान वापरात</string>
+    <string name="nearby_apply_radius_hint">सोद क्षेत्र · म्हजें स्थान वापरात · त्रिज्या</string>
 </resources>

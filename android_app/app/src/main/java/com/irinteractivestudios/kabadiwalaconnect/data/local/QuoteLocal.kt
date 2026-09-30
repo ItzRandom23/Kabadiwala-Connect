@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
 
 @Entity(tableName = "quotes")
 data class QuoteEntity(@PrimaryKey val id: String, val recyclerId: String, val lotId: String, val amountRupees: Double, val recyclerName: String, val pricePerKg: Double, val marketRatePerKg: Double, val distanceKm: Double, val pickupAvailable: Boolean, val createdAtEpochMs: Long, val expiresAtEpochMs: Long, val status: String, val deliveryState: String)
@@ -21,6 +22,12 @@ data class QuoteEntity(@PrimaryKey val id: String, val recyclerId: String, val l
     @Query("SELECT * FROM quotes WHERE lotId = :lotId ORDER BY pricePerKg DESC") fun observeForLot(lotId: String): Flow<List<QuoteEntity>>
     @Query("SELECT q.* FROM quotes q INNER JOIN lots l ON q.lotId = l.id WHERE q.lotId = :lotId AND (l.collectorId = :accountId OR q.recyclerId = :accountId) ORDER BY q.pricePerKg DESC") fun observeForLotForAccount(lotId: String, accountId: String): Flow<List<QuoteEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(items: List<QuoteEntity>)
+    @Query("UPDATE quotes SET status = 'EXPIRED' WHERE lotId = :lotId AND status IN ('PENDING', 'SENT') AND id NOT LIKE 'QRQ-%' AND id NOT IN (:ids) AND EXISTS (SELECT 1 FROM lots WHERE lots.id = quotes.lotId AND lots.collectorId = :owner)")
+    suspend fun expireMissingPending(lotId: String, owner: String, ids: List<String>)
+    @Transaction suspend fun reconcilePending(lotId: String, owner: String, items: List<QuoteEntity>) {
+        expireMissingPending(lotId, owner, items.map { it.id })
+        insertAll(items)
+    }
     @Query("UPDATE quotes SET status = :status WHERE id = :id") suspend fun updateStatus(id: String, status: String): Int
     @Query("UPDATE quotes SET status = :status WHERE id = :id AND EXISTS (SELECT 1 FROM lots WHERE lots.id = quotes.lotId AND (lots.collectorId = :accountId OR quotes.recyclerId = :accountId))") suspend fun updateStatusForAccount(id: String, status: String, accountId: String): Int
     @Query("DELETE FROM quotes WHERE id = :id") suspend fun delete(id: String)
@@ -49,23 +56,34 @@ class RemoteQuoteRepository(
     private val api: ApiService,
     private val queue: SyncQueueDao? = null,
     private val requestSync: () -> Unit = {},
-    private val accountId: () -> String? = { null }
+    private val accountId: () -> String? = { null },
+    private val sessionGenerationProvider: () -> Long = { 0L }
 ) : QuoteRepository {
     override fun observeForLot(lotId: String): Flow<List<Quote>> = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.observeForLotForAccount(lotId, it) } ?: flowOf(emptyList())).map { list -> list.map { it.toDomain() }.map { if (QuoteExpiry.isExpired(it, System.currentTimeMillis())) it.copy(status = QuoteStatus.EXPIRED) else it } }
 
     override suspend fun refresh(lot: Lot, recycler: Recycler?): List<Quote> {
+        val owner = requireOwner()
+        val generation = sessionGenerationProvider()
         val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
-        dao.insertAll(quotes.map { it.toEntity() })
+        checkCurrent(owner, generation)
+        dao.reconcilePending(lot.id, owner, quotes.map { it.toEntity() })
+        checkCurrent(owner, generation)
         return quotes
     }
 
     override suspend fun submitRequest(lot: Lot, recycler: Recycler, nowEpochMs: Long): List<Quote> {
+        val owner = requireOwner()
+        val generation = sessionGenerationProvider()
         return try {
             api.requestQuote(QuoteRequestDto(lot.id, recycler.id)).requireData()
+            checkCurrent(owner, generation)
             val quotes = api.getPendingQuotes(lot.id).requireData().map { it.toDomain(lot, recycler) }
-            dao.insertAll(quotes.map { it.toEntity() })
+            checkCurrent(owner, generation)
+            dao.reconcilePending(lot.id, owner, quotes.map { it.toEntity() })
+            checkCurrent(owner, generation)
             quotes
         } catch (error: Exception) {
+            checkCurrent(owner, generation)
             if (!error.isRetryableTransportFailure()) throw error
             val placeholder = Quote(
                 id = "QRQ-${UUID.randomUUID()}", recyclerId = recycler.id, lotId = lot.id,
@@ -77,51 +95,67 @@ class RemoteQuoteRepository(
                 status = QuoteStatus.PENDING, deliveryState = QuoteDeliveryState.WAITING_TO_SEND
             )
             dao.insertAll(listOf(placeholder.toEntity()))
-            enqueue("REQUEST_QUOTE", JsonObject().apply { addProperty("id", placeholder.id); addProperty("lotId", lot.id); addProperty("recyclerId", recycler.id) })
+            checkCurrent(owner, generation)
+            enqueue("REQUEST_QUOTE", JsonObject().apply { addProperty("id", placeholder.id); addProperty("lotId", lot.id); addProperty("recyclerId", recycler.id) }, owner)
             listOf(placeholder)
         }
     }
 
     override suspend fun submitBatchRequest(lot: Lot, recyclers: List<Recycler>, nowEpochMs: Long): List<Quote> {
+        val owner = requireOwner()
+        val generation = sessionGenerationProvider()
         val selected = recyclers.distinctBy { it.id }.take(10)
         if (selected.isEmpty()) return emptyList()
         return try {
             api.requestQuoteBatch(QuoteBatchRequestDto(lot.id, selected.map { it.id })).requireData()
+            checkCurrent(owner, generation)
             refresh(lot)
         } catch (error: Exception) {
+            checkCurrent(owner, generation)
             if (!error.isRetryableTransportFailure()) throw error
             // Preserve the existing offline contract for each recipient. The
             // backend batch endpoint remains the preferred online path.
-            selected.flatMap { submitRequest(lot, it, nowEpochMs) }
+            selected.flatMap { checkCurrent(owner, generation); submitRequest(lot, it, nowEpochMs) }
         }
     }
 
     override suspend fun accept(quoteId: String): Boolean {
-        return try {
-            val quote = api.acceptQuote(quoteId).requireData()
-            (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
-        } catch (error: Exception) {
-            if (!error.isRetryableTransportFailure()) throw error
-            val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.ACCEPTED.name, it) } ?: 0) > 0
-            if (updated) enqueue("ACCEPT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
-            updated
-        }
+        val owner = requireOwner()
+        val generation = sessionGenerationProvider()
+        // Acceptance reserves inventory and competes with other offers.
+        // A timeout is not proof that it succeeded; only server data commits it.
+        val quote = api.acceptQuote(quoteId).requireData()
+        checkCurrent(owner, generation)
+        val updated = dao.updateStatusForAccount(quote.id, QuoteStatus.ACCEPTED.name, owner) > 0
+        checkCurrent(owner, generation)
+        return updated
     }
 
     override suspend fun reject(quoteId: String): Boolean {
+        val owner = requireOwner()
+        val generation = sessionGenerationProvider()
         return try {
             val quote = api.rejectQuote(quoteId).requireData()
-            (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
+            checkCurrent(owner, generation)
+            (dao.updateStatusForAccount(quote.id, QuoteStatus.REJECTED.name, owner) > 0).also { checkCurrent(owner, generation) }
         } catch (error: Exception) {
+            checkCurrent(owner, generation)
             if (!error.isRetryableTransportFailure()) throw error
-            val updated = (accountId()?.takeIf { it.isNotBlank() }?.let { dao.updateStatusForAccount(quoteId, QuoteStatus.REJECTED.name, it) } ?: 0) > 0
-            if (updated) enqueue("REJECT_QUOTE", JsonObject().apply { addProperty("id", quoteId) })
+            val updated = dao.updateStatusForAccount(quoteId, QuoteStatus.REJECTED.name, owner) > 0
+            checkCurrent(owner, generation)
+            if (updated) enqueue("REJECT_QUOTE", JsonObject().apply { addProperty("id", quoteId) }, owner)
             updated
         }
     }
 
-    private suspend fun enqueue(operation: String, payload: JsonObject) {
-        queue?.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = accountId()))
+    private fun requireOwner(): String = accountId()?.takeIf(String::isNotBlank) ?: error("Authenticated account required for quote changes")
+
+    private fun checkCurrent(owner: String, generation: Long) {
+        if (accountId() != owner || sessionGenerationProvider() != generation) throw CancellationException("Quote session changed")
+    }
+
+    private suspend fun enqueue(operation: String, payload: JsonObject, owner: String) {
+        queue?.enqueue(SyncQueueItemEntity(operation = operation, payloadJson = payload.toString(), createdAtEpochMs = System.currentTimeMillis(), accountId = owner))
         requestSync()
     }
 }

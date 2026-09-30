@@ -1,4 +1,5 @@
 package com.irinteractivestudios.kabadiwalaconnect.ui.supplychain
+import com.irinteractivestudios.kabadiwalaconnect.util.localizedUserFacingError
 
 import android.Manifest
 import android.content.Intent
@@ -325,6 +326,24 @@ fun HouseholdKabadiwalasScreen(
     var gpsAccuracyMeters by remember { mutableStateOf<Float?>(null) }
     var gpsStreetAddressUnavailable by remember { mutableStateOf(false) }
     var showLocationRationale by remember { mutableStateOf(false) }
+    var areaResolutionError by remember { mutableStateOf(false) }
+    fun searchArea(selectedRadius: Int) {
+        if (locationBusy || (area.isBlank() && (state.kabadiwalaLatitude == null || state.kabadiwalaLongitude == null))) return
+        val requestedArea = area.trim()
+        val savedLat = state.kabadiwalaLatitude
+        val savedLng = state.kabadiwalaLongitude
+        scope.launch {
+            locationBusy = true
+            areaResolutionError = false
+            try {
+                val centre = if (requestedArea == state.kabadiwalaAreaQuery.trim() && savedLat != null && savedLng != null) {
+                    CurrentLocation(savedLat, savedLng, requestedArea)
+                } else runCatching { locationProvider.resolveArea(requestedArea) }.getOrNull()
+                if (centre == null) areaResolutionError = true
+                else onUseLocation(centre, selectedRadius)
+            } finally { locationBusy = false }
+        }
+    }
     fun loadCurrentLocation() {
         scope.launch {
             locationBusy = true
@@ -370,6 +389,7 @@ fun HouseholdKabadiwalasScreen(
         item {
             OutlinedTextField(
                 value = area,
+                enabled = !locationBusy,
                 onValueChange = {
                     area = it.take(160)
                     gpsAccuracyMeters = null
@@ -391,7 +411,8 @@ fun HouseholdKabadiwalasScreen(
                 listOf(5, 10, 25, 50, 100, 200).forEach { distance ->
                     FilterChip(
                         selected = radiusKm == distance,
-                        onClick = { radiusKm = distance },
+                        onClick = { radiusKm = distance; searchArea(distance) },
+                        enabled = !locationBusy && !state.kabadiwalaLoading,
                         label = { Text(stringResource(R.string.ui_copy_982c8e50d607, distance), maxLines = 1) },
                         modifier = Modifier.heightIn(min = 48.dp)
                     )
@@ -403,8 +424,8 @@ fun HouseholdKabadiwalasScreen(
                 Button(onClick = {
                     gpsAccuracyMeters = null
                     gpsStreetAddressUnavailable = false
-                    onSearch(area.trim(), radiusKm)
-                }, enabled = !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_f4fd898b8fb9)) }
+                    searchArea(radiusKm)
+                }, enabled = !locationBusy && !state.kabadiwalaLoading && area.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.ui_copy_f4fd898b8fb9)) }
                 OutlinedButton(onClick = {
                     val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (hasLocation) loadCurrentLocation() else showLocationRationale = true
@@ -415,6 +436,7 @@ fun HouseholdKabadiwalasScreen(
                 }
             }
             if (locationError) Text(stringResource(R.string.ui_copy_947e7e7a11c1), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+            if (areaResolutionError) Text(stringResource(R.string.nearby_area_resolution_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             gpsAccuracyMeters?.let { accuracy ->
                 Text(stringResource(R.string.ui_copy_40dd5197b0c9, accuracy.roundToInt().coerceAtLeast(1)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -422,13 +444,16 @@ fun HouseholdKabadiwalasScreen(
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
         if (state.kabadiwalaLoading) item { CircularProgressIndicator(Modifier.size(26.dp)) }
+        if (!locationBusy && !state.kabadiwalaLoading && (state.kabadiwalaLatitude == null || state.kabadiwalaLongitude == null || radiusKm != state.kabadiwalaRadiusKm || area.trim() != state.kabadiwalaAreaQuery.trim())) item {
+            Text(stringResource(R.string.nearby_apply_radius_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (state.initialLoadComplete && !state.loading && !state.kabadiwalaLoading && state.kabadiwalas.isEmpty()) item {
             EmptyPanel(
                 if (state.kabadiwalaRequiresLocation && area.isBlank()) "Choose an area to begin" else "No active Kabadiwalas serving this area yet",
                 if (state.kabadiwalaRequiresLocation && area.isBlank()) "Use your location or enter a locality, city, state or PIN code." else "Try a nearby area or a wider radius."
             )
         }
-        items(state.kabadiwalas, key = { it.id }) { kabadiwala ->
+        items(if (!locationBusy && radiusKm == state.kabadiwalaRadiusKm && area.trim() == state.kabadiwalaAreaQuery.trim() && state.kabadiwalaLatitude != null && state.kabadiwalaLongitude != null) state.kabadiwalas.filter { it.distanceKm?.let { distance -> distance <= radiusKm } == true } else emptyList(), key = { it.id }) { kabadiwala ->
             Surface(shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 6.dp, bottomStart = 22.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -456,7 +481,7 @@ fun HouseholdKabadiwalasScreen(
                 }
             }
         }
-        if (state.kabadiwalaHasMore) item { OutlinedButton(onClick = onLoadMore, enabled = !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_76dee9398c79)) } }
+        if (state.kabadiwalaHasMore && !locationBusy && radiusKm == state.kabadiwalaRadiusKm && area.trim() == state.kabadiwalaAreaQuery.trim() && state.kabadiwalaLatitude != null && state.kabadiwalaLongitude != null) item { OutlinedButton(onClick = onLoadMore, enabled = !state.kabadiwalaLoading, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_76dee9398c79)) } }
     }
     if (showLocationRationale) AlertDialog(
         onDismissRequest = { showLocationRationale = false },
@@ -482,7 +507,7 @@ fun KabadiwalaPublicProfileScreen(
         Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (loading) CircularProgressIndicator(Modifier.size(24.dp))
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                error?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error) }
                 profile?.let { item ->
                     Text(item.areaName, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     item.distanceKm?.let { Text(stringResource(R.string.ui_copy_14d1fa260b92, "%.1f".format(it)), color = MaterialTheme.colorScheme.primary) }
@@ -535,7 +560,7 @@ fun KabadiwalaPickupPricingScreen(pricing: PickupPricingDto?, saving: Boolean, e
         OutlinedTextField(perKm, { perKm = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_d93e4ec937b6)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
         OutlinedTextField(maximum, { maximum = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_576bfbc1605e)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
         if (saved) Text(stringResource(R.string.ui_copy_fdee150f212e), color = MaterialTheme.colorScheme.primary)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error) }
         Button(onClick = { if (valid) onSave(PickupPricingDto(freeValue, perKmValue, maxValue)) }, enabled = valid && !saving, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text(if (saving) "Saving…" else "Save pickup charges") }
     }
 }
@@ -1314,7 +1339,7 @@ fun HouseholdListingCreateScreen(
                         }
                     }
                     locationError?.let { error ->
-                        Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(localizedUserFacingError(error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -1323,7 +1348,7 @@ fun HouseholdListingCreateScreen(
         }
          state.error?.let { message ->
              Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                 Text(message, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                 Text(localizedUserFacingError(message), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
              }
          }
          if (missingPostRequirements.isNotEmpty() && "create-listing" !in busy && !imeVisible) {
@@ -2329,12 +2354,13 @@ private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject:
                 Text("Offer total · ${money(offer.offeredRatePerKg * lot.quantityKg)}", fontWeight = FontWeight.SemiBold)
             }
             Text(stringResource(R.string.ui_copy_d250ca739d6d, money(offer.offeredRatePerKg), statusName(offer.status)))
+            offer.counterRatePerKg?.let { counter -> Text("${stringResource(R.string.ui_copy_f4018045cfb4)} · ${money(counter)}/kg", color = MaterialTheme.colorScheme.primary) }
             if (offer.status == "ACCEPTED" && offer.bulkLot?.status !in setOf("SOLD", "CANCELLED")) {
                 OutlinedButton(onClick = { onOpenBulkChat(offer.bulkLotId, offer.recyclerId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_e68ddcadeb21)) }
             }
             if (offer.status == "PENDING") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { onAccept(offer.id) }, enabled = !busy && (offer.bulkLot?.minimumRatePerKg?.let { offer.offeredRatePerKg >= it } != false), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.quote_accept)) }
+                    Button(onClick = { onAccept(offer.id) }, enabled = !busy && offer.counterRatePerKg == null && (offer.bulkLot?.minimumRatePerKg?.let { offer.offeredRatePerKg >= it } != false), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.quote_accept)) }
                     OutlinedButton(onClick = { showCounter = true }, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f4018045cfb4)) }
                 }
                 OutlinedButton(onClick = { showReject = true }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_4f811190f75e)) }
@@ -2494,13 +2520,14 @@ private fun RecyclerOfferCard(offer: BulkOfferDto, onWithdraw: (String, String?)
             Text(lot?.let { "${materialName(it.materialCategory)} · ${"%.1f".format(it.quantityKg)} kg" } ?: stringResource(R.string.ui_copy_b3a2c273ef01), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.ui_copy_d250ca739d6d, money(offer.offeredRatePerKg), statusName(offer.status)))
             lot?.let { Text("Total · ${money(offer.offeredRatePerKg * it.quantityKg)}", fontWeight = FontWeight.SemiBold) }
+            offer.counterRatePerKg?.let { counter -> Text("${stringResource(R.string.ui_copy_f4018045cfb4)} · ${money(counter)}/kg", color = MaterialTheme.colorScheme.primary) }
             if (offer.status == "ACCEPTED" && offer.bulkLot?.status !in setOf("SOLD", "CANCELLED")) OutlinedButton(onClick = onOpenBulkChat, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_9b1318f8a1b8)) }
             if (lot != null && canReviseBulkOffer(lot.status, offer.status)) OutlinedButton(onClick = { showEdit = true }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (offer.status == "PENDING") "Edit offer" else "Make a new offer") }
             if (offer.status == "PENDING") OutlinedButton(onClick = { showWithdraw = true }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_f4c4aa99a043)) }
         }
     }
     if (showWithdraw) ReasonDialog(title = "Withdraw offer", confirmLabel = "Withdraw", onDismiss = { showWithdraw = false }, onSubmit = { onWithdraw(offer.id, it.ifBlank { null }); showWithdraw = false })
-    if (showEdit && lot != null) OfferDialog(lot, initialRate = offer.offeredRatePerKg, onDismiss = { showEdit = false }, onSubmit = { onOffer(lot.id, it); showEdit = false })
+    if (showEdit && lot != null) OfferDialog(lot, initialRate = offer.counterRatePerKg ?: offer.offeredRatePerKg, onDismiss = { showEdit = false }, onSubmit = { onOffer(lot.id, it); showEdit = false })
 }
 
 @Composable
@@ -2549,7 +2576,7 @@ fun RecyclerDemandCreateScreen(supportedMaterials: List<String>, isSubmitting: B
         OutlinedTextField(minimum, { minimum = it.filter { c -> c.isDigit() || c == '.' }.take(10) }, label = { Text(stringResource(R.string.ui_copy_3c4f2138238a)) }, supportingText = { Text(stringResource(R.string.ui_copy_7857b6bf671d)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(radius, { radius = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_9e9419bb1b40)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_6c4883f1deaa)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(localizedUserFacingError(it), color = MaterialTheme.colorScheme.error) }
         Text("${materialName(material)} · ${q?.let { "${"%.1f".format(it)} kg" } ?: "Enter quantity"} · ${r?.let { "within ${"%.0f".format(it)} km" } ?: "Enter radius"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { if (valid) onSubmit(ProcurementRequirementCreateDto(material, m, q, maxRatePerKg = maxRate, procurementRadiusKm = r)) }, enabled = valid && !isSubmitting, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text(if (isSubmitting) "Publishing…" else "Publish demand") }
     }

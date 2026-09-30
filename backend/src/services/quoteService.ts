@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'; import { AppError } from '../utils/errors.js'; import { assertLotTransition } from './lotStateMachine.js'; import { canonicalWeight } from './lotService.js';
+import { withTransactionRetry } from '../utils/transactionRetry.js';
 export class QuoteService {
   constructor(private readonly db: PrismaClient) {}
   private async findRequest(id:string){return this.db.quoteRequest.findUnique({where:{id},include:{lot:true,recycler:true}});}
@@ -56,8 +57,61 @@ export class QuoteService {
     if (!quote || quote.quoteRequest.collectorId !== actorId) throw new AppError('NOT_FOUND','Quote not found',404,{code:'QUOTE_NOT_FOUND'});
     return this.collectorQuoteView(quote);
   }
-  async submit(recyclerId:string,p:{quoteRequestId:string;pricePerKg:number;validUntil?:string;recyclerNotes?:string}){const q=await this.findRequest(p.quoteRequestId);if(!q||q.recyclerId!==recyclerId)throw new AppError('NOT_FOUND','Quote request not found',404,{code:'QUOTE_REQUEST_NOT_FOUND'});if(q.recycler.authorizationStatus!=='VERIFIED'||(q.recycler.authorizationValidUntil&&q.recycler.authorizationValidUntil<=new Date()))throw new AppError('CONFLICT','Recycler authorization is not current',409,{code:'RECYCLER_NOT_VERIFIED'});if(q.status==='PENDING'&&q.expiresAt<=new Date()){await this.db.quoteRequest.updateMany({where:{id:q.id,status:'PENDING'},data:{status:'EXPIRED'}});throw new AppError('CONFLICT','Quote request has expired',409,{code:'QUOTE_REQUEST_EXPIRED'});}if(q.status!=='PENDING'||q.lot.status==='CANCELLED')throw new AppError('CONFLICT','Quote request is not actionable',409,{code:'QUOTE_NOT_ACTIONABLE'});if(!Number.isFinite(p.pricePerKg)||p.pricePerKg<=0||p.pricePerKg>=1000000)throw new AppError('VALIDATION_ERROR','Invalid quote price',422,{code:'INVALID_QUOTE_PRICE'});const until=p.validUntil?new Date(p.validUntil):new Date(Date.now()+86400000);if(Number.isNaN(until.getTime())||until<=new Date()||until>new Date(Date.now()+86400000))throw new AppError('VALIDATION_ERROR','Invalid quote validity',422,{code:'INVALID_QUOTE_VALIDITY'});const market=await this.db.price.findFirst({where:{materialCategory:q.lot.materialCategory},orderBy:{effectiveAt:'desc'}});const anomaly=!!market&&p.pricePerKg>=market.marketPrice*2;const weightKg=canonicalWeight(q.lot.weight,q.lot.weightUnit);if(q.lot.status==='QUOTE_REQUESTED')assertLotTransition(q.lot.status,'QUOTE_RECEIVED');return this.db.$transaction(async tx=>{const claimed=await tx.quoteRequest.updateMany({where:{id:q.id,status:'PENDING'},data:{status:'ACCEPTED'}});if(!claimed.count)throw new AppError('CONFLICT','Quote request is no longer actionable',409,{code:'QUOTE_NOT_ACTIONABLE'});const quote=await tx.quote.create({data:{quoteRequestId:q.id,lotId:q.lotId,recyclerId,pricePerKg:p.pricePerKg,totalQuotedPrice:Number((p.pricePerKg*weightKg).toFixed(2)),validUntil:until,recyclerNotes:p.recyclerNotes,anomaly,comparison:market?(p.pricePerKg<market.marketPrice*.95?'BELOW_MARKET':p.pricePerKg>market.marketPrice*1.05?'ABOVE_MARKET':'FAIR'):null}});await tx.lot.update({where:{id:q.lotId},data:{status:'QUOTE_RECEIVED'}});await tx.quoteAudit.create({data:{actorId:recyclerId,actorRole:'RECYCLER',event:'QUOTE_SUBMITTED',resourceId:quote.id,metadata:{quoteRequestId:q.id}}});return quote;});}
-  async action(id:string,collectorId:string,accept:boolean){const q=await this.db.quote.findUnique({where:{id},include:{quoteRequest:true,lot:true}});if(!q||q.quoteRequest.collectorId!==collectorId)throw new AppError('NOT_FOUND','Quote not found',404,{code:'QUOTE_NOT_FOUND'});const now=new Date();if(q.status!=='SENT'||q.validUntil<=now){if(q.status==='SENT'&&q.validUntil<=now)await this.db.quote.updateMany({where:{id,status:'SENT'},data:{status:'EXPIRED',respondedAt:now}});throw new AppError('CONFLICT','Quote is expired or not actionable',409,{code:'QUOTE_EXPIRED'});}if(accept)assertLotTransition(q.lot.status,'COLLECTOR_CONFIRMED');return this.db.$transaction(async tx=>{if(accept){const claimed=await tx.quote.updateMany({where:{id,status:'SENT',validUntil:{gt:new Date()}},data:{status:'ACCEPTED',acceptedAt:new Date(),respondedAt:new Date()}});if(!claimed.count)throw new AppError('CONFLICT','Quote is no longer actionable',409,{code:'QUOTE_ALREADY_ACTIONED'});await tx.quote.updateMany({where:{lotId:q.lotId,status:'SENT',id:{not:id}},data:{status:'REJECTED',rejectedAt:new Date(),respondedAt:new Date()}});const lot=await tx.lot.updateMany({where:{id:q.lotId,status:'QUOTE_RECEIVED'},data:{status:'COLLECTOR_CONFIRMED'}});if(!lot.count)throw new AppError('CONFLICT','Lot is no longer actionable',409,{code:'LOT_ALREADY_ACTIONED'});await tx.conversation.upsert({where:{lotId_collectorId_recyclerId:{lotId:q.lotId,collectorId,recyclerId:q.recyclerId}},update:{quoteId:id,status:'OPEN'},create:{lotId:q.lotId,quoteId:id,collectorId,recyclerId:q.recyclerId}});return tx.quote.findUniqueOrThrow({where:{id}});}const rejected=await tx.quote.updateMany({where:{id,status:'SENT'},data:{status:'REJECTED',rejectedAt:new Date(),respondedAt:new Date()}});if(!rejected.count)throw new AppError('CONFLICT','Quote is no longer actionable',409,{code:'QUOTE_ALREADY_ACTIONED'});await tx.quoteRequest.updateMany({where:{id:q.quoteRequestId,status:'ACCEPTED'},data:{status:'REJECTED'}});const remaining=await tx.quote.count({where:{lotId:q.lotId,status:{in:['SENT','ACCEPTED']}}});if(remaining===0){await tx.lot.updateMany({where:{id:q.lotId,status:'QUOTE_RECEIVED'},data:{status:'QUOTE_REQUESTED'}});await tx.quoteAudit.create({data:{actorId:collectorId,actorRole:'COLLECTOR',event:'QUOTE_REJECTED_REOPENED',resourceId:id,metadata:{lotId:q.lotId}}});}return tx.quote.findUniqueOrThrow({where:{id}});});}
+  async submit(recyclerId: string, p: { quoteRequestId: string; pricePerKg: number; validUntil?: string; recyclerNotes?: string }) {
+    if (!Number.isFinite(p.pricePerKg) || p.pricePerKg <= 0 || p.pricePerKg >= 1000000) throw new AppError('VALIDATION_ERROR', 'Invalid quote price', 422, { code: 'INVALID_QUOTE_PRICE' });
+    const until = p.validUntil ? new Date(p.validUntil) : new Date(Date.now() + 86400000);
+    if (Number.isNaN(until.getTime()) || until <= new Date() || until > new Date(Date.now() + 86400000)) throw new AppError('VALIDATION_ERROR', 'Invalid quote validity', 422, { code: 'INVALID_QUOTE_VALIDITY' });
+    return withTransactionRetry(() => this.db.$transaction(async tx => {
+      const q = await tx.quoteRequest.findUnique({ where: { id: p.quoteRequestId }, include: { lot: true, recycler: true } });
+      if (!q || q.recyclerId !== recyclerId) throw new AppError('NOT_FOUND', 'Quote request not found', 404, { code: 'QUOTE_REQUEST_NOT_FOUND' });
+      const now = new Date();
+      if (q.recycler.authorizationStatus !== 'VERIFIED' || (q.recycler.authorizationValidUntil && q.recycler.authorizationValidUntil <= now)) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
+      if (q.expiresAt <= now) throw new AppError('CONFLICT', 'Quote request has expired', 409, { code: 'QUOTE_REQUEST_EXPIRED' });
+      if (q.status !== 'PENDING' || !['QUOTE_REQUESTED', 'QUOTE_RECEIVED'].includes(q.lot.status)) throw new AppError('CONFLICT', 'Quote request is not actionable', 409, { code: 'QUOTE_NOT_ACTIONABLE' });
+      // Claim the lot document as well as the request, serializing submission
+      // with cancellation and acceptance of another Recycler's quote.
+      const lot = await tx.lot.updateMany({ where: { id: q.lotId, status: { in: ['QUOTE_REQUESTED', 'QUOTE_RECEIVED'] } }, data: { status: 'QUOTE_RECEIVED' } });
+      if (!lot.count) throw new AppError('CONFLICT', 'Lot is no longer actionable', 409, { code: 'LOT_ALREADY_ACTIONED' });
+      const claimed = await tx.quoteRequest.updateMany({ where: { id: q.id, recyclerId, status: 'PENDING', expiresAt: { gt: new Date() } }, data: { status: 'ACCEPTED' } });
+      if (!claimed.count) throw new AppError('CONFLICT', 'Quote request is no longer actionable', 409, { code: 'QUOTE_NOT_ACTIONABLE' });
+      const market = await tx.price.findFirst({ where: { materialCategory: q.lot.materialCategory }, orderBy: { effectiveAt: 'desc' } });
+      const weightKg = canonicalWeight(q.lot.weight, q.lot.weightUnit);
+      const quote = await tx.quote.create({ data: { quoteRequestId: q.id, lotId: q.lotId, recyclerId, pricePerKg: p.pricePerKg, totalQuotedPrice: Number((p.pricePerKg * weightKg).toFixed(2)), validUntil: until, recyclerNotes: p.recyclerNotes, anomaly: !!market && p.pricePerKg >= market.marketPrice * 2, comparison: market ? (p.pricePerKg < market.marketPrice * .95 ? 'BELOW_MARKET' : p.pricePerKg > market.marketPrice * 1.05 ? 'ABOVE_MARKET' : 'FAIR') : null } });
+      await tx.quoteAudit.create({ data: { actorId: recyclerId, actorRole: 'RECYCLER', event: 'QUOTE_SUBMITTED', resourceId: quote.id, metadata: { quoteRequestId: q.id } } });
+      return quote;
+    }));
+  }
+  async action(id: string, collectorId: string, accept: boolean) {
+    const q = await this.db.quote.findUnique({ where: { id }, include: { quoteRequest: true, lot: true } });
+    if (!q || q.quoteRequest.collectorId !== collectorId) throw new AppError('NOT_FOUND', 'Quote not found', 404, { code: 'QUOTE_NOT_FOUND' });
+    const now = new Date();
+    if (q.status !== 'SENT' || q.validUntil <= now) {
+      if (q.status === 'SENT' && q.validUntil <= now) await this.db.quote.updateMany({ where: { id, status: 'SENT' }, data: { status: 'EXPIRED', respondedAt: now } });
+      throw new AppError('CONFLICT', 'Quote is expired or not actionable', 409, { code: 'QUOTE_EXPIRED' });
+    }
+    if (accept) assertLotTransition(q.lot.status, 'COLLECTOR_CONFIRMED');
+    return withTransactionRetry(() => this.db.$transaction(async tx => {
+      if (accept) {
+        const claimed = await tx.quote.updateMany({ where: { id, status: 'SENT', validUntil: { gt: new Date() } }, data: { status: 'ACCEPTED', acceptedAt: new Date(), respondedAt: new Date() } });
+        if (!claimed.count) throw new AppError('CONFLICT', 'Quote is no longer actionable', 409, { code: 'QUOTE_ALREADY_ACTIONED' });
+        const lot = await tx.lot.updateMany({ where: { id: q.lotId, collectorId, status: 'QUOTE_RECEIVED' }, data: { status: 'COLLECTOR_CONFIRMED' } });
+        if (!lot.count) throw new AppError('CONFLICT', 'Lot is no longer actionable', 409, { code: 'LOT_ALREADY_ACTIONED' });
+        await tx.quote.updateMany({ where: { lotId: q.lotId, status: 'SENT', id: { not: id } }, data: { status: 'REJECTED', rejectedAt: new Date(), respondedAt: new Date() } });
+        await tx.quoteRequest.updateMany({ where: { lotId: q.lotId, status: 'PENDING' }, data: { status: 'REJECTED' } });
+        await tx.conversation.upsert({ where: { lotId_collectorId_recyclerId: { lotId: q.lotId, collectorId, recyclerId: q.recyclerId } }, update: { quoteId: id, status: 'OPEN' }, create: { lotId: q.lotId, quoteId: id, collectorId, recyclerId: q.recyclerId } });
+        return tx.quote.findUniqueOrThrow({ where: { id } });
+      }
+      const rejected = await tx.quote.updateMany({ where: { id, status: 'SENT' }, data: { status: 'REJECTED', rejectedAt: new Date(), respondedAt: new Date() } });
+      if (!rejected.count) throw new AppError('CONFLICT', 'Quote is no longer actionable', 409, { code: 'QUOTE_ALREADY_ACTIONED' });
+      await tx.quoteRequest.updateMany({ where: { id: q.quoteRequestId, status: 'ACCEPTED' }, data: { status: 'REJECTED' } });
+      const remaining = await tx.quote.count({ where: { lotId: q.lotId, status: { in: ['SENT', 'ACCEPTED'] } } });
+      if (remaining === 0) {
+        await tx.lot.updateMany({ where: { id: q.lotId, status: 'QUOTE_RECEIVED' }, data: { status: 'QUOTE_REQUESTED' } });
+        await tx.quoteAudit.create({ data: { actorId: collectorId, actorRole: 'COLLECTOR', event: 'QUOTE_REJECTED_REOPENED', resourceId: id, metadata: { lotId: q.lotId } } });
+      }
+      return tx.quote.findUniqueOrThrow({ where: { id } });
+    }));
+  }
   async requestQuoteBatch(collectorId: string, lotId: string, recyclerIds: string[]) {
     const uniqueIds = [...new Set(recyclerIds.map(id => id.trim()).filter(Boolean))].slice(0, 10);
     const requested: any[] = [];

@@ -1461,4 +1461,11 @@
     <string name="ui_copy_f1e76e0f8207">%1$s · %2$s പരിശോധിച്ചുറപ്പിച്ച</string>
 
     <string name="ui_new_messages_below">ചുവടെയുള്ള പുതിയ സന്ദേശങ്ങൾ: %1$d ↓</string>
+    <string name="pickup_final_sale_amount">അന്തിമ തുക · %1$s · %2$s kg</string>
+    <string name="pickup_final_purchase_amount">അന്തിമ തുക · %1$s</string>
+    <string name="pickup_final_amount_unavailable">അന്തിമ തുക · ലഭ്യമല്ല. പുതുക്കുക</string>
+    <string name="pickup_view_scrap_photo">സ്ക്രാപ്പ് ഫോട്ടോകൾ കാണുക</string>
+    <string name="pickup_hide_scrap_photo">Close</string>
+    <string name="nearby_area_resolution_failed">ഞങ്ങൾക്ക് വിശ്വസനീയമായ ഒരു സ്ഥാനം നേടാനായില്ല. പകരം നിങ്ങളുടെ ഏരിയ ടൈപ്പ് ചെയ്യുക. എൻ്റെ സ്ഥാനം ഉപയോഗിക്കുക</string>
+    <string name="nearby_apply_radius_hint">തിരയൽ ഏരിയ · എൻ്റെ സ്ഥാനം ഉപയോഗിക്കുക · ആരം</string>
 </resources>
