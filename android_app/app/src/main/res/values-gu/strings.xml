@@ -1133,7 +1133,7 @@
     <string name="ui_copy_eb127c0c7f2c">સ્વીકૃત સામગ્રી બતાવો</string>
     <string name="ui_copy_9ebda4a121af">સ્થાન અનુપલબ્ધ ·</string>
     <string name="ui_copy_9aee0641931f">મારા વર્તમાન સ્થાનનો ઉપયોગ કરો</string>
-    <string name="ui_copy_c54cc1bc59fc">ઘરેલુ પિકઅપનો સમય: સવારે 7:30 થી 6:30 PM ભારતીય સમય. કબાડીવાલા ટ્રિપ શરૂ કરે અને આગમનની નિશાની કરે પછી તમારો પિકઅપ QR દેખાય છે.</string>
+    <string name="ui_copy_c54cc1bc59fc">ઘરેલુ પિકઅપનો સમય: સવારે 7:30 થી 9:30 PM ભારતીય સમય. કબાડીવાલા ટ્રિપ શરૂ કરે અને આગમનની નિશાની કરે પછી તમારો પિકઅપ QR દેખાય છે.</string>
     <string name="ui_copy_2f0993983a8b">મારી સૂચિઓ</string>
     <string name="ui_copy_fc38ee6380fb">કલેક્શન પાર્ટનર શોધો</string>
     <string name="ui_copy_b944a83236e6">ચકાસાયેલ, તમારા વિસ્તારમાં સેવા આપતા સક્રિય કબાડીવાલા.</string>
@@ -1165,7 +1165,7 @@
     <string name="ui_copy_567da6ba2dee">નજીકના કબાડીવાલાસ</string>
     <string name="ui_copy_c3be5e282d6f">Cancel listing</string>
     <string name="ui_copy_7105c5c6087c">અગાઉની પિકઅપ વિનંતી રદ કરવામાં આવી હતી. તમે અન્ય જીવનસાથી પસંદ કરી શકો છો.</string>
-    <string name="ui_copy_97df03205744">ધ કબાડીવાલા પિકઅપના કલાકો દરમિયાન (ભારત સમય મુજબ 7:30 AM-6:30 PM) ટ્રિપ શરૂ કરી શકે છે. તેઓ પહોંચ્યા પછી QR દેખાય છે.</string>
+    <string name="ui_copy_97df03205744">ધ કબાડીવાલા પિકઅપના કલાકો દરમિયાન (ભારત સમય મુજબ 7:30 AM-9:30 PM) ટ્રિપ શરૂ કરી શકે છે. તેઓ પહોંચ્યા પછી QR દેખાય છે.</string>
     <string name="ui_copy_0264bf4f33e6">કબાડીવાલા રસ્તામાં છે. તમારો QR પહોંચ્યા પછી દેખાય છે.</string>
     <string name="ui_copy_9b1318f8a1b8">સંદેશ કબાડીવાલા</string>
     <string name="ui_copy_f8755d7001f5">ઘરગથ્થુ હેન્ડઓવર ચકાસાયેલ</string>
@@ -1215,7 +1215,7 @@
     <string name="ui_copy_fcdad39da790">મેં મારું એકાઉન્ટ</string>
     <string name="ui_copy_f59c3807a845">વિનાશ પુરાવાની વિનંતી કરો</string>
     <string name="ui_copy_08484d351755">સાચવેલ ડેટા બતાવી રહ્યું છે. નવીનતમ પિકઅપ અને સ્ટોક સ્ટેટસ કન્ફર્મ કરવા માટે કનેક્ટ થવા પર રિફ્રેશ કરો.</string>
-    <string name="ui_copy_c0593d30aadf">પિકઅપ શિફ્ટ: 7:30 AM–6:30 PM ભારતીય સમય. આ શિફ્ટ દરમિયાન ટ્રિપ શરૂ કરો, પછી તેના QRને અનલૉક કરવા માટે ઘર પર પહોંચ્યા ચિહ્નિત કરો.</string>
+    <string name="ui_copy_c0593d30aadf">પિકઅપ શિફ્ટ: 7:30 AM–9:30 PM ભારતીય સમય. આ શિફ્ટ દરમિયાન ટ્રિપ શરૂ કરો, પછી તેના QRને અનલૉક કરવા માટે ઘર પર પહોંચ્યા ચિહ્નિત કરો.</string>
     <string name="ui_copy_e1ebb3edfe78">પીકઅપ્સ જુઓ</string>
     <string name="ui_copy_587862aa9efd">રિસાયકલ લોટ બનાવો</string>
     <string name="ui_copy_f9f6a58c24f9">બલ્ક લોટ</string>
@@ -1242,8 +1242,8 @@
     <string name="ui_copy_25b55e8298c7">દાવો કરી રહ્યું છે...</string>
     <string name="ui_copy_c3c7836a6362">દાવો પીકઅપ</string>
     <string name="ui_copy_b59cf9ed55bb">નકારો</string>
-    <string name="ui_copy_1a95258c37c6">પિકઅપ કામના કલાકો ભારતના સમય મુજબ સવારે 7:30 થી સાંજે 6:30 સુધી છે.</string>
-    <string name="ui_copy_3e37016ef70a">પિકઅપ કલાકો દરમિયાન ટ્રિપ શરૂ કરો: સવારે 7:30 થી 6:30 વાગ્યા સુધી.</string>
+    <string name="ui_copy_1a95258c37c6">પિકઅપ કામના કલાકો ભારતના સમય મુજબ સવારે 7:30 થી સાંજે 9:30 સુધી છે.</string>
+    <string name="ui_copy_3e37016ef70a">પિકઅપ કલાકો દરમિયાન ટ્રિપ શરૂ કરો: સવારે 7:30 થી 9:30 વાગ્યા સુધી.</string>
     <string name="ui_copy_01eeeae331be">ઘરમાં? માર્ક તેમના વન-ટાઇમ QRને અનલૉક કરવા માટે પહોંચ્યા. તેમને વજન કરતા પહેલા તે બતાવવા માટે કહો.</string>
     <string name="ui_copy_0828af7f409b">માર્ક આવ્યો</string>
     <string name="ui_copy_648e93d69590">વજન કરતા પહેલા ઘરના વન-ટાઇમ પિકઅપ QRને સ્કેન કરો.</string>
@@ -1298,7 +1298,7 @@
     <string name="ui_copy_287ecfcf652b">ન્યૂનતમ સ્વીકાર્ય દર · ₹/kg (વૈકલ્પિક)</string>
     <string name="ui_copy_3b575a691c82">નોંધો (વૈકલ્પિક)</string>
     <string name="ui_copy_4023cf765ef2">રિસાયકલર્સ</string>
-    <string name="ui_copy_392366d76c17">રિસાયકલર હેન્ડઓવર કબાડીવાલા સાથે ગોઠવવામાં આવે છે; આ પ્રવાહમાં કોઈ નિશ્ચિત પાળી નથી. ઘરની અલગ પિકઅપ શિફ્ટ ભારતીય સમય મુજબ સવારે 7:30 થી સાંજે 6:30 સુધી છે. તૈયારીના 2 કલાકની અંદર કલેક્ટરની સહી કરેલ QR સ્કેન કરો.</string>
+    <string name="ui_copy_392366d76c17">રિસાયકલર હેન્ડઓવર કબાડીવાલા સાથે ગોઠવવામાં આવે છે; આ પ્રવાહમાં કોઈ નિશ્ચિત પાળી નથી. ઘરની અલગ પિકઅપ શિફ્ટ ભારતીય સમય મુજબ સવારે 7:30 થી સાંજે 9:30 સુધી છે. તૈયારીના 2 કલાકની અંદર કલેક્ટરની સહી કરેલ QR સ્કેન કરો.</string>
     <string name="ui_copy_ea21894118d3">માંગ પ્રકાશિત કરો</string>
     <string name="ui_copy_fa3f1b42d9f8">ઉપલબ્ધ કલેક્ટર લોટ</string>
     <string name="ui_copy_2de7f18bf0a2">મારી ઑફર્સ</string>
@@ -1405,7 +1405,7 @@
     <string name="ui_copy_2e3e55b0fa5a">સામગ્રી મૂલ્ય %1$s − પિકઅપ ચાર્જ %2$s</string>
     <string name="ui_copy_59f7c4f53552">આ ઓર્ડર માટે %1$s પિકઅપ ચાર્જ માફ કરો</string>
     <string name="ui_copy_eef4d8744af3">પિકઅપ %1$s · ઘરગથ્થુ હેન્ડઓવર ચકાસાયેલ</string>
-    <string name="ui_copy_73e4b32b8063">પિકઅપ્સ સવારે 7:30 થી સાંજે 6:30 સુધી ચાલે છે. હવેથી ઓછામાં ઓછો %1$s મિનિટનો સમય પસંદ કરો.</string>
+    <string name="ui_copy_73e4b32b8063">પિકઅપ્સ સવારે 7:30 થી સાંજે 9:30 સુધી ચાલે છે. હવેથી ઓછામાં ઓછો %1$s મિનિટનો સમય પસંદ કરો.</string>
     <string name="ui_copy_d547f2275b0b">રકમ %1$s કરતાં વધી શકતી નથી.</string>
     <string name="ui_copy_66a5223089da">સામગ્રી %1$s · પિકઅપ ચાર્જ %2$s</string>
     <string name="ui_copy_be735b699c73">ઇન્વેન્ટરીમાં ઉમેરાયેલ · પેઇડ ઘરગથ્થુ %1$s</string>

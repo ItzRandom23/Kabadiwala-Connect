@@ -5,7 +5,7 @@ export const PICKUP_MIN_LEAD_MS = 15 * 60 * 1000;
 export const PICKUP_MAX_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
 export const PICKUP_TIME_ZONE = 'Asia/Kolkata';
 export const PICKUP_WORK_START_MINUTES = 7 * 60 + 30;
-export const PICKUP_WORK_END_MINUTES = 18 * 60 + 30;
+export const PICKUP_WORK_END_MINUTES = 21 * 60 + 30;
 
 export function isPickupWorkTime(value: Date) {
   const parts = new Intl.DateTimeFormat('en-IN', {
@@ -22,7 +22,7 @@ export function isPickupWorkTime(value: Date) {
 
 export function assertPickupWorkTime(value: Date) {
   if (!isPickupWorkTime(value)) {
-    throw new AppError('CONFLICT', 'Pickups are available from 7:30 AM to 6:30 PM India time', 409, { code: 'PICKUP_OUTSIDE_WORKING_HOURS' });
+    throw new AppError('CONFLICT', 'Pickups are available from 7:30 AM to 9:30 PM India time', 409, { code: 'PICKUP_OUTSIDE_WORKING_HOURS' });
   }
 }
 

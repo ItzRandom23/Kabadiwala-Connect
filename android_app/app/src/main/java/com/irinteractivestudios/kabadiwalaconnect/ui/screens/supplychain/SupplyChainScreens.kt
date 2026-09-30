@@ -502,7 +502,6 @@ fun KabadiwalaPublicProfileScreen(
     onDismiss: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_copy_bc485bb987b7)) }
         Text(profile?.displayName ?: "Kabadiwala profile", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1941,7 +1940,7 @@ private fun paymentMethodName(value: String) = when (value) { "UPI", "DIGITAL_WA
 private fun isPickupWorkTimeNow(): Boolean {
     val indiaNow = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
     val minutesSinceMidnight = indiaNow.get(java.util.Calendar.HOUR_OF_DAY) * 60 + indiaNow.get(java.util.Calendar.MINUTE)
-    return minutesSinceMidnight in (7 * 60 + 30)..(18 * 60 + 30)
+    return minutesSinceMidnight in (7 * 60 + 30)..(21 * 60 + 30)
 }
 
 @Composable
@@ -2114,7 +2113,7 @@ private fun SchedulePickupDialog(
                 timeInMillis = now.timeInMillis
                 add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
             }
-            for (minutesOfDay in (7 * 60 + 30)..(18 * 60 + 30) step 15) {
+            for (minutesOfDay in (7 * 60 + 30)..(21 * 60 + 30) step 15) {
                 val slot = (day.clone() as java.util.Calendar).apply {
                     set(java.util.Calendar.HOUR_OF_DAY, minutesOfDay / 60)
                     set(java.util.Calendar.MINUTE, minutesOfDay % 60)
@@ -2564,7 +2563,6 @@ fun RecyclerDemandCreateScreen(supportedMaterials: List<String>, isSubmitting: B
     val maxRate = rate.toDoubleOrNull()
     val valid = material in supportedMaterials && q != null && q > 0 && m != null && m > 0 && m <= q && r != null && r > 0 && (rate.isBlank() || maxRate != null && maxRate > 0)
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).imePadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onBack, enabled = !isSubmitting) { Text(stringResource(R.string.ui_copy_e9a92db0d837)) }
         Text(stringResource(R.string.ui_copy_f01621d2ab89), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.ui_copy_46630d46e31d), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(stringResource(R.string.ui_copy_991bc3071258), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

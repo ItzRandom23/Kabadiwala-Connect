@@ -198,8 +198,8 @@ fun ChatListScreen(conversations: List<ConversationDto>, onOpen: (String) -> Uni
                     Spacer(Modifier.size(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            if (conversation.type == "PICKUP") "Household pickup · ${conversation.pickupRequestId?.takeLast(8).orEmpty()}"
-                            else "${if (conversation.collectorId == currentAccountId) "Recycler" else "Kabadiwala"} · lot ${conversation.lotId.takeLast(8)}",
+                            if (conversation.type == "PICKUP") "Household pickup"
+                            else if (conversation.collectorId == currentAccountId) "Recycler" else "Kabadiwala",
                             fontWeight = FontWeight.Bold
                         )
                         Text(conversation.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

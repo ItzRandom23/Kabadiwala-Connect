@@ -1133,7 +1133,7 @@
     <string name="ui_copy_eb127c0c7f2c">स्वीकृत सामग्री दिखाएँ</string>
     <string name="ui_copy_9ebda4a121af">स्थान अनुपलब्ध · पुनः प्रयास करू</string>
     <string name="ui_copy_9aee0641931f">हमर वर्तमान स्थानक उपयोग करू</string>
-    <string name="ui_copy_c54cc1bc59fc">घरेलू पिकअप समय: 7:30 AM–6:30 PM भारत समय। कबादीवाला के यात्रा शुरू करला के बाद अहां के पिकअप क्यूआर आबि जाएत अछि आओर Arrived के निशान अछि.</string>
+    <string name="ui_copy_c54cc1bc59fc">घरेलू पिकअप समय: 7:30 AM–9:30 PM भारत समय। कबादीवाला के यात्रा शुरू करला के बाद अहां के पिकअप क्यूआर आबि जाएत अछि आओर Arrived के निशान अछि.</string>
     <string name="ui_copy_2f0993983a8b">हमर लिस्टिंग</string>
     <string name="ui_copy_fc38ee6380fb">एक संग्रह भागीदार खोजें</string>
     <string name="ui_copy_b944a83236e6">सत्यापित, सक्रिय कबादीवाला अपने क्षेत्र की सेवा कर रहे |</string>
@@ -1165,7 +1165,7 @@
     <string name="ui_copy_567da6ba2dee">पास के कबाडीवाला के सूचित करू</string>
     <string name="ui_copy_c3be5e282d6f">लिस्टिंग रद्द करू</string>
     <string name="ui_copy_7105c5c6087c">एकटा पिछला पिकअप अनुरोध रद्द कएल गेल छल. अहां दोसर पार्टनर चुनि सकय छी.</string>
-    <string name="ui_copy_97df03205744">कबादीवाला पिकअप के समय (भारत के समय 7:30 AM–6:30 PM) में यात्रा शुरू क सकैत अछि | ओ सभ Arrived चिह्नित करबाक बाद क्यूआर देखाइत अछि ।</string>
+    <string name="ui_copy_97df03205744">कबादीवाला पिकअप के समय (भारत के समय 7:30 AM–9:30 PM) में यात्रा शुरू क सकैत अछि | ओ सभ Arrived चिह्नित करबाक बाद क्यूआर देखाइत अछि ।</string>
     <string name="ui_copy_0264bf4f33e6">कबादीवाला रस्ता पर अछि। ओ सभ Arrived चिह्नित करबाक बाद अहाँक क्यूआर देखाइत अछि ।</string>
     <string name="ui_copy_9b1318f8a1b8">संदेश कबाडीवाला</string>
     <string name="ui_copy_f8755d7001f5">घरेलू हस्तान्तरण सत्यापित</string>
@@ -1215,7 +1215,7 @@
     <string name="ui_copy_fcdad39da790">हम अपन खाता हटा देलौं</string>
     <string name="ui_copy_f59c3807a845">विनाश प्रमाणक अनुरोध करू</string>
     <string name="ui_copy_08484d351755">सहेजल गेल डेटा देखा रहल अछि. नवीनतम पिकअप आ स्टॉक स्थिति कें पुष्टि करय कें लेल कनेक्ट भेला पर ताजा करूं.</string>
-    <string name="ui_copy_c0593d30aadf">पिकअप शिफ्ट: 7:30 AM–6:30 PM भारत समय। एहि पाली के दौरान यात्रा शुरू करू, फेर ओकर क्यूआर अनलॉक करय लेल घर पर पहुंचल के निशान लगाउ.</string>
+    <string name="ui_copy_c0593d30aadf">पिकअप शिफ्ट: 7:30 AM–9:30 PM भारत समय। एहि पाली के दौरान यात्रा शुरू करू, फेर ओकर क्यूआर अनलॉक करय लेल घर पर पहुंचल के निशान लगाउ.</string>
     <string name="ui_copy_e1ebb3edfe78">पिकअप देखू</string>
     <string name="ui_copy_587862aa9efd">रिसाइकिल लॉट बनाउ</string>
     <string name="ui_copy_f9f6a58c24f9">थोक लॉट</string>
@@ -1242,8 +1242,8 @@
     <string name="ui_copy_25b55e8298c7">दावा...</string>
     <string name="ui_copy_c3c7836a6362">दावा पिकअप</string>
     <string name="ui_copy_b59cf9ed55bb">गिरावट</string>
-    <string name="ui_copy_1a95258c37c6">पिकअप के कार्य समय भारत के समय 7:30 AM–6:30 PM अछि |</string>
-    <string name="ui_copy_3e37016ef70a">पिकअप के समय यात्रा शुरू: 7:30 AM–6:30 PM |</string>
+    <string name="ui_copy_1a95258c37c6">पिकअप के कार्य समय भारत के समय 7:30 AM–9:30 PM अछि |</string>
+    <string name="ui_copy_3e37016ef70a">पिकअप के समय यात्रा शुरू: 7:30 AM–9:30 PM |</string>
     <string name="ui_copy_01eeeae331be">घर मे? मार्क अपन एक बेर के क्यूआर अनलॉक करय लेल पहुंचल. तौलबासँ पहिने ओकरा सभकेँ देखाबय लेल कहब।</string>
     <string name="ui_copy_0828af7f409b">निशान आबि गेल</string>
     <string name="ui_copy_648e93d69590">तौल सं पहिने घरक कें एक बेर कें पिकअप क्यूआर स्कैन करूं.</string>
@@ -1298,7 +1298,7 @@
     <string name="ui_copy_287ecfcf652b">न्यूनतम स्वीकार्य दर · ₹/किलोग्राम (वैकल्पिक)</string>
     <string name="ui_copy_3b575a691c82">रिसाइकिलर कें लेल नोट (वैकल्पिक)</string>
     <string name="ui_copy_4023cf765ef2">रिसाइकिलर कें लेल सूची</string>
-    <string name="ui_copy_392366d76c17">कबादीवाला कें साथ रिसाइकिल हैंडओवर कें व्यवस्था कैल गेल छै; एहि प्रवाह मे कोनो निश्चित पाली नहि होइत छैक। अलग-अलग घरक पिकअप पाली भारत समय स 7:30 AM–6:30 PM अछि। तैयारी के 2 घंटा के भीतर कलेक्टर \ के हस्ताक्षरित क्यूआर स्कैन करू.</string>
+    <string name="ui_copy_392366d76c17">कबादीवाला कें साथ रिसाइकिल हैंडओवर कें व्यवस्था कैल गेल छै; एहि प्रवाह मे कोनो निश्चित पाली नहि होइत छैक। अलग-अलग घरक पिकअप पाली भारत समय स 7:30 AM–9:30 PM अछि। तैयारी के 2 घंटा के भीतर कलेक्टर \ के हस्ताक्षरित क्यूआर स्कैन करू.</string>
     <string name="ui_copy_ea21894118d3">मांग प्रकाशित करू</string>
     <string name="ui_copy_fa3f1b42d9f8">उपलब्ध कलेक्टर लॉट</string>
     <string name="ui_copy_2de7f18bf0a2">हमर प्रस्ताव</string>
@@ -1405,7 +1405,7 @@
     <string name="ui_copy_2e3e55b0fa5a">सामग्री मूल्य %1$s − पिकअप शुल्क %2$s</string>
     <string name="ui_copy_59f7c4f53552">इस आदेश के वलए %1$s पिकअप शुल्क माफ कर</string>
     <string name="ui_copy_eef4d8744af3">पिकअप %1$s · घरेलू हस्तान्तरण सत्यापित</string>
-    <string name="ui_copy_73e4b32b8063">पिकअप 7:30 AM–6:30 PM चलैत अछि। अखन स कम स कम %1$s मिनट क समय चुनू।</string>
+    <string name="ui_copy_73e4b32b8063">पिकअप 7:30 AM–9:30 PM चलैत अछि। अखन स कम स कम %1$s मिनट क समय चुनू।</string>
     <string name="ui_copy_d547f2275b0b">राशि %1$s स बेसी नहि भ सकैत अछि।</string>
     <string name="ui_copy_66a5223089da">सामग्री %1$s · पिकअप चार्ज %2$s</string>
     <string name="ui_copy_be735b699c73">इन्वेंट्री में जोड़ा गया · भुगतान घरेलू %1$s</string>

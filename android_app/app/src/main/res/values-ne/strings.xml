@@ -1133,7 +1133,7 @@
     <string name="ui_copy_eb127c0c7f2c">स्वीकृत सामग्रीहरू देखाउनुहोस्</string>
     <string name="ui_copy_9ebda4a121af">स्थान अनुपलब्ध · पुन: प्रयास गर्नुहोस्</string>
     <string name="ui_copy_9aee0641931f">मेरो हालको स्थान</string>
-    <string name="ui_copy_c54cc1bc59fc">घरेलु पिकअप समय: 7:30 AM – 6:30 PM भारत समय। तपाईंको पिकअप QR कबडीवालाले यात्रा सुरु गरेपछि र आइपुगेको चिन्ह लगाउँछ।</string>
+    <string name="ui_copy_c54cc1bc59fc">घरेलु पिकअप समय: 7:30 AM – 9:30 PM भारत समय। तपाईंको पिकअप QR कबडीवालाले यात्रा सुरु गरेपछि र आइपुगेको चिन्ह लगाउँछ।</string>
     <string name="ui_copy_2f0993983a8b">मेरो सूचीहरू</string>
     <string name="ui_copy_fc38ee6380fb">सङ्कलन साझेदार खोज्नुहोस्</string>
     <string name="ui_copy_b944a83236e6">प्रमाणित, सक्रिय कबडीवालाहरू तपाईंको क्षेत्रमा सेवा गरिरहेका छन्।</string>
@@ -1165,7 +1165,7 @@
     <string name="ui_copy_567da6ba2dee">नजिकैको Kabadiwalas</string>
     <string name="ui_copy_c3be5e282d6f">Cancel listing</string>
     <string name="ui_copy_7105c5c6087c">अघिल्लो पिकअप अनुरोध रद्द गरियो। तपाईं अर्को पार्टनर रोज्न सक्नुहुन्छ।</string>
-    <string name="ui_copy_97df03205744">कबाडीवालाले पिकअप घण्टा (7:30 AM – 6:30 PM भारत समय) मा यात्रा सुरु गर्न सक्छ। तिनीहरूले आइपुगेको चिन्ह लगाएपछि QR देखा पर्दछ।</string>
+    <string name="ui_copy_97df03205744">कबाडीवालाले पिकअप घण्टा (7:30 AM – 9:30 PM भारत समय) मा यात्रा सुरु गर्न सक्छ। तिनीहरूले आइपुगेको चिन्ह लगाएपछि QR देखा पर्दछ।</string>
     <string name="ui_copy_0264bf4f33e6">कबडीवाला बाटोमा छ। तिनीहरूले आइपुगेको चिन्ह लगाउँदा तपाईंको QR देखा पर्दछ।</string>
     <string name="ui_copy_9b1318f8a1b8">Message Kabadiwala</string>
     <string name="ui_copy_f8755d7001f5">घरेलू हस्तान्तरण प्रमाणित</string>
@@ -1215,7 +1215,7 @@
     <string name="ui_copy_fcdad39da790">मैले मेरो खाता</string>
     <string name="ui_copy_f59c3807a845">विनाश प्रमाण अनुरोध गर्नुहोस्</string>
     <string name="ui_copy_08484d351755">बचत गरिएको डाटा देखाउँदै। नवीनतम पिकअप र स्टक स्थिति पुष्टि गर्न जडान हुँदा ताजा गर्नुहोस्।</string>
-    <string name="ui_copy_c0593d30aadf">पिकअप सिफ्ट: 7:30 AM – 6:30 PM भारत समय। यो शिफ्टको समयमा यात्रा सुरु गर्नुहोस्, त्यसपछि यसको QR अनलक गर्न घरमा आइपुगेको चिन्ह लगाउनुहोस्।</string>
+    <string name="ui_copy_c0593d30aadf">पिकअप सिफ्ट: 7:30 AM – 9:30 PM भारत समय। यो शिफ्टको समयमा यात्रा सुरु गर्नुहोस्, त्यसपछि यसको QR अनलक गर्न घरमा आइपुगेको चिन्ह लगाउनुहोस्।</string>
     <string name="ui_copy_e1ebb3edfe78">पिकअपहरू हेर्नुहोस्</string>
     <string name="ui_copy_587862aa9efd">रिसाइक्लर लट</string>
     <string name="ui_copy_f9f6a58c24f9">बल्क लट्स</string>
@@ -1242,8 +1242,8 @@
     <string name="ui_copy_25b55e8298c7">दावी गर्दै...</string>
     <string name="ui_copy_c3c7836a6362">दावी पिकअप</string>
     <string name="ui_copy_b59cf9ed55bb">अस्वीकार</string>
-    <string name="ui_copy_1a95258c37c6">पिकअप कार्य समय 7:30 AM - 6:30 PM भारत समय हो।</string>
-    <string name="ui_copy_3e37016ef70a">पिकअप घण्टामा यात्रा सुरु गर्नुहोस्: बिहान 7:30 देखि 6:30 बजे।</string>
+    <string name="ui_copy_1a95258c37c6">पिकअप कार्य समय 7:30 AM - 9:30 PM भारत समय हो।</string>
+    <string name="ui_copy_3e37016ef70a">पिकअप घण्टामा यात्रा सुरु गर्नुहोस्: बिहान 7:30 देखि 9:30 बजे।</string>
     <string name="ui_copy_01eeeae331be">घरमा? मार्क तिनीहरूको एक पटकको QR अनलक गर्न आइपुगे। तौल गर्नु अघि तिनीहरूलाई देखाउन सोध्नुहोस्।</string>
     <string name="ui_copy_0828af7f409b">मार्क आइपुग्यो</string>
     <string name="ui_copy_648e93d69590">तौल गर्नु अघि घरपरिवारको एक पटकको पिकअप QR स्क्यान गर्नुहोस्।</string>
@@ -1298,7 +1298,7 @@
     <string name="ui_copy_287ecfcf652b">न्यूनतम स्वीकार्य दर · ₹/kg (वैकल्पिक)</string>
     <string name="ui_copy_3b575a691c82">रिसाइकलहरूका लागि नोटहरू (वैकल्पिक)</string>
     <string name="ui_copy_4023cf765ef2">List for recyclers</string>
-    <string name="ui_copy_392366d76c17">रिसाइक्लर हस्तान्तरण काबाडीवालासँग मिलाइएको छ; यो प्रवाहको कुनै निश्चित परिवर्तन छैन। भारतको समयअनुसार बिहान ७:३० बजेदेखि ६:३० बजेसम्मको छुट्टै पारिवारिक पिकअप सिफ्ट हुन्छ। तयारीको २ घण्टा भित्र कलेक्टरको हस्ताक्षर गरिएको QR स्क्यान गर्नुहोस्।</string>
+    <string name="ui_copy_392366d76c17">रिसाइक्लर हस्तान्तरण काबाडीवालासँग मिलाइएको छ; यो प्रवाहको कुनै निश्चित परिवर्तन छैन। भारतको समयअनुसार बिहान ७:३० बजेदेखि ९:३० बजेसम्मको छुट्टै पारिवारिक पिकअप सिफ्ट हुन्छ। तयारीको २ घण्टा भित्र कलेक्टरको हस्ताक्षर गरिएको QR स्क्यान गर्नुहोस्।</string>
     <string name="ui_copy_ea21894118d3">Publish demand</string>
     <string name="ui_copy_fa3f1b42d9f8">उपलब्ध कलेक्टर धेरै</string>
     <string name="ui_copy_2de7f18bf0a2">मेरा प्रस्तावहरू</string>
@@ -1405,7 +1405,7 @@
     <string name="ui_copy_2e3e55b0fa5a">सामग्री मान %1$s − पिकअप चार्ज %2$s</string>
     <string name="ui_copy_59f7c4f53552">यस अर्डरको लागि %1$s पिकअप शुल्क माफ गर्नुहोस्</string>
     <string name="ui_copy_eef4d8744af3">पिकअप %1$s · घरेलु हस्तान्तरण प्रमाणित</string>
-    <string name="ui_copy_73e4b32b8063">पिकअपहरू बिहान 7:30 देखि 6:30 बजेसम्म चल्छन्। अब देखि कम्तिमा %1$s मिनेट समय छान्नुहोस्।</string>
+    <string name="ui_copy_73e4b32b8063">पिकअपहरू बिहान 7:30 देखि 9:30 बजेसम्म चल्छन्। अब देखि कम्तिमा %1$s मिनेट समय छान्नुहोस्।</string>
     <string name="ui_copy_d547f2275b0b">रकम %1$s भन्दा बढी हुन सक्दैन।</string>
     <string name="ui_copy_66a5223089da">सामग्री %1$s · पिकअप चार्ज %2$s</string>
     <string name="ui_copy_be735b699c73">सूचीमा थपियो · भुक्तान गरिएको घर %1$s</string>

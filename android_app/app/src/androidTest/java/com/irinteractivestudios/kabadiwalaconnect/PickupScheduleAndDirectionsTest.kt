@@ -28,7 +28,7 @@ class PickupScheduleAndDirectionsTest {
         showAcceptedPickup()
         composeRule.onNodeWithText("Show directions").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Schedule pickup").performScrollTo().performClick()
-        composeRule.onNodeWithText("Pickups run 7:30 AM–6:30 PM. Choose a time at least 15 minutes from now.").assertIsDisplayed()
+        composeRule.onNodeWithText("Pickups run 7:30 AM–9:30 PM. Choose a time at least 15 minutes from now.").assertIsDisplayed()
     }
 
     @Test

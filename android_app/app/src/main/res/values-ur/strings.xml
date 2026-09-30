@@ -1133,7 +1133,7 @@
     <string name="ui_copy_eb127c0c7f2c">قبول شدہ مواد دکھائیں۔</string>
     <string name="ui_copy_9ebda4a121af">مقام دستیاب نہیں ہے · دوبارہ کوشش کریں</string>
     <string name="ui_copy_9aee0641931f">میرا موجودہ مقام</string>
-    <string name="ui_copy_c54cc1bc59fc">گھریلو پک اپ کے اوقات: صبح 7:30 سے ​​شام 6:30 بجے تک ہندوستانی وقت۔ کبڈی والا کے سفر شروع کرنے اور پہنچنے کے نشانات کے بعد آپ کا پک اپ QR ظاہر ہوتا ہے۔</string>
+    <string name="ui_copy_c54cc1bc59fc">گھریلو پک اپ کے اوقات: صبح 7:30 سے ​​رات 9:30 بجے تک ہندوستانی وقت۔ کبڈی والا کے سفر شروع کرنے اور پہنچنے کے نشانات کے بعد آپ کا پک اپ QR ظاہر ہوتا ہے۔</string>
     <string name="ui_copy_2f0993983a8b">میری فہرستیں</string>
     <string name="ui_copy_fc38ee6380fb">ایک مجموعہ پارٹنر</string>
     <string name="ui_copy_b944a83236e6">تصدیق شدہ، فعال کباڑیوال آپ کے علاقے کی خدمت کر رہے ہیں۔</string>
@@ -1165,7 +1165,7 @@
     <string name="ui_copy_567da6ba2dee">قریبی کبڈیوالاس</string>
     <string name="ui_copy_c3be5e282d6f">Cancel listing</string>
     <string name="ui_copy_7105c5c6087c">پچھلی پک اپ کی درخواست منسوخ کر دی گئی تھی۔ آپ دوسرے ساتھی کا انتخاب کر سکتے ہیں۔</string>
-    <string name="ui_copy_97df03205744">کبڈی والا پک اپ اوقات کے دوران (7:30 AM-6:30 PM ہندوستانی وقت) کے دوران سفر شروع کر سکتا ہے۔ QR پہنچنے کے بعد ظاہر ہوتا ہے۔</string>
+    <string name="ui_copy_97df03205744">کبڈی والا پک اپ اوقات کے دوران (7:30 AM-9:30 PM ہندوستانی وقت) کے دوران سفر شروع کر سکتا ہے۔ QR پہنچنے کے بعد ظاہر ہوتا ہے۔</string>
     <string name="ui_copy_0264bf4f33e6">کبڈی والا راستے میں ہے۔ آپ کی QR آمد کا نشان لگانے کے بعد ظاہر ہوتی ہے۔</string>
     <string name="ui_copy_9b1318f8a1b8">Message Kabadiwala</string>
     <string name="ui_copy_f8755d7001f5">گھریلو ہینڈ اوور تصدیق شدہ</string>
@@ -1215,7 +1215,7 @@
     <string name="ui_copy_fcdad39da790">میں نے اپنا اکاؤنٹ</string>
     <string name="ui_copy_f59c3807a845">تباہی کے ثبوت کی درخواست کریں</string>
     <string name="ui_copy_08484d351755">محفوظ کردہ ڈیٹا دکھا رہا ہے۔ تازہ ترین پک اپ اور اسٹاک اسٹیٹس کی تصدیق کرنے کے لیے منسلک ہونے پر ریفریش کریں۔</string>
-    <string name="ui_copy_c0593d30aadf">پک اپ شفٹ: صبح 7:30 سے ​​شام 6:30 بجے تک ہندوستانی وقت۔ اس شفٹ کے دوران ٹرپ شروع کریں، پھر اپنے QR کو غیر مقفل کرنے کے لیے گھر پر پہنچ گئے کو نشان زد کریں۔</string>
+    <string name="ui_copy_c0593d30aadf">پک اپ شفٹ: صبح 7:30 سے ​​رات 9:30 بجے تک ہندوستانی وقت۔ اس شفٹ کے دوران ٹرپ شروع کریں، پھر اپنے QR کو غیر مقفل کرنے کے لیے گھر پر پہنچ گئے کو نشان زد کریں۔</string>
     <string name="ui_copy_e1ebb3edfe78">پک اپس دیکھیں</string>
     <string name="ui_copy_587862aa9efd">ری سائیکلر لاٹ</string>
     <string name="ui_copy_f9f6a58c24f9">بلک لاٹس</string>
@@ -1242,8 +1242,8 @@
     <string name="ui_copy_25b55e8298c7">دعوی کیا جا رہا ہے…</string>
     <string name="ui_copy_c3c7836a6362">کلیم پک اپ</string>
     <string name="ui_copy_b59cf9ed55bb">انکار</string>
-    <string name="ui_copy_1a95258c37c6">پک اپ کام کے اوقات صبح 7:30 AM سے 6:30 PM ہندوستانی وقت ہیں۔</string>
-    <string name="ui_copy_3e37016ef70a">پک اپ کے اوقات کے دوران سفر شروع کریں: صبح 7:30 تا 6:30 بجے۔</string>
+    <string name="ui_copy_1a95258c37c6">پک اپ کام کے اوقات صبح 7:30 AM سے 9:30 PM ہندوستانی وقت ہیں۔</string>
+    <string name="ui_copy_3e37016ef70a">پک اپ کے اوقات کے دوران سفر شروع کریں: صبح 7:30 تا 9:30 بجے۔</string>
     <string name="ui_copy_01eeeae331be">گھر میں؟ مارک اپنے ایک وقتی QR کو غیر مقفل کرنے کے لیے پہنچا۔ ان سے کہیں کہ وزن کرنے سے پہلے اسے دکھائیں۔</string>
     <string name="ui_copy_0828af7f409b">نشان پہنچ گیا</string>
     <string name="ui_copy_648e93d69590">وزن کرنے سے پہلے گھر کے ایک وقتی پک اپ QR کو اسکین کریں۔</string>
@@ -1298,7 +1298,7 @@
     <string name="ui_copy_287ecfcf652b">کم از کم قابل قبول شرح · ₹/kg (اختیاری)</string>
     <string name="ui_copy_3b575a691c82">نوٹس برائے ری سائیکلرز (اختیاری)</string>
     <string name="ui_copy_4023cf765ef2">فہرست برائے ری سائیکلرز</string>
-    <string name="ui_copy_392366d76c17">ری سائیکلر کے حوالے کبڈی والا کے ساتھ ترتیب دیے گئے ہیں۔ اس بہاؤ کی کوئی مقررہ تبدیلی نہیں ہے۔ علیحدہ گھریلو پک اپ شفٹ ہندوستان کے وقت کے مطابق صبح 7:30 سے ​​شام 6:30 بجے تک ہے۔ تیاری کے 2 گھنٹے کے اندر کلکٹر کے دستخط شدہ QR کو اسکین کریں۔</string>
+    <string name="ui_copy_392366d76c17">ری سائیکلر کے حوالے کبڈی والا کے ساتھ ترتیب دیے گئے ہیں۔ اس بہاؤ کی کوئی مقررہ تبدیلی نہیں ہے۔ علیحدہ گھریلو پک اپ شفٹ ہندوستان کے وقت کے مطابق صبح 7:30 سے ​​رات 9:30 بجے تک ہے۔ تیاری کے 2 گھنٹے کے اندر کلکٹر کے دستخط شدہ QR کو اسکین کریں۔</string>
     <string name="ui_copy_ea21894118d3">ڈیمانڈ</string>
     <string name="ui_copy_fa3f1b42d9f8">دستیاب کلکٹر لاٹس</string>
     <string name="ui_copy_2de7f18bf0a2">میری پیشکشیں</string>
@@ -1405,7 +1405,7 @@
     <string name="ui_copy_2e3e55b0fa5a">مٹیریل ویلیو %1$s − پک اپ چارج %2$s</string>
     <string name="ui_copy_59f7c4f53552">اس آرڈر کے لیے %1$s پک اپ چارج چھوڑ دیں۔</string>
     <string name="ui_copy_eef4d8744af3">پک اپ %1$s · گھریلو حوالگی کی تصدیق شدہ</string>
-    <string name="ui_copy_73e4b32b8063">پک اپ صبح 7:30 سے ​​شام 6:30 تک چلتے ہیں۔ اب سے کم از کم %1$s منٹ کا وقت منتخب کریں۔</string>
+    <string name="ui_copy_73e4b32b8063">پک اپ صبح 7:30 سے ​​رات 9:30 تک چلتے ہیں۔ اب سے کم از کم %1$s منٹ کا وقت منتخب کریں۔</string>
     <string name="ui_copy_d547f2275b0b">رقم %1$s سے زیادہ نہیں ہو سکتی۔</string>
     <string name="ui_copy_66a5223089da">میٹریل %1$s · پک اپ چارج %2$s</string>
     <string name="ui_copy_be735b699c73">انوینٹری میں شامل کیا گیا · ادا شدہ گھریلو %1$s</string>

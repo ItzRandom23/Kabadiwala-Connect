@@ -1133,7 +1133,7 @@
     <string name="ui_copy_eb127c0c7f2c">स्वीकृत सामग्रीं दर्शयतु</string>
     <string name="ui_copy_9ebda4a121af">स्थानं अनुपलब्धम् · पुनः प्रयासं कुर्वन्तु</string>
     <string name="ui_copy_9aee0641931f">मम वर्तमानस्थानस्य उपयोगं कुर्वन्तु</string>
-    <string name="ui_copy_c54cc1bc59fc">गृहे पिकअप समय : 7:30 AM–6:30 PM भारत समय। कबाडीवाला यात्रां आरभ्य Arrived इति चिह्नं कृत्वा भवतः पिकअप QR दृश्यते।</string>
+    <string name="ui_copy_c54cc1bc59fc">गृहे पिकअप समय : 7:30 AM–9:30 PM भारत समय। कबाडीवाला यात्रां आरभ्य Arrived इति चिह्नं कृत्वा भवतः पिकअप QR दृश्यते।</string>
     <string name="ui_copy_2f0993983a8b">मम सूचीः</string>
     <string name="ui_copy_fc38ee6380fb">संग्रह भागीदारं ज्ञातव्यम्</string>
     <string name="ui_copy_b944a83236e6">सत्यापित, सक्रिय कबाडीवाला अपने क्षेत्र की सेवा कर रहे।</string>
@@ -1165,7 +1165,7 @@
     <string name="ui_copy_567da6ba2dee">समीपस्थ कबाडीवालाः सूचयन्तु</string>
     <string name="ui_copy_c3be5e282d6f">सूची रद्दं कुर्वन्तु</string>
     <string name="ui_copy_7105c5c6087c">पूर्वं पिकअप-अनुरोधः रद्दः अभवत् । भवन्तः अन्यं भागीदारं चिन्वितुं शक्नुवन्ति।</string>
-    <string name="ui_copy_97df03205744">कबाडीवाला-यानं पिकअप-समये (भारतसमये (7:30 AM–6:30 PM) यात्रां आरभुं शक्नोति । तेषां Arrived इति चिह्नस्य अनन्तरं QR दृश्यते ।</string>
+    <string name="ui_copy_97df03205744">कबाडीवाला-यानं पिकअप-समये (भारतसमये (7:30 AM–9:30 PM) यात्रां आरभुं शक्नोति । तेषां Arrived इति चिह्नस्य अनन्तरं QR दृश्यते ।</string>
     <string name="ui_copy_0264bf4f33e6">कबाडीवाला मार्गे अस्ति। तेषां Arrived इति चिह्नस्य अनन्तरं भवतः QR दृश्यते ।</string>
     <string name="ui_copy_9b1318f8a1b8">Message Kabadiwala</string>
     <string name="ui_copy_f8755d7001f5">घरेलू हस्तान्तरण सत्यापित</string>
@@ -1215,7 +1215,7 @@
     <string name="ui_copy_fcdad39da790">मया मम खातं निष्कासितम्</string>
     <string name="ui_copy_f59c3807a845">विनाशसाक्ष्यस्य अनुरोधं कुर्वन्तु</string>
     <string name="ui_copy_08484d351755">रक्षितदत्तांशं दर्शयति। नवीनतमं पिकअपं स्टॉक् स्थितिं च पुष्टयितुं संयोजितं सति ताजगीं कुर्वन्तु।</string>
-    <string name="ui_copy_c0593d30aadf">पिकअप शिफ्ट: भारतसमये प्रातः 7:30 AM–6:30 PM। अस्मिन् पाले यात्रां आरभत, ततः तस्य QR अनलॉक् कर्तुं गृहे Arrived इति चिह्नं कुर्वन्तु।</string>
+    <string name="ui_copy_c0593d30aadf">पिकअप शिफ्ट: भारतसमये प्रातः 7:30 AM–9:30 PM। अस्मिन् पाले यात्रां आरभत, ततः तस्य QR अनलॉक् कर्तुं गृहे Arrived इति चिह्नं कुर्वन्तु।</string>
     <string name="ui_copy_e1ebb3edfe78">पिकअपं पश्यन्तु</string>
     <string name="ui_copy_587862aa9efd">पुनर्चक्रणकर्ता लॉट बनाउ</string>
     <string name="ui_copy_f9f6a58c24f9">बल्क लॉट</string>
@@ -1242,8 +1242,8 @@
     <string name="ui_copy_25b55e8298c7">दावा...</string>
     <string name="ui_copy_c3c7836a6362">Claim pickup</string>
     <string name="ui_copy_b59cf9ed55bb">Decline</string>
-    <string name="ui_copy_1a95258c37c6">पिकअप कार्यसमयः भारतसमये प्रातः 7:30 AM–6:30 PM यावत् भवति।</string>
-    <string name="ui_copy_3e37016ef70a">पिकअपसमये यात्रां प्रारभत: प्रातः ७:३०–वादन ६:३०।</string>
+    <string name="ui_copy_1a95258c37c6">पिकअप कार्यसमयः भारतसमये प्रातः 7:30 AM–9:30 PM यावत् भवति।</string>
+    <string name="ui_copy_3e37016ef70a">पिकअपसमये यात्रां प्रारभत: प्रातः ७:३०–वादन ९:३०।</string>
     <string name="ui_copy_01eeeae331be">गृहे? मार्क आगतवान् तेषां एकसमयस्य QR अनलॉक् कर्तुं। तौलनात् पूर्वं दर्शयितुं वदन्तु।</string>
     <string name="ui_copy_0828af7f409b">Mark arrived</string>
     <string name="ui_copy_648e93d69590">तौलनात् पूर्वं गृहस्य एकवारं पिकअप QR स्कैन कुर्वन्तु।</string>
@@ -1298,7 +1298,7 @@
     <string name="ui_copy_287ecfcf652b">न्यूनतम स्वीकार्य दर · ₹/kg (वैकल्पिक)</string>
     <string name="ui_copy_3b575a691c82">पुनर्चक्रणकर्तृणां कृते टिप्पण्यानि (वैकल्पिकम्)</string>
     <string name="ui_copy_4023cf765ef2">पुनर्चक्रणकर्तृणां कृते सूची</string>
-    <string name="ui_copy_392366d76c17">पुनर्चक्रणकर्ता हस्तान्तरणस्य व्यवस्था कबादीवाला सह भवति; अस्य प्रवाहस्य नियतं परिवर्तनं नास्ति । पृथक् गृहेषु पिकअप-पालिः भारतसमये प्रातः ७:३० वादनतः सायं ६:३० वादनपर्यन्तं भवति । सज्जतायाः २ घण्टानां अन्तः संग्राहकस्य हस्ताक्षरितस्य QR इत्यस्य स्कैनिङ्गं कुर्वन्तु।</string>
+    <string name="ui_copy_392366d76c17">पुनर्चक्रणकर्ता हस्तान्तरणस्य व्यवस्था कबादीवाला सह भवति; अस्य प्रवाहस्य नियतं परिवर्तनं नास्ति । पृथक् गृहेषु पिकअप-पालिः भारतसमये प्रातः ७:३० वादनतः रात्रौ ९:३० वादनपर्यन्तं भवति । सज्जतायाः २ घण्टानां अन्तः संग्राहकस्य हस्ताक्षरितस्य QR इत्यस्य स्कैनिङ्गं कुर्वन्तु।</string>
     <string name="ui_copy_ea21894118d3">Publish demand</string>
     <string name="ui_copy_fa3f1b42d9f8">उपलब्ध संग्राहक लॉट</string>
     <string name="ui_copy_2de7f18bf0a2">मम प्रस्तावाः</string>
@@ -1405,7 +1405,7 @@
     <string name="ui_copy_2e3e55b0fa5a">सामग्री मूल्य %1$s − पिकअप शुल्क %2$s</string>
     <string name="ui_copy_59f7c4f53552">अस्य आदेशस्य कृते %1$s पिकअपशुल्कं माफं कुर्वन्तु</string>
     <string name="ui_copy_eef4d8744af3">पिकअप %1$s · घरेलू हस्तान्तरण सत्यापित</string>
-    <string name="ui_copy_73e4b32b8063">पिकअपः प्रातः ७:३० वादनतः सायं ६:३० वादनपर्यन्तं चाल्यते । इतः परं न्यूनातिन्यूनं %1$s निमेषेभ्यः परं समयं चिनुत।</string>
+    <string name="ui_copy_73e4b32b8063">पिकअपः प्रातः ७:३० वादनतः रात्रौ ९:३० वादनपर्यन्तं चाल्यते । इतः परं न्यूनातिन्यूनं %1$s निमेषेभ्यः परं समयं चिनुत।</string>
     <string name="ui_copy_d547f2275b0b">राशि %1$s अधिकं न भवितुमर्हति।</string>
     <string name="ui_copy_66a5223089da">सामग्री %1$s · पिकअप शुल्क %2$s</string>
     <string name="ui_copy_be735b699c73">इन्वेंट्री मध्ये योजितम् · सशुल्क गृहस्थं %1$s</string>

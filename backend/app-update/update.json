@@ -1,8 +1,8 @@
 {
-  "versionCode": 75,
-  "versionName": "0.1.11-beta",
-  "apkUrl": "kabadiwala-connect-0.1.11-beta-debug.apk",
-  "sha256": "7B12F1775E515D72D844C7C268129472832A9C02FA103C2304719FE5A42B7140",
-  "sizeBytes": 31835261,
-  "releaseNotes": "Improved account isolation, offline reliability, chat and screen refreshes, QR verification, and transaction handling."
+  "versionCode": 76,
+  "versionName": "0.1.12-beta",
+  "apkUrl": "kabadiwala-connect-0.1.12-beta-debug.apk",
+  "sha256": "E0743A23AA688BC53308B5ABEF0A3F0D4B9E306A43E5644F85790DF015A13BB0",
+  "sizeBytes": 31835140,
+  "releaseNotes": "Pickup hours extended to 7:30 AM–9:30 PM India time. Removed internal chat ID suffixes and redundant back links."
 }

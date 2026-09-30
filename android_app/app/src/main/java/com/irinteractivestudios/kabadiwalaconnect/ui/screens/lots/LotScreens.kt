@@ -563,9 +563,6 @@ OutlinedButton(onClick = { tts.speak(safetyAudioText, TextToSpeech.QUEUE_FLUSH, 
             Text(stringResource(R.string.lot_saved_id, s.savedLotId.orEmpty()), style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(R.string.ui_copy_ac9b2daa97a5), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             KcPrimaryButton("Open record and request quotes", onViewSaved, icon = Icons.Filled.Inventory2, testTag = "lot_view_saved")
-            OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("lot_back_home")) {
-                Text(stringResource(R.string.lot_back_home))
-            }
         }
     }
 }

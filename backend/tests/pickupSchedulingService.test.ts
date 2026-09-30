@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { isPickupWorkTime, movePickupDay, pickupDayKey, validateCollectorPickupSlot, validatePickupSlot } from '../src/services/pickupSchedulingService.js';
 
 describe('pickup scheduling policy', () => {
-  it('uses the 7:30 AM–6:30 PM India time shift at both boundaries', () => {
+  it('uses the 7:30 AM–9:30 PM India time shift at both boundaries', () => {
     expect(isPickupWorkTime(new Date('2026-09-18T01:59:00.000Z'))).toBe(false);
     expect(isPickupWorkTime(new Date('2026-09-18T02:00:00.000Z'))).toBe(true);
     expect(isPickupWorkTime(new Date('2026-09-18T13:00:00.000Z'))).toBe(true);
-    expect(isPickupWorkTime(new Date('2026-09-18T13:01:00.000Z'))).toBe(false);
+    expect(isPickupWorkTime(new Date('2026-09-18T13:01:00.000Z'))).toBe(true);
+    expect(isPickupWorkTime(new Date('2026-09-18T16:00:00.000Z'))).toBe(true);
+    expect(isPickupWorkTime(new Date('2026-09-18T16:01:00.000Z'))).toBe(false);
   });
   it('accepts aligned near-term slots and rejects unsafe windows', () => {
     const now = new Date('2026-09-18T08:00:00.000Z');
@@ -22,7 +24,7 @@ describe('pickup scheduling policy', () => {
     expect(validateCollectorPickupSlot('2026-09-18T08:15:00.000Z', acceptedAt, now)).toEqual(new Date('2026-09-18T08:15:00.000Z'));
     expect(() => validateCollectorPickupSlot('2026-09-18T08:14:00.000Z', acceptedAt, now)).toThrow(/15 minutes/);
     expect(() => validateCollectorPickupSlot('2026-09-18T08:16:00.000Z', acceptedAt, now)).toThrow(/15-minute interval/);
-    expect(() => validateCollectorPickupSlot('2026-09-18T13:05:00.000Z', acceptedAt, now)).toThrow(/7:30 AM/);
+    expect(() => validateCollectorPickupSlot('2026-09-18T16:15:00.000Z', acceptedAt, now)).toThrow(/7:30 AM/);
   });
 
   it('requires at least 15 minutes from now when an old accepted pickup is rescheduled', () => {

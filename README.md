@@ -1,178 +1,158 @@
 # Kabadiwala Connect
 
-Kabadiwala Connect is one Android-first product connecting informal e-waste collectors with authorized recyclers and aggregators. There is no user-facing website in this repository.
+An Android app that connects **Households → Kabadiwalas → Recyclers** through scrap listings, pickups, inventory, offers and recorded handovers.
 
-## Current release
+## Current beta
 
-- Android source/build version: `0.1.8-beta` (`versionCode 72`)
-- Latest OTA artifact in `backend/app-update`: `0.1.8-beta` (`versionCode 72`), built as `envTestingDebug`.
-- Environments: `envTesting` and `production`
-- OTA manifest: `backend/app-update/update.json`
-- Backend update path: `/app/update.json`
+| Item | Value |
+| --- | --- |
+| App version | **0.1.12-beta** |
+| Android version code | **76** |
+| Published APK variant | `envTestingDebug` |
+| Household pickup hours | **7:30 AM–9:30 PM, Asia/Kolkata** |
+| Update manifest | [`backend/app-update/update.json`](backend/app-update/update.json) |
 
-The current beta keeps signed-out users on authentication, uses saved household
-coordinates for nearby Kabadiwala discovery, recovers from concurrent pickup
-QR scans, and stores street/block details separately from the locality. Household
-listings include saved GPS coordinates and share exact pickup addresses only with
-the household and an assigned Kabadiwala. It also includes GPS-aware lot locations, multi-photo scrap capture,
-Gemini-assisted material suggestions with manual fallback, account-scoped
-offline sync, role-aware navigation, verified household pickup QR handover,
-full-screen final weighing, QR handover to recyclers, and crash-safe camera and
-external-activity handling.
+This is a beta project. A successful build does not establish that every workflow, device or network condition is verified. The testing APK is not a signed production release.
 
-## Product
+## Who uses it?
 
-The Android APK contains three role-routed experiences:
+- **Household:** create a listing with photos, find nearby collectors, request a pickup, review final weight and amount, and confirm payment receipt.
+- **Kabadiwala / Collector:** accept and schedule pickups, verify the Household QR, record weighing, manage inventory, publish bulk lots and handle Recycler offers.
+- **Recycler:** submit facility authorization details for review, browse lots, make offers, publish procurement demands, verify handovers and record settlement payments.
+- **Admin:** review Recycler authorization and operate permission-controlled administrative tools. Admin access requires an online authenticated session.
 
-- Household seller: post recyclable material with a photo, approximate weight and area, review a clearly labelled prototype price range, choose an active Kabadiwala, request pickup, and view weighing, rate, status, and final settlement.
-- Kabadiwala: discover household pickup requests, schedule and weigh collections, manage owned inventory, create recycler-facing bulk lots, review offers, and respond to procurement demand.
-- Recycler: submit facility details and authorization evidence for verification, browse Kabadiwala bulk lots, make and track procurement offers, confirm receipt, and publish material requirements.
+Recycler marketplace access depends on server-side authorization. Account roles, resource ownership and transaction rules are enforced by the backend.
 
-Role is stored in the backend account profile and cached locally only to make offline launch sensible. The app never chooses a role from an email address or domain. A new recycler/aggregator starts as `PENDING`, submits authorization evidence in the app, and becomes `VERIFIED` only after an authorized operator checks the record and approves it.
+## How the journey works
+
+1. A Household creates a scrap listing and uploads its photos.
+2. A Collector accepts the pickup, schedules it, starts the trip and marks arrival.
+3. QR verification links the collection to the Household record.
+4. Final weighing and pricing establish the transaction amount; payment recording and receipt confirmation are separate steps.
+5. Collected material enters Collector inventory and can be reserved in a bulk lot.
+6. A Recycler makes an offer. Accepted terms lead to handover, material receipt and settlement records.
+
+A photo-less Household listing remains a draft. Listed prices are estimates until final weighing and settlement. A QR verifies a recorded handover; it is not government certification. Material receipt alone does not prove payment was received.
 
 ## Architecture
 
-```text
-android_app/   Kotlin + Jetpack Compose + Material 3 + Room + Retrofit + WorkManager
-backend/       Express + TypeScript + Prisma + MongoDB
-design/        Brand tokens and Android reference lock
+```mermaid
+flowchart TD
+    UI[Android / Jetpack Compose] --> VM[ViewModels / StateFlow]
+    VM --> Repo[Repositories and feature services]
+    Repo --> Cache[Room cache and durable outbox]
+    Repo --> API[Retrofit / authenticated API]
+    Cache --> Worker[WorkManager synchronization]
+    Worker --> API
+    API --> Backend[Express / TypeScript]
+    Backend --> DB[Prisma / MongoDB replica set]
+    Backend --> Push[Notification delivery / FCM]
+    Push --> UI
 ```
 
-Android uses a single activity, role-aware Navigation Compose, MVVM-style ViewModels, encrypted session storage, Room caches, an idempotent sync queue, and a warm collector / dense operations visual system. English, Hindi, and Marathi are supported through Android resources and the onboarding language choice. Dark mode, large touch targets, explicit offline states, TTS price/safety hooks, and local cached safety guidance are included.
+| Directory | Purpose |
+| --- | --- |
+| `android_app/` | Kotlin, Compose, Material 3, navigation, Room, Retrofit and WorkManager |
+| `backend/` | Express API, authentication, business rules, Prisma schema and tests |
+| `backend/app-update/` | Downloadable beta APKs and update manifest |
+| `docs/` | Workflow notes and historical verification records |
+| `design/` | Brand and interface references |
+| `.github/workflows/` | CI build, test, secret scanning and container checks |
+
+The Android cache and outbox are account-scoped. Session and request-generation checks prevent late responses from replacing a newer account's state. Notifications check recipient identity and role before display.
+
+## Offline behavior
+
+Cached content can remain usable during network loss. Supported drafts and eligible messages in existing conversations can be queued for later synchronization. Pending, failed and confirmed states must remain distinguishable.
+
+**Pickup acceptance, QR verification, inventory transfer and payment confirmation require online server confirmation.** Queued work must not be presented as completed. Legacy queued acceptance or handover confirmation requires explicit online reconciliation.
+
+Offline support is limited to implemented cache and replay contracts. Complete process-death, reconnect and cross-role runtime acceptance remains separate from storage/unit-test coverage.
+
+## Languages and accessibility
+
+The app includes English and **20 additional locale resource packs**, with a saved language preference. Resource completeness checks do not certify translation accuracy or guarantee that every dynamic server message is translated.
+
+Compose screens use light/dark themes, scrolling forms and accessible controls. Small-screen and large-font checks exist; complete device and accessibility coverage is still required before production acceptance.
 
 ## Backend setup
 
-Requirements: Node.js 20+, npm, and MongoDB/Atlas.
+Requirements: **Node.js 20+, npm and MongoDB configured as a replica set**. Atlas supports the transactions used by the app; a standalone local MongoDB instance does not.
 
-```text
+From PowerShell:
+
+```powershell
 cd backend
-copy .env.testing.example .env
+Copy-Item .env.testing.example .env
 npm ci
 npm run db:generate
+```
+
+Edit the untracked `.env` for your environment. Set `DATABASE_URL`, a strong `JWT_SECRET`, a separate `TRACEABILITY_SIGNING_SECRET` and the storage configuration. The example database hostname `database` refers to the Docker service; replace it when using Atlas or another host.
+
+Prepare required indexes and start development:
+
+```powershell
 npm run db:prepare
 npm run dev
 ```
 
-For PowerShell, use `Copy-Item .env.testing.example .env`. `db:prepare`
-creates the runtime MongoDB indexes while preserving intentional partial unique
-indexes; do not replace it with a direct `prisma db push` on a deployment
-database. Development seed data is restricted to `APP_ENV=testing`.
+The API listens on the configured `PORT` (example: `4000`) under `/api/v1`. Readiness is exposed at `/api/v1/ready`.
 
-The backend owns role, recycler authorization, ownership, lot/offer/handover transitions, price ranges, valuation, payment records, and traceability-related audit data. MongoDB indexes cover account lookup, roles, authorization, material, lot status, timestamps, and transaction references. Secrets remain environment-only.
+For a **new disposable database**, Prisma schema preparation can be run before index preparation. Do not blindly run `prisma db push` against an existing deployment: review its schema/index changes and back up data first. Explicit index preparation fails when required maintenance cannot complete.
 
-The supply-chain boundary is explicit: a Household posts material and requests a
-Kabadiwala pickup; only a Kabadiwala can weigh it into inventory and reserve
-that inventory in a bulk lot; only a verified Recycler can offer on and receive
-that lot. The consolidated [project and verification guide](docs/README.md)
-contains the role/state boundaries, safe database guidance, testing evidence,
-and remaining integration gates. Use a disposable test database for schema
-changes; the guide documents the deployment index-preparation path.
+A local testing replica-set configuration is provided in [`backend/compose.testing.yml`](backend/compose.testing.yml). Development and performance seeds must use isolated testing databases.
 
-### Authentication
+## Android setup and APK build
 
-New accounts use:
+Open `android_app/` in Android Studio with the installed Android SDK and a compatible Gradle JDK. The project uses SDK 37 and supports Android 6.0+ (`minSdk 23`).
 
-- `POST /api/v1/auth/signup` with email, password, role, language, and optional recycler details.
-- `POST /api/v1/auth/login` with email and password.
-- `POST /api/v1/auth/admin-login` for a persisted, permission-scoped admin account seeded from deployment environment variables.
-- `GET /api/v1/auth/profile` with the bearer token for revalidation.
+Build a testing APK against your own API:
 
-The existing phone/OTP endpoints remain available for older collector deployments during migration, but the Android onboarding uses email accounts. Household accounts are persisted as a distinct seller role while sharing the collector-owned lot, quote, handover, payment, and notification boundary. Passwords are hashed with Node’s `scrypt`; they are never stored or logged in plaintext. Recycler discovery and quote responses use privacy-safe public views; exact facility/contact details are reserved for authorized workflows.
-
-## Android setup
-
-Open `android_app/` in Android Studio, or build from PowerShell:
-
-```text
+```powershell
 cd android_app
-./gradlew.bat :app:testEnvTestingDebugUnitTest
-./gradlew.bat :app:assembleEnvTestingDebug -PtestingApiBaseUrl=https://testing-host.example/api/v1/
-./gradlew.bat :app:assembleProductionRelease -PproductionApiBaseUrl=https://your-production-host.example/api/v1/ \
-  -PproductionSigningStoreFile=... -PproductionSigningStorePassword=... \
-  -PproductionSigningKeyAlias=... -PproductionSigningKeyPassword=...
+.\gradlew.bat :app:assembleEnvTestingDebug -PtestingApiBaseUrl=http://10.0.2.2:4000/api/v1/
 ```
 
-Android uses product flavors for environment selection. `envTesting` is the
-disposable testing flavor and `production` is the release flavor; environment
-values are generated into `BuildConfig` rather than scattered through source.
-The testing endpoint can be set with `-PtestingApiBaseUrl=...`. HTTPS is
-required except for local loopback or the Android emulator host alias
-(`10.0.2.2`). No remote testing host is configured by default. Production
-variants require an explicit HTTPS `-PproductionApiBaseUrl` and release builds
-also require signing properties supplied by CI or local secret configuration.
-Never put production credentials, Gemini keys, storage credentials, or signing
-secrets in this repository.
+`10.0.2.2` is the Android emulator's route to the host computer. A physical phone needs a reachable LAN address or HTTPS staging host. Override the endpoint explicitly; the checkout's testing configuration may target a remote test server.
 
-The testing build is the safe target for intensive ADB work. Production builds
-must use the production flavor, a legitimate HTTPS API, and the production
-signing key; do not point a testing build at production data.
-
-The backend uses the matching centralized environment contract. Start from
-`backend/.env.testing.example` or `backend/.env.production.example`, copy the
-selected file to an untracked `.env`, and set `APP_ENV=testing` or
-`APP_ENV=production`. Production startup rejects development mode, insecure
-CORS, placeholder secrets, and incomplete provider configuration.
-
-Production secrets, Gemini keys, storage credentials, OTP provider keys, and
-JWT/traceability secrets remain backend-only and must be supplied through the
-VPS or CI environment.
-
-## Offline and AI integration boundaries
-
-Room stores drafts, cached prices/recyclers, payments, handovers, and sync operations. WorkManager retries supported collector/household mutations with account-scoped idempotency keys and server-side conflict responses, then pulls a delta feed without overwriting unsynced local work. Handover scale evidence and household listing photos upload independently to private storage; failed household photo uploads are retained in an account-scoped local retry queue. The UI exposes honest estimate ranges rather than fake precision. Material classification, valuation, recycler matching, and anomaly detection are isolated integration points; seeded data is marked development data and no model-accuracy claim is made. Successful payment closes the confirmed handover and exposes the transaction passport timeline.
-
-The lot material classifier is assistive only: it validates JPEG/PNG/WebP input
-and never blocks manual material selection. Provider outage and low confidence
-are distinct UI states. GPS lot capture stores latitude, longitude, precision,
-and a separate human-readable area label; the helper text is never persisted as
-the area name.
-
-## Testing
+Output:
 
 ```text
-cd backend
-npm run build
-npm test
-npm run lint
-
-cd ../android_app
-./gradlew.bat :app:testEnvTestingDebugUnitTest
-./gradlew.bat :app:lintEnvTestingDebug
-./gradlew.bat :app:assembleEnvTestingDebug
-./gradlew.bat :app:connectedEnvTestingDebugAndroidTest
+android_app/app/build/outputs/apk/envTesting/debug/app-envTesting-debug.apk
 ```
 
-The current automated suite covers authentication boundaries, JWTs, validation, lot rules, price/valuation utilities, recycler filtering, quote rematching/idempotency, handover recovery, notification isolation, Room-backed state, and ViewModel transitions. Device validation remains important for camera permissions, QR scanning, TalkBack, GPS, and real network loss/recovery.
+For production, use the `production` flavor, an explicit HTTPS `productionApiBaseUrl`, and protected signing properties. Keep signing files, passwords, database URLs and provider credentials out of Git. An update must be signed with the same key as the installed app.
 
-A historical device pass (2026-09-22) recorded a 1,200-event rapid-tap run and
-camera recovery after deliberately killing the app while the external camera
-Activity was open. That older result is not a current-build regression test;
-the current audit evidence and device coverage are summarized in
-`docs/README.md`.
+## Checks
 
-## OTA Android updates
+```powershell
+# From backend/
+npm run build
+npm run lint
+npm test
 
-The app checks the backend-hosted `/app/update.json` and compares its
-`versionCode` with the installed version. Each published entry must reference
-an APK signed with the same key as the installed app and include a matching
-SHA-256 and byte size. The current manifest publishes `0.1.8-beta` with
-`versionCode 72`. The APK is an `envTestingDebug` build; production release
-signing and deployment are managed separately.
+# From android_app/
+.\gradlew.bat :app:testEnvTestingDebugUnitTest
+.\gradlew.bat :app:lintEnvTestingDebug
+.\gradlew.bat :app:connectedEnvTestingDebugAndroidTest
 
-The user confirms the download and Android separately confirms installation;
-updates are never installed silently. After changing the manifest or APK,
-redeploy the backend `app-update` directory to the VPS.
+# From repository root
+node android_app/check-localization.mjs
+```
 
-## Submission evidence
+Database integration tests are opt-in and require isolated fixtures. The performance fixture is deterministic and supports large histories, offers, demands, messages and notifications. Do not seed an application database with synthetic load data.
 
-See the consolidated [project and verification guide](docs/README.md) for
-requirements evidence, demo and field-research boundaries, unit-economics
-assumptions, AI/data limits, privacy guidance, and the current App Verification
-Map.
+Recent checks passed **258 backend tests** and **169 Android unit tests**. These are point-in-time results, not a guarantee for every future commit. Emulator acceptance and physical-device performance targets are not fully complete. Historical details live in [`docs/README.md`](docs/README.md); its older counts and screenshots should not be interpreted as current release certification.
 
-## Known limitations
+## Updating the beta channel
 
-- Production email delivery and FCM push delivery still need provider wiring; QR scanning depends on the device camera/activity, while the durable in-app notification inbox and Android photo capture flows work without those providers.
-- The backend verification/admin seed path is intentionally backend-only; no admin website is provided.
-- Live MongoDB, object storage, payment provider, and signed-release credentials must be supplied by deployment.
-- Development demo fixtures are not real government-verified companies or live market claims.
+1. Increase `versionCode` and `versionName` in `android_app/app/build.gradle.kts`.
+2. Build the intended variant against the intended backend.
+3. Copy the resulting APK into `backend/app-update/` with a versioned filename.
+4. Update `update.json` with the same version, APK filename, SHA-256 checksum, size and release notes.
+5. Publish both files to the backend's `/app/` update path.
+
+GitHub source pushes do not automatically deploy a running backend. Deploy backend changes before clients that depend on new endpoints, and run reviewed database/index preparation as part of deployment. Room schema version 30 includes the non-destructive conversation-cache migration from version 29.
+
+The Android app asks before downloading an update; Android controls installation confirmation.
