@@ -1,6 +1,6 @@
 # Household pickup and settlement state contract
 
-Updated **1 October 2026**, accompanying Android **0.1.13-beta (77)**. API paths below are relative to `/api/v1`.
+Updated **1 October 2026**, accompanying Android **0.1.14-beta (78)**. API paths below are relative to `/api/v1`.
 
 Household pickup hours are **7:30 AM–9:30 PM, Asia/Kolkata**. Scheduling also checks minimum lead time, horizon, slot interval and capacity; being within the shift alone does not guarantee a valid slot.
 

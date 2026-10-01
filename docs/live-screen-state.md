@@ -8,6 +8,8 @@ Separate SupplyChainViewModel instances per navigation entry let Home update whi
 
 ## Ownership
 
+Phone registration must not silently sign into an existing account of another role. The backend checks selected versus existing role, including concurrent insert recovery; Android checks the returned role before session persistence. Signup conflicts require explicit existing-account sign-in or a different phone number.
+
 - Related authenticated routes share feature ViewModels/StateFlow.
 - Account or role changes, including logout, release the old scope.
 - Async work captures account/session and request generation; late results cannot publish into another session.

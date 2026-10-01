@@ -1,6 +1,6 @@
 # Backend stabilization status
 
-Updated **1 October 2026**, accompanying Android **0.1.13-beta (77)**. This is engineering status, not production certification.
+Updated **1 October 2026**, accompanying Android **0.1.14-beta (78)**. This is engineering status, not production certification.
 
 ## Implemented
 

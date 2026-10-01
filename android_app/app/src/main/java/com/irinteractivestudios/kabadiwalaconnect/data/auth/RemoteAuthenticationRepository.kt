@@ -125,6 +125,9 @@ class RemoteAuthenticationRepository(
             // role. Keep the previous session untouched if the response is
             // incomplete, so the UI never guesses from the onboarding form.
             if (profile == null) return OtpVerification.ServerError
+            // Older deployments may return an existing phone account during
+            // signup. Never persist a different role than the user selected.
+            if (account != null && profile.role != account.role) return OtpVerification.AccountConflict
             val expiry = jwtExpiry(auth.token) ?: (System.currentTimeMillis() + SESSION_FALLBACK_MS)
             persistAuthenticatedSession(auth.token, expiry, auth.refreshToken, profile)
             OtpVerification.Success(auth.token, expiry, profile.profileId, profile)

@@ -436,20 +436,9 @@ class OnboardingViewModel(
                     OtpVerification.NetworkError
                 }
                 if (generation != otpFlowGeneration) return@launch
-                // Older test deployments can have a phone profile without its
-                // matching account identity. A verified phone is enough to safely
-                // retry through the existing-phone sign-in path.
-                val result = if (registrationResult == OtpVerification.AccountConflict) {
-                    try {
-                        auth.verifyOtp(current.phone, current.otp)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        OtpVerification.NetworkError
-                    }
-                } else {
-                    registrationResult
-                }
+                // Do not silently convert a signup conflict into sign-in:
+                // that can open an established account with another role.
+                val result = registrationResult
                 if (generation != otpFlowGeneration) return@launch
                 _state.value = when (result) {
                 is OtpVerification.Success -> {

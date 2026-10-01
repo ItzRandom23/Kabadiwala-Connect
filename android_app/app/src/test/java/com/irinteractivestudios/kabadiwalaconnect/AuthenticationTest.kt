@@ -15,6 +15,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.AccountProfile
 import com.irinteractivestudios.kabadiwalaconnect.domain.model.CollectorProfile
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingStep
 import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OnboardingViewModel
+import com.irinteractivestudios.kabadiwalaconnect.ui.screens.auth.OtpError
 import com.irinteractivestudios.kabadiwalaconnect.util.InMemorySecureStorage
 import com.irinteractivestudios.kabadiwalaconnect.util.CurrentLocation
 import com.irinteractivestudios.kabadiwalaconnect.util.LocationProvider
@@ -531,7 +532,7 @@ class AuthenticationTest {
         }
     }
 
-    @Test fun onboarding_retriesVerifiedExistingPhoneWhenRegistrationConflicts() = runTest {
+    @Test fun onboarding_preservesExplicitPhoneOnlySignIn() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)
         try {
@@ -567,7 +568,7 @@ class AuthenticationTest {
         }
     }
 
-    @Test fun onboarding_retriesVerifiedCollectorPhoneEvenWhenOptionalEmailWasEntered() = runTest {
+    @Test fun onboarding_doesNotSignInAutomaticallyWhenCollectorRegistrationConflicts() = runTest {
         val mainDispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(mainDispatcher)
         try {
@@ -600,9 +601,9 @@ class AuthenticationTest {
             vm.verifyOtp()
             advanceUntilIdle()
 
-            assertEquals(1, legacySignInCalls)
-            assertEquals(OnboardingStep.COMPLETE, vm.state.value.step)
-            assertTrue(vm.state.value.completed)
+            assertEquals(0, legacySignInCalls)
+            assertEquals(OtpError.ACCOUNT_CONFLICT, vm.state.value.otpError)
+            assertFalse(vm.state.value.completed)
         } finally {
             Dispatchers.resetMain()
         }

@@ -6,15 +6,20 @@ An Android app that connects **Households → Kabadiwalas → Recyclers** throug
 
 | Item | Value |
 | --- | --- |
-| App version | **0.1.13-beta** |
-| Android version code | **77** |
+| App version | **0.1.14-beta** |
+| Android version code | **78** |
 | Published APK variant | `envTestingDebug` |
 | Household pickup hours | **7:30 AM–9:30 PM, Asia/Kolkata** |
 | Update manifest | [`backend/app-update/update.json`](backend/app-update/update.json) |
 
 This is a beta project. A successful build does not establish that every workflow, device or network condition is verified. The testing APK is not a signed production release.
 
-### Changes in 0.1.13-beta
+### Changes in 0.1.14-beta
+
+- Registration with a phone already linked to another role now shows an account conflict instead of silently opening that account. Android rejects a mismatched role before saving a session, including responses from older backend deployments.
+- Signup conflicts no longer automatically retry as sign-in. Existing-account sign-in still restores the server-owned profile; registration does not overwrite its name, address or role.
+
+### Included from 0.1.13-beta
 
 - Shared Collector–Recycler transaction cards show directions, handover progress, amounts and payment actions together.
 - New bulk lots specify Collector delivery or Recycler pickup; the backend validates the corresponding handover location.

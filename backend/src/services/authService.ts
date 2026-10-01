@@ -84,6 +84,9 @@ export class AuthService {
     // and recycler roles are preserved instead of falling back to collector.
     if (!this.db) {
       let collector = await this.collectors.findByPhone(phone);
+      if (collector && input?.role && input.role !== 'COLLECTOR') {
+        throw new AppError('CONFLICT', 'This mobile number already has a different account type. Sign in to the existing account or use another mobile number.', 409, { code: 'ACCOUNT_ROLE_MISMATCH' });
+      }
       const created = !collector;
       if (created && !input?.role) {
         throw new AppError('VALIDATION_ERROR', 'Choose an account type to continue', 422, { code: 'ROLE_REQUIRED' });
@@ -112,7 +115,7 @@ export class AuthService {
         // identity boundary: return the account that won the insert instead
         // of surfacing a misleading 409 to the user.
         if (isUniqueConstraint) {
-          const existing = await this.findExistingPhoneAccount(phone);
+          const existing = await this.findExistingPhoneAccount(phone, input?.role);
           if (existing) return existing;
         }
         // The phone OTP is the verified identity boundary. Email is optional
@@ -124,7 +127,7 @@ export class AuthService {
         } catch (retryError) {
           if (retryError instanceof AppError) throw retryError;
           if ((retryError as { code?: string })?.code === 'P2002') {
-            const existing = await this.findExistingPhoneAccount(phone);
+            const existing = await this.findExistingPhoneAccount(phone, input?.role);
             if (existing) return existing;
             throw new AppError('CONFLICT', 'This mobile number is already linked to another account', 409, { code: 'ACCOUNT_CONFLICT' });
           }
@@ -136,14 +139,21 @@ export class AuthService {
     }
   }
 
-  private async findExistingPhoneAccount(phone: string) {
+  private async findExistingPhoneAccount(phone: string, requestedRole?: PhoneAccountInput['role']) {
     if (!this.db) return null;
     const user = await this.findUserByPhone(this.db, phone);
     if (!user || user.accountStatus === 'SUSPENDED' || user.accountStatus === 'DELETED') return null;
+    this.requireMatchingRegistrationRole(user.role, requestedRole);
     const profile = user.role === 'RECYCLER'
       ? await this.db.recycler.findUnique({ where: { id: user.recyclerProfileId ?? '' }, include: { materials: true, rates: true } })
       : await this.db.collector.findUnique({ where: { id: user.collectorProfileId ?? '' } });
     return this.issuePhone(user, profile);
+  }
+
+  private requireMatchingRegistrationRole(existingRole: string, requestedRole?: PhoneAccountInput['role']) {
+    if (requestedRole && existingRole !== requestedRole) {
+      throw new AppError('CONFLICT', 'This mobile number already has a different account type. Sign in to the existing account or use another mobile number.', 409, { code: 'ACCOUNT_ROLE_MISMATCH' });
+    }
   }
 
   /**
@@ -240,10 +250,10 @@ export class AuthService {
       if (user) {
         if (user.accountStatus === 'SUSPENDED') throw new AppError('ACCOUNT_SUSPENDED', 'This account is suspended', 403);
         if (user.accountStatus === 'DELETED') throw new AppError('ACCOUNT_DELETED', 'This account is deleted', 403);
-        // OTP verification for an existing phone is sign-in, even if the app
-        // sends registration fields (for example after reinstalling and
-        // choosing the wrong entry path). Never replace an established
-        // profile with those fields here; profile edits use account settings.
+        this.requireMatchingRegistrationRole(user.role, requestedRole);
+        // A matching-role retry can restore the existing verified phone
+        // account. A different-role signup was rejected above. Never replace
+        // established details here; profile edits use account settings.
         if (user.role === 'COLLECTOR' || user.role === 'HOUSEHOLD') {
           await tx.collector.update({
             where: { id: user.collectorProfileId ?? '' },

@@ -10,7 +10,7 @@ Updated 1 October 2026. Visible tap feedback and network completion are separate
 | Same session | Six existing-task resumes | 234, 138, 227, 129, 181, 139 ms; median 160; approximate p95 232 | Not login/tap feedback |
 | 29 September candidate | Two cold starts / one resume | 5642 / 6245 ms cold; 1270 ms resume; total PSS 139246 KB | Spot check after instrumentation |
 
-Small samples and emulator load prevent a defensible regression or acceptance claim. These historical builds are not current 0.1.13-beta.
+Small samples and emulator load prevent a defensible regression or acceptance claim. These historical builds are not current 0.1.14-beta.
 
 ## High-volume database verification
 

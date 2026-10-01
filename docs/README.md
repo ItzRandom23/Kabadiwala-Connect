@@ -1,6 +1,6 @@
 # Project documentation
 
-Updated **1 October 2026**. Current Android beta: **0.1.13-beta (77)**.
+Updated **1 October 2026**. Current Android beta: **0.1.14-beta (78)**.
 
 These documents describe current contracts and recorded verification. They do not certify every workflow or device. The five obsolete Android planning/report documents remain removed.
 
@@ -28,6 +28,8 @@ These documents describe current contracts and recorded verification. They do no
 - English and 20 additional locale packs are included. Resource coverage does not certify translation quality or every dynamic server message.
 
 ## Recorded verification
+
+**0.1.14-beta:** adds registration role checks and removes automatic sign-in after signup conflict. Backend compilation passed. Live registration with this fix and test suites have not been re-run for this release.
 
 **0.1.13-beta release checks:** testing APK assembly and backend compilation passed; APK version, checksum and size match the update manifest. The historical test counts below were not re-run for this release. Transport selection, portrait scanning and two-account automatic refresh still require live acceptance.
 

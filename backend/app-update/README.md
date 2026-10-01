@@ -1,13 +1,13 @@
 # Beta APK publishing
 
-Current channel: **0.1.13-beta (77)**.
+Current channel: **0.1.14-beta (78)**.
 
 | Field | Value |
 | --- | --- |
-| APK | kabadiwala-connect-0.1.13-beta-debug.apk |
+| APK | kabadiwala-connect-0.1.14-beta-debug.apk |
 | Variant | envTestingDebug |
-| Size | 31,914,782 bytes |
-| SHA-256 | 9239D95EBFE60C168BF8B3281CB779938F6AF752A5DA5D4BAED1C0D1A48674B7 |
+| Size | 3,19,14,789 bytes |
+| SHA-256 | F46AB88915D7FB022458E90EDBB57D505039C7792811A2A37EC703EF97340619 |
 
 [update.json](update.json) is authoritative. The backend serves this directory under /app/, including /app/update.json. Relative apkUrl resolves within that path.
 
@@ -25,7 +25,7 @@ This is a debug-signed testing beta, not a production-signed release. Check its 
 From the repository root:
 
 ```powershell
-$betaApk = Get-Item -LiteralPath 'backend/app-update/kabadiwala-connect-0.1.13-beta-debug.apk'
+$betaApk = Get-Item -LiteralPath 'backend/app-update/kabadiwala-connect-0.1.14-beta-debug.apk'
 $betaApk.Length
 (Get-FileHash -LiteralPath $betaApk.FullName -Algorithm SHA256).Hash
 Get-Content -LiteralPath 'backend/app-update/update.json'

@@ -1,8 +1,8 @@
 {
-  "versionCode": 77,
-  "versionName": "0.1.13-beta",
-  "apkUrl": "kabadiwala-connect-0.1.13-beta-debug.apk",
-  "sha256": "9239D95EBFE60C168BF8B3281CB779938F6AF752A5DA5D4BAED1C0D1A48674B7",
-  "sizeBytes": 31914782,
-  "releaseNotes": "Unified Recycler trade cards with directions and inline payments. Added delivery or Recycler pickup selection, automatic transaction updates and QR dismissal, portrait QR scanners, clearer weighing, and Admin payment fixes."
+  "versionCode": 78,
+  "versionName": "0.1.14-beta",
+  "apkUrl": "kabadiwala-connect-0.1.14-beta-debug.apk",
+  "sha256": "F46AB88915D7FB022458E90EDBB57D505039C7792811A2A37EC703EF97340619",
+  "sizeBytes": 31914789,
+  "releaseNotes": "Fixed Collector registration opening an existing Household account. Signup now blocks account-role mismatches and no longer silently retries as sign-in. Existing account details remain protected."
 }

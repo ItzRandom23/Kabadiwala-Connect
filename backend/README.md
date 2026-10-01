@@ -1,6 +1,6 @@
 # Kabadiwala Connect backend
 
-Express 5 / TypeScript API with Prisma 6.12 and MongoDB. Current Android beta: **0.1.13-beta (77)**. The npm package version is independently **1.0.0**.
+Express 5 / TypeScript API with Prisma 6.12 and MongoDB. Current Android beta: **0.1.14-beta (78)**. The npm package version is independently **1.0.0**.
 
 ## Setup
 
