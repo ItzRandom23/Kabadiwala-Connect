@@ -43,6 +43,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.irinteractivestudios.kabadiwalaconnect.ui.supplychain.BulkTradeJourneyCard
+import com.irinteractivestudios.kabadiwalaconnect.data.remote.BulkTradeDetailsDto
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
+import com.irinteractivestudios.kabadiwalaconnect.util.portraitQrScanOptions
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyHandoverDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerRateUpdateDto
 import com.irinteractivestudios.kabadiwalaconnect.data.remote.RecyclerDto
@@ -566,7 +568,12 @@ fun RecyclerOrdersScreen(
     onScan: () -> Unit = {},
     paymentBusy: Set<String> = emptySet(),
     paymentError: String? = null,
-    onRecordPayment: (String, com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyPaymentRequestDto) -> Unit = { _, _ -> }
+    onRecordPayment: (String, com.irinteractivestudios.kabadiwalaconnect.data.remote.SupplyPaymentRequestDto) -> Unit = { _, _ -> },
+    tradeDetails: Map<String, BulkTradeDetailsDto> = emptyMap(),
+    tradeErrors: Map<String, String> = emptyMap(),
+    tradeBusy: Set<String> = emptySet(),
+    onLoadTradeDetails: (String) -> Unit = {},
+    onOpenBulkChat: (String, String) -> Unit = { _, _ -> }
 ) {
     val layout = rememberKcResponsiveLayout()
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding), verticalArrangement = Arrangement.spacedBy(layout.sectionSpacing)) {
@@ -591,7 +598,14 @@ fun RecyclerOrdersScreen(
         } else if (liveHandovers.isEmpty()) {
             item { EmptyContent(Modifier.fillMaxWidth().heightIn(min = 300.dp)) }
         } else {
-            items(liveHandovers, key = { it.id }) { handover -> LiveOrderCard(handover, onScan, handover.id in paymentBusy, onRecordPayment) }
+            items(liveHandovers, key = { it.id }) { handover ->
+                if (handover.bulkLotId != null) {
+                    BulkTradeJourneyCard(handover.bulkLotId, null, null, handover, tradeDetails[handover.bulkLotId],
+                        tradeErrors[handover.bulkLotId], recycler = true,
+                        busy = tradeBusy + if (handover.id in paymentBusy) setOf("supply-payment-${handover.id}") else emptySet(),
+                        onLoadDetails = onLoadTradeDetails, onScan = onScan, onChat = onOpenBulkChat, onRecordPayment = onRecordPayment)
+                } else LiveOrderCard(handover, onScan, handover.id in paymentBusy, onRecordPayment)
+            }
         }
     }
 }
@@ -620,7 +634,13 @@ private fun LiveOrderCard(handover: SupplyHandoverDto, onScan: () -> Unit, payme
             SupplyPaymentSection(handover, recycler = true, busy = paymentBusy, onRecord = onRecordPayment)
             if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.expiresAt?.let { Text("QR expires: ${com.irinteractivestudios.kabadiwalaconnect.util.IndiaFormat.dateTimeIso(it) ?: "Time unavailable"} India time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text(stringResource(R.string.ui_copy_b7ba58863e37), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Button(onClick = onScan, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
+            if (handover.status == "PREPARED" && !qrExpired) {
+                Text(stringResource(R.string.household_waiting_for, stringResource(R.string.auth_demo_kabadiwala)), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.auth_demo_kabadiwala) + " · " + stringResource(R.string.ui_copy_7be330b874d6), style = MaterialTheme.typography.bodySmall)
+            }
+            if (handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Button(onClick = onScan,
+                enabled = handover.status == "COLLECTOR_CONFIRMED" && !qrExpired,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Text(stringResource(R.string.recycler_order_scan)) }
         }
     }
 }
@@ -668,10 +688,7 @@ fun RecyclerScanScreen(
                 scannerLaunchError = false
                 runCatching {
                     scanner.launch(
-                        ScanOptions()
-                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            .setBeepEnabled(false)
-                            .setPrompt(scannerPrompt)
+                        portraitQrScanOptions(scannerPrompt)
                     )
                 }.onFailure { scannerLaunchError = true }
             },

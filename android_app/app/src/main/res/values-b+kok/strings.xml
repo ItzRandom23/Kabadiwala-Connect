@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">बंद करचें</string>
     <string name="nearby_area_resolution_failed">आमकां विस्वासांत घेवपासारकें थळ मेळूंक शकलें ना. उपकार करून ताचे बदला तुमचो वाठार टाइप करचो. म्हजें स्थान वापरात</string>
     <string name="nearby_apply_radius_hint">सोद क्षेत्र · म्हजें स्थान वापरात · त्रिज्या</string>
+    <string name="weighing_grade_optional">गुणवत्तेचो दर्जो (पर्यायी)</string>
+    <string name="weighing_grade_help">दर्जो खबर आसल्यारच बरयात. ना जाल्यार रिकामो सोडात.</string>
+    <string name="bulk_transport_title">हो माल कोण व्हरतलो?</string>
+    <string name="bulk_collector_delivery">कबाडीवालो रिसायक्लराक माल पावयतलो</string>
+    <string name="bulk_recycler_pickup">रिसायक्लर कबाडीवाल्याकडल्यान माल उचलतलो</string>
 </resources>

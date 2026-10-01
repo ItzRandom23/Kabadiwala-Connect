@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">بند کریں</string>
     <string name="nearby_area_resolution_failed">ہم قابل اعتماد مقام حاصل نہیں کر سکے۔ براہ کرم اس کے بجائے اپنا علاقہ ٹائپ کریں۔ میرا مقام استعمال کریں۔</string>
     <string name="nearby_apply_radius_hint">تلاش کا علاقہ · میرا مقام استعمال کریں۔ · رداس</string>
+    <string name="weighing_grade_optional">معیار کا درجہ (اختیاری)</string>
+    <string name="weighing_grade_help">درجہ معلوم ہو تو ہی لکھیں۔ ورنہ خالی چھوڑ دیں۔</string>
+    <string name="bulk_transport_title">یہ سامان کون پہنچائے گا؟</string>
+    <string name="bulk_collector_delivery">کباڑی والا ری سائیکلر تک سامان پہنچائے گا</string>
+    <string name="bulk_recycler_pickup">ری سائیکلر کباڑی والے سے سامان اٹھائے گا</string>
 </resources>

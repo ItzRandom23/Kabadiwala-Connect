@@ -1367,6 +1367,7 @@ model BulkLot {
   quantityKg      Float
   askingRatePerKg Float
   minimumRatePerKg Float?
+  fulfillmentMode String?
   areaName        String
   latitude        Float?
   longitude       Float?
@@ -1593,6 +1594,7 @@ model SupplyHandover {
   authorizationSnapshot Json
   status                SupplyHandoverStatus @default(PREPARED)
   collectorConfirmedAt  DateTime?
+  recyclerQrScannedAt    DateTime?
   recyclerConfirmedAt   DateTime?
   preparedAt            DateTime             @default(now())
   expiresAt             DateTime

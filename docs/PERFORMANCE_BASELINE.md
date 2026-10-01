@@ -1,6 +1,6 @@
 # Performance baseline and measurement gates
 
-Updated 30 September 2026. Visible tap feedback and network completion are separate measurements.
+Updated 1 October 2026. Visible tap feedback and network completion are separate measurements.
 
 ## Recorded Android samples
 
@@ -10,7 +10,7 @@ Updated 30 September 2026. Visible tap feedback and network completion are separ
 | Same session | Six existing-task resumes | 234, 138, 227, 129, 181, 139 ms; median 160; approximate p95 232 | Not login/tap feedback |
 | 29 September candidate | Two cold starts / one resume | 5642 / 6245 ms cold; 1270 ms resume; total PSS 139246 KB | Spot check after instrumentation |
 
-Small samples and emulator load prevent a defensible regression or acceptance claim. These historical builds are not current 0.1.12-beta.
+Small samples and emulator load prevent a defensible regression or acceptance claim. These historical builds are not current 0.1.13-beta.
 
 ## High-volume database verification
 
@@ -46,6 +46,8 @@ npm run db:seed:performance
 Never use the application database. The seed reads process environment; do not assume it loads .env. Replica-set support is required for transactional journey tests.
 
 ## Outstanding gates
+
+The 0.1.13-beta journey refresh fallback is two seconds while resumed. Measure its request volume and battery impact alongside cross-account visible update delay; this interval is not a performance result. APK assembly and backend compilation passed, but no fresh latency baseline was captured for this release.
 
 1. Compare builds using identical device, data, account state and script.
 2. Measure cold/warm start, login/dashboard, tabs, details/back and return-screen request counts.

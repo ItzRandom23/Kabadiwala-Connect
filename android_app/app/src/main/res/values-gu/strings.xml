@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">Close</string>
     <string name="nearby_area_resolution_failed">અમે વિશ્વસનીય સ્થાન મેળવી શક્યા નથી. કૃપા કરીને તેના બદલે તમારો વિસ્તાર લખો. મારા સ્થાનનો ઉપયોગ કરો</string>
     <string name="nearby_apply_radius_hint">શોધ વિસ્તાર · મારા સ્થાનનો ઉપયોગ કરો · ત્રિજ્યા</string>
+    <string name="weighing_grade_optional">ગુણવત્તાનો ગ્રેડ (વૈકલ્પિક)</string>
+    <string name="weighing_grade_help">ગ્રેડ જાણતા હો તો જ લખો. નહિતર ખાલી રાખો.</string>
+    <string name="bulk_transport_title">આ માલ કોણ પહોંચાડશે?</string>
+    <string name="bulk_collector_delivery">કબાડીવાળો રિસાયક્લરને માલ પહોંચાડશે</string>
+    <string name="bulk_recycler_pickup">રિસાયક્લર કબાડીવાળા પાસેથી માલ ઉપાડશે</string>
 </resources>

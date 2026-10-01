@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">বন্ধ কৰক</string>
     <string name="nearby_area_resolution_failed">আমি নিৰ্ভৰযোগ্য স্থান পাব নোৱাৰিলোঁ৷ ইয়াৰ পৰিৱৰ্তে আপোনাৰ অঞ্চলটো টাইপ কৰক। মোৰ স্থান ব্যৱহাৰ কৰক</string>
     <string name="nearby_apply_radius_hint">সন্ধান এলেকা · মোৰ স্থান ব্যৱহাৰ কৰক · ব্যাসাৰ্ধ</string>
+    <string name="weighing_grade_optional">মানৰ শ্ৰেণী (ঐচ্ছিক)</string>
+    <string name="weighing_grade_help">শ্ৰেণী জানিলেহে লিখক। নহ’লে খালী ৰাখক।</string>
+    <string name="bulk_transport_title">এই সামগ্ৰী কোনে কঢ়িয়াব?</string>
+    <string name="bulk_collector_delivery">কাবাড়িৱালাই ৰিচাইক্লাৰৰ ওচৰলৈ সামগ্ৰী নিব</string>
+    <string name="bulk_recycler_pickup">ৰিচাইক্লাৰে কাবাড়িৱালাৰ পৰা সামগ্ৰী সংগ্ৰহ কৰিব</string>
 </resources>

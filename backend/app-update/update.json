@@ -1,8 +1,8 @@
 {
-  "versionCode": 76,
-  "versionName": "0.1.12-beta",
-  "apkUrl": "kabadiwala-connect-0.1.12-beta-debug.apk",
-  "sha256": "E0743A23AA688BC53308B5ABEF0A3F0D4B9E306A43E5644F85790DF015A13BB0",
-  "sizeBytes": 31835140,
-  "releaseNotes": "Pickup hours extended to 7:30 AM–9:30 PM India time. Removed internal chat ID suffixes and redundant back links."
+  "versionCode": 77,
+  "versionName": "0.1.13-beta",
+  "apkUrl": "kabadiwala-connect-0.1.13-beta-debug.apk",
+  "sha256": "9239D95EBFE60C168BF8B3281CB779938F6AF752A5DA5D4BAED1C0D1A48674B7",
+  "sizeBytes": 31914782,
+  "releaseNotes": "Unified Recycler trade cards with directions and inline payments. Added delivery or Recycler pickup selection, automatic transaction updates and QR dismissal, portrait QR scanners, clearer weighing, and Admin payment fixes."
 }

@@ -1368,4 +1368,9 @@
     <string name="pickup_hide_scrap_photo">Hide scrap photo</string>
     <string name="nearby_area_resolution_failed">Couldn’t locate this area. Use current location or enter a more specific address to apply the radius.</string>
     <string name="nearby_apply_radius_hint">Search this area or use current location to find partners within the selected radius.</string>
+    <string name="weighing_grade_optional">Grade (optional)</string>
+    <string name="weighing_grade_help">Only add a grade if you know it. Otherwise, leave this blank.</string>
+    <string name="bulk_transport_title">Who will transport this lot?</string>
+    <string name="bulk_collector_delivery">Kabadiwala delivers to the Recycler</string>
+    <string name="bulk_recycler_pickup">Recycler collects from the Kabadiwala</string>
 </resources>

@@ -1,6 +1,6 @@
 # Live screen state and action reconciliation
 
-Updated 30 September 2026.
+Updated 1 October 2026.
 
 ## Root cause
 
@@ -19,6 +19,8 @@ Separate SupplyChainViewModel instances per navigation entry let Home update whi
 
 Visible screens refresh on resume and account-checked push/mutation hints, coalesced for 200 ms. Operational navigation reuses data within a ten-second window; explicit refresh and relevant events bypass it.
 
+While operational journey routes are resumed, an account-scoped change-feed fallback runs every two seconds; other authenticated screens use a 120-second fallback. A feed check only reconciles content when changes are found. This is a network completion mechanism, not a measured UI latency guarantee.
+
 Mutation refresh selects affected dependency groups. Reads begun before/during a confirmed write are cancelled or rejected. Independent sections publish as they complete. Paging/read-only work must not invalidate its own generation; partial refresh must not reset the age of a whole cached snapshot.
 
 Activity traversal uses stable account/role cursors. Android drains up to 20 pages per run, checks cancellation/session ownership and persists each cursor after applying its page. Outbox success emits a hint after updating local storage.
@@ -26,6 +28,8 @@ Activity traversal uses stable account/role cursors. Android drains up to 20 pag
 ## Scanner, chat and settings
 
 Exact-record QR verification replaces history lookup. Reset cancels verification; confirmation blocks competing reset/scan actions until reconciliation. Confirmed receipt updates Orders/marketplace before navigation.
+
+Household QR display checks the exact pickup for `householdQrScannedAt`. Collector handover display checks an owner-only status endpoint for `recyclerQrScannedAt` and receipt status. The display hides after a server-confirmed scan; scanning alone does not confirm material receipt or payment. Both capture entry points use a portrait activity. Recycler receipt completion returns to Market; Collector handover completion returns Home and reconciles affected data.
 
 Chat preserves pending/failed states, deduplicates client message IDs and retains conversation metadata through Room 30. Timestamp normalization supports legacy epoch text. Cached content remains usable with refresh failure/retry feedback.
 

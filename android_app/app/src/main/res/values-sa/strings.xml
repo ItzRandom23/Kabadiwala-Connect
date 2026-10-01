@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">Close</string>
     <string name="nearby_area_resolution_failed">विश्वसनीयं स्थानं प्राप्तुं न शक्तवन्तः । कृपया तस्य स्थाने स्वक्षेत्रं टङ्कयन्तु। मम स्थानस्य उपयोगं कुर्वन्तु</string>
     <string name="nearby_apply_radius_hint">अन्वेषणक्षेत्रं · मम स्थानस्य उपयोगं कुर्वन्तु · त्रिज्या</string>
+    <string name="weighing_grade_optional">गुणवत्ताश्रेणी (वैकल्पिकी)</string>
+    <string name="weighing_grade_help">श्रेणी ज्ञाता चेत् एव लिखतु। अन्यथा रिक्तं त्यजतु।</string>
+    <string name="bulk_transport_title">अस्य सामग्रीसमूहस्य परिवहनं कः करिष्यति?</string>
+    <string name="bulk_collector_delivery">कबाडीवाला पुनर्चक्रणकर्त्रे सामग्रीं प्रापयिष्यति</string>
+    <string name="bulk_recycler_pickup">पुनर्चक्रणकर्ता कबाडीवालात् सामग्रीं सङ्ग्रहीष्यति</string>
 </resources>

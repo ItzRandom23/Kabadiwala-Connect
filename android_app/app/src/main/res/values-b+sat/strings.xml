@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">ᱵᱚᱱᱫᱚ</string>
     <string name="nearby_area_resolution_failed">ᱟᱞᱮ ᱫᱚ ᱯᱟᱹᱛᱭᱟᱹᱣᱟᱱ ᱴᱷᱟᱶ ᱵᱟᱞᱮ ᱧᱟᱢ ᱞᱮᱫᱟ᱾ ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱟᱢᱟᱜ ᱴᱚᱴᱷᱟ ᱴᱟᱭᱤᱯ ᱢᱮ᱾ ᱤᱧᱟᱜ ᱴᱷᱟᱶ</string>
     <string name="nearby_apply_radius_hint">ᱥᱮᱸᱫᱽᱨᱟ ᱴᱚᱴᱷᱟ · ᱤᱧᱟᱜ ᱴᱷᱟᱶ · ᱨᱮᱰᱤᱭᱟᱥ</string>
+    <string name="weighing_grade_optional">ᱜᱨᱮᱰ (ᱟᱯᱱᱟᱨ ᱠᱩᱥᱤ)</string>
+    <string name="weighing_grade_help">ᱜᱨᱮᱰ ᱵᱟᱰᱟᱭ ᱠᱷᱟᱱ ᱚᱞ ᱢᱮ᱾ ᱵᱟᱝ ᱵᱟᱰᱟᱭ ᱠᱷᱟᱱ ᱠᱷᱟᱞᱤ ᱟᱲᱟᱜ ᱢᱮ᱾</string>
+    <string name="bulk_transport_title">ᱱᱚᱣᱟ ᱢᱟᱞ ᱚᱠᱚᱭ ᱤᱫᱤᱭᱟ?</string>
+    <string name="bulk_collector_delivery">ᱠᱟᱵᱟᱲᱤᱣᱟᱞᱟ ᱨᱤᱥᱟᱭᱠᱞᱚᱨ ᱥᱟᱨᱮ ᱢᱟᱞ ᱤᱫᱤᱭᱟ</string>
+    <string name="bulk_recycler_pickup">ᱨᱤᱥᱟᱭᱠᱞᱚᱨ ᱠᱟᱵᱟᱲᱤᱣᱟᱞᱟ ᱠᱷᱚᱱ ᱢᱟᱞ ᱤᱫᱤᱭᱟ</string>
 </resources>

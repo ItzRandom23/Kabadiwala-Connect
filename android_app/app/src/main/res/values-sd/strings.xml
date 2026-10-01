@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">بند ڪريو</string>
     <string name="nearby_area_resolution_failed">اسان هڪ قابل اعتماد هنڌ حاصل نه ڪري سگهيا آهيون. مھرباني ڪري پنھنجو علائقو لکو. منهنجو مقام استعمال ڪريو</string>
     <string name="nearby_apply_radius_hint">ڳولا واري علائقي · منهنجو مقام استعمال ڪريو · ريڊيس</string>
+    <string name="weighing_grade_optional">معيار جو درجو (اختياري)</string>
+    <string name="weighing_grade_help">درجو معلوم هجي ته لکو. ٻي صورت ۾ خالي ڇڏيو.</string>
+    <string name="bulk_transport_title">هي سامان ڪير کڻي ويندو؟</string>
+    <string name="bulk_collector_delivery">ڪباڙي وارو ري سائيڪلر تائين سامان پهچائيندو</string>
+    <string name="bulk_recycler_pickup">ري سائيڪلر ڪباڙي واري کان سامان کڻندو</string>
 </resources>

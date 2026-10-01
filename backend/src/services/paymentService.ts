@@ -59,8 +59,11 @@ export class PaymentService {
     const cursor = query.cursor == null ? null : String(query.cursor);
     if (cursor && !/^[A-Za-z0-9_-]{1,120}$/.test(cursor)) throw new AppError('VALIDATION_ERROR', 'Invalid payment cursor', 422, { code: 'INVALID_CURSOR' });
     const statuses = ['RECORDED', 'VERIFIED', 'DISPUTED', 'REVERSED'];
-    if (query.status != null && !statuses.includes(String(query.status))) throw new AppError('VALIDATION_ERROR', 'Invalid payment status', 422);
-    const where = { ...(cid ? { collectorId: cid } : {}), ...(query.status ? { status: String(query.status) as any } : {}) };
+    // Older Android Admin consoles called unreconciled payments PENDING.
+    // Retain that filter alias without adding a new persisted payment state.
+    const status = query.status == null ? null : String(query.status) === 'PENDING' ? 'RECORDED' : String(query.status);
+    if (status != null && !statuses.includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid payment status', 422);
+    const where = { ...(cid ? { collectorId: cid } : {}), ...(status ? { status: status as any } : {}) };
     if (cursor && !await this.db.payment.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) throw new AppError('VALIDATION_ERROR', 'Invalid payment cursor', 422, { code: 'INVALID_CURSOR' });
     const rows = await this.db.payment.findMany({ where, orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }], take: limit + 1, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
     const items = rows.slice(0, limit);

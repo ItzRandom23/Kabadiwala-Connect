@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -47,6 +48,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.RadioButton
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
@@ -85,6 +87,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text as MaterialText
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import com.irinteractivestudios.kabadiwalaconnect.util.UiActionTrace
@@ -124,7 +130,7 @@ import com.irinteractivestudios.kabadiwalaconnect.domain.model.LotStatus
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
+import com.irinteractivestudios.kabadiwalaconnect.util.portraitQrScanOptions
 import com.google.gson.JsonObject
 import com.irinteractivestudios.kabadiwalaconnect.R
 import com.irinteractivestudios.kabadiwalaconnect.ui.components.rememberKcResponsiveLayout
@@ -150,8 +156,8 @@ private const val PICKUP_MIN_LEAD_MINUTES = 15
 // OTHER until the contract adds a dedicated category.
 private val materials = listOf("PLASTIC", "CABLE", "COPPER", "PCB", "BATTERY", "MOTOR", "MAGNET", "CRT", "LCD_PANEL", "OTHER")
 
-private fun materialName(value: String) = localizedSupplyChainText(value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() })
-private fun statusName(value: String) = localizedSupplyChainText(value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() })
+internal fun materialName(value: String) = localizedSupplyChainText(value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() })
+internal fun statusName(value: String) = localizedSupplyChainText(value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() })
 private fun money(value: Double?) = value?.let { "₹${"%.2f".format(it)}" } ?: localizedSupplyChainText("Pending inspection")
 
 @Composable
@@ -179,6 +185,7 @@ fun HouseholdSupplyScreen(
     pickupQrError: String? = null,
     onLoadPickupQr: (String) -> Unit = {},
     onClearPickupQr: () -> Unit = {},
+    onCheckPickupQrScanned: suspend (String) -> Unit = {},
     onOpenPickupChat: (String) -> Unit = {},
     onLoadMoreHistory: () -> Unit = {},
     initialArea: String = "",
@@ -235,6 +242,7 @@ fun HouseholdSupplyScreen(
                 pickupQrError = pickupQrError,
                 onLoadPickupQr = onLoadPickupQr,
                 onClearPickupQr = onClearPickupQr,
+                onCheckPickupQrScanned = onCheckPickupQrScanned,
                 onOpenPickupChat = onOpenPickupChat
             )
         }
@@ -466,8 +474,8 @@ fun HouseholdKabadiwalasScreen(
                         }
                         StatusChip(if (kabadiwala.acceptingPickups) "Accepting" else "Busy today")
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        kabadiwala.distanceKm?.let { Text(stringResource(R.string.recyclers_distance_km, "%.1f".format(it)), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        kabadiwala.distanceKm?.let { Text(stringResource(R.string.recyclers_distance_km, if (it < 0.1) "<0.1" else "%.1f".format(it)), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                         if (kabadiwala.ratingAverage != null && kabadiwala.reviewCount > 0) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(17.dp))
@@ -587,6 +595,7 @@ private fun HouseholdListingCard(
     pickupQrError: String?,
     onLoadPickupQr: (String) -> Unit,
     onClearPickupQr: () -> Unit,
+    onCheckPickupQrScanned: suspend (String) -> Unit,
     onOpenPickupChat: (String) -> Unit
 ) {
     val activePickupStatuses = setOf("WAITING_FOR_PICKUP", "REQUESTED", "ACCEPTED", "SCHEDULED", "IN_TRANSIT", "ARRIVED", "WEIGHED")
@@ -601,6 +610,24 @@ private fun HouseholdListingCard(
     var showSettlement by remember(pickup?.id) { mutableStateOf(false) }
     var showPaymentConfirmation by remember(pickup?.id) { mutableStateOf(false) }
     var showPickupQr by remember(pickup?.id) { mutableStateOf(false) }
+    val qrLifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(showPickupQr, pickup?.id, pickup?.status, pickup?.householdQrScannedAt) {
+        if (showPickupQr && (pickup == null || pickup.status != "ARRIVED" || pickup.householdQrScannedAt != null)) {
+            showPickupQr = false
+            onClearPickupQr()
+        }
+    }
+    if (showPickupQr && pickup?.status == "ARRIVED" && pickup.householdQrScannedAt == null) {
+        DisposableEffect(pickup.id) { onDispose { onClearPickupQr() } }
+        LaunchedEffect(pickup.id, qrLifecycle) {
+            qrLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    onCheckPickupQrScanned(pickup.id)
+                    delay(2_000)
+                }
+            }
+        }
+    }
     var showPartnerChoices by remember(listing.id) { mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .3f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1408,7 +1435,7 @@ fun HouseholdListingCreateScreen(
 
 
 @Composable
-fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMorePickups: () -> Unit = {}, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}, onResumeRefresh: () -> Unit = onRefresh, onConfirmSupplyPayment: (String, String, String?) -> Unit = { _, _, _ -> }, onHandoverCompleted: () -> Unit = {}) {
+fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, onRefresh: () -> Unit, onAccept: (String) -> Unit, onSchedule: (String, String) -> Unit, onStatus: (String, String) -> Unit, onComplete: (String, PickupCompletionDto) -> Unit, onCreateBulk: (BulkLotCreateDto) -> Unit, onCancelBulk: (String) -> Unit, onAcceptOffer: (String) -> Unit, capturedLots: List<Lot> = emptyList(), currentArea: String = "Current area", currentCollectorId: String = "", listingPhotos: Map<String, List<ByteArray>> = emptyMap(), listingPhotoErrors: Map<String, String> = emptyMap(), onLoadListingPhotos: (String, Int) -> Unit = { _, _ -> }, onRouteEstimate: (String, Double, String) -> Unit = { _, _, _ -> }, onCreatePool: (String, String) -> Unit = { _, _ -> }, onJoinPool: (String, Double, String, Double?) -> Unit = { _, _, _, _ -> }, onLeavePool: (String) -> Unit = {}, onLockPool: (String) -> Unit = {}, onPreparePoolHandover: (String) -> Unit = {}, onPrepareBulkHandover: (String) -> Unit = {}, onConfirmCollectorHandover: (String) -> Unit = {}, onAcknowledgeSafety: (String) -> Unit = {}, onCreateCapturedLot: () -> Unit = {}, onOpenTools: () -> Unit = {}, onOpenPickups: () -> Unit = {}, onOpenInventory: () -> Unit = {}, onRejectPickup: (String, String) -> Unit = { _, _ -> }, onCancelPickup: (String, String?) -> Unit = { _, _ -> }, onReassignPickup: (String, String, Boolean) -> Unit = { _, _, _ -> }, onRejectOffer: (String, String) -> Unit = { _, _ -> }, onCounterOffer: (String, Double, String?) -> Unit = { _, _, _ -> }, onLoadSafetyRouting: (String, String) -> Unit = { _, _ -> }, onLoadMaterialPassport: (String) -> Unit = {}, onLoadAnomalies: (String) -> Unit = {}, onDecideSupplySettlement: (String, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }, onRecordPickupPayment: (String, PickupSettlementPaymentRequestDto) -> Unit = { _, _ -> }, onVerifyHouseholdPickupQr: (String, String) -> Unit = { _, _ -> }, onOpenPickupChat: (String) -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMorePickups: () -> Unit = {}, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}, onResumeRefresh: () -> Unit = onRefresh, onConfirmSupplyPayment: (String, String, String?) -> Unit = { _, _, _ -> }, onCheckHandoverReceipt: suspend (String) -> Unit = {}, onLoadTradeDetails: (String) -> Unit = {}, onPrepareTradeHandover: (String, String) -> Unit = { _, _ -> }, onHandoverCompleted: () -> Unit = {}) {
     val layout = rememberKcResponsiveLayout()
     TraceBusyFrames(state.busy)
     val listingsById = remember(state.listings) { state.listings.associateBy { it.id } }
@@ -1417,9 +1444,24 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
     LaunchedEffect(state.handovers) {
         val completedNow = state.handovers.any { it.status == "COMPLETED" && previousHandovers[it.id] in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED") }
         previousHandovers = state.handovers.associate { it.id to it.status }
-        if (completedNow && section == KabadiwalaSection.LOTS) onHandoverCompleted()
+        if (completedNow && section in setOf(KabadiwalaSection.LOTS, KabadiwalaSection.TOOLS)) onHandoverCompleted()
     }
     var lotsMode by rememberSaveable(section) { mutableStateOf("LOTS") }
+    val receiptLifecycle = LocalLifecycleOwner.current.lifecycle
+    val pendingQrIds = state.handovers.filter {
+        it.collectorId == currentCollectorId &&
+            it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")
+    }.map { it.id }
+    LaunchedEffect(pendingQrIds, section, lotsMode, currentCollectorId, receiptLifecycle) {
+        if (pendingQrIds.isNotEmpty() && (section == KabadiwalaSection.TOOLS || (section == KabadiwalaSection.LOTS && lotsMode in setOf("LOTS", "OFFERS")))) {
+            receiptLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    pendingQrIds.forEach { onCheckHandoverReceipt(it) }
+                    delay(2_000)
+                }
+            }
+        }
+    }
     TradeRefreshEffect(currentCollectorId, onRefresh, onResumeRefresh)
     val title = when (section) {
         KabadiwalaSection.HOME -> "Collection desk"
@@ -1475,7 +1517,17 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                     val completedTrades = state.handovers.filter { it.status == "COMPLETED" }.take(3)
                     if (completedTrades.isNotEmpty()) item { Text("Recycler receipts & payments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                     items(completedTrades, key = { "payment-${it.id}" }) { handover ->
+                        if (handover.bulkLotId != null) {
+                            val lotId = handover.bulkLotId
+                            val offer = state.offers.firstOrNull { it.bulkLotId == lotId && it.status in setOf("ACCEPTED", "COMPLETED") }
+                            BulkTradeJourneyCard(lotId, state.bulkLots.firstOrNull { it.id == lotId } ?: offer?.bulkLot, offer, handover,
+                                state.tradeDetails[lotId], state.tradeDetailErrors[lotId], recycler = false, busy = state.busy,
+                                onLoadDetails = onLoadTradeDetails, onPrepare = onPrepareTradeHandover,
+                                onConfirmCollector = onConfirmCollectorHandover, onChat = onOpenBulkChat,
+                                onConfirmPayment = onConfirmSupplyPayment)
+                        } else {
                         SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement, onConfirmPayment = onConfirmSupplyPayment, paymentBusy = "supply-payment-${handover.id}" in state.busy)
+                        }
                     }
                 }
             }
@@ -1498,17 +1550,27 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                         item { Text(stringResource(R.string.ui_copy_f9f6a58c24f9), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No bulk lots yet", "Reserve available inventory when ready.", actionLabel = "Open inventory", onAction = onOpenInventory) }
                         items(state.bulkLots, key = { it.id }) { lot ->
+                            val acceptedOffer = state.offers.firstOrNull { it.bulkLotId == lot.id && it.status in setOf("ACCEPTED", "COMPLETED") }
+                            val tradeHandover = state.handovers.firstOrNull { it.bulkLotId == lot.id && it.status !in setOf("EXPIRED", "CANCELLED") }
+                            if (acceptedOffer != null || tradeHandover != null) {
+                                BulkTradeJourneyCard(lot.id, lot, acceptedOffer, tradeHandover,
+                                    state.tradeDetails[lot.id], state.tradeDetailErrors[lot.id], recycler = false, busy = state.busy,
+                                    onLoadDetails = onLoadTradeDetails, onPrepare = onPrepareTradeHandover,
+                                    onConfirmCollector = onConfirmCollectorHandover, onChat = onOpenBulkChat,
+                                    onConfirmPayment = onConfirmSupplyPayment)
+                            } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 BulkLotCard(lot, onCancelBulk, onPrepareBulkHandover, onOpenBulkChat)
                                 val lotOffers = state.offers.filter { it.bulkLotId == lot.id && it.status in setOf("PENDING", "ACCEPTED") && lot.status !in setOf("SOLD", "CANCELLED") }
                                 if (lotOffers.isNotEmpty()) Text("Recycler offers · ${lotOffers.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                 lotOffers.forEach { offer -> OfferCard(offer.copy(bulkLot = lot), onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat, busy = "offer-${offer.id}" in state.busy || "reject-offer-${offer.id}" in state.busy || "counter-offer-${offer.id}" in state.busy) }
                             }
+                            }
                         }
                         if (state.collectorLotsNextCursor != null) item {
                             TextButton(onClick = onLoadMoreLots, enabled = "more-collector-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if ("more-collector-lots" in state.busy) "Loading older lots…" else "Load older lots") }
                         }
-                        val bulkHandovers = state.handovers.filter { it.bulkLotId != null && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED", "COMPLETED") }
+                        val bulkHandovers = state.handovers.filter { it.bulkLotId != null && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED", "REVIEW_REQUIRED", "COMPLETED") && (it.status == "REVIEW_REQUIRED" || state.bulkLots.none { lot -> lot.id == it.bulkLotId }) }
                         if (bulkHandovers.isNotEmpty()) item { Text(stringResource(R.string.ui_copy_d4d63ac52b21), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         items(bulkHandovers, key = { "bulk-handover-${it.id}" }) { handover ->
                             SupplyHandoverCard(handover, state.materialPassports[handover.id], state.anomalies[handover.id], onPrepareBulkHandover, onConfirmCollectorHandover, onLoadMaterialPassport, onLoadAnomalies, onDecideSupplySettlement, onConfirmPayment = onConfirmSupplyPayment, paymentBusy = "supply-payment-${handover.id}" in state.busy)
@@ -1517,7 +1579,15 @@ fun KabadiwalaSupplyScreen(state: SupplyChainState, section: KabadiwalaSection, 
                     "OFFERS" -> {
                         item { Text(stringResource(R.string.ui_copy_8e79f9d8555e), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                         if (state.initialLoadComplete && state.offers.isEmpty()) item { EmptyPanel("No offers yet", "Offers on your listed lots appear here.", actionLabel = "View lots", onAction = { lotsMode = "LOTS" }) }
-                        items(state.offers.filter { offer -> offer.status != "COMPLETED" && (state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot)?.status !in setOf("SOLD", "CANCELLED") }, key = { it.id }) { offer -> OfferCard(offer.copy(bulkLot = state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot), onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat) }
+                        items(state.offers.filter { offer -> offer.status != "COMPLETED" && (state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot)?.status !in setOf("SOLD", "CANCELLED") }, key = { it.id }) { offer ->
+                            val lot = state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot
+                            if (offer.status == "ACCEPTED") {
+                                BulkTradeJourneyCard(offer.bulkLotId, lot, offer, state.handovers.firstOrNull { it.bulkLotId == offer.bulkLotId && it.status !in setOf("EXPIRED", "CANCELLED") },
+                                    state.tradeDetails[offer.bulkLotId], state.tradeDetailErrors[offer.bulkLotId], recycler = false, busy = state.busy,
+                                    onLoadDetails = onLoadTradeDetails, onPrepare = onPrepareTradeHandover, onConfirmCollector = onConfirmCollectorHandover,
+                                    onChat = onOpenBulkChat, onConfirmPayment = onConfirmSupplyPayment)
+                            } else OfferCard(offer.copy(bulkLot = lot), onAcceptOffer, onRejectOffer, onCounterOffer, onOpenBulkChat)
+                        }
                         if (state.collectorOffersNextCursor != null) item {
                             TextButton(onClick = onLoadMoreOffers, enabled = "more-collector-offers" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if ("more-collector-offers" in state.busy) "Loading older offers…" else "Load older offers") }
                         }
@@ -1885,10 +1955,7 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                                 scannerLaunchError = false
                                 runCatching {
                                     pickupScanner.launch(
-                                        ScanOptions()
-                                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                                            .setBeepEnabled(false)
-                                            .setPrompt("Scan household pickup QR")
+                                        portraitQrScanOptions("Scan household pickup QR")
                                     )
                                 }.onFailure { scannerLaunchError = true }
                             },
@@ -1903,8 +1970,8 @@ private fun PickupCard(pickup: PickupRequestDto, listing: HouseholdListingDto?, 
                     Text(stringResource(R.string.pickup_final_purchase_amount, money(pickup.finalAmount)), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     if ((pickup.pickupCharge ?: 0.0) > 0) Text(stringResource(R.string.ui_copy_66a5223089da, money(pickup.grossMaterialAmount), money(pickup.pickupCharge)), style = MaterialTheme.typography.bodySmall)
                     when (pickup.settlementPayment?.status) {
-                        "RECORDED" -> Text("${paymentMethodName(pickup.settlementPayment.paymentMethod)} payment recorded · ${if (pickup.settlementPayment.householdReceivedAt == null) "awaiting household receipt confirmation" else "awaiting operator reconciliation"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        "VERIFIED" -> Text(stringResource(R.string.ui_copy_2e78eb6961ed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        "RECORDED" -> Text("${paymentMethodName(pickup.settlementPayment.paymentMethod)} payment recorded · ${if (pickup.settlementPayment.householdReceivedAt == null) "awaiting household receipt confirmation" else "Household confirmed receiving ${money(pickup.settlementPayment.amount)}"}", style = MaterialTheme.typography.bodySmall, color = if (pickup.settlementPayment.householdReceivedAt == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                        "VERIFIED" -> Text(if (pickup.settlementPayment.householdReceivedAt != null) "Household confirmed receiving ${money(pickup.settlementPayment.amount)}" else "Payment verified", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         "DISPUTED" -> Text(stringResource(R.string.ui_copy_d3227fded149), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         else -> if (pickup.settlementStatus == "ACCEPTED") Button(onClick = { showPayment = true }, enabled = "pickup-payment-${pickup.id}" !in busy, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(if ("pickup-payment-${pickup.id}" in busy) R.string.common_syncing else R.string.ui_copy_78a8f977fecf)) }
                     }
@@ -2234,83 +2301,121 @@ private fun SettlementDecisionDialog(
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun CompletionDialog(pickup: PickupRequestDto, listing: HouseholdListingDto?, onDismiss: () -> Unit, onSubmit: (PickupCompletionDto) -> Unit) {
-    var weight by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(listing?.materialCategory ?: pickup.finalCategory ?: "OTHER") }
-    var grade by remember { mutableStateOf("UNSPECIFIED") }
-    var reasonCode by remember { mutableStateOf<String?>(null) }
-    var waivePickupCharge by remember { mutableStateOf(false) }
-    val total = (weight.toDoubleOrNull() ?: 0.0) * (rate.toDoubleOrNull() ?: 0.0)
-    val charge = if (waivePickupCharge) 0.0 else pickup.pickupCharge ?: 0.0
+    var weight by rememberSaveable(pickup.id) { mutableStateOf("") }
+    var rate by rememberSaveable(pickup.id) { mutableStateOf("") }
+    var category by rememberSaveable(pickup.id) { mutableStateOf(listing?.materialCategory ?: pickup.finalCategory ?: "OTHER") }
+    var grade by rememberSaveable(pickup.id) { mutableStateOf("") }
+    var reasonCode by rememberSaveable(pickup.id) { mutableStateOf<String?>(null) }
+    var waivePickupCharge by rememberSaveable(pickup.id) { mutableStateOf(false) }
+    var submitted by remember(pickup.id) { mutableStateOf(false) }
     val actualWeight = weight.toDoubleOrNull()
+    val agreedRate = rate.toDoubleOrNull()
+    val validWeight = actualWeight != null && actualWeight.isFinite() && actualWeight > 0 && actualWeight <= 500
+    val validRate = agreedRate != null && agreedRate.isFinite() && agreedRate > 0 && agreedRate <= 1_000_000
+    val total = if (validWeight && validRate) actualWeight * agreedRate else 0.0
+    val charge = if (waivePickupCharge) 0.0 else pickup.pickupCharge ?: 0.0
     val referenceValue = listing?.estimatedPriceMax ?: listing?.estimatedPriceMin
-    val weightChanged = listing != null && actualWeight != null && kotlin.math.abs(actualWeight - listing.estimatedWeight) / listing.estimatedWeight > 0.2
-    val valueChanged = referenceValue != null && total > 0 && kotlin.math.abs(total - referenceValue) / referenceValue.coerceAtLeast(1.0) > 0.2
+    val weightChanged = listing != null && listing.estimatedWeight > 0 && validWeight &&
+        kotlin.math.abs(actualWeight - listing.estimatedWeight) / listing.estimatedWeight > 0.2
+    val valueChanged = referenceValue != null && total > 0 &&
+        kotlin.math.abs(total - referenceValue) / referenceValue.coerceAtLeast(1.0) > 0.2
     val materialChanged = listing != null && category != listing.materialCategory
     val reasonRequired = listing == null || materialChanged || weightChanged || valueChanged
+    val canSubmit = validWeight && validRate && total > charge && (!reasonRequired || reasonCode != null) && !submitted
     val reasonOptions = listOf(
-        "MATERIAL_MISMATCH" to "Material differs",
-        "WEIGHT_VARIANCE" to "Weight differs",
-        "VALUE_VARIANCE" to "Value differs",
-        "OTHER_INSPECTION" to "Other inspection reason"
+        "MATERIAL_MISMATCH" to R.string.dispute_reason_material,
+        "WEIGHT_VARIANCE" to R.string.dispute_reason_weight,
+        "VALUE_VARIANCE" to R.string.dispute_reason_price,
+        "OTHER_INSPECTION" to R.string.dispute_reason_other
     )
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { if (!submitted) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().imePadding()) {
+            Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.ui_copy_5593428c6ab6), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text(stringResource(R.string.ui_copy_eef4d8744af3, pickup.id.takeLast(7)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.ui_copy_5593428c6ab6), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        listing?.let {
+                            Text(stringResource(R.string.ui_copy_d8d4daa3983b, materialName(it.materialCategory), "%.1f".format(it.estimatedWeight)),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_copy_5feb7763bbb8)) }
+                    IconButton(onClick = onDismiss, enabled = !submitted) {
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_copy_5feb7763bbb8))
+                    }
                 }
                 HorizontalDivider()
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(stringResource(R.string.ui_copy_9b6e56ce8dad), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    listing?.let { Text(stringResource(R.string.ui_copy_d8d4daa3983b, materialName(it.materialCategory), "%.1f".format(it.estimatedWeight)), style = MaterialTheme.typography.bodyMedium) }
-                    OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) }, label = { Text(stringResource(R.string.ui_copy_852d87b759bb)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_c7545418054d)) }, supportingText = { Text(stringResource(R.string.ui_copy_ffa763d18edb)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Text(stringResource(R.string.ui_copy_e2009b04b506), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        materials.forEach { option -> FilterChip(selected = category == option, onClick = { category = option }, label = { Text(materialName(option), maxLines = 2) }) }
-                    }
-                    OutlinedTextField(grade, { grade = it.take(80) }, label = { Text(stringResource(R.string.ui_copy_aecc49c15355)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    if (reasonRequired) {
-                        Text(stringResource(R.string.ui_copy_7d9a1e45d574), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            reasonOptions.forEach { (code, label) -> FilterChip(selected = reasonCode == code, onClick = { reasonCode = code }, label = { Text(label) }) }
+                    Text(stringResource(R.string.ui_copy_9b6e56ce8dad), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ui_copy_e2009b04b506), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        materials.forEach { option ->
+                            FilterChip(selected = category == option, onClick = { category = option; reasonCode = null },
+                                label = { Text(materialName(option), maxLines = 2) })
                         }
                     }
-                    if ((pickup.pickupCharge ?: 0.0) > 0) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = waivePickupCharge, onCheckedChange = { waivePickupCharge = it })
-                        Text(stringResource(R.string.ui_copy_59f7c4f53552, money(pickup.pickupCharge)))
-                    }
-                    if (total > 0) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
+                    HorizontalDivider()
+                    OutlinedTextField(
+                        weight, { weight = it.filter { c -> c.isDigit() || c == '.' }.take(7) },
+                        label = { Text(stringResource(R.string.ui_copy_852d87b759bb)) },
+                        isError = weight.isNotBlank() && !validWeight,
+                        supportingText = { if (weight.isNotBlank() && !validWeight) Text(stringResource(R.string.lot_weight_error)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(10) },
+                        label = { Text(stringResource(R.string.ui_copy_c7545418054d)) },
+                        isError = rate.isNotBlank() && !validRate,
+                        supportingText = { Text(stringResource(R.string.ui_copy_ffa763d18edb)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                    )
+                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(stringResource(R.string.ui_copy_a6ddd991eeaf), style = MaterialTheme.typography.labelLarge)
-                            Text(stringResource(R.string.ui_copy_2e3e55b0fa5a, money(total), money(charge)), style = MaterialTheme.typography.bodyMedium)
-                            Text(stringResource(R.string.ui_copy_174f79312fae, money(total - charge)), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.ui_copy_174f79312fae, if (total > charge) money(total - charge) else "—"),
+                                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            if (total > 0) Text(stringResource(R.string.ui_copy_2e3e55b0fa5a, money(total), money(charge)),
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.ui_copy_ef4d411a058d), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if ((pickup.pickupCharge ?: 0.0) > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = waivePickupCharge, onCheckedChange = { waivePickupCharge = it })
+                            Text(stringResource(R.string.ui_copy_59f7c4f53552, money(pickup.pickupCharge)), Modifier.weight(1f))
                         }
                     }
                     if (total > 0 && total <= charge) Text(stringResource(R.string.ui_copy_ba2429bdadbf), color = MaterialTheme.colorScheme.error)
-                    Text(stringResource(R.string.ui_copy_ef4d411a058d), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (validWeight && validRate && reasonRequired) {
+                        Text(stringResource(R.string.ui_copy_7d9a1e45d574), style = MaterialTheme.typography.bodyMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            reasonOptions.forEach { (code, label) ->
+                                FilterChip(selected = reasonCode == code, onClick = { reasonCode = code }, label = { Text(stringResource(label)) })
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    OutlinedTextField(grade, { grade = it.take(80) },
+                        label = { Text(stringResource(R.string.weighing_grade_optional)) },
+                        supportingText = { Text(stringResource(R.string.weighing_grade_help)) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 HorizontalDivider()
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text(stringResource(R.string.cancel)) }
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Button(
                         onClick = {
-                            val w = weight.toDoubleOrNull()
-                            val r = rate.toDoubleOrNull()
-                            if (w != null && r != null && w > 0 && w <= 500 && r > 0 && total > charge && (!reasonRequired || reasonCode != null)) {
-                                onSubmit(PickupCompletionDto(w, category, grade.ifBlank { "UNSPECIFIED" }, r, reasonCode.takeIf { reasonRequired }, waivePickupCharge = waivePickupCharge))
+                            if (canSubmit) {
+                                submitted = true
+                                onSubmit(PickupCompletionDto(actualWeight, category, grade.trim().ifBlank { "UNSPECIFIED" },
+                                    agreedRate, reasonCode.takeIf { reasonRequired }, waivePickupCharge = waivePickupCharge))
                             }
                         },
-                        enabled = weight.toDoubleOrNull()?.let { it > 0 && it <= 500 } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && total > charge && (!reasonRequired || reasonCode != null),
-                        modifier = Modifier.weight(1.3f).heightIn(min = 52.dp)
+                        enabled = canSubmit,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
                     ) { Text(stringResource(R.string.ui_copy_2d2dcdbfaa4b)) }
                 }
             }
@@ -2340,7 +2445,7 @@ private fun InventoryCard(item: InventoryBalanceDto) { Surface(shape = MaterialT
         }
     }
 }
-@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit, onPrepareHandover: (String) -> Unit, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text(stringResource(R.string.ui_copy_c0d278e12f90, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg))); Text(stringResource(R.string.ui_copy_1547fd202254, lot.areaName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_689b5f9c7355)) }; if (lot.status == "RESERVED") { Text(stringResource(R.string.ui_copy_3ca3617baca2), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Button(onClick = { onPrepareHandover(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_6f8511b380c6)) }; if (!lot.reservedForId.isNullOrBlank()) OutlinedButton(onClick = { onOpenBulkChat(lot.id, lot.reservedForId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_e68ddcadeb21)) } } } } }
+@Composable private fun BulkLotCard(lot: BulkLotDto, onCancel: (String) -> Unit, onPrepareHandover: (String) -> Unit, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }) { Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f)), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Text(materialName(lot.materialCategory), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); StatusChip(statusName(lot.status)) }; Text(stringResource(R.string.ui_copy_c0d278e12f90, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg))); Text(stringResource(R.string.ui_copy_1547fd202254, lot.areaName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); bulkTransportLabel(lot.fulfillmentMode)?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }; if (lot.status == "LISTED") OutlinedButton(onClick = { onCancel(lot.id) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ui_copy_689b5f9c7355)) }; if (lot.status == "RESERVED") { Text(stringResource(R.string.ui_copy_3ca3617baca2), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Button(onClick = { onPrepareHandover(lot.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_6f8511b380c6)) }; if (!lot.reservedForId.isNullOrBlank()) OutlinedButton(onClick = { onOpenBulkChat(lot.id, lot.reservedForId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ui_copy_e68ddcadeb21)) } } } } }
 @Composable
 private fun OfferCard(offer: BulkOfferDto, onAccept: (String) -> Unit, onReject: (String, String) -> Unit = { _, _ -> }, onCounter: (String, Double, String?) -> Unit = { _, _, _ -> }, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, busy: Boolean = false) {
     var showReject by remember(offer.id) { mutableStateOf(false) }
@@ -2396,8 +2501,9 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
     var rate by remember { mutableStateOf("") }
     var minimumRate by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var fulfillmentMode by rememberSaveable { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(R.string.ui_copy_332b62cec05e)) }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(stringResource(R.string.ui_copy_cd0080fd8abd))
             if (options.size > 1) {
                 Text(stringResource(R.string.lot_material_label), style = MaterialTheme.typography.labelLarge)
@@ -2412,16 +2518,23 @@ private fun CounterOfferDialog(initialRate: Double, onDismiss: () -> Unit, onSub
             OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_fdfd1e13dea3)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
             OutlinedTextField(minimumRate, { minimumRate = it.filter { c -> c.isDigit() || c == '.' }.take(8) }, label = { Text(stringResource(R.string.ui_copy_287ecfcf652b)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
             OutlinedTextField(notes, { notes = it.take(1000) }, label = { Text(stringResource(R.string.ui_copy_3b575a691c82)) }, minLines = 2)
+            Text(stringResource(R.string.bulk_transport_title), style = MaterialTheme.typography.titleSmall)
+            listOf("COLLECTOR_DELIVERY", "RECYCLER_PICKUP").forEach { mode ->
+                androidx.compose.material3.OutlinedButton(onClick = { fulfillmentMode = mode }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    RadioButton(selected = fulfillmentMode == mode, onClick = null)
+                    Text(bulkTransportLabel(mode).orEmpty(), Modifier.weight(1f).padding(start = 8.dp))
+                }
+            }
         }
-    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); val min = minimumRate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0 && (min == null || (min > 0 && min <= r))) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, min, currentArea.ifBlank { "Current area" }, notes = notes.ifBlank { null })) }, enabled = item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (minimumRate.toDoubleOrNull() == null || minimumRate.toDoubleOrNull()?.let { it > 0 && it <= (rate.toDoubleOrNull() ?: 0.0) } == true)) { Text(stringResource(R.string.ui_copy_4023cf765ef2)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
+    }, confirmButton = { TextButton(onClick = { val q = quantity.toDoubleOrNull(); val r = rate.toDoubleOrNull(); val min = minimumRate.toDoubleOrNull(); if (item != null && q != null && r != null && q > 0 && q <= item.availableKg && r > 0 && (min == null || (min > 0 && min <= r))) onSubmit(BulkLotCreateDto(item.materialCategory, item.grade, q, r, min, currentArea.ifBlank { "Current area" }, notes = notes.ifBlank { null }, fulfillmentMode = fulfillmentMode)) }, enabled = fulfillmentMode != null && item != null && quantity.toDoubleOrNull()?.let { it > 0 && it <= (item.availableKg) } == true && rate.toDoubleOrNull()?.let { it > 0 } == true && (minimumRate.toDoubleOrNull() == null || minimumRate.toDoubleOrNull()?.let { it > 0 && it <= (rate.toDoubleOrNull() ?: 0.0) } == true)) { Text(stringResource(R.string.ui_copy_4023cf765ef2)) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
-fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onOpenDemand: () -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}, onLoadMoreDemand: () -> Unit = {}, currentAccountId: String = "", onResumeRefresh: () -> Unit = onRefresh, onOpenOrders: () -> Unit = {}) {
+fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer: (String, Double) -> Unit, onReceive: (String) -> Unit, onOpenDemand: () -> Unit, onWithdrawOffer: (String, String?) -> Unit = { _, _ -> }, onUpdateRequirement: (String, ProcurementRequirementUpdateDto) -> Unit = { _, _ -> }, onOpenHandoverScanner: () -> Unit = {}, onOpenBulkChat: (String, String) -> Unit = { _, _ -> }, onLoadMoreLots: () -> Unit = {}, onLoadMoreOffers: () -> Unit = {}, onLoadMoreDemand: () -> Unit = {}, currentAccountId: String = "", onResumeRefresh: () -> Unit = onRefresh, onLoadTradeDetails: (String) -> Unit = {}, onRecordSupplyPayment: (String, SupplyPaymentRequestDto) -> Unit = { _, _ -> }, onOpenOrders: () -> Unit = {}) {
     TradeRefreshEffect(currentAccountId, onRefresh, onResumeRefresh)
     TraceBusyFrames(state.busy)
     var marketSection by rememberSaveable { mutableStateOf(if (state.bulkLots.isEmpty() && state.offers.isNotEmpty()) "OFFERS" else "LOTS") }
-    val activeOffers = state.offers.filter { offer -> offer.status != "COMPLETED" && (state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot)?.status !in setOf("SOLD", "CANCELLED") }
+    val activeOffers = state.offers.filter { offer -> offer.status !in setOf("ACCEPTED", "COMPLETED") && (state.bulkLots.firstOrNull { it.id == offer.bulkLotId } ?: offer.bulkLot)?.status !in setOf("SOLD", "CANCELLED") }
     val pendingPayments = state.handovers.count { it.status == "COMPLETED" && it.payments.none { p -> p.status == "VERIFIED" } }
 
     androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
@@ -2444,9 +2557,8 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onOpenDemand, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("New demand", style = MaterialTheme.typography.labelLarge) }
-                TextButton(onClick = onOpenOrders, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Orders & payments", style = MaterialTheme.typography.labelLarge) }
             }
-            if (pendingPayments > 0) TextButton(onClick = onOpenOrders) { Text("$pendingPayments payment(s) need attention") }
+            if (pendingPayments > 0) Text(stringResource(R.string.recycler_orders_subtitle), style = MaterialTheme.typography.bodySmall)
         }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2456,11 +2568,26 @@ fun RecyclerSupplyScreen(state: SupplyChainState, onRefresh: () -> Unit, onOffer
             }
         }
         state.error?.let { item { ErrorPanel(it, onRefresh) } }
+        val paidHistory = state.handovers.filter { it.status == "COMPLETED" && it.payments.any { p -> p.status == "VERIFIED" } }.take(3).map { it.id }.toSet()
+        val transactionLotIds = (state.offers.filter { it.status == "ACCEPTED" && it.bulkLot?.status != "SOLD" }.map { it.bulkLotId } +
+            state.handovers.filter { it.status !in setOf("EXPIRED", "CANCELLED") &&
+                (it.payments.none { p -> p.status == "VERIFIED" } || it.id in paidHistory) }.mapNotNull { it.bulkLotId }).distinct()
+        if (transactionLotIds.isNotEmpty()) item {
+            Text(stringResource(R.string.recycler_orders_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        items(transactionLotIds, key = { "trade-$it" }) { lotId ->
+            val offer = state.offers.firstOrNull { it.bulkLotId == lotId && it.status in setOf("ACCEPTED", "COMPLETED") }
+            val lot = state.bulkLots.firstOrNull { it.id == lotId } ?: offer?.bulkLot
+            val handover = state.handovers.firstOrNull { it.bulkLotId == lotId && it.status !in setOf("EXPIRED", "CANCELLED") }
+            BulkTradeJourneyCard(lotId, lot, offer, handover, state.tradeDetails[lotId], state.tradeDetailErrors[lotId],
+                recycler = true, busy = state.busy, onLoadDetails = onLoadTradeDetails,
+                onScan = onOpenHandoverScanner, onChat = onOpenBulkChat, onRecordPayment = onRecordSupplyPayment)
+        }
         if (marketSection == "LOTS") {
         item { Text(stringResource(R.string.ui_copy_fa3f1b42d9f8), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
         if (!state.initialLoadComplete && state.loading) item { LoadingPanel("Loading recycler marketplace…") }
         if (state.initialLoadComplete && !state.loading && state.bulkLots.isEmpty()) item { EmptyPanel("No lots available", "Matching lots will appear here.") }
-        items(state.bulkLots.filter { it.status !in setOf("SOLD", "CANCELLED") }, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive, busy = "offer-${lot.id}" in state.busy) }
+        items(state.bulkLots.filter { it.status !in setOf("SOLD", "CANCELLED") && it.id !in transactionLotIds }, key = { it.id }) { lot -> RecyclerLotCard(lot, state.offers.firstOrNull { it.bulkLotId == lot.id }, onOffer, onReceive, busy = "offer-${lot.id}" in state.busy) }
         if (state.recyclerLotsNextCursor != null) item { TextButton(onClick = onLoadMoreLots, enabled = "more-recycler-lots" !in state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.recycler_load_older_lots)) } }
         }
         if (marketSection == "OFFERS") {
@@ -2496,6 +2623,7 @@ private fun RecyclerLotCard(lot: BulkLotDto, offer: BulkOfferDto?, onOffer: (Str
             Text(stringResource(R.string.ui_copy_f5540311aef0, "%.1f".format(lot.quantityKg), money(lot.askingRatePerKg)))
             lot.minimumRatePerKg?.let { Text("Minimum ${money(it)}/kg · ${money(it * lot.quantityKg)} total", style = MaterialTheme.typography.bodySmall) }
             Text(lot.areaName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            bulkTransportLabel(lot.fulfillmentMode)?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
             if (offer != null) {
                 Text(stringResource(R.string.ui_copy_236524a7db4b, money(offer.offeredRatePerKg), statusName(offer.status)), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 Text("Offer total · ${money(offer.offeredRatePerKg * lot.quantityKg)}", style = MaterialTheme.typography.bodyMedium)
@@ -2768,7 +2896,7 @@ private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPa
     }
     val expiresEpochMs = remember(handover.expiresAt) { handover.expiresAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } }
     val qrExpired = expiresEpochMs != null && nowEpochMs >= expiresEpochMs
-    val qrBitmap = remember(handover.status, handover.qrCodeData, qrExpired) { if (!qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
+    val qrBitmap = remember(handover.status, handover.qrCodeData, handover.recyclerQrScannedAt, qrExpired) { if (!qrExpired && handover.recyclerQrScannedAt == null && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) handover.qrCodeData?.let(::createSupplyQr) else null }
     Surface(shape = RoundedCornerShape(8.dp, 26.dp, 26.dp, 26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .45f)), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(stringResource(R.string.ui_copy_c7e82e2b7e50), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -2778,7 +2906,12 @@ private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPa
             if (qrExpired && handover.status in setOf("PREPARED", "COLLECTOR_CONFIRMED")) Text(stringResource(R.string.ui_copy_799eb717ba03), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             qrBitmap?.let { Image(it.asImageBitmap(), "One-time handover QR", Modifier.size(190.dp).align(Alignment.CenterHorizontally)) }
             if (handover.status == "PREPARED" && !qrExpired) Button(onClick = { onConfirmCollector(handover.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_7be330b874d6)) }
-            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) Text(stringResource(R.string.ui_copy_fecc7ddf5e07), style = MaterialTheme.typography.bodySmall)
+            if (handover.status == "COLLECTOR_CONFIRMED" && !qrExpired) {
+                if (handover.recyclerQrScannedAt != null) {
+                    Text(stringResource(R.string.recycler_scan_verified), color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.handover_collector_confirmed), style = MaterialTheme.typography.bodySmall)
+                } else Text(stringResource(R.string.ui_copy_fecc7ddf5e07), style = MaterialTheme.typography.bodySmall)
+            }
             if (qrExpired && handover.bulkLotId != null) Button(onClick = { onPrepareBulk(handover.bulkLotId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text(stringResource(R.string.ui_copy_154331c55f35)) }
             if (handover.status == "REVIEW_REQUIRED") {
                 Text("Settlement needs review: ${handover.reviewReason ?: "variance recorded"}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -2795,7 +2928,7 @@ private fun SupplyHandoverCard(handover: SupplyHandoverDto, passport: MaterialPa
     if (showSettlement) SettlementDecisionDialog(title = "Review formal settlement", acceptLabel = "Accept settlement", onDismiss = { showSettlement = false }, onSubmit = { decision, reason, notes -> showSettlement = false; onDecideSettlement(handover.id, decision, reason, null, notes) })
 }
 
-private fun createSupplyQr(value: String): Bitmap? = runCatching { val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, 480, 480); Bitmap.createBitmap(480, 480, Bitmap.Config.RGB_565).also { bitmap -> for (x in 0 until 480) for (y in 0 until 480) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE) } }.getOrNull()
+internal fun createSupplyQr(value: String): Bitmap? = runCatching { val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, 480, 480); Bitmap.createBitmap(480, 480, Bitmap.Config.RGB_565).also { bitmap -> for (x in 0 until 480) for (y in 0 until 480) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE) } }.getOrNull()
 
 @Composable
 private fun Text(

@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">Close</string>
     <string name="nearby_area_resolution_failed">हामीले भरपर्दो स्थान पाउन सकेनौं। बरु आफ्नो क्षेत्र टाइप गर्नुहोस्। मेरो स्थान प्रयोग गर्नुहोस्</string>
     <string name="nearby_apply_radius_hint">खोज क्षेत्र · मेरो स्थान प्रयोग गर्नुहोस् · त्रिज्या</string>
+    <string name="weighing_grade_optional">गुणस्तर श्रेणी (वैकल्पिक)</string>
+    <string name="weighing_grade_help">श्रेणी थाहा भए मात्र भर्नुहोस्। नभए खाली छोड्नुहोस्।</string>
+    <string name="bulk_transport_title">यो सामान कसले ढुवानी गर्छ?</string>
+    <string name="bulk_collector_delivery">कबाडीवालाले रिसाइक्लरकहाँ सामान पुर्‍याउँछन्</string>
+    <string name="bulk_recycler_pickup">रिसाइक्लरले कबाडीवालाबाट सामान उठाउँछन्</string>
 </resources>

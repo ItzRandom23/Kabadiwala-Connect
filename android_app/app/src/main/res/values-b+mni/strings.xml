@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">ꯊꯤꯡꯖꯤꯜꯂꯨ</string>
     <string name="nearby_area_resolution_failed">ꯑꯩꯈꯣꯌꯅꯥ ꯊꯥꯖꯕꯥ ꯌꯥꯕꯥ ꯃꯐꯝ ꯑꯃꯥ ꯐꯪꯂꯃꯗꯦ꯫ ꯆꯥꯅꯕꯤꯗꯨꯅꯥ ꯃꯗꯨꯒꯤ ꯃꯍꯨꯠꯇꯥ ꯅꯍꯥꯛꯀꯤ ꯃꯐꯝ ꯑꯗꯨ ꯇꯥꯏꯞ ꯇꯧꯕꯤꯌꯨ꯫ ꯑꯩꯒꯤ ꯂꯣꯀꯦꯁꯟ ꯁꯤꯖꯤꯟꯅꯧ꯫</string>
     <string name="nearby_apply_radius_hint">ꯁꯥꯔꯆ ꯑꯦꯔꯤꯌꯥ · ꯑꯩꯒꯤ ꯂꯣꯀꯦꯁꯟ ꯁꯤꯖꯤꯟꯅꯧ꯫ · ꯔꯦꯗꯤꯌꯁ꯫</string>
+    <string name="weighing_grade_optional">ꯒ꯭ꯔꯦꯗ (ꯄꯥꯝꯂꯕꯗꯤ)</string>
+    <string name="weighing_grade_help">ꯒ꯭ꯔꯦꯗ ꯈꯉꯂꯕꯗꯤ ꯑꯩꯕꯤꯌꯨ꯫ ꯈꯉꯗ꯭ꯔꯕꯗꯤ ꯑꯍꯥꯡꯕꯥ ꯊꯝꯕꯤꯌꯨ꯫</string>
+    <string name="bulk_transport_title">মালসি কনা পুথোক্কনি?</string>
+    <string name="bulk_collector_delivery">কবাড়িওয়ালানা রিসাইক্লরদা মাল পুথোক্কনি</string>
+    <string name="bulk_recycler_pickup">রিসাইক্লরনা কবাড়িওয়ালাদগী মাল লৌগনি</string>
 </resources>

@@ -7,7 +7,7 @@ internal enum class SupplyReadGroup { PICKUPS, INVENTORY, TRADES, MARKET, POOLS,
 /** Server side effects determine which cached sections need reconciliation. */
 internal fun supplyRefreshDependencies(key: String, role: AccountRole): Set<SupplyReadGroup> {
     if (key.startsWith("more-") || key.startsWith("receive-") || key in setOf("route-advantage", "safety-routing") ||
-        key.startsWith("passport-") || key.startsWith("anomalies-")) return emptySet()
+        key.startsWith("passport-") || key.startsWith("anomalies-") || key.startsWith("trade-details-")) return emptySet()
     if (role == AccountRole.HOUSEHOLD) return setOf(SupplyReadGroup.PICKUPS)
     return when {
         key.startsWith("complete-") -> setOf(SupplyReadGroup.PICKUPS, SupplyReadGroup.INVENTORY, SupplyReadGroup.PASSPORT)

@@ -343,15 +343,18 @@ class AppContainer(context: Context) {
 
     fun startPushTokenRegistration() {
         if (!isAuthenticatedBackgroundWorkReady() || !hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        if (currentAccount()?.role !in setOf(AccountRole.HOUSEHOLD, AccountRole.COLLECTOR, AccountRole.RECYCLER)) return
         FcmTokenRegistrar.fetchToken(appContext) { token -> queuePushToken(token) }
         registerPendingPushToken()
     }
 
     fun registerPendingPushToken() {
         if (!isAuthenticatedBackgroundWorkReady() || !hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return
+        if (currentAccount()?.role !in setOf(AccountRole.HOUSEHOLD, AccountRole.COLLECTOR, AccountRole.RECYCLER)) return
         val accountId = currentAccount()?.profileId ?: return
         val token = secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return
         preferenceScope.launch {
+            if (currentAccount()?.profileId != accountId || currentAccount()?.role !in setOf(AccountRole.HOUSEHOLD, AccountRole.COLLECTOR, AccountRole.RECYCLER)) return@launch
             runCatching {
                 apiService.registerNotificationDevice(
                     NotificationDeviceRequestDto(
@@ -369,6 +372,7 @@ class AppContainer(context: Context) {
     }
 
     suspend fun unregisterCurrentPushToken(): Boolean {
+        if (currentAccount()?.role == AccountRole.ADMIN) return true
         val token = secureStorage.get(SecureStorage.PUSH_TOKEN) ?: secureStorage.get(SecureStorage.PENDING_PUSH_TOKEN) ?: return true
         if (!hasValidSession() || BuildConfig.API_BASE_URL.contains(".invalid")) return false
         return try {

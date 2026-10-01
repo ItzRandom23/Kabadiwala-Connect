@@ -648,8 +648,8 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
   async function prepareHandover(req: any, res: any, target: 'POOL' | 'BULK') {
     const targetId = parse(id, target === 'POOL' ? req.params.poolId : req.params.lotId);
     const options = parse(z.object({ dataBearingDevice: z.boolean().optional(), dataDestructionRequested: z.boolean().optional(), handoverLocation: location.optional() }).strict(), req.body ?? {});
-    const handoverLocation = options.handoverLocation ?? parse(location, {});
     const result = await store.$transaction(async (tx: Store) => {
+      let handoverLocation = options.handoverLocation ?? parse(location, {});
       let materialCategory: string; let quotedWeightKg: number; let quotedRatePerKg: number; let recyclerId: string; let poolId: string | null = null; let bulkLotId: string | null = null; let contributions: any[] = []; let sourceStatus: string; let sourceListingIds: string[] = [];
       if (target === 'POOL') {
         const pool = await tx.pooledConsignment.findFirst({ where: { id: targetId, createdByCollectorId: req.identity!.collectorId }, include: undefined });
@@ -665,6 +665,11 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
         const lot = await tx.bulkLot.findFirst({ where: { id: targetId, kabadiwalaId: req.identity!.collectorId, status: 'RESERVED' } });
         const offer = lot ? await tx.bulkOffer.findFirst({ where: { bulkLotId: lot.id, status: 'ACCEPTED' } }) : null;
         if (!lot || !offer) throw new AppError('CONFLICT', 'A reserved bulk lot with an accepted offer is required', 409, { code: 'BULK_LOT_NOT_READY_FOR_HANDOVER' });
+        const fixedType = lot.fulfillmentMode === 'COLLECTOR_DELIVERY' ? 'RECYCLER_FACILITY' : lot.fulfillmentMode === 'RECYCLER_PICKUP' ? 'COLLECTOR_LOCATION' : null;
+        if (fixedType) {
+          if (options.handoverLocation && options.handoverLocation.type !== fixedType) throw new AppError('CONFLICT', 'Handover location must match the lot transport agreement', 409, { code: 'TRANSPORT_LOCATION_MISMATCH' });
+          handoverLocation = parse(location, { ...handoverLocation, type: fixedType });
+        }
         materialCategory = lot.materialCategory; quotedWeightKg = lot.quantityKg; quotedRatePerKg = offer.offeredRatePerKg; recyclerId = offer.recyclerId; bulkLotId = lot.id; sourceStatus = lot.status; sourceListingIds = lot.sourceListingIds ?? [];
       }
       const sourceListings = sourceListingIds.length ? await tx.householdListing.findMany({ where: { id: { in: sourceListingIds } }, select: { id: true, dataBearingDevice: true, ownerPreparationCompleted: true, dataDestructionRequested: true } }) : [];
@@ -729,6 +734,49 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     res.json({ success: true, data: result.handover, ...(result.replayed ? { message: 'Handover confirmation already processed' } : {}) });
   });
 
+  const tradeDetails = async (req: any, res: any) => {
+    const lotId = parse(id, req.params.lotId);
+    const actorId = req.identity!.collectorId;
+    const recyclerSide = req.identity!.role === 'RECYCLER';
+    const lot = await store.bulkLot.findUnique({ where: { id: lotId } });
+    if (!lot || (!recyclerSide && lot.kabadiwalaId !== actorId)) throw new AppError('NOT_FOUND', 'Trade not found', 404);
+    const offer = await store.bulkOffer.findFirst({
+      where: { bulkLotId: lotId, status: { in: ['ACCEPTED', 'COMPLETED'] }, ...(recyclerSide ? { recyclerId: actorId } : {}) }
+    });
+    if (!offer) throw new AppError('NOT_FOUND', 'Accepted trade not found', 404);
+    const [collector, recycler, handover] = await Promise.all([
+      store.collector.findUnique({ where: { id: lot.kabadiwalaId }, select: { displayName: true, address: true, areaName: true, latitude: true, longitude: true } }),
+      store.recycler.findUnique({ where: { id: offer.recyclerId }, select: { name: true, address: true, areaName: true, latitude: true, longitude: true, pickupAvailable: true } }),
+      store.supplyHandover.findFirst({ where: { bulkLotId: lotId, collectorId: lot.kabadiwalaId, recyclerId: offer.recyclerId }, orderBy: { preparedAt: 'desc' } })
+    ]);
+    // Exact locations are shared only between the participants of an accepted
+    // direct trade. Never expose phone, authorization evidence or source records.
+    const collectorLocation = collector ? { name: collector.displayName, address: collector.address, areaName: collector.areaName, latitude: collector.latitude, longitude: collector.longitude } : null;
+    const recyclerLocation = recycler ? { name: recycler.name, address: recycler.address, areaName: recycler.areaName, latitude: recycler.latitude, longitude: recycler.longitude } : null;
+    res.json({ success: true, data: {
+      lotId, collectorId: lot.kabadiwalaId, recyclerId: offer.recyclerId,
+      fulfillmentMode: lot.fulfillmentMode ?? null,
+      collectorLocation, recyclerLocation, recyclerPickupAvailable: recycler?.pickupAvailable ?? false,
+      handoverLocation: handover?.handoverLocation ?? null
+    } });
+  };
+  router.get('/kabadiwala/bulk-lots/:lotId/trade', requireAuth(jwt, collectors), tradeDetails);
+  router.get('/recycler/bulk-lots/:lotId/trade', requireRecycler(jwt, db), tradeDetails);
+
+  router.get('/kabadiwala/handovers/:handoverId/status', requireAuth(jwt, collectors), async (req, res) => {
+    const handoverId = parse(id, req.params.handoverId);
+    // Only the QR owner may watch its receipt; no QR or pooled participant data
+    // is exposed by this lightweight status endpoint.
+    const handover = await store.supplyHandover.findFirst({
+      where: { id: handoverId, collectorId: req.identity!.collectorId },
+      select: { id: true, status: true, expiresAt: true, recyclerQrScannedAt: true }
+    });
+    if (!handover) throw new AppError('NOT_FOUND', 'Handover not found', 404);
+    const status = ['PREPARED', 'COLLECTOR_CONFIRMED'].includes(handover.status) && handover.expiresAt && handover.expiresAt <= new Date()
+      ? 'EXPIRED' : handover.status;
+    res.json({ success: true, data: { id: handover.id, status, recyclerQrScannedAt: handover.recyclerQrScannedAt } });
+  });
+
   router.get('/kabadiwala/handovers', requireAuth(jwt, collectors), async (req, res) => {
     const contributions = await store.poolContribution.findMany({ where: { collectorId: req.identity!.collectorId, handoverId: { not: null } }, select: { handoverId: true } });
     const contributionHandoverIds = [...new Set(contributions.map((row: any) => row.handoverId).filter(Boolean))];
@@ -762,7 +810,21 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
     if (handover.qrCodeData !== input.qrCodeData || createHash('sha256').update(String(payload.nonce)).digest('hex') !== handover.qrNonceHash) throw new AppError('CONFLICT', 'This handover QR is not the current server record', 409, { code: 'HANDOVER_QR_MISMATCH' });
     if (handover.expiresAt <= new Date() && handover.status !== 'COMPLETED') throw new AppError('CONFLICT', 'Handover QR has expired', 409, { code: 'HANDOVER_EXPIRED' });
     if (!['COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(handover.status)) throw new AppError('CONFLICT', 'Collector must confirm the handover first', 409, { code: 'HANDOVER_NOT_CONFIRMABLE' });
-    res.json({ success: true, data: handover });
+    // Scanning is evidence of QR verification, not material receipt or payment.
+    // Claim once against the still-current QR; repeated scans retain the first
+    // timestamp and cannot revive an expired/cancelled/completed handover.
+    await store.supplyHandover.updateMany({
+      where: { id: handover.id, recyclerId: req.identity!.collectorId,
+        status: 'COLLECTOR_CONFIRMED', qrCodeData: input.qrCodeData,
+        expiresAt: { gt: new Date() },
+        OR: [{ recyclerQrScannedAt: null }, { recyclerQrScannedAt: { isSet: false } }] },
+      data: { recyclerQrScannedAt: new Date() }
+    });
+    const current = await store.supplyHandover.findUnique({ where: { id: handover.id } });
+    if (!current || !['COLLECTOR_CONFIRMED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(current.status) || current.qrCodeData !== input.qrCodeData || (current.status !== 'COMPLETED' && current.expiresAt <= new Date())) {
+      throw new AppError('CONFLICT', 'Handover changed while verifying. Scan the current QR again.', 409, { code: 'HANDOVER_NOT_CONFIRMABLE' });
+    }
+    res.json({ success: true, data: current });
   });
 
   router.post('/recycler/handovers/confirm', requireRecycler(jwt, db), async (req, res) => {
@@ -810,6 +872,11 @@ export function formalisationRoutes(jwt: JwtService, collectors: CollectorReposi
       throw new AppError('CONFLICT', 'Handover QR has expired; the Kabadiwala must prepare a new QR', 409, { code: 'HANDOVER_EXPIRED' });
     }
     if (handover.status !== 'COLLECTOR_CONFIRMED') throw new AppError('CONFLICT', 'Collector confirmation is required before the Recycler can receive this handover', 409, { code: 'COLLECTOR_CONFIRMATION_REQUIRED' });
+    if (handover.bulkLotId && input.handoverLocation) {
+      const lot = await store.bulkLot.findUnique({ where: { id: handover.bulkLotId }, select: { fulfillmentMode: true } });
+      const fixedType = lot?.fulfillmentMode === 'COLLECTOR_DELIVERY' ? 'RECYCLER_FACILITY' : lot?.fulfillmentMode === 'RECYCLER_PICKUP' ? 'COLLECTOR_LOCATION' : null;
+      if (fixedType && input.handoverLocation.type !== fixedType) throw new AppError('CONFLICT', 'Receipt location must match the lot transport agreement', 409, { code: 'TRANSPORT_LOCATION_MISMATCH' });
+    }
     const actual = input.actualWeightKg ?? handover.quotedWeightKg;
     const accepted = input.acceptedWeightKg ?? actual;
     assertSettlementQuantity(handover.quotedWeightKg, actual, accepted);

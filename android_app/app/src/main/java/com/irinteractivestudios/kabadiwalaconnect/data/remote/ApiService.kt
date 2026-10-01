@@ -180,6 +180,10 @@ interface ApiService {
     suspend fun confirmCollectorHandover(@Path("handoverId") handoverId: String, @Header("Idempotency-Key") idempotencyKey: String? = null): Response<ApiEnvelope<SupplyHandoverDto>>
     @GET("kabadiwala/handovers")
     suspend fun getKabadiwalaHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
+    @GET("{role}/bulk-lots/{lotId}/trade")
+    suspend fun getBulkTradeDetails(@Path("role") role: String, @Path("lotId") lotId: String): Response<ApiEnvelope<BulkTradeDetailsDto>>
+    @GET("kabadiwala/handovers/{handoverId}/status")
+    suspend fun getKabadiwalaHandoverStatus(@Path("handoverId") handoverId: String): Response<ApiEnvelope<JsonObject>>
     @GET("recycler/supply-handovers")
     suspend fun getSupplyHandovers(): Response<ApiEnvelope<List<SupplyHandoverDto>>>
     @POST("recycler/handovers/verify")

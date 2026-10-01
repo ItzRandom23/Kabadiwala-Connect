@@ -1,6 +1,6 @@
 # Kabadiwala Connect backend
 
-Express 5 / TypeScript API with Prisma 6.12 and MongoDB. Current Android beta: **0.1.12-beta (76)**. The npm package version is independently **1.0.0**.
+Express 5 / TypeScript API with Prisma 6.12 and MongoDB. Current Android beta: **0.1.13-beta (77)**. The npm package version is independently **1.0.0**.
 
 ## Setup
 
@@ -36,6 +36,8 @@ Middleware and routes enforce role, resource ownership, account state, Recycler 
 Conditional claims and transactions protect competing acceptance. QR verification checks signature, nonce, expiry, recipient and current server state. Household pickup hours are **7:30 AM–9:30 PM Asia/Kolkata**; scheduling also validates lead time, horizon and capacity.
 
 Physical completion, agreed amount, recorded payment and verified receipt are separate. See [pickup transitions](../docs/PICKUP_STATE_MACHINE.md) and [Recycler settlement](../docs/recycler-receipt-payment.md).
+
+New direct bulk lots can specify `COLLECTOR_DELIVERY` or `RECYCLER_PICKUP` through optional `BulkLot.fulfillmentMode`. Pickup requires a pickup-enabled Recycler; handover preparation and receipt enforce the selected location. Legacy lots retain location selection. Participant-only trade-detail routes expose meeting locations without private source records. Collector handover-status reads and optional `SupplyHandover.recyclerQrScannedAt` let Android dismiss a scanned QR without implying receipt or payment.
 
 ## Sync, notification and paging contracts
 

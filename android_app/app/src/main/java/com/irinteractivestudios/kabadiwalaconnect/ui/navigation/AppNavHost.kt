@@ -208,13 +208,29 @@ fun AppNavHost(
     }
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val appLifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated) {
+    // Both sides of a live journey must see confirmed remote actions even when
+    // FCM is unavailable. Read the bounded change feed, not the whole dashboard;
+    // existing account-scoped events reconcile content only when it changed.
+    val liveJourneyVisible = currentRoute in setOf(
+        Destinations.HOME, Destinations.KABADIWALA_PICKUPS,
+        Destinations.KABADIWALA_INVENTORY, Destinations.KABADIWALA_LOTS,
+        Destinations.KABADIWALA_TOOLS, Destinations.RECYCLER_MARKETPLACE,
+        Destinations.RECYCLER_ORDERS, Destinations.RECYCLER_SCAN
+    )
+    LaunchedEffect(role, factory.currentAccount?.profileId, demoMode, sessionAuthenticated, liveJourneyVisible, appLifecycleOwner) {
         val activityFeedRole = role == AccountRole.COLLECTOR || role == AccountRole.HOUSEHOLD || role == AccountRole.RECYCLER
         if (sessionAuthenticated && !demoMode && activityFeedRole && factory.currentAccount?.profileId?.isNotBlank() == true) {
-            appLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            appLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
-                    runCatching { factory.refreshActivity() }
-                    delay(120_000)
+                    try {
+                        factory.refreshActivity()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Preserve usable content; push, resume and the next
+                        // bounded check remain independent recovery paths.
+                    }
+                    delay(if (liveJourneyVisible) 2_000L else 120_000L)
                 }
             }
         }
@@ -425,6 +441,7 @@ fun AppNavHost(
                     pickupQrError = state.householdPickupQrError,
                     onLoadPickupQr = vm::loadHouseholdPickupQr,
                     onClearPickupQr = vm::clearHouseholdPickupQr,
+                    onCheckPickupQrScanned = vm::checkHouseholdPickupQrScanned,
                     onOpenPickupChat = openPickupChat,
                     onLoadMoreHistory = vm::loadMoreHouseholdHistory,
                     initialArea = factory.currentAccount?.areaName.orEmpty(),
@@ -451,7 +468,7 @@ fun AppNavHost(
             } else if (!demoMode) {
                 val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenTools = { navController.navigate(Destinations.KABADIWALA_TOOLS) }, onOpenPickups = { navController.navigate(Destinations.KABADIWALA_PICKUPS) }, onOpenInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) }, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
+                 KabadiwalaSupplyScreen(state, KabadiwalaSection.HOME, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenTools = { navController.navigate(Destinations.KABADIWALA_TOOLS) }, onOpenPickups = { navController.navigate(Destinations.KABADIWALA_PICKUPS) }, onOpenInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) }, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onCheckHandoverReceipt = vm::checkCollectorHandoverReceipt, onLoadTradeDetails = vm::loadBulkTradeDetails, onPrepareTradeHandover = vm::prepareBulkHandoverAt, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
             } else {
                 val vm: HomeViewModel = viewModel(factory = factory)
                 val state by vm.uiState.collectAsStateWithLifecycle()
@@ -481,14 +498,14 @@ fun AppNavHost(
             if (kabadiwalaDemo) DemoKabadiwalaInventoryScreen()
             else {
                 val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory); val state by vm.state.collectAsStateWithLifecycle()
-                KabadiwalaSupplyScreen(state, KabadiwalaSection.INVENTORY, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = featureAccount, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.INVENTORY, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = featureAccount, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onCheckHandoverReceipt = vm::checkCollectorHandoverReceipt, onLoadTradeDetails = vm::loadBulkTradeDetails, onPrepareTradeHandover = vm::prepareBulkHandoverAt, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
             }
         }
         composable(Destinations.KABADIWALA_PICKUPS) {
             if (kabadiwalaDemo) DemoKabadiwalaPickupsScreen()
             else {
                 val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory); val state by vm.state.collectAsStateWithLifecycle()
-                KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = featureAccount, listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onLoadMorePickups = vm::loadMoreCollectorPickups, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.PICKUPS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = featureAccount, listingPhotos = state.listingPhotos, listingPhotoErrors = state.listingPhotoErrors, onLoadListingPhotos = vm::loadKabadiwalaListingPhotos, onRejectPickup = vm::rejectPickup, onCancelPickup = vm::cancelKabadiwalaPickup, onReassignPickup = vm::reassignPickup, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onRecordPickupPayment = vm::recordPickupSettlementPayment, onVerifyHouseholdPickupQr = vm::verifyHouseholdPickupQr, onOpenPickupChat = openPickupChat, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onLoadMorePickups = vm::loadMoreCollectorPickups, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onCheckHandoverReceipt = vm::checkCollectorHandoverReceipt, onLoadTradeDetails = vm::loadBulkTradeDetails, onPrepareTradeHandover = vm::prepareBulkHandoverAt, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
             }
         }
         composable(Destinations.KABADIWALA_LOTS) {
@@ -496,13 +513,13 @@ fun AppNavHost(
             else {
                 val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory); val state by vm.state.collectAsStateWithLifecycle()
                 val capturedLots by factory.lots.observeLots().collectAsStateWithLifecycle(initialValue = emptyList())
-                KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, capturedLots, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) }, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onLoadMoreLots = vm::loadMoreCollectorLots, onLoadMoreOffers = vm::loadMoreCollectorOffers, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
+                KabadiwalaSupplyScreen(state, KabadiwalaSection.LOTS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, capturedLots, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), onCreateCapturedLot = { navController.navigate(Destinations.CREATE_LOT) }, onOpenInventory = { navController.navigate(Destinations.KABADIWALA_INVENTORY) }, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onRejectOffer = vm::rejectOffer, onCounterOffer = vm::counterOffer, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onLoadMoreLots = vm::loadMoreCollectorLots, onLoadMoreOffers = vm::loadMoreCollectorOffers, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onCheckHandoverReceipt = vm::checkCollectorHandoverReceipt, onLoadTradeDetails = vm::loadBulkTradeDetails, onPrepareTradeHandover = vm::prepareBulkHandoverAt, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
             }
         }
         composable(Destinations.KABADIWALA_TOOLS) {
             val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
             val state by vm.state.collectAsStateWithLifecycle()
-            KabadiwalaSupplyScreen(state, KabadiwalaSection.TOOLS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
+            KabadiwalaSupplyScreen(state, KabadiwalaSection.TOOLS, vm::refreshKabadiwala, vm::acceptListing, vm::schedulePickup, vm::pickupStatus, vm::completePickup, vm::createBulkLot, vm::cancelBulkLot, vm::acceptOffer, currentArea = factory.currentAccount?.areaName.orEmpty(), currentCollectorId = factory.currentAccount?.profileId.orEmpty(), onRouteEstimate = vm::loadRouteAdvantage, onCreatePool = vm::createPool, onJoinPool = vm::joinPool, onLeavePool = vm::leavePool, onLockPool = vm::lockPool, onPreparePoolHandover = vm::preparePoolHandover, onPrepareBulkHandover = vm::prepareBulkHandover, onConfirmCollectorHandover = vm::confirmCollectorHandover, onAcknowledgeSafety = vm::acknowledgeSafety, onLoadSafetyRouting = vm::loadSafetyRouting, onLoadMaterialPassport = vm::loadMaterialPassport, onLoadAnomalies = vm::loadAnomalies, onDecideSupplySettlement = vm::decideSupplySettlement, onOpenBulkChat = { lotId, recyclerId -> openBulkChat(lotId, factory.currentAccount?.profileId.orEmpty(), recyclerId) }, onResumeRefresh = vm::refreshIfStale, onConfirmSupplyPayment = vm::confirmSupplyPayment, onCheckHandoverReceipt = vm::checkCollectorHandoverReceipt, onLoadTradeDetails = vm::loadBulkTradeDetails, onPrepareTradeHandover = vm::prepareBulkHandoverAt, onHandoverCompleted = { vm.refreshKabadiwala(); navController.navigate(Destinations.HOME) { popUpTo(Destinations.HOME) { inclusive = false }; launchSingleTop = true } })
         }
         composable(Destinations.PRICES) {
             val vm: PricesViewModel = viewModel(factory = factory)
@@ -1265,7 +1282,7 @@ fun AppNavHost(
             else {
                 val vm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
-                RecyclerSupplyScreen(state, vm::refreshRecycler, vm::makeOffer, vm::receiveLot, onOpenDemand = { navController.navigate(Destinations.RECYCLER_CREATE_DEMAND) }, onWithdrawOffer = vm::withdrawOffer, onUpdateRequirement = vm::updateRequirement, onOpenHandoverScanner = { navController.navigate(Destinations.RECYCLER_SCAN) }, onOpenBulkChat = { lotId, collectorId -> openBulkChat(lotId, collectorId, factory.currentAccount?.profileId.orEmpty()) }, onLoadMoreLots = vm::loadMoreRecyclerLots, onLoadMoreOffers = vm::loadMoreRecyclerOffers, onLoadMoreDemand = vm::loadMoreRecyclerRequirements, currentAccountId = factory.currentAccount?.profileId.orEmpty(), onResumeRefresh = vm::refreshIfStale, onOpenOrders = { navController.navigate(Destinations.RECYCLER_ORDERS) })
+                RecyclerSupplyScreen(state, vm::refreshRecycler, vm::makeOffer, vm::receiveLot, onOpenDemand = { navController.navigate(Destinations.RECYCLER_CREATE_DEMAND) }, onWithdrawOffer = vm::withdrawOffer, onUpdateRequirement = vm::updateRequirement, onOpenHandoverScanner = { navController.navigate(Destinations.RECYCLER_SCAN) }, onOpenBulkChat = { lotId, collectorId -> openBulkChat(lotId, collectorId, factory.currentAccount?.profileId.orEmpty()) }, onLoadMoreLots = vm::loadMoreRecyclerLots, onLoadMoreOffers = vm::loadMoreRecyclerOffers, onLoadMoreDemand = vm::loadMoreRecyclerRequirements, currentAccountId = factory.currentAccount?.profileId.orEmpty(), onResumeRefresh = vm::refreshIfStale, onLoadTradeDetails = vm::loadBulkTradeDetails, onRecordSupplyPayment = vm::recordSupplyPayment, onOpenOrders = { navController.navigate(Destinations.RECYCLER_ORDERS) })
             }
         }
         composable(Destinations.RECYCLER_CREATE_DEMAND) {
@@ -1285,9 +1302,18 @@ fun AppNavHost(
             if (demoMode) DemoRecyclerOrdersScreen(onOpenScan = { navController.navigate(Destinations.RECYCLER_SCAN) })
             else {
                 val vm: RecyclerOrdersViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
+                val supplyVm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
+                val tradeState by supplyVm.state.collectAsStateWithLifecycle()
                 val state by vm.state.collectAsStateWithLifecycle()
                 RefreshOnResume(featureAccount, onRefresh = vm::refresh)
-                RecyclerOrdersScreen(liveHandovers = state.handovers, liveLoading = state.loading, liveError = state.error, onRefresh = vm::refresh, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) }, paymentBusy = state.paymentBusy, paymentError = state.paymentError, onRecordPayment = vm::recordPayment)
+                RecyclerOrdersScreen(liveHandovers = state.handovers, liveLoading = state.loading, liveError = state.error,
+                    onRefresh = vm::refresh, onScan = { navController.navigate(Destinations.RECYCLER_SCAN) },
+                    paymentBusy = state.handovers.filter { "supply-payment-${it.id}" in tradeState.busy }.map { it.id }.toSet(),
+                    paymentError = tradeState.error ?: state.paymentError,
+                    onRecordPayment = { id, input -> state.handovers.firstOrNull { it.id == id }?.let { supplyVm.recordSupplyPaymentForReceipt(it, input) } },
+                    tradeDetails = tradeState.tradeDetails, tradeErrors = tradeState.tradeDetailErrors, tradeBusy = tradeState.busy,
+                    onLoadTradeDetails = supplyVm::loadBulkTradeDetails,
+                    onOpenBulkChat = { lotId, collectorId -> openBulkChat(lotId, collectorId, factory.currentAccount?.profileId.orEmpty()) })
             }
         }
         composable(Destinations.RECYCLER_PICKUPS) {
@@ -1326,8 +1352,10 @@ fun AppNavHost(
             if (demoMode) DemoRecyclerScanScreen()
             else {
                 val vm: com.irinteractivestudios.kabadiwalaconnect.ui.screens.recycler.RecyclerScanViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
+                val supplyVm: SupplyChainViewModel = accountFeatureViewModel(owner = featureOwner, accountId = featureAccount, factory = factory)
                 val state by vm.state.collectAsStateWithLifecycle()
                 RecyclerScanScreen(state = state, onVerify = vm::verify, onConfirm = vm::confirm, onReset = vm::reset, onReceiptRecorded = {
+                    supplyVm.refreshRecycler()
                     vm.reset()
                     navController.navigate(Destinations.RECYCLER_MARKETPLACE) {
                         popUpTo(Destinations.RECYCLER_SCAN) { inclusive = true }

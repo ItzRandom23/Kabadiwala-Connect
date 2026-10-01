@@ -97,7 +97,7 @@ class AdminConsoleViewModel(
                     AdminSection.DISPUTES -> api.adminDisputes("OPEN").requireData()
                     AdminSection.PAYMENTS -> {
                         coroutineScope {
-                            val recorded = async { api.adminPayments("PENDING").requireData() }
+                            val recorded = async { api.adminPayments("RECORDED").requireData() }
                             val pickupPayments = async { api.adminHouseholdPickupPayments("RECORDED").requireData() }
                             recorded.await() + pickupPayments.await()
                         }

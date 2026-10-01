@@ -1,6 +1,6 @@
 # Household pickup and settlement state contract
 
-Updated **30 September 2026**, accompanying Android **0.1.12-beta (76)**. API paths below are relative to `/api/v1`.
+Updated **1 October 2026**, accompanying Android **0.1.13-beta (77)**. API paths below are relative to `/api/v1`.
 
 Household pickup hours are **7:30 AM–9:30 PM, Asia/Kolkata**. Scheduling also checks minimum lead time, horizon, slot interval and capacity; being within the shift alone does not guarantee a valid slot.
 
@@ -37,6 +37,9 @@ The cancellation and reassignment paths reverse an **assignment**, not a complet
 | payment RECORDED → DISPUTED | Admin same API with DISPUTE | Reason required; anomaly tracked | Online | Needs review / needs review | `PICKUP_PAYMENT_DISPUTED` to each account with role-specific route |
 
 ## Cross-role invariants
+
+- Household QR display dismisses after the authoritative pickup reports `householdQrScannedAt`; the Collector scanner uses portrait capture. This does not skip weighing or payment confirmation.
+- Household-confirmed payment receipt is shown on customer cards immediately after reconciliation of the returned record. Admin reconciliation remains an internal audit state and is not shown as unfinished customer work.
 
 - Every write checks the authenticated actor and the pickup's current state. Conditional updates are required for competing acceptances and other races.
 - Push recipient account ID must equal the stored notification recipient and the device's active account when displayed. A stale push is suppressed after logout or account switching.

@@ -54,6 +54,8 @@ import java.util.UUID
 
 data class SupplyChainState(
     val loading: Boolean = true,
+    val tradeDetails: Map<String, BulkTradeDetailsDto> = emptyMap(),
+    val tradeDetailErrors: Map<String, String> = emptyMap(),
     val householdListingsLoading: Boolean = true,
     val householdListingsLoaded: Boolean = false,
     val initialLoadComplete: Boolean = false,
@@ -1178,6 +1180,61 @@ class SupplyChainViewModel(
                 }
         }
     }
+    suspend fun checkCollectorHandoverReceipt(handoverId: String) {
+        if (!allowed(AccountRole.COLLECTOR) || !protectedSessionReady()) return
+        val owner = accountId()
+        val session = sessionSnapshots?.value
+        val before = _state.value.handovers.firstOrNull { it.id == handoverId } ?: return
+        if (before.status !in setOf("PREPARED", "COLLECTOR_CONFIRMED")) return
+        try {
+            val record = api.getKabadiwalaHandoverStatus(handoverId).requireData()
+            val status = record.get("status")?.asString ?: return
+            if (accountId() != owner || sessionSnapshots?.value != session || !protectedSessionReady()) return
+            val scannedAt = record.get("recyclerQrScannedAt")?.takeUnless { it.isJsonNull }?.asString
+            if (scannedAt != null) {
+                _state.value = _state.value.copy(handovers = _state.value.handovers.map {
+                    if (it.id == handoverId && it.recyclerQrScannedAt == null) it.copy(recyclerQrScannedAt = scannedAt) else it
+                })
+            }
+            if (status == before.status || status !in setOf("COMPLETED", "REVIEW_REQUIRED", "CANCELLED", "EXPIRED")) return
+            _state.value = _state.value.copy(handovers = _state.value.handovers.map {
+                if (it.id == handoverId && it.status == before.status) it.copy(status = status, qrCodeData = null) else it
+            })
+            refreshKabadiwalaGroups(setOf(SupplyReadGroup.HANDOVERS, SupplyReadGroup.TRADES, SupplyReadGroup.INVENTORY))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Keep the QR usable during a missed check. Confirmed server receipt
+            // alone closes it; a later check or activity refresh recovers.
+        }
+    }
+    suspend fun checkHouseholdPickupQrScanned(pickupId: String) {
+        if (!allowed(AccountRole.HOUSEHOLD) || !protectedSessionReady()) return
+        val owner = accountId()
+        val session = sessionSnapshots?.value
+        try {
+            val record = api.getHouseholdPickup(pickupId).requireData().getAsJsonObject("pickup") ?: return
+            val scannedAt = record.get("householdQrScannedAt")?.takeUnless { it.isJsonNull }?.asString ?: return
+            if (accountId() != owner || sessionSnapshots?.value != session || !protectedSessionReady()) return
+            // Merge only confirmed QR evidence, never replace a newer pickup snapshot
+            // with the potentially older status returned by this short-lived watcher.
+            _state.value = _state.value.copy(
+                pickups = _state.value.pickups.map {
+                    if (it.id == pickupId && it.householdQrScannedAt == null) it.copy(householdQrScannedAt = scannedAt) else it
+                },
+                listings = _state.value.listings.map { listing ->
+                    listing.copy(pickups = listing.pickups.map {
+                        if (it.id == pickupId && it.householdQrScannedAt == null) it.copy(householdQrScannedAt = scannedAt) else it
+                    })
+                }
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // A missed check leaves the usable QR open; the next check or activity
+            // refresh can recover. Never dismiss on network/authorization failure.
+        }
+    }
     fun clearHouseholdPickupQr() {
         _state.value = _state.value.copy(householdPickupQr = null, householdPickupQrLoadingId = null, householdPickupQrError = null)
     }
@@ -1503,7 +1560,7 @@ class SupplyChainViewModel(
     fun completePickup(pickupId: String, input: PickupCompletionDto) = action("complete-$pickupId", AccountRole.COLLECTOR, { publishPickup(api.completePickup(pickupId, input).requireData()); "Purchase completed and inventory updated." })
     fun recordPickupSettlementPayment(pickupId: String, input: PickupSettlementPaymentRequestDto) = action("pickup-payment-$pickupId", AccountRole.COLLECTOR, {
         publishPayment(pickupId, api.recordPickupSettlementPayment(pickupId, input, UUID.randomUUID().toString()).requireData())
-        "Payment recorded for operator reconciliation."
+        "Payment recorded. Awaiting Household receipt confirmation."
     })
     fun rateHouseholdPickup(pickupId: String, rating: Int) = action("rate-pickup-$pickupId", AccountRole.HOUSEHOLD, {
         api.reviewHouseholdPickup(pickupId, HouseholdPickupReviewDto(rating)).requireData()
@@ -1572,12 +1629,88 @@ class SupplyChainViewModel(
         "Safety route loaded. Follow the handling instruction before transport."
     }
 
+    fun loadBulkTradeDetails(lotId: String) {
+        if (!protectedSessionReady() || roleProvider() !in setOf(AccountRole.COLLECTOR, AccountRole.RECYCLER)) return
+        val key = "trade-details-$lotId"
+        if (key in _state.value.busy) return
+        val owner = accountId()
+        val session = sessionSnapshots?.value
+        val role = roleProvider()
+        _state.value = _state.value.copy(busy = _state.value.busy + key)
+        actionJobs[key] = viewModelScope.launch {
+            try {
+                val details = api.getBulkTradeDetails(if (role == AccountRole.RECYCLER) "recycler" else "kabadiwala", lotId).requireData()
+                if (accountId() != owner || sessionSnapshots?.value != session || !protectedSessionReady()) return@launch
+                _state.value = _state.value.copy(tradeDetails = _state.value.tradeDetails + (lotId to details),
+                    tradeDetailErrors = _state.value.tradeDetailErrors - lotId)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (accountId() == owner && sessionSnapshots?.value == session) {
+                    _state.value = _state.value.copy(tradeDetailErrors = _state.value.tradeDetailErrors + (lotId to friendly(error)))
+                }
+            } finally {
+                if (accountId() == owner && sessionSnapshots?.value == session) _state.value = _state.value.copy(busy = _state.value.busy - key)
+                actionJobs.remove(key)
+            }
+        }
+    }
+
+    fun recordSupplyPayment(handoverId: String, input: SupplyPaymentRequestDto) = recordSupplyPaymentAction(handoverId, input, null)
+
+    fun recordSupplyPaymentForReceipt(receipt: SupplyHandoverDto, input: SupplyPaymentRequestDto) {
+        if (receipt.recyclerId != accountId()) return
+        recordSupplyPaymentAction(receipt.id, input, receipt)
+    }
+
+    private fun recordSupplyPaymentAction(handoverId: String, input: SupplyPaymentRequestDto, receipt: SupplyHandoverDto?) = action("supply-payment-$handoverId", AccountRole.RECYCLER) {
+        val owner = accountId()
+        val session = sessionSnapshots?.value
+        val payment = api.recordSupplyPayment(handoverId, input).requireData()
+        if (accountId() != owner || sessionSnapshots?.value != session) throw CancellationException()
+        val existing = receipt ?: _state.value.handovers.firstOrNull { it.id == handoverId }
+        if (existing != null) {
+            val updated = existing.copy(payments = listOf(payment) + existing.payments.filterNot { it.id == payment.id })
+            _state.value = _state.value.copy(handovers = listOf(updated) + _state.value.handovers.filterNot { it.id == handoverId })
+        }
+        _state.value.handovers.firstOrNull { it.id == handoverId }?.let { ConfirmedHandoverEvents.publish(owner.orEmpty(), it) }
+        saveCache()
+        "Payment recorded. Awaiting Kabadiwala confirmation."
+    }
+
     fun confirmSupplyPayment(handoverId: String, decision: String, reason: String?) = action("supply-payment-$handoverId", AccountRole.COLLECTOR) {
+        val owner = accountId()
+        val session = sessionSnapshots?.value
         val payment = api.confirmSupplyPayment(handoverId, SettlementDecisionDto(decision = decision, reasonCode = reason)).requireData()
+        if (accountId() != owner || sessionSnapshots?.value != session) throw CancellationException()
         _state.value = _state.value.copy(handovers = _state.value.handovers.map { h ->
             if (h.id == handoverId) h.copy(payments = listOf(payment) + h.payments.filterNot { it.id == payment.id }) else h
         })
+        _state.value.handovers.firstOrNull { it.id == handoverId }?.let { ConfirmedHandoverEvents.publish(owner.orEmpty(), it) }
         "Payment status updated."
+    }
+
+    fun prepareBulkHandoverAt(lotId: String, locationType: String) = action("handover-bulk-$lotId", AccountRole.COLLECTOR) {
+        val owner = accountId()
+        val session = sessionSnapshots?.value
+        val body = JsonObject().apply { add("handoverLocation", JsonObject().apply { addProperty("type", locationType) }) }
+        val handover = api.prepareBulkHandover(lotId, body).requireData()
+        if (accountId() != owner || sessionSnapshots?.value != session) throw CancellationException()
+        _state.value = _state.value.copy(handovers = listOf(handover) + _state.value.handovers.filterNot {
+            it.id == handover.id || (it.bulkLotId == lotId && it.status in setOf("PREPARED", "COLLECTOR_CONFIRMED"))
+        }, tradeDetails = _state.value.tradeDetails.mapValues { (id, details) ->
+            if (id == lotId) details.copy(handoverLocation = com.irinteractivestudios.kabadiwalaconnect.data.remote.HandoverLocationDto(type = locationType)) else details
+        })
+        saveCache()
+        if (handover.status == "PREPARED") {
+            if (accountId() != owner || sessionSnapshots?.value != session) throw CancellationException()
+            val operation = "collector-handover-${handover.id}"
+            val confirmed = api.confirmCollectorHandover(handover.id, idempotencyKeys?.getOrCreate(operation)).requireData()
+            if (accountId() != owner || sessionSnapshots?.value != session) throw CancellationException()
+            idempotencyKeys?.clear(operation)
+            _state.value = _state.value.copy(handovers = listOf(confirmed) + _state.value.handovers.filterNot { it.id == confirmed.id })
+            saveCache()
+        }
+        "Handover QR ready. Recycler can scan and confirm receipt."
     }
 
     fun loadMaterialPassport(handoverId: String) = action("passport-$handoverId") {

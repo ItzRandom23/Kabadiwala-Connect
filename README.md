@@ -6,13 +6,23 @@ An Android app that connects **Households → Kabadiwalas → Recyclers** throug
 
 | Item | Value |
 | --- | --- |
-| App version | **0.1.12-beta** |
-| Android version code | **76** |
+| App version | **0.1.13-beta** |
+| Android version code | **77** |
 | Published APK variant | `envTestingDebug` |
 | Household pickup hours | **7:30 AM–9:30 PM, Asia/Kolkata** |
 | Update manifest | [`backend/app-update/update.json`](backend/app-update/update.json) |
 
 This is a beta project. A successful build does not establish that every workflow, device or network condition is verified. The testing APK is not a signed production release.
+
+### Changes in 0.1.13-beta
+
+- Shared Collector–Recycler transaction cards show directions, handover progress, amounts and payment actions together.
+- New bulk lots specify Collector delivery or Recycler pickup; the backend validates the corresponding handover location.
+- Visible journey screens reconcile remote changes through account-checked events and a two-second change-feed fallback. QR displays close after server-confirmed scans, while material receipt and payment remain separate.
+- Household and Recycler QR scanners use a portrait capture activity. Collector weighing makes grade optional and shows the calculated amount.
+- Admin payment filters use supported statuses, and customer cards show receipt confirmation without internal reconciliation wording.
+
+The testing APK and backend build passed for this release. The full test suites and two-device journeys were not re-run for this release; historical results below remain separate.
 
 ## Who uses it?
 
@@ -29,7 +39,7 @@ Recycler marketplace access depends on server-side authorization. Account roles,
 2. A Collector accepts the pickup, schedules it, starts the trip and marks arrival.
 3. QR verification links the collection to the Household record.
 4. Final weighing and pricing establish the transaction amount; payment recording and receipt confirmation are separate steps.
-5. Collected material enters Collector inventory and can be reserved in a bulk lot.
+5. Collected material enters Collector inventory and can be reserved in a bulk lot. New lots specify whether the Collector delivers or requires Recycler pickup.
 6. A Recycler makes an offer. Accepted terms lead to handover, material receipt and settlement records.
 
 A photo-less Household listing remains a draft. Listed prices are estimates until final weighing and settlement. A QR verifies a recorded handover; it is not government certification. Material receipt alone does not prove payment was received.
@@ -153,5 +163,7 @@ Recorded stabilization checks passed **258 backend tests** and **169 Android uni
 5. Publish both files to the backend's `/app/` update path.
 
 GitHub source pushes do not automatically deploy a running backend. Deploy backend changes before clients that depend on new endpoints, and run reviewed database/index preparation as part of deployment. Room schema version 30 includes the non-destructive conversation-cache migration from version 29.
+
+This release adds nullable MongoDB fields `BulkLot.fulfillmentMode` and `SupplyHandover.recyclerQrScannedAt`. Existing documents can omit them. Regenerate Prisma Client and deploy the trade-detail and handover-status endpoints before distributing this APK; see the [Recycler rollout contract](docs/recycler-receipt-payment.md).
 
 The Android app asks before downloading an update; Android controls installation confirmation.

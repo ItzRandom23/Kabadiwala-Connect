@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">Close</string>
     <string name="nearby_area_resolution_failed">ਅਸੀਂ ਭਰੋਸੇਯੋਗ ਟਿਕਾਣਾ ਪ੍ਰਾਪਤ ਨਹੀਂ ਕਰ ਸਕੇ। ਕਿਰਪਾ ਕਰਕੇ ਇਸਦੀ ਬਜਾਏ ਆਪਣਾ ਖੇਤਰ ਟਾਈਪ ਕਰੋ। ਮੇਰੇ ਟਿਕਾਣੇ ਦੀ ਵਰਤੋਂ ਕਰੋ</string>
     <string name="nearby_apply_radius_hint">ਖੋਜ ਖੇਤਰ · ਮੇਰੇ ਟਿਕਾਣੇ ਦੀ ਵਰਤੋਂ ਕਰੋ · ਰੇਡੀਅਸ</string>
+    <string name="weighing_grade_optional">ਗੁਣਵੱਤਾ ਦਰਜਾ (ਵਿਕਲਪਿਕ)</string>
+    <string name="weighing_grade_help">ਦਰਜਾ ਪਤਾ ਹੋਵੇ ਤਾਂ ਹੀ ਲਿਖੋ। ਨਹੀਂ ਤਾਂ ਖਾਲੀ ਛੱਡੋ।</string>
+    <string name="bulk_transport_title">ਇਹ ਮਾਲ ਕੌਣ ਪਹੁੰਚਾਏਗਾ?</string>
+    <string name="bulk_collector_delivery">ਕਬਾੜੀਵਾਲਾ ਰੀਸਾਈਕਲਰ ਕੋਲ ਮਾਲ ਪਹੁੰਚਾਏਗਾ</string>
+    <string name="bulk_recycler_pickup">ਰੀਸਾਈਕਲਰ ਕਬਾੜੀਵਾਲੇ ਤੋਂ ਮਾਲ ਚੁੱਕੇਗਾ</string>
 </resources>

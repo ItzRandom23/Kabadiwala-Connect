@@ -1468,4 +1468,9 @@
     <string name="pickup_hide_scrap_photo">बंद करो</string>
     <string name="nearby_area_resolution_failed">असेंगी कोई भरोसेमंद थाह् र नेई थ्होई सकेआ। कृपया इसदे बजाय अपना इलाका टाइप करो। मेरी लोकेशन दा इस्तेमाल करो</string>
     <string name="nearby_apply_radius_hint">खोज क्षेत्र · मेरी लोकेशन दा इस्तेमाल करो · त्रिज्या</string>
+    <string name="weighing_grade_optional">गुणवत्ता दर्जा (वैकल्पिक)</string>
+    <string name="weighing_grade_help">दर्जा पता होऐ तां गै भरो। नेईं तां खाली छोड़ो।</string>
+    <string name="bulk_transport_title">एह् माल कु\'न पुजाग?</string>
+    <string name="bulk_collector_delivery">कबाड़ीवाला रीसाइक्लर कोल माल पुजाग</string>
+    <string name="bulk_recycler_pickup">रीसाइक्लर कबाड़ीवाले कोला माल चुੱਕग</string>
 </resources>

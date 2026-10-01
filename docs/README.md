@@ -1,6 +1,6 @@
 # Project documentation
 
-Updated **30 September 2026**. Current Android beta: **0.1.12-beta (76)**.
+Updated **1 October 2026**. Current Android beta: **0.1.13-beta (77)**.
 
 These documents describe current contracts and recorded verification. They do not certify every workflow or device. The five obsolete Android planning/report documents remain removed.
 
@@ -29,6 +29,8 @@ These documents describe current contracts and recorded verification. They do no
 
 ## Recorded verification
 
+**0.1.13-beta release checks:** testing APK assembly and backend compilation passed; APK version, checksum and size match the update manifest. The historical test counts below were not re-run for this release. Transport selection, portrait scanning and two-account automatic refresh still require live acceptance.
+
 | Area | Result | Limit |
 | --- | --- | --- |
 | Backend suite | 258 tests passed; two live integration files skipped | Database fixtures run separately |
@@ -50,6 +52,8 @@ Complete role journeys under slow network, process death and reconnect. Measure 
 
 1. Back up the database and review additive Prisma fields/index changes.
 2. Deploy backend contracts first; generate Prisma Client and prepare required indexes.
+
+   For 0.1.13-beta, include optional `BulkLot.fulfillmentMode` and `SupplyHandover.recyclerQrScannedAt`, participant trade-detail routes and Collector handover-status reads. Existing documents require no value backfill.
 3. Deploy Android with non-destructive Room migration 29 → 30.
 4. Publish matching APK and manifest together.
 5. Check deployed readiness and critical journeys.

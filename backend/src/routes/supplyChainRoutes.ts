@@ -23,7 +23,7 @@ const listingInput = z.object({ materialCategory: material, estimatedWeight: pos
 const pickupRequest = z.object({ kabadiwalaId: id.optional(), requestedSlot: z.string().datetime().optional() });
 const cancellationInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
 const activePickupStatuses = ['WAITING_FOR_PICKUP', 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_TRANSIT', 'ARRIVED', 'WEIGHED'] as const;
-const publicBulkLotSelect = { id: true, kabadiwalaId: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, areaName: true, notes: true, status: true, reservedForId: true, createdAt: true, updatedAt: true };
+const publicBulkLotSelect = { id: true, kabadiwalaId: true, materialCategory: true, grade: true, quantityKg: true, askingRatePerKg: true, minimumRatePerKg: true, fulfillmentMode: true, areaName: true, notes: true, status: true, reservedForId: true, createdAt: true, updatedAt: true };
 
 async function describeBulkOffers(store: any, offers: any[]) {
   if (!offers.length) return [];
@@ -36,7 +36,7 @@ async function describeBulkOffers(store: any, offers: any[]) {
   return offers.map(offer => ({ ...offer, bulkLot: lotById.get(offer.bulkLotId) ?? null, recyclerName: recyclerById.get(offer.recyclerId) ?? null }));
 }
 const sourceListingIdsInput = z.array(id).max(100).default([]);
-const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional(), sourceListingIds: sourceListingIdsInput }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
+const bulkInput = z.object({ materialCategory: material, grade: z.string().trim().min(1).max(80).default('UNSPECIFIED'), quantityKg: positive.max(100000), askingRatePerKg: positive.max(1000000), minimumRatePerKg: positive.max(1000000).optional(), fulfillmentMode: z.enum(['COLLECTOR_DELIVERY', 'RECYCLER_PICKUP']).optional(), areaName: z.string().trim().min(1).max(160), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), notes: z.string().trim().max(1000).optional(), sourceListingIds: sourceListingIdsInput }).refine(value => !value.minimumRatePerKg || value.minimumRatePerKg <= value.askingRatePerKg, { message: 'Minimum rate cannot exceed asking rate' });
 const settlementDecision = z.object({ decision: z.enum(['ACCEPT', 'RAISE_ISSUE']), reasonCode: z.string().trim().min(2).max(120).optional(), evidenceReference: z.string().trim().max(500).optional(), notes: z.string().trim().max(1000).optional() }).superRefine((value, ctx) => { if (value.decision === 'RAISE_ISSUE' && !value.reasonCode) ctx.addIssue({ code: 'custom', path: ['reasonCode'], message: 'A reason code is required when raising an issue' }); });
 const collectorPickupPricing = z.object({ freeRadiusKm: z.number().finite().min(0).max(200), feePerKm: z.number().finite().min(0).max(10000), maxDistanceKm: z.number().finite().positive().max(200) }).strict().refine(value => value.freeRadiusKm <= value.maxDistanceKm, { path: ['freeRadiusKm'], message: 'Free distance cannot exceed maximum distance' });
 const listingPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 6 } });
@@ -400,7 +400,8 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
         // An active Kabadiwala account is eligible for household discovery.
         // Only recycler facilities require admin authorization.
         verified: true,
-        distanceKm: distance == null ? null : Number(distance.toFixed(1)),
+        // Keep sub-kilometre precision for radius checks and presentation.
+        distanceKm: distance,
         acceptingPickups: slots > 0,
         availablePickupSlots: slots,
         pickupPricing: { freeRadiusKm: profile.pickupFreeRadiusKm ?? 0, feePerKm: profile.pickupFeePerKm ?? 0, maxDistanceKm: profile.pickupMaxDistanceKm ?? 25, estimatedFee: distance == null ? null : Number((Math.max(0, distance - (profile.pickupFreeRadiusKm ?? 0)) * (profile.pickupFeePerKm ?? 0)).toFixed(2)) },
@@ -1407,6 +1408,7 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
     if (!lot) throw new AppError('NOT_FOUND', 'Available bulk lot not found', 404);
     const recycler = await store.recycler.findFirst({ where: { id: req.identity!.collectorId, authorizationStatus: 'VERIFIED', OR: [{ authorizationValidUntil: null }, { authorizationValidUntil: { isSet: false } }, { authorizationValidUntil: { gt: new Date() } }], materials: { some: { category: lot.materialCategory } } }, include: { materials: true } });
     const capability = recycler?.materials.find((row: any) => row.category === lot.materialCategory);
+    if (lot.fulfillmentMode === 'RECYCLER_PICKUP' && !recycler?.pickupAvailable) throw new AppError('CONFLICT', 'This lot requires Recycler pickup. Enable facility pickup before making an offer.', 409, { code: 'RECYCLER_PICKUP_REQUIRED' });
     if (!recycler || !capability || (capability.minAcceptableWeight != null && lot.quantityKg < capability.minAcceptableWeight) || (capability.maxAcceptableWeight != null && lot.quantityKg > capability.maxAcceptableWeight) || (capability.acceptedGrades?.length && !capability.acceptedGrades.includes('UNSPECIFIED') && !capability.acceptedGrades.includes(lot.grade))) throw new AppError('CONFLICT', 'This Recycler is not currently eligible for the lot grade or quantity', 409, { code: 'RECYCLER_LOT_INELIGIBLE' });
     const offer = await withTransactionRetry<any>(() => store.$transaction(async (tx: any) => {
       const current = await tx.bulkLot.findFirst({ where: { id: lotId, status: 'LISTED' } });
@@ -1474,8 +1476,9 @@ export function supplyChainRoutes(jwt: JwtService, collectors: CollectorReposito
       if (offer.counterRatePerKg != null) throw new AppError('CONFLICT', 'The Recycler must respond to your counter-offer before acceptance', 409, { code: 'BULK_COUNTER_AWAITING_RECYCLER' });
       const lot = await tx.bulkLot.findFirst({ where: { id: offer.bulkLotId, kabadiwalaId: req.identity!.collectorId, status: 'LISTED' } });
       if (!lot) throw new AppError('NOT_FOUND', 'Listed bulk lot not found', 404);
-      const recycler = await tx.recycler.findUnique({ where: { id: offer.recyclerId }, select: { authorizationStatus: true, authorizationValidUntil: true } });
+      const recycler = await tx.recycler.findUnique({ where: { id: offer.recyclerId }, select: { authorizationStatus: true, authorizationValidUntil: true, pickupAvailable: true } });
       if (!recycler || recycler.authorizationStatus !== 'VERIFIED' || (recycler.authorizationValidUntil && recycler.authorizationValidUntil <= new Date())) throw new AppError('CONFLICT', 'Recycler authorization is not current', 409, { code: 'RECYCLER_NOT_VERIFIED' });
+      if (lot.fulfillmentMode === 'RECYCLER_PICKUP' && !recycler.pickupAvailable) throw new AppError('CONFLICT', 'Recycler pickup is no longer available for this lot', 409, { code: 'RECYCLER_PICKUP_REQUIRED' });
       const capability = await tx.recyclerMaterial.findFirst({ where: { recyclerId: offer.recyclerId, category: lot.materialCategory } });
       if (!capability || (capability.minAcceptableWeight != null && lot.quantityKg < capability.minAcceptableWeight) || (capability.maxAcceptableWeight != null && lot.quantityKg > capability.maxAcceptableWeight) || (capability.acceptedGrades?.length && !capability.acceptedGrades.includes('UNSPECIFIED') && !capability.acceptedGrades.includes(lot.grade))) throw new AppError('CONFLICT', 'Recycler is no longer eligible for this lot grade or quantity', 409, { code: 'RECYCLER_LOT_INELIGIBLE' });
       if (lot.minimumRatePerKg && offer.offeredRatePerKg < lot.minimumRatePerKg) throw new AppError('CONFLICT', 'Offer is below the lot minimum', 409);
