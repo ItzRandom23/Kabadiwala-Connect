@@ -42,7 +42,7 @@ describe('household Kabadiwala directory', () => {
     expect(areaOnly.body.data.items.map((p: any) => p.id)).toContain('no-gps');
     expect(areaOnly.body.data.locationFilter.radiusKm).toBeNull();
   });
-  it('returns paginated rounded distance and public aggregates without exact coordinates', async () => {
+  it('returns paginated precise distance and public aggregates without exact coordinates', async () => {
     const findManyProfiles = vi.fn().mockResolvedValue([
       { id: 'collector-near', displayName: 'Asha', areaName: 'Kothrud, Pune', latitude: 0.01, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: null },
       { id: 'collector-far', displayName: 'Rafiq', areaName: 'Pune', latitude: 2, longitude: 0, dailyPickupCapacity: 8, pilotVerifiedAt: new Date() }
@@ -71,7 +71,7 @@ describe('household Kabadiwala directory', () => {
         displayName: 'Asha',
         areaName: 'Kothrud, Pune',
         verified: true,
-        distanceKm: 1.1,
+        distanceKm: expect.closeTo(1.1119492664455874, 10),
         acceptingPickups: true,
         availablePickupSlots: 5,
         completedPickupCount: 1,

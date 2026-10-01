@@ -31,6 +31,8 @@ These documents describe current contracts and recorded verification. They do no
 
 **0.1.13-beta release checks:** testing APK assembly and backend compilation passed; APK version, checksum and size match the update manifest. The historical test counts below were not re-run for this release. Transport selection, portrait scanning and two-account automatic refresh still require live acceptance.
 
+**Post-release CI repair, 1 October 2026:** backend `npm test` passed all 261 tests across 62 files; two opt-in database integration files were skipped. `npm run build` passed. Directory assertions now check unrounded distance, and the QR fixture models the conditional scan-marker write with duplicate/race regression coverage. These are automated checks, not live two-device acceptance.
+
 | Area | Result | Limit |
 | --- | --- | --- |
 | Backend suite | 258 tests passed; two live integration files skipped | Database fixtures run separately |
