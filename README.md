@@ -2,6 +2,10 @@
 
 An Android app that connects **Households → Kabadiwalas → Recyclers** through scrap listings, pickups, inventory, offers and recorded handovers.
 
+## Demo video
+
+[Watch the Kabadiwala Connect app demo on YouTube](https://youtu.be/XuKolbI0HZY)
+
 ## Current beta
 
 | Item | Value |
