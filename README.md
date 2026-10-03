@@ -18,21 +18,6 @@ An Android app that connects **Households → Kabadiwalas → Recyclers** throug
 
 This is a beta project. A successful build does not establish that every workflow, device or network condition is verified. The testing APK is not a signed production release.
 
-### Changes in 0.1.14-beta
-
-- Registration with a phone already linked to another role now shows an account conflict instead of silently opening that account. Android rejects a mismatched role before saving a session, including responses from older backend deployments.
-- Signup conflicts no longer automatically retry as sign-in. Existing-account sign-in still restores the server-owned profile; registration does not overwrite its name, address or role.
-
-### Included from 0.1.13-beta
-
-- Shared Collector–Recycler transaction cards show directions, handover progress, amounts and payment actions together.
-- New bulk lots specify Collector delivery or Recycler pickup; the backend validates the corresponding handover location.
-- Visible journey screens reconcile remote changes through account-checked events and a two-second change-feed fallback. QR displays close after server-confirmed scans, while material receipt and payment remain separate.
-- Household and Recycler QR scanners use a portrait capture activity. Collector weighing makes grade optional and shows the calculated amount.
-- Admin payment filters use supported statuses, and customer cards show receipt confirmation without internal reconciliation wording.
-
-The testing APK and backend build passed for this release. The full test suites and two-device journeys were not re-run for this release; historical results below remain separate.
-
 ## Who uses it?
 
 - **Household:** create a listing with photos, find nearby collectors, request a pickup, review final weight and amount, and confirm payment receipt.
